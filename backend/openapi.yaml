@@ -1,0 +1,752 @@
+openapi: 3.0.3
+info:
+  title: API del sistema web de producción de vacunación (DDRISS San Marcos)
+  version: 0.1.0
+  description: |
+    Versión preliminar. Endpoints principales para que el sistema funcione de punta a punta:
+    acceso, catálogos, configuración de formularios, registro de producción, revisión y cierre,
+    indicadores, alertas y auditoría.
+
+    El modelo de datos está descrito en `05_contexto_base_de_datos.md`.
+    El sistema maneja solo datos agregados: ningún endpoint recibe ni devuelve datos de pacientes.
+
+    Todas las rutas, salvo `/salud` y `/auth/login`, exigen el encabezado `Authorization: Bearer <token>`.
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Desarrollo local
+
+tags:
+  - name: Sistema
+  - name: Autenticación
+  - name: Usuarios
+  - name: Catálogos
+  - name: Configuración
+  - name: Producción
+  - name: Revisión
+  - name: Indicadores
+  - name: Alertas y auditoría
+
+security:
+  - bearerAuth: []
+
+paths:
+  /salud:
+    get:
+      tags: [Sistema]
+      summary: Estado de la API y de las conexiones a MySQL y MongoDB
+      security: []
+      responses:
+        "200":
+          description: La API y las bases de datos responden
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mysql: { type: string, example: ok }
+                  mongo: { type: string, example: ok }
+
+  # ---------------------------------------------------------------- Autenticación
+  /auth/login:
+    post:
+      tags: [Autenticación]
+      summary: Iniciar sesión
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombreUsuario, contrasena]
+              properties:
+                nombreUsuario: { type: string, example: jperez }
+                contrasena: { type: string, format: password }
+      responses:
+        "200":
+          description: Sesión iniciada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  usuario: { $ref: "#/components/schemas/UsuarioSesion" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "423":
+          description: Cuenta bloqueada por intentos fallidos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /auth/logout:
+    post:
+      tags: [Autenticación]
+      summary: Cerrar sesión
+      responses:
+        "204": { description: Sesión cerrada }
+
+  /auth/yo:
+    get:
+      tags: [Autenticación]
+      summary: Datos de la sesión actual (usuario, empleado, rol y permisos)
+      responses:
+        "200":
+          description: Sesión actual
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UsuarioSesion" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+
+  # ---------------------------------------------------------------- Usuarios
+  /empleados:
+    get:
+      tags: [Usuarios]
+      summary: Listar empleados
+      parameters:
+        - { $ref: "#/components/parameters/Pagina" }
+        - { $ref: "#/components/parameters/PorPagina" }
+      responses:
+        "200": { description: Lista paginada de empleados }
+    post:
+      tags: [Usuarios]
+      summary: Registrar un empleado (puede existir sin cuenta)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmpleadoEntrada" }
+      responses:
+        "201": { description: Empleado creado }
+        "400": { $ref: "#/components/responses/EntradaInvalida" }
+
+  /usuarios:
+    get:
+      tags: [Usuarios]
+      summary: Listar cuentas de usuario
+      parameters:
+        - { $ref: "#/components/parameters/Pagina" }
+        - { $ref: "#/components/parameters/PorPagina" }
+      responses:
+        "200": { description: Lista paginada de cuentas }
+    post:
+      tags: [Usuarios]
+      summary: Crear la cuenta de acceso de un empleado (solo Administrador)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [empleadoId, nombreUsuario, contrasenaTemporal, rolId]
+              properties:
+                empleadoId: { type: integer }
+                nombreUsuario: { type: string }
+                contrasenaTemporal: { type: string, format: password }
+                rolId: { type: integer }
+      responses:
+        "201": { description: Cuenta creada; el usuario debe cambiar la contraseña al entrar }
+        "409": { $ref: "#/components/responses/Conflicto" }
+
+  /usuarios/{id}:
+    patch:
+      tags: [Usuarios]
+      summary: Cambiar rol, desactivar o reactivar una cuenta (desactivación lógica)
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rolId: { type: integer }
+                activo: { type: boolean }
+      responses:
+        "200": { description: Cuenta actualizada }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+
+  # ---------------------------------------------------------------- Catálogos
+  /municipios:
+    get:
+      tags: [Catálogos]
+      summary: Listar municipios (codigo_ine es la llave del GeoJSON)
+      parameters:
+        - name: jurisdiccion
+          in: query
+          description: true para solo los 30 municipios de San Marcos
+          schema: { type: boolean }
+      responses:
+        "200": { description: Lista de municipios }
+
+  /establecimientos:
+    get:
+      tags: [Catálogos]
+      summary: Listar establecimientos e instituciones
+      parameters:
+        - { name: municipioId, in: query, schema: { type: integer } }
+        - { name: activo, in: query, schema: { type: boolean } }
+      responses:
+        "200": { description: Lista de establecimientos }
+    post:
+      tags: [Catálogos]
+      summary: Crear un establecimiento (Administrador)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EstablecimientoEntrada" }
+      responses:
+        "201": { description: Establecimiento creado }
+        "409": { $ref: "#/components/responses/Conflicto" }
+
+  /establecimientos/{id}:
+    patch:
+      tags: [Catálogos]
+      summary: Actualizar o desactivar un establecimiento
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EstablecimientoEntrada" }
+      responses:
+        "200": { description: Establecimiento actualizado }
+
+  /vacunas:
+    get:
+      tags: [Catálogos]
+      summary: Listar vacunas con sus dosis
+      responses:
+        "200": { description: Lista de vacunas }
+    post:
+      tags: [Catálogos]
+      summary: Registrar una vacuna nueva con sus dosis (Administrador)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [codigo, nombre, dosis]
+              properties:
+                codigo: { type: string, example: PENTA }
+                nombre: { type: string, example: Pentavalente }
+                dosis:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      codigo: { type: string, example: D1 }
+                      nombre: { type: string, example: Primera dosis }
+                      orden: { type: integer, example: 1 }
+      responses:
+        "201": { description: Vacuna creada }
+
+  /periodos:
+    get:
+      tags: [Catálogos]
+      summary: Listar periodos mensuales de reporte
+      parameters:
+        - { name: anio, in: query, schema: { type: integer } }
+      responses:
+        "200": { description: Lista de periodos }
+    post:
+      tags: [Catálogos]
+      summary: Abrir un periodo mensual
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [anio, mes, fechaLimiteEnvio]
+              properties:
+                anio: { type: integer, example: 2026 }
+                mes: { type: integer, minimum: 1, maximum: 12 }
+                fechaLimiteEnvio: { type: string, format: date }
+      responses:
+        "201": { description: Periodo creado }
+        "409": { $ref: "#/components/responses/Conflicto" }
+
+  /poblaciones-objetivo:
+    get:
+      tags: [Catálogos]
+      summary: Consultar denominadores de cobertura
+      parameters:
+        - { name: anio, in: query, schema: { type: integer } }
+        - { name: municipioId, in: query, schema: { type: integer } }
+        - { name: vacunaId, in: query, schema: { type: integer } }
+      responses:
+        "200": { description: Lista de poblaciones objetivo }
+    post:
+      tags: [Catálogos]
+      summary: Registrar o actualizar la población objetivo de un municipio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [municipioId, anio, vacunaId, clasificacionPoblacion, cantidad]
+              properties:
+                municipioId: { type: integer }
+                anio: { type: integer }
+                vacunaId: { type: integer }
+                clasificacionPoblacion: { type: string, example: MENOR_1 }
+                cantidad: { type: integer, minimum: 0 }
+                fuente: { type: string }
+      responses:
+        "201": { description: Población registrada }
+
+  # ---------------------------------------------------------------- Configuración (MongoDB)
+  /dimensiones:
+    get:
+      tags: [Configuración]
+      summary: Catálogo de dimensiones de desagregación y sus valores
+      responses:
+        "200": { description: "Lista de dimensiones (sexo, grupo_edad, estado_embarazo, ...)" }
+
+  /vacunas/{codigo}/esquema-vigente:
+    get:
+      tags: [Configuración]
+      summary: Esquema de captura VIGENTE de una vacuna (molde del formulario)
+      parameters:
+        - { name: codigo, in: path, required: true, schema: { type: string, example: PENTA } }
+      responses:
+        "200": { description: Documento de esquemas_captura }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+
+  /esquemas-captura:
+    post:
+      tags: [Configuración]
+      summary: Crear una versión nueva (BORRADOR) del esquema de una vacuna
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Estructura de esquemas_captura (ver 05_contexto_base_de_datos.md, sección 6)
+      responses:
+        "201": { description: Versión creada en BORRADOR }
+        "422": { $ref: "#/components/responses/ReglaNegocio" }
+
+  /esquemas-captura/{id}/publicar:
+    post:
+      tags: [Configuración]
+      summary: Publicar una versión (pasa a VIGENTE y la anterior a HISTORICO)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, description: ObjectId } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                motivoCambio: { type: string }
+      responses:
+        "200": { description: Versión publicada }
+        "422": { $ref: "#/components/responses/ReglaNegocio" }
+
+  # ---------------------------------------------------------------- Producción
+  /reportes:
+    get:
+      tags: [Producción]
+      summary: Listar reportes (limitado al alcance del usuario)
+      parameters:
+        - { name: periodoId, in: query, schema: { type: integer } }
+        - { name: establecimientoId, in: query, schema: { type: integer } }
+        - { name: estado, in: query, schema: { $ref: "#/components/schemas/EstadoReporte" } }
+        - { $ref: "#/components/parameters/Pagina" }
+        - { $ref: "#/components/parameters/PorPagina" }
+      responses:
+        "200": { description: Lista paginada de reportes }
+    post:
+      tags: [Producción]
+      summary: Crear el reporte mensual de un establecimiento (inicia en BORRADOR)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [establecimientoId, periodoId]
+              properties:
+                establecimientoId: { type: integer }
+                periodoId: { type: integer }
+      responses:
+        "201":
+          description: Reporte creado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reporte" }
+        "409": { $ref: "#/components/responses/Conflicto" }
+
+  /reportes/{id}:
+    get:
+      tags: [Producción]
+      summary: Detalle de un reporte
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Reporte
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reporte" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+
+  /reportes/{id}/formulario:
+    get:
+      tags: [Producción]
+      summary: Formulario dinámico del reporte (esquemas por vacuna y celdas ya guardadas)
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200": { description: Esquemas aplicables y valores capturados }
+
+  /reportes/{id}/vacunas/{vacunaId}:
+    put:
+      tags: [Producción]
+      summary: Guardar las cantidades de una vacuna del reporte
+      description: |
+        Solo si el reporte está en BORRADOR. Valida dosis, dimensiones y procedencia contra el
+        esquema de la vacuna y escribe detalle_produccion y detalle_dimension en una transacción.
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { name: vacunaId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [versionFila, celdas]
+              properties:
+                versionFila:
+                  type: integer
+                  description: Versión del reporte que leyó el cliente (control de concurrencia)
+                totalDeclarado: { type: integer, minimum: 0 }
+                celdas:
+                  type: array
+                  items: { $ref: "#/components/schemas/Celda" }
+      responses:
+        "200": { description: Cantidades guardadas }
+        "409": { $ref: "#/components/responses/Conflicto" }
+        "422": { $ref: "#/components/responses/ReglaNegocio" }
+
+  # ---------------------------------------------------------------- Revisión
+  /reportes/{id}/validar:
+    post:
+      tags: [Revisión]
+      summary: Ejecutar las reglas de validación sin cambiar el estado
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Resultados de validación
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ResultadoValidacion" }
+
+  /reportes/{id}/transiciones:
+    post:
+      tags: [Revisión]
+      summary: Cambiar el estado del reporte (enviar, asignar, pedir corrección, aprobar, cerrar)
+      description: |
+        Única vía para cambiar el estado. La transición se valida contra la tabla transicion_estado
+        según el rol del usuario. Pasar a ENVIADO ejecuta antes las reglas y se rechaza si quedan errores.
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [estadoDestino]
+              properties:
+                estadoDestino: { $ref: "#/components/schemas/EstadoReporte" }
+                comentario: { type: string }
+      responses:
+        "200":
+          description: Estado actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reporte" }
+        "422": { $ref: "#/components/responses/ReglaNegocio" }
+
+  /reportes/{id}/historial:
+    get:
+      tags: [Revisión]
+      summary: Historial de estados del reporte
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200": { description: "Lista de cambios de estado con usuario, fecha y comentario" }
+
+  /reportes/{id}/observaciones:
+    post:
+      tags: [Revisión]
+      summary: Registrar una observación de revisión (general, por vacuna o por celda)
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [texto]
+              properties:
+                texto: { type: string }
+                reporteVacunaId: { type: integer }
+                detalleId: { type: integer }
+      responses:
+        "201": { description: Observación registrada }
+
+  /periodos/{id}/cerrar:
+    post:
+      tags: [Revisión]
+      summary: Cerrar el periodo (cierra los reportes aprobados y dispara el cálculo de indicadores)
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200": { description: Periodo cerrado }
+        "422": { $ref: "#/components/responses/ReglaNegocio" }
+
+  /reportes/{id}/rectificaciones:
+    post:
+      tags: [Revisión]
+      summary: Solicitar la rectificación de un reporte CERRADO
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo]
+              properties:
+                motivo: { type: string }
+      responses:
+        "201": { description: Solicitud creada en estado PENDIENTE }
+
+  # ---------------------------------------------------------------- Indicadores
+  /indicadores/corridas:
+    post:
+      tags: [Indicadores]
+      summary: Ejecutar manualmente el cálculo de indicadores
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [anio, mesHasta]
+              properties:
+                anio: { type: integer }
+                mesHasta: { type: integer, minimum: 1, maximum: 12 }
+      responses:
+        "202": { description: Corrida iniciada }
+
+  /indicadores/resultados:
+    get:
+      tags: [Indicadores]
+      summary: Cobertura, brecha, deserción y proyección (de la corrida vigente)
+      parameters:
+        - { name: indicador, in: query, schema: { type: string, example: COB_PENTA3 } }
+        - { name: anio, in: query, schema: { type: integer } }
+        - { name: mes, in: query, schema: { type: integer } }
+        - { name: municipioId, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: Resultados
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ResultadoIndicador" }
+
+  # ---------------------------------------------------------------- Alertas y auditoría
+  /alertas:
+    get:
+      tags: [Alertas y auditoría]
+      summary: Alertas activas para el rol y alcance del usuario
+      parameters:
+        - { name: estado, in: query, schema: { type: string, enum: [ACTIVA, ATENDIDA, DESCARTADA] } }
+      responses:
+        "200": { description: Lista de alertas }
+
+  /auditoria/bitacora:
+    get:
+      tags: [Alertas y auditoría]
+      summary: Consultar la bitácora (solo lectura; no existe endpoint para modificarla)
+      parameters:
+        - { name: desde, in: query, schema: { type: string, format: date } }
+        - { name: hasta, in: query, schema: { type: string, format: date } }
+        - { name: usuarioId, in: query, schema: { type: integer } }
+        - { name: modulo, in: query, schema: { type: string } }
+        - { name: accion, in: query, schema: { type: string } }
+        - { $ref: "#/components/parameters/Pagina" }
+        - { $ref: "#/components/parameters/PorPagina" }
+      responses:
+        "200": { description: Lista paginada de registros de bitácora }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer }
+    Pagina:
+      name: pagina
+      in: query
+      schema: { type: integer, default: 1, minimum: 1 }
+    PorPagina:
+      name: porPagina
+      in: query
+      schema: { type: integer, default: 20, maximum: 100 }
+
+  responses:
+    EntradaInvalida:
+      description: La solicitud no cumple el formato esperado
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NoAutenticado:
+      description: Sin sesión o credenciales incorrectas
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NoEncontrado:
+      description: No existe o está fuera del alcance del usuario
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflicto:
+      description: Duplicado o versionFila desactualizada
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ReglaNegocio:
+      description: Se incumple una regla del negocio (transición no permitida, errores de validación, reporte no editable)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            codigo: { type: string, example: TRANSICION_NO_PERMITIDA }
+            mensaje: { type: string }
+            detalles: { type: array, items: { type: object } }
+
+    EstadoReporte:
+      type: string
+      enum: [BORRADOR, ENVIADO, EN_REVISION, CORRECCION_SOLICITADA, APROBADO, CERRADO, RECTIFICACION]
+
+    UsuarioSesion:
+      type: object
+      properties:
+        id: { type: integer }
+        nombreUsuario: { type: string }
+        rol: { type: string, enum: [ESTABLECIMIENTO, REVISOR, EPIDEMIOLOGIA, ADMINISTRADOR, AUTORIDAD] }
+        permisos: { type: array, items: { type: string } }
+        empleado:
+          type: object
+          properties:
+            nombres: { type: string }
+            apellidos: { type: string }
+            establecimientoId: { type: integer, nullable: true }
+            municipioId: { type: integer, nullable: true }
+
+    EmpleadoEntrada:
+      type: object
+      required: [nombres, apellidos]
+      properties:
+        nombres: { type: string }
+        apellidos: { type: string }
+        cargo: { type: string }
+        correo: { type: string, format: email }
+        telefono: { type: string }
+        establecimientoId: { type: integer }
+        municipioId: { type: integer }
+
+    EstablecimientoEntrada:
+      type: object
+      properties:
+        codigo: { type: string }
+        nombre: { type: string }
+        tipoEstablecimientoId: { type: integer }
+        distritoSaludId: { type: integer, nullable: true }
+        municipioId: { type: integer }
+        reportaProduccion: { type: boolean }
+        esExterno: { type: boolean }
+        direccion: { type: string }
+        telefono: { type: string }
+        correo: { type: string }
+        nombreContacto: { type: string }
+        activo: { type: boolean }
+
+    Reporte:
+      type: object
+      properties:
+        id: { type: integer }
+        establecimientoId: { type: integer }
+        periodoId: { type: integer }
+        estado: { $ref: "#/components/schemas/EstadoReporte" }
+        revisorId: { type: integer, nullable: true }
+        numeroRectificacion: { type: integer }
+        versionFila: { type: integer }
+
+    Celda:
+      type: object
+      description: Una cantidad del formulario. Las dimensiones dependen del esquema de la vacuna.
+      required: [dosisCodigo, municipioProcedenciaId, cantidad]
+      properties:
+        dosisCodigo: { type: string, example: D3 }
+        municipioProcedenciaId: { type: integer }
+        dimensiones:
+          type: object
+          additionalProperties: { type: string }
+          example: { sexo: F, grupo_edad: MENOR_1 }
+        cantidad: { type: integer, minimum: 0, example: 40 }
+
+    ResultadoValidacion:
+      type: object
+      properties:
+        reglaCodigo: { type: string, example: TOTAL_CUADRA }
+        reglaVersion: { type: integer }
+        severidad: { type: string, enum: [ERROR, ADVERTENCIA] }
+        mensaje: { type: string }
+        estado: { type: string, enum: [ABIERTO, CORREGIDO, JUSTIFICADO] }
+
+    ResultadoIndicador:
+      type: object
+      properties:
+        indicadorCodigo: { type: string }
+        municipioId: { type: integer, nullable: true, description: null = departamental }
+        anio: { type: integer }
+        mes: { type: integer }
+        numerador: { type: number }
+        denominador: { type: number }
+        valor: { type: number }
+        meta: { type: number }
+        cumpleMeta: { type: boolean }
+        esProyeccion: { type: boolean }

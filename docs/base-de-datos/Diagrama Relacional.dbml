@@ -1,0 +1,743 @@
+// Plataforma web de producción de vacunación — DDRISS San Marcos (MSPAS)
+// Modelo relacional preliminar v0.4 (MySQL 8.0) en formato DBML para dbdiagram.io
+// Generado a partir de 01_modelo_relacional_mysql.sql. Las vistas y los datos
+// semilla no se representan en DBML; están en el script SQL.
+// Los grupos de tablas siguen los cuatro grupos de MySQL de la propuesta v2.
+
+Project vacunacion_ddriss {
+  database_type: 'MySQL'
+  Note: '''
+    Solo datos agregados: ninguna tabla guarda datos personales ni clínicos de pacientes.
+    Las columnas esquema_mongo_id, regla_codigo, indicador_codigo y
+    detalle_dimension.dimension_codigo / valor_codigo apuntan a documentos de
+    MongoDB (vacunacion_config); no son llaves foráneas y las valida el backend.
+  '''
+}
+
+Enum "periodo_estado_enum" {
+  "ABIERTO"
+  "EN_CIERRE"
+  "CERRADO"
+}
+
+Enum "resultado_validacion_severidad_enum" {
+  "ERROR"
+  "ADVERTENCIA"
+}
+
+Enum "resultado_validacion_estado_enum" {
+  "ABIERTO"
+  "CORREGIDO"
+  "JUSTIFICADO"
+}
+
+Enum "solicitud_rectificacion_estado_enum" {
+  "PENDIENTE"
+  "AUTORIZADA"
+  "RECHAZADA"
+  "APLICADA"
+}
+
+Enum "corrida_calculo_motivo_enum" {
+  "CIERRE_PERIODO"
+  "RECTIFICACION"
+  "MANUAL"
+  "PROGRAMADA"
+}
+
+Enum "corrida_calculo_estado_enum" {
+  "EN_PROCESO"
+  "COMPLETADA"
+  "FALLIDA"
+}
+
+Enum "alerta_tipo_enum" {
+  "REPORTE_PENDIENTE"
+  "CALIDAD"
+  "COBERTURA_BAJO_META"
+  "PROCESO"
+}
+
+Enum "alerta_severidad_enum" {
+  "INFO"
+  "ADVERTENCIA"
+  "CRITICA"
+}
+
+Enum "alerta_estado_enum" {
+  "ACTIVA"
+  "ATENDIDA"
+  "DESCARTADA"
+}
+
+Enum "bitacora_modulo_enum" {
+  "USUARIOS"
+  "CONFIGURACION"
+  "PRODUCCION"
+  "REVISION"
+  "RECTIFICACION"
+  "INDICADORES"
+  "REPORTES"
+  "SISTEMA"
+}
+
+Table "rol" {
+  "id" TINYINT [pk, not null, increment]
+  "codigo" VARCHAR(30) [not null]
+  "nombre" VARCHAR(80) [not null]
+  "descripcion" VARCHAR(255)
+
+  Indexes {
+    codigo [unique, name: "uq_rol_codigo"]
+  }
+  Note: 'Roles del sistema (sección 5.3)'
+}
+
+Table "permiso" {
+  "id" SMALLINT [pk, not null, increment]
+  "codigo" VARCHAR(60) [not null, note: 'Ej.: PRODUCCION_REGISTRAR, REPORTE_APROBAR']
+  "modulo" VARCHAR(40) [not null, note: 'Uno de los ocho módulos']
+  "descripcion" VARCHAR(255)
+
+  Indexes {
+    codigo [unique, name: "uq_permiso_codigo"]
+  }
+}
+
+Table "rol_permiso" {
+  "rol_id" TINYINT [not null]
+  "permiso_id" SMALLINT [not null]
+
+  Indexes {
+    (rol_id, permiso_id) [pk]
+  }
+}
+
+Table "departamento" {
+  "id" TINYINT [pk, not null, increment]
+  "codigo_ine" CHAR(2) [not null, note: 'Código INE; 12 = San Marcos; 99 = no especificado']
+  "nombre" VARCHAR(60) [not null]
+
+  Indexes {
+    codigo_ine [unique, name: "uq_departamento_codigo"]
+  }
+}
+
+Table "municipio" {
+  "id" SMALLINT [pk, not null, increment]
+  "departamento_id" TINYINT [not null]
+  "codigo_ine" CHAR(4) [not null, note: 'Código INE de 4 dígitos; también es la llave del GeoJSON']
+  "nombre" VARCHAR(80) [not null]
+  "es_jurisdiccion" BOOLEAN [not null, default: FALSE, note: 'TRUE para los 30 municipios de la DDRISS San Marcos']
+  "activo" BOOLEAN [not null, default: TRUE]
+
+  Indexes {
+    codigo_ine [unique, name: "uq_municipio_codigo"]
+    departamento_id [name: "ix_municipio_depto"]
+  }
+  Note: 'Incluye municipios fuera de la jurisdicción para registrar la procedencia'
+}
+
+Table "distrito_salud" {
+  "id" SMALLINT [pk, not null, increment]
+  "municipio_id" SMALLINT [not null]
+  "codigo" VARCHAR(20) [not null]
+  "nombre" VARCHAR(120) [not null]
+  "activo" BOOLEAN [not null, default: TRUE]
+
+  Indexes {
+    codigo [unique, name: "uq_distrito_codigo"]
+  }
+}
+
+Table "tipo_establecimiento" {
+  "id" TINYINT [pk, not null, increment]
+  "codigo" VARCHAR(20) [not null]
+  "nombre" VARCHAR(80) [not null]
+
+  Indexes {
+    codigo [unique, name: "uq_tipoest_codigo"]
+  }
+}
+
+Table "establecimiento" {
+  "id" INT [pk, not null, increment]
+  "codigo" VARCHAR(20) [not null, note: 'Código institucional (p. ej. el usado en SIGSA)']
+  "nombre" VARCHAR(150) [not null]
+  "tipo_establecimiento_id" TINYINT [not null]
+  "distrito_salud_id" SMALLINT [note: 'NULL solo para establecimientos externos a la DDRISS']
+  "municipio_id" SMALLINT [not null, note: 'Municipio de aplicación de sus dosis']
+  "reporta_produccion" BOOLEAN [not null, default: TRUE, note: 'FALSE si su producción la consolida otro establecimiento']
+  "es_externo" BOOLEAN [not null, default: FALSE, note: 'TRUE: establecimiento o institución fuera del departamento que atiende población de San Marcos (p. ej. Coatepeque)']
+  "direccion" VARCHAR(255) [note: 'Dirección física (aldea, cantón, zona, calle); el municipio va en municipio_id']
+  "telefono" VARCHAR(20)
+  "correo" VARCHAR(150) [note: 'Correo institucional del establecimiento']
+  "nombre_contacto" VARCHAR(150) [note: 'Persona de contacto o encargado del establecimiento']
+  "activo" BOOLEAN [not null, default: TRUE]
+  "creado_en" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
+  "actualizado_en" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
+
+  Indexes {
+    codigo [unique, name: "uq_establecimiento_codigo"]
+    municipio_id [name: "ix_establecimiento_municipio"]
+  }
+}
+
+Table "empleado" {
+  "id" INT [pk, not null, increment]
+  "codigo_empleado" VARCHAR(20) [note: 'Código o número de personal del MSPAS, si se usa']
+  "nombres" VARCHAR(100) [not null]
+  "apellidos" VARCHAR(100) [not null]
+  "cargo" VARCHAR(100) [note: 'Ej.: enfermera auxiliar, estadígrafa, epidemióloga']
+  "correo" VARCHAR(150) [note: 'Correo de contacto; se usa para notificaciones y recuperación de contraseña']
+  "telefono" VARCHAR(20)
+  "establecimiento_id" INT [note: 'Lugar de trabajo; obligatorio para personal de establecimiento']
+  "municipio_id" SMALLINT [note: 'Alcance territorial opcional (p. ej. coordinador municipal)']
+  "activo" BOOLEAN [not null, default: TRUE]
+  "creado_en" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
+  "actualizado_en" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
+
+  Indexes {
+    codigo_empleado [unique, name: "uq_empleado_codigo"]
+    correo [unique, name: "uq_empleado_correo"]
+    establecimiento_id [name: "ix_empleado_est"]
+  }
+  Note: 'Personal de la DDRISS y de los establecimientos; no son pacientes'
+}
+
+Table "usuario" {
+  "id" INT [pk, not null, increment]
+  "empleado_id" INT [not null]
+  "nombre_usuario" VARCHAR(50) [not null]
+  "hash_contrasena" VARCHAR(255) [not null, note: 'bcrypt/argon2; nunca la contraseña en claro']
+  "rol_id" TINYINT [not null]
+  "activo" BOOLEAN [not null, default: TRUE, note: 'Desactivación lógica de la cuenta (módulo 1)']
+  "intentos_fallidos" TINYINT [not null, default: 0]
+  "bloqueado_hasta" DATETIME
+  "debe_cambiar_contrasena" BOOLEAN [not null, default: TRUE]
+  "ultimo_acceso" DATETIME
+  "creado_por" INT
+  "creado_en" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
+  "actualizado_en" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
+  "desactivado_en" DATETIME
+
+  Indexes {
+    empleado_id [unique, name: "uq_usuario_empleado"]
+    nombre_usuario [unique, name: "uq_usuario_usuario"]
+    rol_id [name: "ix_usuario_rol"]
+  }
+  Note: 'Cuentas de acceso del personal'
+}
+
+Table "vacuna" {
+  "id" SMALLINT [pk, not null, increment]
+  "codigo" VARCHAR(20) [not null, note: 'Llave estable compartida con MongoDB (p. ej. PENTA)']
+  "nombre" VARCHAR(120) [not null]
+  "descripcion" VARCHAR(255)
+  "orden_informe" SMALLINT [not null, default: 0]
+  "activa" BOOLEAN [not null, default: TRUE]
+  "creado_en" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
+
+  Indexes {
+    codigo [unique, name: "uq_vacuna_codigo"]
+  }
+}
+
+Table "dosis" {
+  "id" SMALLINT [pk, not null, increment]
+  "vacuna_id" SMALLINT [not null]
+  "codigo" VARCHAR(20) [not null, note: 'Ej.: D1, D2, D3, R1, R2, UNICA']
+  "nombre" VARCHAR(60) [not null]
+  "orden" TINYINT [not null, note: 'Secuencia en el esquema; base de la deserción entre dosis']
+  "activa" BOOLEAN [not null, default: TRUE]
+
+  Indexes {
+    (vacuna_id, codigo) [unique, name: "uq_dosis_vacuna_codigo"]
+  }
+}
+
+Table "clasificacion_poblacion" {
+  "id" SMALLINT [pk, not null, increment]
+  "codigo" VARCHAR(30) [not null, note: 'Ej.: MENOR_1, UN_ANIO, EMBARAZADAS, NINAS_10']
+  "descripcion" VARCHAR(120) [not null]
+
+  Indexes {
+    codigo [unique, name: "uq_clasif_pob_codigo"]
+  }
+  Note: 'Clasificación del denominador de cobertura'
+}
+
+Table "poblacion_objetivo" {
+  "id" INT [pk, not null, increment]
+  "municipio_id" SMALLINT [not null]
+  "anio" SMALLINT [not null]
+  "vacuna_id" SMALLINT [not null]
+  "clasificacion_poblacion_id" SMALLINT [not null]
+  "cantidad" INT [not null]
+  "fuente" VARCHAR(150) [note: 'Ej.: proyección INE / Unidad de Vacunación']
+  "registrado_por" INT [not null]
+  "creado_en" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
+  "actualizado_en" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
+
+  Indexes {
+    (municipio_id, anio, vacuna_id, clasificacion_poblacion_id) [unique, name: "uq_pobobj"]
+  }
+  Note: 'Denominadores de cobertura por municipio, año, vacuna y clasificación'
+}
+
+Table "periodo" {
+  "id" SMALLINT [pk, not null, increment]
+  "anio" SMALLINT [not null]
+  "mes" TINYINT [not null]
+  "fecha_inicio" DATE [not null]
+  "fecha_fin" DATE [not null]
+  "fecha_limite_envio" DATE [not null, note: 'Base de las alertas de reportes pendientes']
+  "estado" periodo_estado_enum [not null, default: 'ABIERTO']
+  "cerrado_por" INT
+  "cerrado_en" DATETIME
+
+  Checks {
+    `mes BETWEEN 1 AND 12` [name: 'ck_periodo_mes']
+  }
+
+  Indexes {
+    (anio, mes) [unique, name: "uq_periodo"]
+  }
+  Note: 'Periodo mensual de reporte'
+}
+
+Table "estado_reporte" {
+  "codigo" VARCHAR(25) [pk, not null]
+  "nombre" VARCHAR(40) [not null]
+  "permite_edicion" BOOLEAN [not null, note: 'TRUE solo en BORRADOR y RECTIFICACION (esta última vía solicitud autorizada)']
+  "orden" TINYINT [not null]
+}
+
+Table "transicion_estado" {
+  "estado_origen" VARCHAR(25) [not null]
+  "estado_destino" VARCHAR(25) [not null]
+  "rol_id" TINYINT [not null]
+  "requiere_comentario" BOOLEAN [not null, default: FALSE]
+
+  Indexes {
+    (estado_origen, estado_destino, rol_id) [pk]
+  }
+}
+
+Table "reporte_produccion" {
+  "id" INT [pk, not null, increment]
+  "establecimiento_id" INT [not null]
+  "periodo_id" SMALLINT [not null]
+  "estado" VARCHAR(25) [not null, default: 'BORRADOR']
+  "numero_rectificacion" TINYINT [not null, default: 0, note: 'Se incrementa con cada rectificación aplicada']
+  "observaciones" VARCHAR(500)
+  "creado_por" INT [not null]
+  "creado_en" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
+  "actualizado_en" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
+  "enviado_en" DATETIME
+  "revisor_id" INT [note: 'Revisor asignado en la transición Enviado -> En revisión']
+  "asignado_en" DATETIME
+  "aprobado_por" INT
+  "aprobado_en" DATETIME
+  "cerrado_en" DATETIME
+  "version_fila" INT [not null, default: 1, note: 'Control de concurrencia optimista']
+
+  Indexes {
+    (establecimiento_id, periodo_id) [unique, name: "uq_reporte_est_periodo"]
+    (periodo_id, estado) [name: "ix_reporte_periodo_estado"]
+  }
+}
+
+Table "reporte_vacuna" {
+  "id" INT [pk, not null, increment]
+  "reporte_id" INT [not null]
+  "vacuna_id" SMALLINT [not null]
+  "esquema_mongo_id" CHAR(24) [not null, note: 'ObjectId del documento en esquemas_captura']
+  "esquema_version" SMALLINT [not null, note: 'Copia de la versión para consultas sin ir a MongoDB']
+  "datos_adicionales" JSON [note: 'Valores de campos no dimensionales definidos por el esquema (siempre agregados)']
+  "total_declarado" INT [note: 'Total de dosis declarado por el establecimiento; se contrasta con la suma del detalle']
+
+  Indexes {
+    (reporte_id, vacuna_id) [unique, name: "uq_repvac"]
+    esquema_mongo_id [name: "ix_repvac_esquema"]
+  }
+}
+
+Table "detalle_produccion" {
+  "id" BIGINT [pk, not null, increment]
+  "reporte_vacuna_id" INT [not null]
+  "dosis_id" SMALLINT [not null]
+  "municipio_procedencia_id" SMALLINT [not null, note: 'Usar el registro 9999 si la procedencia no se conoce']
+  "clave_combinacion" VARCHAR(255) [not null, default: '', note: 'Forma canónica de las dimensiones, ordenadas por código: grupo_edad=MENOR_1|sexo=F. Vacía si la vacuna no desagrega']
+  "cantidad" INT [not null, default: 0]
+  "actualizado_por" INT [not null]
+  "actualizado_en" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
+
+  Indexes {
+    (reporte_vacuna_id, dosis_id, municipio_procedencia_id, clave_combinacion) [unique, name: "uq_detalle"]
+    (municipio_procedencia_id, dosis_id) [name: "ix_detalle_procedencia"]
+  }
+  Note: 'Producción agregada; sin datos de pacientes'
+}
+
+Table "detalle_dimension" {
+  "detalle_id" BIGINT [not null]
+  "dimension_codigo" VARCHAR(30) [not null, note: 'catalogo_dimensiones.codigo']
+  "valor_codigo" VARCHAR(30) [not null, note: 'catalogo_dimensiones.valores.codigo']
+
+  Indexes {
+    (detalle_id, dimension_codigo) [pk]
+    (dimension_codigo, valor_codigo, detalle_id) [name: "ix_dimension_valor"]
+  }
+  Note: 'Desagregación dinámica por vacuna (modelo entidad-atributo-valor acotado)'
+}
+
+Table "historial_estado_reporte" {
+  "id" BIGINT [pk, not null, increment]
+  "reporte_id" INT [not null]
+  "estado_anterior" VARCHAR(25)
+  "estado_nuevo" VARCHAR(25) [not null]
+  "usuario_id" INT [not null]
+  "comentario" VARCHAR(1000)
+  "fecha" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
+
+  Indexes {
+    (reporte_id, fecha) [name: "ix_hist_reporte"]
+  }
+}
+
+Table "observacion_revision" {
+  "id" BIGINT [pk, not null, increment]
+  "reporte_id" INT [not null]
+  "reporte_vacuna_id" INT [note: 'NULL = observación general del reporte']
+  "detalle_id" BIGINT [note: 'Celda puntual observada, si aplica']
+  "usuario_id" INT [not null]
+  "texto" VARCHAR(1000) [not null]
+  "atendida" BOOLEAN [not null, default: FALSE]
+  "atendida_en" DATETIME
+  "creado_en" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
+
+  Indexes {
+    reporte_id [name: "ix_obs_reporte"]
+  }
+}
+
+Table "resultado_validacion" {
+  "id" BIGINT [pk, not null, increment]
+  "reporte_id" INT [not null]
+  "reporte_vacuna_id" INT
+  "detalle_id" BIGINT
+  "regla_codigo" VARCHAR(40) [not null, note: 'Código de la regla en reglas_validacion']
+  "regla_version" SMALLINT [not null]
+  "severidad" resultado_validacion_severidad_enum [not null, note: 'ERROR bloquea el envío']
+  "mensaje" VARCHAR(500) [not null]
+  "estado" resultado_validacion_estado_enum [not null, default: 'ABIERTO']
+  "justificacion" VARCHAR(500) [note: 'Solo para advertencias']
+  "ejecutado_en" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
+
+  Indexes {
+    (reporte_id, severidad, estado) [name: "ix_val_reporte"]
+  }
+}
+
+Table "solicitud_rectificacion" {
+  "id" INT [pk, not null, increment]
+  "reporte_id" INT [not null]
+  "solicitado_por" INT [not null]
+  "motivo" VARCHAR(1000) [not null]
+  "evidencia_ruta" VARCHAR(255) [note: 'Documento de respaldo (oficio, acta); nunca datos de pacientes']
+  "estado" solicitud_rectificacion_estado_enum [not null, default: 'PENDIENTE']
+  "resuelto_por" INT
+  "comentario_resolucion" VARCHAR(500)
+  "solicitado_en" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
+  "resuelto_en" DATETIME
+  "aplicado_en" DATETIME
+
+  Indexes {
+    (reporte_id, estado) [name: "ix_rect_reporte"]
+  }
+}
+
+Table "rectificacion_detalle" {
+  "id" BIGINT [pk, not null, increment]
+  "solicitud_id" INT [not null]
+  "detalle_id" BIGINT [note: 'NULL si la rectificación agrega una combinación nueva']
+  "reporte_vacuna_id" INT [not null]
+  "dosis_id" SMALLINT [not null]
+  "municipio_procedencia_id" SMALLINT [not null]
+  "clave_combinacion" VARCHAR(255) [not null, default: '', note: 'Identifica la celda aunque detalle_id se haya creado en la rectificación']
+  "cantidad_anterior" INT [not null]
+  "cantidad_nueva" INT [not null]
+}
+
+Table "corrida_calculo" {
+  "id" INT [pk, not null, increment]
+  "anio" SMALLINT [not null]
+  "mes_hasta" TINYINT [not null, note: 'Mes de corte del cálculo acumulado']
+  "disparada_por" INT [note: 'NULL = proceso automático (p. ej. al cerrar periodo)']
+  "motivo" corrida_calculo_motivo_enum [not null]
+  "estado" corrida_calculo_estado_enum [not null, default: 'EN_PROCESO']
+  "iniciada_en" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
+  "finalizada_en" DATETIME
+  "vigente" BOOLEAN [not null, default: FALSE, note: 'Solo una corrida vigente por (anio, mes_hasta)']
+
+  Indexes {
+    (anio, mes_hasta, vigente) [name: "ix_corrida_vigente"]
+  }
+  Note: 'Cada ejecución del motor de indicadores'
+}
+
+Table "resultado_indicador" {
+  "id" BIGINT [pk, not null, increment]
+  "corrida_id" INT [not null]
+  "indicador_codigo" VARCHAR(40) [not null, note: 'Código en configuracion_indicadores']
+  "indicador_version" SMALLINT [not null]
+  "municipio_id" SMALLINT [note: 'NULL = nivel departamental']
+  "vacuna_id" SMALLINT [not null]
+  "dosis_id" SMALLINT [note: 'Dosis evaluada (o dosis final en deserción)']
+  "filtro_dimensiones" VARCHAR(255) [not null, default: '', note: 'Filtro aplicado, en la misma forma canónica (grupo_edad=MENOR_1)']
+  "anio" SMALLINT [not null]
+  "mes" TINYINT [not null, note: 'Mes de corte']
+  "es_proyeccion" BOOLEAN [not null, default: FALSE, note: 'TRUE = estimación; se muestra diferenciada del dato real']
+  "numerador" DECIMAL(14,2)
+  "denominador" DECIMAL(14,2)
+  "valor" DECIMAL(9,4) [note: 'Porcentaje o tasa según el indicador']
+  "meta" DECIMAL(9,4)
+  "brecha_dosis" INT [note: 'Dosis aproximadas faltantes para la meta']
+  "cumple_meta" BOOLEAN
+  "calculado_en" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
+
+  Indexes {
+    (corrida_id, indicador_codigo, municipio_id, vacuna_id, dosis_id, filtro_dimensiones, anio, mes, es_proyeccion) [unique, name: "uq_resultado"]
+    (indicador_codigo, anio, mes, vacuna_id, municipio_id) [name: "ix_resultado_consulta"]
+  }
+}
+
+Table "alerta" {
+  "id" BIGINT [pk, not null, increment]
+  "tipo" alerta_tipo_enum [not null]
+  "severidad" alerta_severidad_enum [not null, default: 'ADVERTENCIA']
+  "titulo" VARCHAR(150) [not null]
+  "mensaje" VARCHAR(1000) [not null]
+  "periodo_id" SMALLINT
+  "municipio_id" SMALLINT
+  "establecimiento_id" INT
+  "reporte_id" INT
+  "resultado_indicador_id" BIGINT
+  "rol_destino_id" TINYINT [note: 'Rol que debe ver la alerta']
+  "estado" alerta_estado_enum [not null, default: 'ACTIVA']
+  "atendida_por" INT
+  "atendida_en" DATETIME
+  "generada_en" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
+
+  Indexes {
+    (estado, tipo, generada_en) [name: "ix_alerta_estado"]
+  }
+}
+
+Table "bitacora" {
+  "id" BIGINT [pk, not null, increment]
+  "fecha" DATETIME(3) [not null, default: `CURRENT_TIMESTAMP(3)`]
+  "usuario_id" INT [note: 'NULL en intentos de acceso fallidos o procesos automáticos']
+  "nombre_usuario_intento" VARCHAR(50) [note: 'Usuario tecleado en un inicio de sesión fallido']
+  "modulo" bitacora_modulo_enum [not null]
+  "accion" VARCHAR(40) [not null, note: 'Ej.: LOGIN_OK, LOGIN_FALLIDO, CREAR, ACTUALIZAR, DESACTIVAR, CAMBIO_ESTADO, PUBLICAR_ESQUEMA']
+  "entidad" VARCHAR(60) [not null, note: 'Tabla MySQL o colección MongoDB afectada']
+  "entidad_id" VARCHAR(40) [note: 'Id numérico de MySQL u ObjectId de MongoDB']
+  "valores_anteriores" JSON
+  "valores_nuevos" JSON
+  "ip_origen" VARCHAR(45)
+  "agente_usuario" VARCHAR(255)
+
+  Indexes {
+    fecha [name: "ix_bitacora_fecha"]
+    (usuario_id, fecha) [name: "ix_bitacora_usuario"]
+    (entidad, entidad_id) [name: "ix_bitacora_entidad"]
+    (modulo, accion, fecha) [name: "ix_bitacora_modulo"]
+  }
+  Note: 'Solo INSERT; el usuario de la aplicación no tiene UPDATE/DELETE sobre esta tabla'
+}
+
+Ref "fk_rolperm_rol":"rol"."id" < "rol_permiso"."rol_id"
+
+Ref "fk_rolperm_permiso":"permiso"."id" < "rol_permiso"."permiso_id"
+
+Ref "fk_municipio_depto":"departamento"."id" < "municipio"."departamento_id"
+
+Ref "fk_distrito_municipio":"municipio"."id" < "distrito_salud"."municipio_id"
+
+Ref "fk_est_tipo":"tipo_establecimiento"."id" < "establecimiento"."tipo_establecimiento_id"
+
+Ref "fk_est_distrito":"distrito_salud"."id" < "establecimiento"."distrito_salud_id"
+
+Ref "fk_est_municipio":"municipio"."id" < "establecimiento"."municipio_id"
+
+Ref "fk_empleado_est":"establecimiento"."id" < "empleado"."establecimiento_id"
+
+Ref "fk_empleado_municipio":"municipio"."id" < "empleado"."municipio_id"
+
+Ref "fk_usuario_empleado":"empleado"."id" - "usuario"."empleado_id"
+
+Ref "fk_usuario_rol":"rol"."id" < "usuario"."rol_id"
+
+Ref "fk_usuario_creador":"usuario"."id" < "usuario"."creado_por"
+
+Ref "fk_dosis_vacuna":"vacuna"."id" < "dosis"."vacuna_id"
+
+Ref "fk_pobobj_municipio":"municipio"."id" < "poblacion_objetivo"."municipio_id"
+
+Ref "fk_pobobj_vacuna":"vacuna"."id" < "poblacion_objetivo"."vacuna_id"
+
+Ref "fk_pobobj_clasif":"clasificacion_poblacion"."id" < "poblacion_objetivo"."clasificacion_poblacion_id"
+
+Ref "fk_pobobj_usuario":"usuario"."id" < "poblacion_objetivo"."registrado_por"
+
+Ref "fk_periodo_cerrado_por":"usuario"."id" < "periodo"."cerrado_por"
+
+Ref "fk_trans_origen":"estado_reporte"."codigo" < "transicion_estado"."estado_origen"
+
+Ref "fk_trans_destino":"estado_reporte"."codigo" < "transicion_estado"."estado_destino"
+
+Ref "fk_trans_rol":"rol"."id" < "transicion_estado"."rol_id"
+
+Ref "fk_reporte_est":"establecimiento"."id" < "reporte_produccion"."establecimiento_id"
+
+Ref "fk_reporte_periodo":"periodo"."id" < "reporte_produccion"."periodo_id"
+
+Ref "fk_reporte_estado":"estado_reporte"."codigo" < "reporte_produccion"."estado"
+
+Ref "fk_reporte_creador":"usuario"."id" < "reporte_produccion"."creado_por"
+
+Ref "fk_reporte_revisor":"usuario"."id" < "reporte_produccion"."revisor_id"
+
+Ref "fk_reporte_aprobador":"usuario"."id" < "reporte_produccion"."aprobado_por"
+
+Ref "fk_repvac_reporte":"reporte_produccion"."id" < "reporte_vacuna"."reporte_id" [delete: cascade]
+
+Ref "fk_repvac_vacuna":"vacuna"."id" < "reporte_vacuna"."vacuna_id"
+
+Ref "fk_det_repvac":"reporte_vacuna"."id" < "detalle_produccion"."reporte_vacuna_id" [delete: cascade]
+
+Ref "fk_det_dosis":"dosis"."id" < "detalle_produccion"."dosis_id"
+
+Ref "fk_det_procedencia":"municipio"."id" < "detalle_produccion"."municipio_procedencia_id"
+
+Ref "fk_det_usuario":"usuario"."id" < "detalle_produccion"."actualizado_por"
+
+Ref "fk_detdim_detalle":"detalle_produccion"."id" < "detalle_dimension"."detalle_id" [delete: cascade]
+
+Ref "fk_hist_reporte":"reporte_produccion"."id" < "historial_estado_reporte"."reporte_id"
+
+Ref "fk_hist_anterior":"estado_reporte"."codigo" < "historial_estado_reporte"."estado_anterior"
+
+Ref "fk_hist_nuevo":"estado_reporte"."codigo" < "historial_estado_reporte"."estado_nuevo"
+
+Ref "fk_hist_usuario":"usuario"."id" < "historial_estado_reporte"."usuario_id"
+
+Ref "fk_obs_reporte":"reporte_produccion"."id" < "observacion_revision"."reporte_id"
+
+Ref "fk_obs_repvac":"reporte_vacuna"."id" < "observacion_revision"."reporte_vacuna_id" [delete: set null]
+
+Ref "fk_obs_detalle":"detalle_produccion"."id" < "observacion_revision"."detalle_id" [delete: set null]
+
+Ref "fk_obs_usuario":"usuario"."id" < "observacion_revision"."usuario_id"
+
+Ref "fk_val_reporte":"reporte_produccion"."id" < "resultado_validacion"."reporte_id"
+
+Ref "fk_val_repvac":"reporte_vacuna"."id" < "resultado_validacion"."reporte_vacuna_id" [delete: cascade]
+
+Ref "fk_val_detalle":"detalle_produccion"."id" < "resultado_validacion"."detalle_id" [delete: cascade]
+
+Ref "fk_rect_reporte":"reporte_produccion"."id" < "solicitud_rectificacion"."reporte_id"
+
+Ref "fk_rect_solicita":"usuario"."id" < "solicitud_rectificacion"."solicitado_por"
+
+Ref "fk_rect_resuelve":"usuario"."id" < "solicitud_rectificacion"."resuelto_por"
+
+Ref "fk_rectdet_solicitud":"solicitud_rectificacion"."id" < "rectificacion_detalle"."solicitud_id"
+
+Ref "fk_rectdet_detalle":"detalle_produccion"."id" < "rectificacion_detalle"."detalle_id" [delete: set null]
+
+Ref "fk_rectdet_repvac":"reporte_vacuna"."id" < "rectificacion_detalle"."reporte_vacuna_id"
+
+Ref "fk_rectdet_dosis":"dosis"."id" < "rectificacion_detalle"."dosis_id"
+
+Ref "fk_rectdet_proc":"municipio"."id" < "rectificacion_detalle"."municipio_procedencia_id"
+
+Ref "fk_corrida_usuario":"usuario"."id" < "corrida_calculo"."disparada_por"
+
+Ref "fk_resind_corrida":"corrida_calculo"."id" < "resultado_indicador"."corrida_id"
+
+Ref "fk_resind_municipio":"municipio"."id" < "resultado_indicador"."municipio_id"
+
+Ref "fk_resind_vacuna":"vacuna"."id" < "resultado_indicador"."vacuna_id"
+
+Ref "fk_resind_dosis":"dosis"."id" < "resultado_indicador"."dosis_id"
+
+Ref "fk_alerta_periodo":"periodo"."id" < "alerta"."periodo_id"
+
+Ref "fk_alerta_municipio":"municipio"."id" < "alerta"."municipio_id"
+
+Ref "fk_alerta_est":"establecimiento"."id" < "alerta"."establecimiento_id"
+
+Ref "fk_alerta_reporte":"reporte_produccion"."id" < "alerta"."reporte_id"
+
+Ref "fk_alerta_resind":"resultado_indicador"."id" < "alerta"."resultado_indicador_id"
+
+Ref "fk_alerta_rol":"rol"."id" < "alerta"."rol_destino_id"
+
+Ref "fk_alerta_usuario":"usuario"."id" < "alerta"."atendida_por"
+
+Ref "fk_bitacora_usuario":"usuario"."id" < "bitacora"."usuario_id"
+
+TableGroup "Seguridad y organizacion" [color: #6C8EBF] {
+  "rol"
+  "permiso"
+  "rol_permiso"
+  "usuario"
+  "empleado"
+  "departamento"
+  "municipio"
+  "distrito_salud"
+  "tipo_establecimiento"
+  "establecimiento"
+}
+
+TableGroup "Catalogos sanitarios" [color: #82B366] {
+  "vacuna"
+  "dosis"
+  "clasificacion_poblacion"
+  "poblacion_objetivo"
+  "periodo"
+}
+
+TableGroup "Operacion de vacunacion" [color: #B85450] {
+  "reporte_produccion"
+  "reporte_vacuna"
+  "detalle_produccion"
+  "detalle_dimension"
+  "corrida_calculo"
+  "resultado_indicador"
+  "alerta"
+}
+
+TableGroup "Trazabilidad y reportes" [color: #9673A6] {
+  "bitacora"
+  "estado_reporte"
+  "transicion_estado"
+  "historial_estado_reporte"
+  "observacion_revision"
+  "resultado_validacion"
+  "solicitud_rectificacion"
+  "rectificacion_detalle"
+}
+
+Note nota_mongodb {
+'''
+**Vínculos lógicos con MongoDB (sin llave foránea)**
+- reporte_vacuna.esquema_mongo_id + esquema_version → esquemas_captura
+- detalle_dimension.dimension_codigo / valor_codigo → catalogo_dimensiones
+- resultado_validacion.regla_codigo + regla_version → reglas_validacion
+- resultado_indicador.indicador_codigo + indicador_version → configuracion_indicadores
+'''
+}
