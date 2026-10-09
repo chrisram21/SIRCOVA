@@ -215,7 +215,30 @@ paths:
         - { name: municipioId, in: query, schema: { type: integer } }
         - { name: activo, in: query, schema: { type: boolean } }
       responses:
-        "200": { description: Lista de establecimientos }
+        "200":
+          description: Lista de establecimientos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: integer }
+                    codigo: { type: string }
+                    nombre: { type: string }
+                    tipoEstablecimientoId: { type: integer }
+                    tipoEstablecimientoNombre: { type: string }
+                    distritoSaludId: { type: integer, nullable: true }
+                    municipioId: { type: integer }
+                    municipioNombre: { type: string }
+                    reportaProduccion: { type: boolean }
+                    esExterno: { type: boolean }
+                    activo: { type: boolean }
+        "400":
+          $ref: "#/components/responses/EntradaInvalida"
+        "500":
+          description: Error interno al consultar establecimientos
     post:
       tags: [Catálogos]
       summary: Crear un establecimiento (Administrador)
@@ -246,7 +269,31 @@ paths:
       tags: [Catálogos]
       summary: Listar vacunas con sus dosis
       responses:
-        "200": { description: Lista de vacunas }
+        "200":
+          description: Lista de vacunas con sus dosis
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: integer }
+                    codigo: { type: string }
+                    nombre: { type: string }
+                    descripcion: { type: string, nullable: true }
+                    ordenInforme: { type: integer }
+                    activa: { type: boolean }
+                    dosis:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          id: { type: integer }
+                          codigo: { type: string }
+                          nombre: { type: string }
+                          orden: { type: integer }
+                          activa: { type: boolean }
     post:
       tags: [Catálogos]
       summary: Registrar una vacuna nueva con sus dosis (Administrador)
@@ -333,8 +380,37 @@ paths:
       tags: [Configuración]
       summary: Catálogo de dimensiones de desagregación y sus valores
       responses:
-        "200": { description: "Lista de dimensiones (sexo, grupo_edad, estado_embarazo, ...)" }
-
+        "200":
+          description: Lista de dimensiones configuradas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    codigo: { type: string }
+                    nombre: { type: string }
+                    descripcion: { type: string, nullable: true }
+                    tipo: { type: string }
+                    activo: { type: boolean }
+                    valores:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          codigo: { type: string }
+                          etiqueta: { type: string }
+                          orden: { type: integer }
+                          activo: { type: boolean }
+                          edadMinMeses: { type: integer }
+                          edadMaxMeses: { type: integer }
+        "500":
+          description: Error al consultar las dimensiones
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /vacunas/{codigo}/esquema-vigente:
     get:
       tags: [Configuración]
