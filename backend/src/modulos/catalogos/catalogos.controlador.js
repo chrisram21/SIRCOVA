@@ -1,8 +1,11 @@
+
 const {
   obtenerMunicipios,
   obtenerVacunas,
   obtenerEstablecimientos,
+  obtenerPeriodos
 } = require('./catalogos.servicio');
+
 
 async function listarMunicipios(req, res) {
   const { jurisdiccion } = req.query;
@@ -122,9 +125,58 @@ async function listarEstablecimientos(req, res) {
   }
 }
 
+async function listarPeriodos(req, res) {
+  const { anio } = req.query;
+
+  let anioFiltro;
+
+  if (anio !== undefined) {
+    const valor = Number(anio);
+
+    if (
+      !/^\d+$/.test(anio) ||
+      !Number.isInteger(valor) ||
+      valor < 1 ||
+      valor > 65535
+    ) {
+      return res.status(400).json({
+        error: {
+          codigo: 'PARAMETRO_INVALIDO',
+          mensaje: 'anio debe ser un entero positivo válido'
+        }
+      });
+    }
+
+    anioFiltro = valor;
+  }
+
+  try {
+    const periodos = await obtenerPeriodos(anioFiltro);
+
+    return res.status(200).json(periodos);
+
+  } catch (error) {
+    console.error(
+      'Error al consultar períodos:',
+      error.message
+    );
+
+    return res.status(500).json({
+      error: {
+        codigo: 'ERROR_INTERNO',
+        mensaje: 'No fue posible consultar los períodos'
+      }
+    });
+  }
+}
+
+
+
 module.exports = {
   listarMunicipios,
   listarVacunas,
   listarEstablecimientos,
+  listarPeriodos
 };
+
 

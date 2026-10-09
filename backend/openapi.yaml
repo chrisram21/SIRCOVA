@@ -324,8 +324,31 @@ paths:
       summary: Listar periodos mensuales de reporte
       parameters:
         - { name: anio, in: query, schema: { type: integer } }
+      
       responses:
-        "200": { description: Lista de periodos }
+        "200":
+          description: Lista de períodos mensuales
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: integer }
+                    anio: { type: integer }
+                    mes: { type: integer }
+                    fechaInicio: { type: string, format: date }
+                    fechaFin: { type: string, format: date }
+                    fechaLimiteEnvio: { type: string, format: date }
+                    estado:
+                      type: string
+                      enum: [ABIERTO, EN_CIERRE, CERRADO]
+        "400":
+          $ref: "#/components/responses/EntradaInvalida"
+        "500":
+          description: Error interno al consultar períodos
+
     post:
       tags: [Catálogos]
       summary: Abrir un periodo mensual

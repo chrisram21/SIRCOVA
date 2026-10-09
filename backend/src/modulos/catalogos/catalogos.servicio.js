@@ -129,8 +129,54 @@ async function obtenerEstablecimientos(filtros = {}) {
     activo: Boolean(establecimiento.activo)
   }));
 }
+
+
+async function obtenerPeriodos(anio) {
+  const condiciones = [];
+  const parametros = [];
+
+  if (anio !== undefined) {
+    condiciones.push('p.anio = ?');
+    parametros.push(anio);
+  }
+
+  const where = condiciones.length > 0
+    ? `WHERE ${condiciones.join(' AND ')}`
+    : '';
+
+  const consulta = `
+    SELECT
+      p.id,
+      p.anio,
+      p.mes,
+      DATE_FORMAT(
+        p.fecha_inicio, '%Y-%m-%d'
+      ) AS fechaInicio,
+      DATE_FORMAT(
+        p.fecha_fin, '%Y-%m-%d'
+      ) AS fechaFin,
+      DATE_FORMAT(
+        p.fecha_limite_envio, '%Y-%m-%d'
+      ) AS fechaLimiteEnvio,
+      p.estado
+    FROM periodo p
+    ${where}
+    ORDER BY p.anio DESC, p.mes DESC
+  `;
+
+  const [filas] = await poolMysql.execute(
+    consulta,
+    parametros
+  );
+
+  return filas;
+}
+
+
 module.exports = {
   obtenerMunicipios,
   obtenerVacunas,
   obtenerEstablecimientos,
+  obtenerPeriodos
 };
+
