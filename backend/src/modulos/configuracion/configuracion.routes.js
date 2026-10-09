@@ -2,7 +2,7 @@ const express = require('express');
 
 const {
   listarDimensiones
-} = require('./configuracion.controlador');
+} = require('./configuracion.controller');
 
 const router = express.Router();
 

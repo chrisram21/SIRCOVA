@@ -2,15 +2,15 @@
 const express = require('express');
 
 const rutasSistema = require(
-  './modulos/sistema/sistema.rutas'
+  './modulos/sistema/sistema.routes'
 );
 
 const rutasCatalogos = require(
-  './modulos/catalogos/catalogos.rutas'
+  './modulos/catalogos/catalogos.routes'
 );
 
 const rutasConfiguracion = require(
-  './modulos/configuracion/configuracion.rutas'
+  './modulos/configuracion/configuracion.routes'
 );
 
 const app = express();

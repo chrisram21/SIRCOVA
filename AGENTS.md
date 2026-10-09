@@ -38,7 +38,7 @@ backend/
 ├── docker-compose.yml
 ├── db/                 ← scripts 01 (MySQL) y 02 (MongoDB)
 └── src/
-    ├── app.js, servidor.js
+    ├── app.js, server.js
     ├── config/         ← variables de entorno y conexiones
     ├── middlewares/    ← autenticación, permisos, errores
     └── modulos/        ← auth, usuarios, catalogos, configuracion,
@@ -46,6 +46,8 @@ backend/
 ```
 
 Cada módulo separa **rutas** (declaran el endpoint), **controlador** (recibe y responde) y **servicio** (reglas del negocio y acceso a datos). No mezcles capas. La estructura de `frontend/` aún no está definida.
+
+Los archivos de cada módulo usan sufijos técnicos en inglés (`.routes.js`, `.controller.js`, `.service.js`) y conservan el nombre del dominio en español, por ejemplo `sistema.controller.js`.
 
 Errores con el formato común: `{ "error": { "codigo": "...", "mensaje": "..." } }` y los códigos HTTP 400, 401, 403, 404, 409 y 422 según `INSTRUCCIONES_BACKEND.md`.
 

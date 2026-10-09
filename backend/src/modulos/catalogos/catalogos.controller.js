@@ -4,7 +4,7 @@ const {
   obtenerVacunas,
   obtenerEstablecimientos,
   obtenerPeriodos
-} = require('./catalogos.servicio');
+} = require('./catalogos.service');
 
 
 async function listarMunicipios(req, res) {

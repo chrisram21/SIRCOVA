@@ -3,7 +3,7 @@ const express = require('express');
 
 const {
   consultarSalud
-} = require('./sistema.controlador');
+} = require('./sistema.controller');
 
 const router = express.Router();
 

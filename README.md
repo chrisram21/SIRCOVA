@@ -100,7 +100,7 @@ Resumen de esas reglas:
 │   ├── docker-compose.yml
 │   ├── db/                ← 01_modelo_relacional_mysql.sql y 02_colecciones_mongodb.js
 │   └── src/
-│       ├── app.js, servidor.js
+│       ├── app.js, server.js
 │       ├── config/, middlewares/
 │       └── modulos/       ← auth, usuarios, catalogos, configuracion, produccion,
 │                            revision, indicadores, auditoria
@@ -122,6 +122,7 @@ Los comandos exactos del paso 3 quedan **pendientes** hasta que exista el códig
 ## 9. Convenciones
 
 - Documentación y mensajes de la API en español; nombres de carpetas y módulos en español.
+- Los archivos de cada módulo usan sufijos técnicos en inglés (`.routes.js`, `.controller.js`, `.service.js`), por ejemplo `sistema.controller.js`.
 - No se suben secretos ni archivos `.env`.
 - Consultas a la base siempre parametrizadas.
 - **Pendientes:** estrategia de ramas, formato de commits, revisión de código y licencia del repositorio.

@@ -1,7 +1,7 @@
 
 const {
   verificarConexiones
-} = require('./sistema.servicio');
+} = require('./sistema.service');
 
 async function consultarSalud(req, res) {
   try {

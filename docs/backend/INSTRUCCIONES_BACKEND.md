@@ -38,7 +38,7 @@ backend/
 ├── db/                   ← scripts 01 (MySQL) y 02 (MongoDB)
 └── src/
     ├── app.js            ← configuración de Express
-    ├── servidor.js       ← arranque
+    ├── server.js         ← arranque
     ├── config/           ← variables de entorno y conexiones
     ├── middlewares/      ← autenticación, permisos, manejo de errores
     └── modulos/
@@ -57,6 +57,8 @@ Cada módulo separa tres capas:
 - **rutas**: declaran el endpoint.
 - **controlador**: recibe la solicitud y responde.
 - **servicio**: aplica las reglas del negocio y consulta la base de datos.
+
+Los archivos usan sufijos técnicos en inglés (`.routes.js`, `.controller.js`, `.service.js`) y conservan el nombre del dominio en español, por ejemplo `sistema.controller.js`. El arranque está en `server.js` y la comprobación de conexiones en `test-connections.js`.
 
 ---
 

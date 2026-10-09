@@ -6,7 +6,7 @@ const {
   listarVacunas,
   listarEstablecimientos,
   listarPeriodos
-} = require('./catalogos.controlador');
+} = require('./catalogos.controller');
 
 const router = express.Router();
 

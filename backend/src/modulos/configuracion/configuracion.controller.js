@@ -1,6 +1,6 @@
 const {
   obtenerDimensiones
-} = require('./configuracion.servicio');
+} = require('./configuracion.service');
 
 async function listarDimensiones(req, res) {
   try {
