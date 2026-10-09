@@ -45,6 +45,13 @@ paths:
                 properties:
                   mysql: { type: string, example: ok }
                   mongo: { type: string, example: ok }
+        
+        "503":
+          description: Una o ambas bases de datos no responden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   # ---------------------------------------------------------------- Autenticación
   /auth/login:
@@ -177,7 +184,28 @@ paths:
           description: true para solo los 30 municipios de San Marcos
           schema: { type: boolean }
       responses:
-        "200": { description: Lista de municipios }
+        "200":
+          description: Lista de municipios
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: integer }
+                    departamentoId: { type: integer }
+                    codigoIne: { type: string }
+                    nombre: { type: string }
+                    esJurisdiccion: { type: boolean }
+                    activo: { type: boolean }
+        "400":
+          description: Parámetro jurisdiccion inválido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
 
   /establecimientos:
     get:
