@@ -7,6 +7,6 @@ const {
 
 const router = express.Router();
 
-router.get('/salud', consultarSalud);
+router.get('/health', consultarSalud);
 
 module.exports = router;

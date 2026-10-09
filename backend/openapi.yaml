@@ -30,7 +30,7 @@ security:
   - bearerAuth: []
 
 paths:
-  /salud:
+  /health:
     get:
       tags: [Sistema]
       summary: Estado de la API y de las conexiones a MySQL y MongoDB

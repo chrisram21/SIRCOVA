@@ -12,7 +12,7 @@ const servidor = app.listen(PUERTO, () => {
     `API: http://localhost:${PUERTO}/api/v1`
   );
   console.log(
-    `Salud: http://localhost:${PUERTO}/api/v1/salud`
+    `Health: http://localhost:${PUERTO}/api/v1/health`
   );
 });
 
