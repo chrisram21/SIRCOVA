@@ -1,7 +1,13 @@
 // =============================================================================
 //  Plataforma web de producción de vacunación — DDRISS San Marcos (MSPAS)
 //  Diseño preliminar de colecciones MongoDB (MongoDB 7.x, ejecutar con mongosh)
-//  Versión: 0.2 (propuesta para revisión, Sprint 2)   Fecha: 2026-09-29
+//  Versión: 0.3 (propuesta para revisión)   Fecha: 2026-10-10
+//  Cambios v0.3 (modelo preparado para varias DDRISS, igual que MySQL v0.5):
+//  reglas_validacion y configuracion_indicadores agregan "territorio"
+//  (NACIONAL o una DDRISS). Una versión vigente de una DDRISS prevalece sobre
+//  la nacional del mismo código. Las semillas son todas NACIONAL; el proyecto
+//  solo opera la DDRISS San Marcos. catalogo_dimensiones y esquemas_captura no
+//  cambian, porque el formulario 5C es nacional.
 //  Cambios v0.2: nueva colección catalogo_dimensiones; cada esquema de captura
 //  declara sus propias dimensiones de desagregación (sexo, grupo de edad,
 //  embarazo u otras nuevas) en lugar de usar sexo y grupo de edad fijos.
@@ -55,6 +61,20 @@ const auditoria = {
 };
 
 const estadoVersion = { enum: ["BORRADOR", "VIGENTE", "HISTORICO"] };
+
+// Subesquema reutilizable: territorio al que aplica una regla o indicador.
+// NACIONAL aplica a todas las DDRISS; DDRISS aplica solo a la indicada
+// (ddriss_codigo = ddriss.codigo de MySQL, p. ej. "DDRISS_SM").
+// Resolución en el backend: para una DDRISS se usa la versión VIGENTE con su
+// ddriss_codigo si existe; si no, la VIGENTE NACIONAL del mismo código.
+const territorio = {
+  bsonType: "object",
+  required: ["nivel", "ddriss_codigo"],
+  properties: {
+    nivel:         { enum: ["NACIONAL", "DDRISS"] },
+    ddriss_codigo: { bsonType: ["string", "null"], description: "null cuando nivel = NACIONAL" }
+  }
+};
 
 // -----------------------------------------------------------------------------
 // 1. catalogo_dimensiones
@@ -230,7 +250,7 @@ db_.createCollection("reglas_validacion", {
   validator: {
     $jsonSchema: {
       bsonType: "object",
-      required: ["codigo", "version", "nombre", "tipo", "ambito", "severidad", "mensaje", "estado", "vigencia", "auditoria"],
+      required: ["codigo", "version", "nombre", "tipo", "ambito", "severidad", "mensaje", "territorio", "estado", "vigencia", "auditoria"],
       properties: {
         codigo:      { bsonType: "string", pattern: "^[A-Z0-9_]+$" },
         version:     { bsonType: "int", minimum: 1 },
@@ -259,6 +279,7 @@ db_.createCollection("reglas_validacion", {
         },
         parametros: { bsonType: "object" },
         mensaje:    { bsonType: "string", description: "Plantilla con marcadores {vacuna}, {dosis}, {valor}..." },
+        territorio: territorio,
         estado:     estadoVersion,
         vigencia:   vigencia,
         auditoria:  auditoria
@@ -267,10 +288,14 @@ db_.createCollection("reglas_validacion", {
   }
 });
 
+// (codigo, version) sigue siendo único en todo el país: MySQL guarda
+// regla_codigo + regla_version y con eso identifica la versión sin ambigüedad.
 db_.reglas_validacion.createIndex({ codigo: 1, version: 1 }, { unique: true, name: "uq_regla_version" });
+// Una sola versión VIGENTE por código y territorio (una nacional y, si hace
+// falta, una por DDRISS).
 db_.reglas_validacion.createIndex(
-  { codigo: 1 },
-  { unique: true, partialFilterExpression: { estado: "VIGENTE" }, name: "uq_regla_vigente" }
+  { codigo: 1, "territorio.nivel": 1, "territorio.ddriss_codigo": 1 },
+  { unique: true, partialFilterExpression: { estado: "VIGENTE" }, name: "uq_regla_vigente_territorio" }
 );
 db_.reglas_validacion.createIndex({ "aplica_a.vacunas": 1, estado: 1 }, { name: "ix_regla_vacuna" });
 
@@ -283,7 +308,7 @@ db_.createCollection("configuracion_indicadores", {
   validator: {
     $jsonSchema: {
       bsonType: "object",
-      required: ["codigo", "version", "nombre", "tipo_calculo", "aplica_a", "periodicidad", "estado", "vigencia", "auditoria"],
+      required: ["codigo", "version", "nombre", "tipo_calculo", "aplica_a", "periodicidad", "territorio", "estado", "vigencia", "auditoria"],
       properties: {
         codigo:       { bsonType: "string", pattern: "^[A-Z0-9_]+$" },
         version:      { bsonType: "int", minimum: 1 },
@@ -347,6 +372,7 @@ db_.createCollection("configuracion_indicadores", {
           }
         },
         es_estimacion: { bsonType: "bool", description: "TRUE: el resultado se muestra como proyección" },
+        territorio: territorio,
         estado:    estadoVersion,
         vigencia:  vigencia,
         auditoria: auditoria
@@ -357,8 +383,8 @@ db_.createCollection("configuracion_indicadores", {
 
 db_.configuracion_indicadores.createIndex({ codigo: 1, version: 1 }, { unique: true, name: "uq_indicador_version" });
 db_.configuracion_indicadores.createIndex(
-  { codigo: 1 },
-  { unique: true, partialFilterExpression: { estado: "VIGENTE" }, name: "uq_indicador_vigente" }
+  { codigo: 1, "territorio.nivel": 1, "territorio.ddriss_codigo": 1 },
+  { unique: true, partialFilterExpression: { estado: "VIGENTE" }, name: "uq_indicador_vigente_territorio" }
 );
 db_.configuracion_indicadores.createIndex({ "aplica_a.vacuna": 1, estado: 1 }, { name: "ix_indicador_vacuna" });
 
@@ -368,6 +394,9 @@ db_.configuracion_indicadores.createIndex({ "aplica_a.vacuna": 1, estado: 1 }, {
 
 const ahora = new Date("2026-10-01T00:00:00Z");
 const auditoriaEjemplo = { creado_por: NumberInt(1), creado_en: ahora, publicado_por: NumberInt(1), publicado_en: ahora, motivo_cambio: null };
+// Todas las reglas e indicadores de ejemplo son nacionales.
+const territorioNacional = { nivel: "NACIONAL", ddriss_codigo: null };
+const conTerritorioNacional = (doc) => ({ ...doc, territorio: territorioNacional });
 
 // --- Catálogo de dimensiones ---------------------------------------------------
 db_.catalogo_dimensiones.insertMany([
@@ -448,7 +477,7 @@ db_.reglas_validacion.insertMany([
     mensaje: "La producción de {vacuna} varía {variacion} % respecto al promedio de los últimos {meses_referencia} meses.",
     estado: "VIGENTE", vigencia: { desde: new Date("2026-01-01"), hasta: null }, auditoria: auditoriaEjemplo
   }
-]);
+].map(conTerritorioNacional));
 
 // --- Esquemas de captura (Pentavalente: versión 1 histórica y versión 2 vigente)
 const penta_v1 = ObjectId("66f8a1c2e4b0a1b2c3d4e5f5");
@@ -574,6 +603,7 @@ db_.esquemas_captura.insertMany([
 // --- Configuración de indicadores ---------------------------------------------
 const baseIndicador = {
   version: NumberInt(1), periodicidad: "MENSUAL", estado: "VIGENTE",
+  territorio: territorioNacional,
   niveles: ["MUNICIPIO", "DEPARTAMENTO"],
   vigencia: { desde: new Date("2026-01-01"), hasta: null }, auditoria: auditoriaEjemplo
 };

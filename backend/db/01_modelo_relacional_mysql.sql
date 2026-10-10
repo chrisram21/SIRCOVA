@@ -1,7 +1,19 @@
 -- =============================================================================
 --  Plataforma web de producción de vacunación — DDRISS San Marcos (MSPAS)
 --  Modelo relacional preliminar (MySQL 8.0, InnoDB, utf8mb4)
---  Versión: 0.4 (propuesta para revisión)   Fecha: 2026-10-08
+--  Versión: 0.5 (propuesta para revisión)   Fecha: 2026-10-10
+--  Cambios v0.5 (modelo preparado para varias DDRISS; solo se opera San Marcos):
+--    Bloque A, territorio: tabla ddriss; distrito_salud.ddriss_id y
+--    establecimiento.ddriss_id (DDRISS a la que reporta); se elimina
+--    municipio.es_jurisdiccion (el territorio de una DDRISS son los
+--    municipios de sus distritos).
+--    Bloque B, personas y roles: empleado.ddriss_id (alcance del personal).
+--    Siguen los mismos 5 roles; AUTORIDAD con ddriss_id NULL es la autoridad
+--    nacional, con una DDRISS es la autoridad de esa DDRISS.
+--    Bloque C, periodos, alertas y vistas: periodo queda como calendario común
+--    (año, mes, fechas) y la tabla cierre_periodo guarda, por DDRISS, la fecha
+--    límite, el estado y quién cerró; alerta.ddriss_id; las vistas exponen la
+--    DDRISS.
 --  Cambios v0.4: normalización de usuario en dos tablas, usuario (datos de
 --  acceso) y empleado (datos del personal); dirección y contacto en
 --  establecimiento.
@@ -84,22 +96,39 @@ CREATE TABLE municipio (
   departamento_id TINYINT UNSIGNED  NOT NULL,
   codigo_ine      CHAR(4)           NOT NULL COMMENT 'Código INE de 4 dígitos; también es la llave del GeoJSON',
   nombre          VARCHAR(80)       NOT NULL,
-  es_jurisdiccion BOOLEAN           NOT NULL DEFAULT FALSE COMMENT 'TRUE para los 30 municipios de la DDRISS San Marcos',
   activo          BOOLEAN           NOT NULL DEFAULT TRUE,
   PRIMARY KEY (id),
   UNIQUE KEY uq_municipio_codigo (codigo_ine),
   KEY ix_municipio_depto (departamento_id),
   CONSTRAINT fk_municipio_depto FOREIGN KEY (departamento_id) REFERENCES departamento (id)
-) ENGINE=InnoDB COMMENT='Incluye municipios fuera de la jurisdicción para registrar la procedencia';
+) ENGINE=InnoDB COMMENT='Catálogo INE; incluye municipios fuera de la DDRISS para registrar la procedencia';
+
+-- DDRISS (Dirección Departamental de Redes Integradas de Servicios de Salud).
+-- El modelo admite varias; el proyecto solo carga y opera San Marcos. Su
+-- territorio son los municipios de sus distritos de salud.
+CREATE TABLE ddriss (
+  id              TINYINT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  codigo          VARCHAR(20)       NOT NULL COMMENT 'Código provisional, p. ej. DDRISS_SM',
+  nombre          VARCHAR(100)      NOT NULL,
+  departamento_id TINYINT UNSIGNED  NOT NULL COMMENT 'Departamento sede; un departamento puede tener más de una DDRISS',
+  activo          BOOLEAN           NOT NULL DEFAULT TRUE,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_ddriss_codigo (codigo),
+  KEY ix_ddriss_depto (departamento_id),
+  CONSTRAINT fk_ddriss_depto FOREIGN KEY (departamento_id) REFERENCES departamento (id)
+) ENGINE=InnoDB;
 
 CREATE TABLE distrito_salud (
   id              SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  ddriss_id       TINYINT UNSIGNED  NOT NULL COMMENT 'DDRISS a la que pertenece el distrito',
   municipio_id    SMALLINT UNSIGNED NOT NULL,
   codigo          VARCHAR(20)       NOT NULL,
   nombre          VARCHAR(120)      NOT NULL,
   activo          BOOLEAN           NOT NULL DEFAULT TRUE,
   PRIMARY KEY (id),
   UNIQUE KEY uq_distrito_codigo (codigo),
+  KEY ix_distrito_ddriss (ddriss_id),
+  CONSTRAINT fk_distrito_ddriss    FOREIGN KEY (ddriss_id)    REFERENCES ddriss (id),
   CONSTRAINT fk_distrito_municipio FOREIGN KEY (municipio_id) REFERENCES municipio (id)
 ) ENGINE=InnoDB;
 
@@ -116,10 +145,11 @@ CREATE TABLE establecimiento (
   codigo                 VARCHAR(20)       NOT NULL COMMENT 'Código institucional (p. ej. el usado en SIGSA)',
   nombre                 VARCHAR(150)      NOT NULL,
   tipo_establecimiento_id TINYINT UNSIGNED NOT NULL,
+  ddriss_id              TINYINT UNSIGNED  NOT NULL COMMENT 'DDRISS a la que reporta; coincide con la de su distrito salvo en los externos',
   distrito_salud_id      SMALLINT UNSIGNED NULL COMMENT 'NULL solo para establecimientos externos a la DDRISS',
   municipio_id           SMALLINT UNSIGNED NOT NULL COMMENT 'Municipio de aplicación de sus dosis',
   reporta_produccion     BOOLEAN           NOT NULL DEFAULT TRUE COMMENT 'FALSE si su producción la consolida otro establecimiento',
-  es_externo             BOOLEAN           NOT NULL DEFAULT FALSE COMMENT 'TRUE: establecimiento o institución fuera del departamento que atiende población de San Marcos (p. ej. Coatepeque)',
+  es_externo             BOOLEAN           NOT NULL DEFAULT FALSE COMMENT 'TRUE: su municipio no pertenece al territorio de la DDRISS a la que reporta (p. ej. Coatepeque); lo valida el backend',
   direccion              VARCHAR(255)      NULL COMMENT 'Dirección física (aldea, cantón, zona, calle); el municipio va en municipio_id',
   telefono               VARCHAR(20)       NULL,
   correo                 VARCHAR(150)      NULL COMMENT 'Correo institucional del establecimiento',
@@ -130,6 +160,8 @@ CREATE TABLE establecimiento (
   PRIMARY KEY (id),
   UNIQUE KEY uq_establecimiento_codigo (codigo),
   KEY ix_establecimiento_municipio (municipio_id),
+  KEY ix_establecimiento_ddriss (ddriss_id),
+  CONSTRAINT fk_est_ddriss    FOREIGN KEY (ddriss_id)               REFERENCES ddriss (id),
   CONSTRAINT fk_est_tipo      FOREIGN KEY (tipo_establecimiento_id) REFERENCES tipo_establecimiento (id),
   CONSTRAINT fk_est_distrito  FOREIGN KEY (distrito_salud_id)       REFERENCES distrito_salud (id),
   CONSTRAINT fk_est_municipio FOREIGN KEY (municipio_id)            REFERENCES municipio (id)
@@ -147,6 +179,7 @@ CREATE TABLE empleado (
   correo              VARCHAR(150)      NULL COMMENT 'Correo de contacto; se usa para notificaciones y recuperación de contraseña',
   telefono            VARCHAR(20)       NULL,
   establecimiento_id  INT UNSIGNED      NULL COMMENT 'Lugar de trabajo; obligatorio para personal de establecimiento',
+  ddriss_id           TINYINT UNSIGNED  NULL COMMENT 'DDRISS donde trabaja; NULL solo para el rol AUTORIDAD de nivel nacional (lo valida el backend)',
   municipio_id        SMALLINT UNSIGNED NULL COMMENT 'Alcance territorial opcional (p. ej. coordinador municipal)',
   activo              BOOLEAN           NOT NULL DEFAULT TRUE,
   creado_en           DATETIME          NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -155,6 +188,8 @@ CREATE TABLE empleado (
   UNIQUE KEY uq_empleado_codigo (codigo_empleado),
   UNIQUE KEY uq_empleado_correo (correo),
   KEY ix_empleado_est (establecimiento_id),
+  KEY ix_empleado_ddriss (ddriss_id),
+  CONSTRAINT fk_empleado_ddriss    FOREIGN KEY (ddriss_id)          REFERENCES ddriss (id),
   CONSTRAINT fk_empleado_est       FOREIGN KEY (establecimiento_id) REFERENCES establecimiento (id),
   CONSTRAINT fk_empleado_municipio FOREIGN KEY (municipio_id)       REFERENCES municipio (id)
 ) ENGINE=InnoDB COMMENT='Personal de la DDRISS y de los establecimientos; no son pacientes';
@@ -255,15 +290,31 @@ CREATE TABLE periodo (
   mes                 TINYINT UNSIGNED  NOT NULL,
   fecha_inicio        DATE              NOT NULL,
   fecha_fin           DATE              NOT NULL,
-  fecha_limite_envio  DATE              NOT NULL COMMENT 'Base de las alertas de reportes pendientes',
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_periodo (anio, mes),
+  CONSTRAINT ck_periodo_mes CHECK (mes BETWEEN 1 AND 12)
+) ENGINE=InnoDB COMMENT='Calendario común de periodos mensuales; el estado de cada mes va por DDRISS en cierre_periodo';
+
+-- Estado del mes para cada DDRISS: cada una abre, cierra y fija su fecha
+-- límite de envío por separado. El backend crea la fila al abrir el mes
+-- (una por DDRISS activa). Mientras está ABIERTO los establecimientos de esa
+-- DDRISS envían y corrigen; al quedar CERRADO solo procede la rectificación.
+CREATE TABLE cierre_periodo (
+  id                  INT UNSIGNED      NOT NULL AUTO_INCREMENT,
+  periodo_id          SMALLINT UNSIGNED NOT NULL,
+  ddriss_id           TINYINT UNSIGNED  NOT NULL,
+  fecha_limite_envio  DATE              NOT NULL COMMENT 'Base de las alertas de reportes pendientes de esa DDRISS',
   estado              ENUM('ABIERTO','EN_CIERRE','CERRADO') NOT NULL DEFAULT 'ABIERTO',
   cerrado_por         INT UNSIGNED      NULL,
   cerrado_en          DATETIME          NULL,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_periodo (anio, mes),
-  CONSTRAINT ck_periodo_mes CHECK (mes BETWEEN 1 AND 12),
-  CONSTRAINT fk_periodo_cerrado_por FOREIGN KEY (cerrado_por) REFERENCES usuario (id)
-) ENGINE=InnoDB COMMENT='Periodo mensual de reporte';
+  UNIQUE KEY uq_cierre_periodo_ddriss (periodo_id, ddriss_id),
+  KEY ix_cierre_ddriss_estado (ddriss_id, estado),
+  CONSTRAINT ck_cierre_cerrado CHECK (estado <> 'CERRADO' OR (cerrado_por IS NOT NULL AND cerrado_en IS NOT NULL)),
+  CONSTRAINT fk_cierre_periodo     FOREIGN KEY (periodo_id)  REFERENCES periodo (id),
+  CONSTRAINT fk_cierre_ddriss      FOREIGN KEY (ddriss_id)   REFERENCES ddriss (id),
+  CONSTRAINT fk_cierre_cerrado_por FOREIGN KEY (cerrado_por) REFERENCES usuario (id)
+) ENGINE=InnoDB COMMENT='Apertura y cierre de cada periodo mensual por DDRISS';
 
 -- Catálogo de estados del reporte (sección 5.4)
 CREATE TABLE estado_reporte (
@@ -522,6 +573,7 @@ CREATE TABLE alerta (
   severidad           ENUM('INFO','ADVERTENCIA','CRITICA') NOT NULL DEFAULT 'ADVERTENCIA',
   titulo              VARCHAR(150)      NOT NULL,
   mensaje             VARCHAR(1000)     NOT NULL,
+  ddriss_id           TINYINT UNSIGNED  NULL COMMENT 'DDRISS a cuya bandeja pertenece; NULL = alerta de nivel nacional',
   periodo_id          SMALLINT UNSIGNED NULL,
   municipio_id        SMALLINT UNSIGNED NULL,
   establecimiento_id  INT UNSIGNED      NULL,
@@ -534,6 +586,8 @@ CREATE TABLE alerta (
   generada_en         DATETIME          NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY ix_alerta_estado (estado, tipo, generada_en),
+  KEY ix_alerta_ddriss (ddriss_id, estado),
+  CONSTRAINT fk_alerta_ddriss    FOREIGN KEY (ddriss_id)              REFERENCES ddriss (id),
   CONSTRAINT fk_alerta_periodo   FOREIGN KEY (periodo_id)             REFERENCES periodo (id),
   CONSTRAINT fk_alerta_municipio FOREIGN KEY (municipio_id)           REFERENCES municipio (id),
   CONSTRAINT fk_alerta_est       FOREIGN KEY (establecimiento_id)     REFERENCES establecimiento (id),
@@ -579,6 +633,7 @@ CREATE TABLE bitacora (
 CREATE VIEW v_produccion AS
 SELECT  p.anio, p.mes, p.id AS periodo_id,
         r.id AS reporte_id, r.estado,
+        dr.id AS ddriss_id, dr.codigo AS ddriss_codigo,
         e.id AS establecimiento_id, e.nombre AS establecimiento,
         ma.id AS municipio_aplicacion_id, ma.nombre AS municipio_aplicacion,
         mp.id AS municipio_procedencia_id, mp.nombre AS municipio_procedencia,
@@ -593,6 +648,7 @@ JOIN reporte_vacuna     rv ON rv.id = dp.reporte_vacuna_id
 JOIN reporte_produccion r  ON r.id  = rv.reporte_id
 JOIN periodo            p  ON p.id  = r.periodo_id
 JOIN establecimiento    e  ON e.id  = r.establecimiento_id
+JOIN ddriss             dr ON dr.id = e.ddriss_id
 JOIN municipio          ma ON ma.id = e.municipio_id
 JOIN municipio          mp ON mp.id = dp.municipio_procedencia_id
 JOIN vacuna             v  ON v.id  = rv.vacuna_id
@@ -607,23 +663,27 @@ JOIN detalle_dimension dd ON dd.detalle_id = vp.detalle_id;
 
 -- Excel 1 (población propia) + Excel 2 (otros municipios) + Excel 3 (total)
 CREATE VIEW v_consolidado_establecimiento AS
-SELECT  periodo_id, anio, mes, establecimiento_id, establecimiento,
+SELECT  periodo_id, anio, mes, ddriss_id, ddriss_codigo,
+        establecimiento_id, establecimiento,
         municipio_aplicacion_id, vacuna_id, dosis_id,
         SUM(CASE WHEN es_poblacion_propia     THEN cantidad ELSE 0 END) AS dosis_poblacion_propia,
         SUM(CASE WHEN NOT es_poblacion_propia THEN cantidad ELSE 0 END) AS dosis_otros_municipios,
         SUM(cantidad)                                                   AS dosis_total
 FROM v_produccion
 WHERE estado IN ('APROBADO','CERRADO','RECTIFICACION')
-GROUP BY periodo_id, anio, mes, establecimiento_id, establecimiento,
+GROUP BY periodo_id, anio, mes, ddriss_id, ddriss_codigo,
+         establecimiento_id, establecimiento,
          municipio_aplicacion_id, vacuna_id, dosis_id;
 
--- Numerador de cobertura con atribución por procedencia (solo datos cerrados)
+-- Numerador de cobertura con atribución por procedencia (solo datos cerrados).
+-- ddriss_id es la DDRISS que recibió el reporte; para la cobertura nacional de
+-- un municipio se suma sobre todas las DDRISS.
 CREATE VIEW v_produccion_atribuida AS
-SELECT  anio, mes, municipio_procedencia_id AS municipio_id,
+SELECT  anio, mes, ddriss_id, municipio_procedencia_id AS municipio_id,
         vacuna_id, dosis_id, SUM(cantidad) AS dosis_atribuidas
 FROM v_produccion
 WHERE estado = 'CERRADO'
-GROUP BY anio, mes, municipio_procedencia_id, vacuna_id, dosis_id;
+GROUP BY anio, mes, ddriss_id, municipio_procedencia_id, vacuna_id, dosis_id;
 
 -- =============================================================================
 -- DATOS SEMILLA MÍNIMOS (catálogos que el diseño necesita para funcionar)
@@ -634,7 +694,7 @@ INSERT INTO rol (codigo, nombre, descripcion) VALUES
  ('REVISOR',         'Estadígrafa / revisor DDRISS', 'Revisa, solicita correcciones, aprueba y cierra periodos'),
  ('EPIDEMIOLOGIA',   'Departamento de Epidemiología', 'Consulta indicadores, mapas, alertas, brechas, proyecciones e informes'),
  ('ADMINISTRADOR',   'Administrador',                'Gestiona usuarios, catálogos y configuraciones'),
- ('AUTORIDAD',       'Autoridades (solo consulta)',  'Accede a resultados e informes');
+ ('AUTORIDAD',       'Autoridades (solo consulta)',  'Consulta de resultados e informes de su DDRISS, o de todas si no tiene DDRISS asignada');
 
 INSERT INTO estado_reporte (codigo, nombre, permite_edicion, orden) VALUES
  ('BORRADOR',              'Borrador',              TRUE,  1),
@@ -670,25 +730,30 @@ INSERT INTO departamento (codigo_ine, nombre) VALUES
  ('99', 'No especificado / otro'),
  ('09', 'Quetzaltenango');
 
+-- Única DDRISS que opera el proyecto. Sus distritos de salud se cargan con
+-- ddriss_id = 1; agregar otra DDRISS es insertar datos, no cambiar tablas.
+INSERT INTO ddriss (codigo, nombre, departamento_id) VALUES
+ ('DDRISS_SM', 'DDRISS San Marcos', 1);
+
 -- 30 municipios de San Marcos (verificar códigos contra el catálogo INE y el GeoJSON)
-INSERT INTO municipio (departamento_id, codigo_ine, nombre, es_jurisdiccion) VALUES
- (1,'1201','San Marcos',TRUE), (1,'1202','San Pedro Sacatepéquez',TRUE),
- (1,'1203','San Antonio Sacatepéquez',TRUE), (1,'1204','Comitancillo',TRUE),
- (1,'1205','San Miguel Ixtahuacán',TRUE), (1,'1206','Concepción Tutuapa',TRUE),
- (1,'1207','Tacaná',TRUE), (1,'1208','Sibinal',TRUE),
- (1,'1209','Tajumulco',TRUE), (1,'1210','Tejutla',TRUE),
- (1,'1211','San Rafael Pie de la Cuesta',TRUE), (1,'1212','Nuevo Progreso',TRUE),
- (1,'1213','El Tumbador',TRUE), (1,'1214','El Rodeo',TRUE),
- (1,'1215','Malacatán',TRUE), (1,'1216','Catarina',TRUE),
- (1,'1217','Ayutla',TRUE), (1,'1218','Ocós',TRUE),
- (1,'1219','San Pablo',TRUE), (1,'1220','El Quetzal',TRUE),
- (1,'1221','La Reforma',TRUE), (1,'1222','Pajapita',TRUE),
- (1,'1223','Ixchiguán',TRUE), (1,'1224','San José Ojetenam',TRUE),
- (1,'1225','San Cristóbal Cucho',TRUE), (1,'1226','Sipacapa',TRUE),
- (1,'1227','Esquipulas Palo Gordo',TRUE), (1,'1228','Río Blanco',TRUE),
- (1,'1229','San Lorenzo',TRUE), (1,'1230','La Blanca',TRUE),
- (2,'9999','Procedencia no especificada / fuera del departamento',FALSE),
- (3,'0920','Coatepeque',FALSE);  -- establecimiento externo que atiende población de San Marcos; verificar código INE
+INSERT INTO municipio (departamento_id, codigo_ine, nombre) VALUES
+ (1,'1201','San Marcos'), (1,'1202','San Pedro Sacatepéquez'),
+ (1,'1203','San Antonio Sacatepéquez'), (1,'1204','Comitancillo'),
+ (1,'1205','San Miguel Ixtahuacán'), (1,'1206','Concepción Tutuapa'),
+ (1,'1207','Tacaná'), (1,'1208','Sibinal'),
+ (1,'1209','Tajumulco'), (1,'1210','Tejutla'),
+ (1,'1211','San Rafael Pie de la Cuesta'), (1,'1212','Nuevo Progreso'),
+ (1,'1213','El Tumbador'), (1,'1214','El Rodeo'),
+ (1,'1215','Malacatán'), (1,'1216','Catarina'),
+ (1,'1217','Ayutla'), (1,'1218','Ocós'),
+ (1,'1219','San Pablo'), (1,'1220','El Quetzal'),
+ (1,'1221','La Reforma'), (1,'1222','Pajapita'),
+ (1,'1223','Ixchiguán'), (1,'1224','San José Ojetenam'),
+ (1,'1225','San Cristóbal Cucho'), (1,'1226','Sipacapa'),
+ (1,'1227','Esquipulas Palo Gordo'), (1,'1228','Río Blanco'),
+ (1,'1229','San Lorenzo'), (1,'1230','La Blanca'),
+ (2,'9999','Procedencia no especificada / fuera del departamento'),
+ (3,'0920','Coatepeque');  -- establecimiento externo que atiende población de San Marcos; verificar código INE
 
 -- Ejemplos de vacunas y dosis (a confirmar contra el 5C vigente).
 -- Los valores de sexo, grupo de edad, embarazo, etc. ya no se siembran aquí:

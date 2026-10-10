@@ -2,7 +2,7 @@
 
 > **Para qué sirve este documento.** Da contexto preciso sobre la base de datos del proyecto a otros agentes de IA y a los integrantes del equipo. Resume qué se trabajó, cómo está organizada la persistencia (MySQL + MongoDB) y qué es y para qué sirve cada tabla y cada colección.
 >
-> **Estado:** modelo preliminar **v0.4** (8 de octubre de 2026). El modelo se sigue refinando por sprint.
+> **Estado:** modelo preliminar **v0.5** (10 de octubre de 2026), preparado para varias DDRISS. El modelo se sigue refinando por sprint.
 >
 > **Fuente de verdad:** si este resumen y los scripts difieren, mandan los scripts.
 > - `01_modelo_relacional_mysql.sql`: DDL de MySQL 8.0.
@@ -12,7 +12,7 @@
 
 ---
 
-## 1. Lo esencial en diez puntos
+## 1. Lo esencial en once puntos
 
 1. **Qué es el sistema.** Una plataforma web para que los establecimientos de salud de los 30 municipios de San Marcos (MSPAS, Guatemala) registren cada mes su **producción de vacunación**, que hoy se reporta en el formulario físico **5C (SIGSA-S5c)**. La DDRISS la valida, revisa y cierra, y un motor calcula **cobertura, brecha, deserción y proyección**.
 2. **Solo datos agregados.** Ninguna tabla ni colección guarda datos personales ni clínicos de pacientes. La unidad mínima es *una cantidad de dosis*. Sí se guardan datos del **personal** que usa el sistema (`empleado`, `usuario`).
@@ -26,6 +26,7 @@
 8. **Ciclo de vida del reporte (7 estados).** Borrador → Enviado → En revisión → (Corrección solicitada → Borrador) | Aprobado → Cerrado → (Rectificación → Cerrado). Las transiciones permitidas por rol están en la tabla `transicion_estado`.
 9. **Versionado e inmutabilidad.** Una versión publicada de esquema, regla o indicador no se edita: se crea una nueva. MySQL guarda la versión exacta que se usó.
 10. **Sin llaves foráneas entre motores.** Los vínculos MySQL ↔ MongoDB son códigos o ObjectId que valida el backend (sección 7).
+11. **Preparado para varias DDRISS (v0.5).** La tabla `ddriss` agrupa distritos, establecimientos y personal. El proyecto solo carga y opera la DDRISS San Marcos; agregar otra es cargar datos, no modificar tablas.
 
 ---
 
@@ -37,23 +38,26 @@
 | **v0.2** | 2026-09-29 | **Decisión del equipo:** los formularios deben admitir dimensiones nuevas por vacuna, y por eso se eligió MongoDB. Sexo y grupo de edad dejan de ser columnas: se crean la tabla genérica `detalle_dimension`, la colección `catalogo_dimensiones` y la regla `DIMENSIONES_VALIDAS`. Se elimina la tabla `grupo_edad`. |
 | **v0.3** | 2026-09-29 | Alineación con la **propuesta v2**. "Corrección solicitada" regresa a **Borrador** (antes iba a Enviado). Se asigna un revisor al pasar a En revisión (`revisor_id`, `asignado_en`). Nuevos tipos de establecimiento (CAIMI, centro comunitario, casa materna, otra institución). Se admiten establecimientos **externos** (caso Coatepeque, Quetzaltenango). |
 | **v0.4** | 2026-10-08 | **Normalización de usuario:** se separa `empleado` (datos del personal) de `usuario` (solo datos de acceso), con relación 1:1. Se agregan **dirección y contacto** a `establecimiento`. |
+| **v0.5** | 2026-10-10 | **Modelo preparado para varias DDRISS**, operando solo San Marcos. Bloque A: tabla `ddriss`, `distrito_salud.ddriss_id`, `establecimiento.ddriss_id` (DDRISS a la que reporta) y se elimina `municipio.es_jurisdiccion`. Bloque B: `empleado.ddriss_id`; los 5 roles se conservan y `AUTORIDAD` sin DDRISS es la autoridad nacional. Bloque C: `periodo` queda como calendario común y la nueva tabla `cierre_periodo` guarda el estado del mes por DDRISS; `alerta.ddriss_id`; las vistas exponen la DDRISS. MongoDB (script v0.3): campo `territorio` en reglas e indicadores. |
 
 Entregables generados en el hilo, todos en `/mnt/project-files/diseno-bd/`:
 
 | Archivo | Contenido |
 |---|---|
-| `01_modelo_relacional_mysql.sql` | DDL de MySQL: 30 tablas, 4 vistas y datos semilla mínimos |
+| `01_modelo_relacional_mysql.sql` | DDL de MySQL: 32 tablas, 4 vistas y datos semilla mínimos |
 | `02_colecciones_mongodb.js` | 4 colecciones con validadores `$jsonSchema`, índices y documentos de ejemplo |
 | `03_documento_diseno_bd.md` | Documento de diseño con justificación, decisiones, supuestos y preguntas abiertas |
 | `04_modelo_relacional.dbml` | Modelo MySQL para dbdiagram.io, agrupado en los 4 grupos de la propuesta v2 |
 | `05_contexto_base_de_datos.md` | Este documento |
 | `diagrama_er.png` | Diagrama ER (Mermaid) |
-| `diagramas_chen/` | Diagramas en notación de Chen (uno general y seis por módulo), con el script que los genera |
+| `06_guia_instalacion_local.docx` | Guía corta para crear ambas bases en local |
+| `plan_v05_multi_ddriss.md` | Plan de la v0.5 y su avance por bloques |
+| `_archivo/diagramas_chen/` | Diagramas de Chen de la v0.4; archivados, ya no se actualizan |
 
 **Verificación realizada:**
-- El DDL v0.4 se ejecutó en MariaDB 10.11 (sustituyendo la colación `utf8mb4_0900_ai_ci` por `utf8mb4_unicode_ci`). Crea 30 tablas y 66 llaves foráneas.
-- Con datos de prueba se comprobaron las vistas, el rechazo de duplicados y la restricción de una cuenta por empleado.
-- El DBML se convierte de vuelta a SQL y produce las mismas 30 tablas y 66 llaves foráneas.
+- El DDL v0.5 se ejecutó en MariaDB 10.11 (sustituyendo la colación `utf8mb4_0900_ai_ci` por `utf8mb4_unicode_ci`). Crea 32 tablas, 4 vistas y 73 llaves foráneas.
+- Con datos de prueba se comprobaron las vistas, el rechazo de duplicados y la restricción de una cuenta por empleado. En v0.5 también: establecimientos ligados a la DDRISS (incluido el externo de Coatepeque), rechazo de una DDRISS inexistente, un empleado sin DDRISS (autoridad nacional), dos DDRISS con estados distintos en el mismo mes, el rechazo de un cierre sin responsable o duplicado, y las vistas y alertas filtradas por DDRISS.
+- El DBML se convierte de vuelta a SQL y produce las mismas 32 tablas y 73 llaves foráneas.
 - El script de MongoDB **no se ha ejecutado contra un servidor MongoDB real**; solo se verificó su sintaxis JavaScript.
 
 ---
@@ -77,15 +81,15 @@ Entregables generados en el hilo, todos en `/mnt/project-files/diseno-bd/`:
 
 ---
 
-## 4. MySQL: las 30 tablas
+## 4. MySQL: las 32 tablas
 
 Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se agrupan según los cuatro grupos de MySQL de la propuesta v2. "→" indica una llave foránea.
 
-### 4.1 Seguridad y organización (10 tablas)
+### 4.1 Seguridad y organización (11 tablas)
 
 **`rol`**: catálogo de roles del sistema. Sirve para asignar a cada cuenta lo que puede hacer.
 - Columnas: `id`, `codigo` (único), `nombre`, `descripcion`.
-- Valores semilla: `ESTABLECIMIENTO` (personal del establecimiento), `REVISOR` (estadígrafa / revisor DDRISS), `EPIDEMIOLOGIA`, `ADMINISTRADOR` y `AUTORIDAD` (solo consulta).
+- Valores semilla: `ESTABLECIMIENTO` (personal del establecimiento), `REVISOR` (estadígrafa / revisor DDRISS), `EPIDEMIOLOGIA`, `ADMINISTRADOR` y `AUTORIDAD` (solo consulta). Los 5 roles funcionan. El alcance de `AUTORIDAD` lo da `empleado.ddriss_id`: con una DDRISS consulta esa DDRISS; sin DDRISS (NULL) consulta todo el país.
 
 **`permiso`**: catálogo de acciones permitidas, por ejemplo `REPORTE_APROBAR`. Sirve para controlar el acceso fino por módulo.
 - Columnas: `id`, `codigo` (único), `modulo`, `descripcion`.
@@ -96,6 +100,7 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 **`empleado`** (nueva en v0.4): **datos del personal**, es decir quién es y dónde trabaja. Sirve para identificar y contactar a las personas, que no son pacientes. Un empleado puede existir **sin cuenta**, por ejemplo alguien que solo figura como contacto.
 - Columnas: `id`, `codigo_empleado` (único, opcional), `nombres`, `apellidos`, `cargo`, `correo` (único, opcional; se usa para notificaciones y recuperación de contraseña), `telefono`, `activo`, `creado_en`, `actualizado_en`.
 - `establecimiento_id` → establecimiento: lugar de trabajo; obligatorio en la práctica para el personal de establecimiento.
+- `ddriss_id` → ddriss (v0.5, opcional): DDRISS donde trabaja; define el alcance de lo que ve. Solo el rol `AUTORIDAD` puede dejarlo NULL (autoridad nacional); lo valida el backend.
 - `municipio_id` → municipio: alcance territorial opcional, por ejemplo un coordinador municipal.
 - No guarda DPI ni otros datos personales innecesarios.
 
@@ -104,18 +109,23 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 - `empleado_id` → empleado, **único**: relación 1:1, un empleado tiene a lo sumo una cuenta.
 - `rol_id` → rol: un rol por cuenta.
 - `creado_por` → usuario: el administrador que creó la cuenta.
-- Nombre, correo y establecimiento se obtienen de `empleado`. Los permisos sobre reportes se deducen de `usuario.rol_id` y de `empleado.establecimiento_id`.
+- Nombre, correo y establecimiento se obtienen de `empleado`. Los permisos sobre reportes se deducen de `usuario.rol_id`, `empleado.establecimiento_id` y `empleado.ddriss_id`.
 
 **`departamento`**: catálogo de departamentos.
 - Columnas: `id`, `codigo_ine` (único), `nombre`.
 - Semillas: `12` San Marcos, `09` Quetzaltenango (por Coatepeque) y `99` No especificado.
 
-**`municipio`**: catálogo de municipios. Incluye municipios de fuera de la jurisdicción para registrar la procedencia.
-- Columnas: `id`, `departamento_id` → departamento, `codigo_ine` (único; también es la llave del GeoJSON de Leaflet), `nombre`, `es_jurisdiccion` (TRUE para los 30 de San Marcos), `activo`.
+**`municipio`**: catálogo de municipios (INE). Incluye municipios de fuera de la DDRISS para registrar la procedencia.
+- Columnas: `id`, `departamento_id` → departamento, `codigo_ine` (único; también es la llave del GeoJSON de Leaflet), `nombre`, `activo`.
+- En v0.5 se eliminó `es_jurisdiccion`: un municipio pertenece a una DDRISS si alguno de sus distritos de salud pertenece a ella.
 - Semillas: los 30 municipios de San Marcos (códigos 1201 a 1230), `9999` Procedencia no especificada y `0920` Coatepeque.
 
-**`distrito_salud`**: distritos de salud, cada uno dentro de un municipio. Sirve para agrupar establecimientos.
-- Columnas: `id`, `municipio_id` → municipio, `codigo` (único), `nombre`, `activo`.
+**`ddriss`** (nueva en v0.5): Direcciones Departamentales de Redes Integradas de Servicios de Salud. Sirve para que el modelo admita varias DDRISS; su territorio son los municipios de sus distritos.
+- Columnas: `id`, `codigo` (único; provisional `DDRISS_SM`), `nombre`, `departamento_id` → departamento (sede; un departamento puede tener más de una DDRISS), `activo`.
+- Semilla: una sola fila, DDRISS San Marcos. Es la única que opera el proyecto.
+
+**`distrito_salud`**: distritos de salud, cada uno dentro de un municipio. Sirve para agrupar establecimientos y definir el territorio de cada DDRISS.
+- Columnas: `id`, `ddriss_id` → ddriss (v0.5, obligatorio), `municipio_id` → municipio, `codigo` (único), `nombre`, `activo`.
 
 **`tipo_establecimiento`**: catálogo de tipos de servicio.
 - Columnas: `id`, `codigo` (único), `nombre`.
@@ -123,12 +133,12 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 
 **`establecimiento`**: establecimientos de salud e instituciones que reportan producción.
 - Identificación: `id`, `codigo` (único), `nombre`.
-- Ubicación y clasificación: `tipo_establecimiento_id` → tipo_establecimiento, `distrito_salud_id` → distrito_salud (NULL solo si es externo), `municipio_id` → municipio (es el **municipio de aplicación** de sus dosis).
-- Banderas: `reporta_produccion` (FALSE si otro establecimiento consolida su producción), `es_externo` (TRUE para instituciones fuera del departamento que atienden población de San Marcos), `activo`.
+- Ubicación y clasificación: `tipo_establecimiento_id` → tipo_establecimiento, `ddriss_id` → ddriss (v0.5, obligatorio: DDRISS **a la que reporta**; coincide con la de su distrito salvo en los externos), `distrito_salud_id` → distrito_salud (NULL solo si es externo), `municipio_id` → municipio (es el **municipio de aplicación** de sus dosis).
+- Banderas: `reporta_produccion` (FALSE si otro establecimiento consolida su producción), `es_externo` (TRUE si su municipio no pertenece al territorio de la DDRISS a la que reporta, como Coatepeque con San Marcos; lo valida el backend), `activo`.
 - **Dirección y contacto (v0.4):** `direccion` (dirección física; el municipio va aparte), `telefono`, `correo`, `nombre_contacto` (persona de contacto en texto libre).
 - Auditoría: `creado_en`, `actualizado_en`.
 
-### 4.2 Catálogos sanitarios (5 tablas)
+### 4.2 Catálogos sanitarios (6 tablas)
 
 **`vacuna`**: catálogo de vacunas, la *identidad* de cada una. Cómo se captura cada vacuna está en MongoDB.
 - Columnas: `id`, `codigo` (único; llave compartida con MongoDB, por ejemplo `PENTA`), `nombre`, `descripcion`, `orden_informe`, `activa`, `creado_en`.
@@ -147,9 +157,14 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 - Columnas: `id`, `municipio_id` → municipio, `anio`, `vacuna_id` → vacuna, `clasificacion_poblacion_id` → clasificacion_poblacion, `cantidad`, `fuente`, `registrado_por` → usuario, `creado_en`, `actualizado_en`.
 - Único (`municipio_id`, `anio`, `vacuna_id`, `clasificacion_poblacion_id`).
 
-**`periodo`**: periodos mensuales de reporte.
-- Columnas: `id`, `anio`, `mes` (1 a 12), `fecha_inicio`, `fecha_fin`, `fecha_limite_envio` (base de las alertas de reportes pendientes), `estado` (ABIERTO, EN_CIERRE, CERRADO), `cerrado_por` → usuario, `cerrado_en`.
-- Único (`anio`, `mes`).
+**`periodo`**: calendario común de periodos mensuales de reporte (una fila por mes para todo el país). Los reportes apuntan aquí.
+- Columnas: `id`, `anio`, `mes` (1 a 12), `fecha_inicio`, `fecha_fin`.
+- Único (`anio`, `mes`). En v0.5 la fecha límite, el estado y el cierre pasaron a `cierre_periodo`.
+
+**`cierre_periodo`** (nueva en v0.5): estado del mes **para cada DDRISS**. Sirve para que cada DDRISS abra, cierre y fije su fecha límite por separado. Mientras está ABIERTO sus establecimientos envían y corrigen; CERRADO solo admite rectificación.
+- Columnas: `id`, `periodo_id` → periodo, `ddriss_id` → ddriss, `fecha_limite_envio` (base de las alertas de reportes pendientes de esa DDRISS), `estado` (ABIERTO, EN_CIERRE, CERRADO), `cerrado_por` → usuario, `cerrado_en`.
+- Único (`periodo_id`, `ddriss_id`). `CHECK`: si el estado es CERRADO, `cerrado_por` y `cerrado_en` son obligatorios.
+- El backend crea la fila al abrir el mes, una por DDRISS activa (en el proyecto, solo San Marcos).
 
 ### 4.3 Operación de vacunación (7 tablas)
 
@@ -185,7 +200,7 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 
 **`alerta`**: alertas automáticas.
 - Contenido: `id`, `tipo` (REPORTE_PENDIENTE, CALIDAD, COBERTURA_BAJO_META, PROCESO), `severidad` (INFO, ADVERTENCIA, CRITICA), `titulo`, `mensaje`.
-- A qué se refiere, todo opcional: `periodo_id`, `municipio_id`, `establecimiento_id`, `reporte_id`, `resultado_indicador_id`.
+- A qué se refiere, todo opcional: `ddriss_id` → ddriss (v0.5; bandeja de la DDRISS, NULL = nivel nacional), `periodo_id`, `municipio_id`, `establecimiento_id`, `reporte_id`, `resultado_indicador_id`.
 - Destino y atención: `rol_destino_id` → rol, `estado` (ACTIVA, ATENDIDA, DESCARTADA), `atendida_por` → usuario, `atendida_en`, `generada_en`.
 
 ### 4.4 Trazabilidad y reportes (8 tablas)
@@ -237,10 +252,10 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 
 | Vista | Para qué sirve |
 |---|---|
-| `v_produccion` | Une detalle, reporte, periodo, establecimiento, municipios de aplicación y procedencia, vacuna y dosis. Incluye `es_poblacion_propia` (procedencia = municipio de aplicación). Es la base de las demás vistas. |
+| `v_produccion` | Une detalle, reporte, periodo, DDRISS que recibió el reporte (`ddriss_id`, `ddriss_codigo`), establecimiento, municipios de aplicación y procedencia, vacuna y dosis. Incluye `es_poblacion_propia` (procedencia = municipio de aplicación). Es la base de las demás vistas. |
 | `v_produccion_dimension` | `v_produccion` más una fila por dimensión (`dimension_codigo`, `valor_codigo`). Sirve para filtrar o agrupar por cualquier dimensión, por ejemplo `dimension_codigo='grupo_edad' AND valor_codigo='MENOR_1'`. |
-| `v_consolidado_establecimiento` | Reproduce los **tres Excel** que hoy lleva la estadígrafa: dosis a población propia (Excel 1), dosis a otros municipios (Excel 2) y total (Excel 3). Toma reportes APROBADO, CERRADO y RECTIFICACION. |
-| `v_produccion_atribuida` | Numerador de cobertura **por municipio de procedencia**. Solo toma reportes CERRADO. |
+| `v_consolidado_establecimiento` | Reproduce los **tres Excel** que hoy lleva la estadígrafa: dosis a población propia (Excel 1), dosis a otros municipios (Excel 2) y total (Excel 3). Toma reportes APROBADO, CERRADO y RECTIFICACION. Agrupa también por DDRISS. |
+| `v_produccion_atribuida` | Numerador de cobertura **por municipio de procedencia** y DDRISS que recibió el reporte. Solo toma reportes CERRADO. Para la cobertura nacional de un municipio se suma sobre todas las DDRISS. |
 
 ---
 
@@ -250,7 +265,7 @@ Base de datos `vacunacion_config`. Las cuatro colecciones guardan configuración
 
 Mecánica de versionado, común a las tres últimas:
 - Llave única (`codigo`, `version`); en esquemas, (`vacuna.codigo`, `version`).
-- `estado`: BORRADOR, VIGENTE o HISTORICO. Un índice único parcial asegura **una sola versión VIGENTE** por código.
+- `estado`: BORRADOR, VIGENTE o HISTORICO. Un índice único parcial asegura **una sola versión VIGENTE** por código (en reglas e indicadores, por código y territorio).
 - Subdocumento `vigencia` (`desde`, `hasta`).
 - Subdocumento `auditoria`: `creado_por` y `publicado_por` son ids de `usuario` en MySQL, más `motivo_cambio`.
 
@@ -276,7 +291,8 @@ Ejemplos incluidos en el script:
 | Td | D1, D2, R1 | Estado de embarazo y grupo de edad, sin sexo; R1 solo por edad |
 
 **`reglas_validacion`**: reglas declarativas que se ejecutan antes de enviar un reporte. `tipo` elige un validador que ya existe en el backend y `parametros` lo configura.
-- Campos: `codigo`, `version`, `nombre`, `tipo`, `ambito` (DETALLE, VACUNA o REPORTE), `severidad` (ERROR o ADVERTENCIA), `aplica_a.vacunas`, `parametros`, `mensaje` (plantilla).
+- Campos: `codigo`, `version`, `nombre`, `tipo`, `ambito` (DETALLE, VACUNA o REPORTE), `severidad` (ERROR o ADVERTENCIA), `aplica_a.vacunas`, `parametros`, `mensaje` (plantilla), `territorio`.
+- `territorio` (script v0.3): `{ nivel: NACIONAL | DDRISS, ddriss_codigo }`; `ddriss_codigo` es `ddriss.codigo` de MySQL (p. ej. `DDRISS_SM`) y es null si es nacional. Para una DDRISS el backend usa la versión VIGENTE con su código si existe; si no, la NACIONAL. Todas las semillas son NACIONAL. `(codigo, version)` sigue siendo único en todo el país, por eso MySQL guarda solo código y versión.
 - Reglas de ejemplo:
 
 | Regla | Severidad |
@@ -293,6 +309,7 @@ Ejemplos incluidos en el script:
 - `aplica_a[]`: vacuna, dosis o dosis inicial y final, `clasificacion_poblacion` y `filtros_dimension`, por ejemplo `{grupo_edad:["MENOR_1"]}`.
 - `numerador` (fuente, estados del reporte, `atribucion` PROCEDENCIA o APLICACION, acumulado) y `denominador` (fuente, prorrateo).
 - `meta`, `umbrales` (semáforo), `periodicidad`, `alerta` (si genera alertas y a qué roles) y `es_estimacion`.
+- `territorio`: igual que en `reglas_validacion`, con la misma prioridad de la DDRISS sobre la nacional.
 
 Ejemplos:
 
@@ -342,6 +359,8 @@ No hay llaves foráneas entre motores. Los vínculos son estos:
 - No borrar ni renombrar códigos de catálogos ni valores de dimensiones; desactivarlos.
 - Los cambios de estado de un reporte solo se hacen si existen en `transicion_estado` para el rol del usuario.
 - Las acciones auditables apuntan a `usuario`. Los datos de la persona se consultan en `empleado`.
+- Toda consulta y bandeja se filtra por la DDRISS del usuario (`empleado.ddriss_id`); solo `AUTORIDAD` sin DDRISS ve todas. No volver a guardar banderas fijas de San Marcos: la jurisdicción se deduce de `ddriss`.
+- El estado del mes (abierto, en cierre, cerrado) y la fecha límite se leen y cambian en `cierre_periodo` para la DDRISS correspondiente, nunca en `periodo`.
 - La cobertura usa reportes **CERRADO** y atribución por **procedencia**, salvo que la configuración del indicador diga otra cosa.
 
 ---
@@ -353,6 +372,7 @@ Valores elegidos por el equipo de diseño que deben validarse:
 - Códigos INE de los municipios (1201 a 1230, y 0920 para Coatepeque) **por verificar** contra el catálogo INE y el GeoJSON.
 - Umbral de deserción ≤ 10 %, semáforo 95/80 %, prorrateo mensual lineal del denominador y proyección por promedio móvil de 3 meses: **por confirmar con Epidemiología**.
 - El contacto del establecimiento es texto libre; podría pasar a ser una llave foránea a `empleado` si el equipo lo decide.
+- El código de la DDRISS (`DDRISS_SM`) es provisional, y falta confirmar si algún departamento tiene más de una DDRISS.
 
 Preguntas abiertas para la DDRISS (detalle en la sección 7 de `03_documento_diseno_bd.md`):
 - ¿Qué dimensiones usa realmente cada vacuna?
@@ -378,3 +398,4 @@ Preguntas abiertas para la DDRISS (detalle en la sección 7 de `03_documento_dis
 | Población objetivo | Denominador de la cobertura por municipio, año, vacuna y clasificación |
 | Cobertura / brecha / deserción / proyección | Indicadores calculados por el backend y guardados en `resultado_indicador` |
 | Rectificación | Cambio justificado a un reporte cerrado, con evidencia del dato anterior |
+| DDRISS | Dirección Departamental de Redes Integradas de Servicios de Salud; tabla `ddriss`. El proyecto opera solo la de San Marcos |

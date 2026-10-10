@@ -1,5 +1,5 @@
 // Plataforma web de producción de vacunación — DDRISS San Marcos (MSPAS)
-// Modelo relacional preliminar v0.4 (MySQL 8.0) en formato DBML para dbdiagram.io
+// Modelo relacional preliminar v0.5 (MySQL 8.0) en formato DBML para dbdiagram.io
 // Generado a partir de 01_modelo_relacional_mysql.sql. Las vistas y los datos
 // semilla no se representan en DBML; están en el script SQL.
 // Los grupos de tablas siguen los cuatro grupos de MySQL de la propuesta v2.
@@ -14,7 +14,7 @@ Project vacunacion_ddriss {
   '''
 }
 
-Enum "periodo_estado_enum" {
+Enum "cierre_periodo_estado_enum" {
   "ABIERTO"
   "EN_CIERRE"
   "CERRADO"
@@ -128,18 +128,31 @@ Table "municipio" {
   "departamento_id" TINYINT [not null]
   "codigo_ine" CHAR(4) [not null, note: 'Código INE de 4 dígitos; también es la llave del GeoJSON']
   "nombre" VARCHAR(80) [not null]
-  "es_jurisdiccion" BOOLEAN [not null, default: FALSE, note: 'TRUE para los 30 municipios de la DDRISS San Marcos']
   "activo" BOOLEAN [not null, default: TRUE]
 
   Indexes {
     codigo_ine [unique, name: "uq_municipio_codigo"]
     departamento_id [name: "ix_municipio_depto"]
   }
-  Note: 'Incluye municipios fuera de la jurisdicción para registrar la procedencia'
+  Note: 'Catálogo INE; incluye municipios fuera de la DDRISS para registrar la procedencia'
+}
+
+Table "ddriss" {
+  "id" TINYINT [pk, not null, increment]
+  "codigo" VARCHAR(20) [not null, note: 'Código provisional, p. ej. DDRISS_SM']
+  "nombre" VARCHAR(100) [not null]
+  "departamento_id" TINYINT [not null, note: 'Departamento sede; un departamento puede tener más de una DDRISS']
+  "activo" BOOLEAN [not null, default: TRUE]
+
+  Indexes {
+    codigo [unique, name: "uq_ddriss_codigo"]
+    departamento_id [name: "ix_ddriss_depto"]
+  }
 }
 
 Table "distrito_salud" {
   "id" SMALLINT [pk, not null, increment]
+  "ddriss_id" TINYINT [not null, note: 'DDRISS a la que pertenece el distrito']
   "municipio_id" SMALLINT [not null]
   "codigo" VARCHAR(20) [not null]
   "nombre" VARCHAR(120) [not null]
@@ -147,6 +160,7 @@ Table "distrito_salud" {
 
   Indexes {
     codigo [unique, name: "uq_distrito_codigo"]
+    ddriss_id [name: "ix_distrito_ddriss"]
   }
 }
 
@@ -165,10 +179,11 @@ Table "establecimiento" {
   "codigo" VARCHAR(20) [not null, note: 'Código institucional (p. ej. el usado en SIGSA)']
   "nombre" VARCHAR(150) [not null]
   "tipo_establecimiento_id" TINYINT [not null]
+  "ddriss_id" TINYINT [not null, note: 'DDRISS a la que reporta; coincide con la de su distrito salvo en los externos']
   "distrito_salud_id" SMALLINT [note: 'NULL solo para establecimientos externos a la DDRISS']
   "municipio_id" SMALLINT [not null, note: 'Municipio de aplicación de sus dosis']
   "reporta_produccion" BOOLEAN [not null, default: TRUE, note: 'FALSE si su producción la consolida otro establecimiento']
-  "es_externo" BOOLEAN [not null, default: FALSE, note: 'TRUE: establecimiento o institución fuera del departamento que atiende población de San Marcos (p. ej. Coatepeque)']
+  "es_externo" BOOLEAN [not null, default: FALSE, note: 'TRUE: su municipio no pertenece al territorio de la DDRISS a la que reporta (p. ej. Coatepeque); lo valida el backend']
   "direccion" VARCHAR(255) [note: 'Dirección física (aldea, cantón, zona, calle); el municipio va en municipio_id']
   "telefono" VARCHAR(20)
   "correo" VARCHAR(150) [note: 'Correo institucional del establecimiento']
@@ -180,6 +195,7 @@ Table "establecimiento" {
   Indexes {
     codigo [unique, name: "uq_establecimiento_codigo"]
     municipio_id [name: "ix_establecimiento_municipio"]
+    ddriss_id [name: "ix_establecimiento_ddriss"]
   }
 }
 
@@ -192,6 +208,7 @@ Table "empleado" {
   "correo" VARCHAR(150) [note: 'Correo de contacto; se usa para notificaciones y recuperación de contraseña']
   "telefono" VARCHAR(20)
   "establecimiento_id" INT [note: 'Lugar de trabajo; obligatorio para personal de establecimiento']
+  "ddriss_id" TINYINT [note: 'DDRISS donde trabaja; NULL solo para el rol AUTORIDAD de nivel nacional (lo valida el backend)']
   "municipio_id" SMALLINT [note: 'Alcance territorial opcional (p. ej. coordinador municipal)']
   "activo" BOOLEAN [not null, default: TRUE]
   "creado_en" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
@@ -201,6 +218,7 @@ Table "empleado" {
     codigo_empleado [unique, name: "uq_empleado_codigo"]
     correo [unique, name: "uq_empleado_correo"]
     establecimiento_id [name: "ix_empleado_est"]
+    ddriss_id [name: "ix_empleado_ddriss"]
   }
   Note: 'Personal de la DDRISS y de los establecimientos; no son pacientes'
 }
@@ -291,10 +309,6 @@ Table "periodo" {
   "mes" TINYINT [not null]
   "fecha_inicio" DATE [not null]
   "fecha_fin" DATE [not null]
-  "fecha_limite_envio" DATE [not null, note: 'Base de las alertas de reportes pendientes']
-  "estado" periodo_estado_enum [not null, default: 'ABIERTO']
-  "cerrado_por" INT
-  "cerrado_en" DATETIME
 
   Checks {
     `mes BETWEEN 1 AND 12` [name: 'ck_periodo_mes']
@@ -303,7 +317,27 @@ Table "periodo" {
   Indexes {
     (anio, mes) [unique, name: "uq_periodo"]
   }
-  Note: 'Periodo mensual de reporte'
+  Note: 'Calendario común de periodos mensuales; el estado de cada mes va por DDRISS en cierre_periodo'
+}
+
+Table "cierre_periodo" {
+  "id" INT [pk, not null, increment]
+  "periodo_id" SMALLINT [not null]
+  "ddriss_id" TINYINT [not null]
+  "fecha_limite_envio" DATE [not null, note: 'Base de las alertas de reportes pendientes de esa DDRISS']
+  "estado" cierre_periodo_estado_enum [not null, default: 'ABIERTO']
+  "cerrado_por" INT
+  "cerrado_en" DATETIME
+
+  Checks {
+    `estado <> 'CERRADO' OR (cerrado_por IS NOT NULL AND cerrado_en IS NOT NULL)` [name: 'ck_cierre_cerrado']
+  }
+
+  Indexes {
+    (periodo_id, ddriss_id) [unique, name: "uq_cierre_periodo_ddriss"]
+    (ddriss_id, estado) [name: "ix_cierre_ddriss_estado"]
+  }
+  Note: 'Apertura y cierre de cada periodo mensual por DDRISS'
 }
 
 Table "estado_reporte" {
@@ -519,6 +553,7 @@ Table "alerta" {
   "severidad" alerta_severidad_enum [not null, default: 'ADVERTENCIA']
   "titulo" VARCHAR(150) [not null]
   "mensaje" VARCHAR(1000) [not null]
+  "ddriss_id" TINYINT [note: 'DDRISS a cuya bandeja pertenece; NULL = alerta de nivel nacional']
   "periodo_id" SMALLINT
   "municipio_id" SMALLINT
   "establecimiento_id" INT
@@ -532,6 +567,7 @@ Table "alerta" {
 
   Indexes {
     (estado, tipo, generada_en) [name: "ix_alerta_estado"]
+    (ddriss_id, estado) [name: "ix_alerta_ddriss"]
   }
 }
 
@@ -564,13 +600,21 @@ Ref "fk_rolperm_permiso":"permiso"."id" < "rol_permiso"."permiso_id"
 
 Ref "fk_municipio_depto":"departamento"."id" < "municipio"."departamento_id"
 
+Ref "fk_ddriss_depto":"departamento"."id" < "ddriss"."departamento_id"
+
+Ref "fk_distrito_ddriss":"ddriss"."id" < "distrito_salud"."ddriss_id"
+
 Ref "fk_distrito_municipio":"municipio"."id" < "distrito_salud"."municipio_id"
+
+Ref "fk_est_ddriss":"ddriss"."id" < "establecimiento"."ddriss_id"
 
 Ref "fk_est_tipo":"tipo_establecimiento"."id" < "establecimiento"."tipo_establecimiento_id"
 
 Ref "fk_est_distrito":"distrito_salud"."id" < "establecimiento"."distrito_salud_id"
 
 Ref "fk_est_municipio":"municipio"."id" < "establecimiento"."municipio_id"
+
+Ref "fk_empleado_ddriss":"ddriss"."id" < "empleado"."ddriss_id"
 
 Ref "fk_empleado_est":"establecimiento"."id" < "empleado"."establecimiento_id"
 
@@ -592,7 +636,11 @@ Ref "fk_pobobj_clasif":"clasificacion_poblacion"."id" < "poblacion_objetivo"."cl
 
 Ref "fk_pobobj_usuario":"usuario"."id" < "poblacion_objetivo"."registrado_por"
 
-Ref "fk_periodo_cerrado_por":"usuario"."id" < "periodo"."cerrado_por"
+Ref "fk_cierre_periodo":"periodo"."id" < "cierre_periodo"."periodo_id"
+
+Ref "fk_cierre_ddriss":"ddriss"."id" < "cierre_periodo"."ddriss_id"
+
+Ref "fk_cierre_cerrado_por":"usuario"."id" < "cierre_periodo"."cerrado_por"
 
 Ref "fk_trans_origen":"estado_reporte"."codigo" < "transicion_estado"."estado_origen"
 
@@ -674,6 +722,8 @@ Ref "fk_resind_vacuna":"vacuna"."id" < "resultado_indicador"."vacuna_id"
 
 Ref "fk_resind_dosis":"dosis"."id" < "resultado_indicador"."dosis_id"
 
+Ref "fk_alerta_ddriss":"ddriss"."id" < "alerta"."ddriss_id"
+
 Ref "fk_alerta_periodo":"periodo"."id" < "alerta"."periodo_id"
 
 Ref "fk_alerta_municipio":"municipio"."id" < "alerta"."municipio_id"
@@ -698,6 +748,7 @@ TableGroup "Seguridad y organizacion" [color: #6C8EBF] {
   "empleado"
   "departamento"
   "municipio"
+  "ddriss"
   "distrito_salud"
   "tipo_establecimiento"
   "establecimiento"
@@ -709,6 +760,7 @@ TableGroup "Catalogos sanitarios" [color: #82B366] {
   "clasificacion_poblacion"
   "poblacion_objetivo"
   "periodo"
+  "cierre_periodo"
 }
 
 TableGroup "Operacion de vacunacion" [color: #B85450] {

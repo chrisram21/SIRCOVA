@@ -6,6 +6,8 @@ Reglas para cualquier agente de IA que trabaje en este repositorio. Este archivo
 
 Sistema web para la **DDRISS San Marcos** (MSPAS, Guatemala) que reemplaza el formulario físico **5C (SIGSA-S5c)** y los Excel de la estadígrafa. Los establecimientos de los 30 municipios registran su producción mensual de vacunación en formularios dinámicos por vacuna; el sistema la valida, la DDRISS la revisa, aprueba y cierra, y un motor calcula cobertura, brecha, deserción y proyección.
 
+El modelo de datos (v0.5) está **preparado para varias DDRISS**, pero el proyecto implementa y opera solo la DDRISS San Marcos. No escribas código que dé por hecho una sola DDRISS ni que fije San Marcos: usa la tabla `ddriss`.
+
 Proyecto de fin de carrera (Universidad Mesoamericana, Quetzaltenango, 2026). **Orden de trabajo actual: primero el backend** (API documentada en OpenAPI); el frontend en React viene después, sobre esa API.
 
 ## 2. Lee antes de trabajar
@@ -15,7 +17,7 @@ Proyecto de fin de carrera (Universidad Mesoamericana, Quetzaltenango, 2026). **
 | `README.md` | Alcance, tecnologías acordadas, estructura del repositorio |
 | `docs/backend/INSTRUCCIONES_BACKEND.md` | Estructura del backend, capas, formato de error, reglas |
 | `backend/openapi.yaml` | Contrato de la API: todos los endpoints bajo `/api/v1` |
-| `docs/base-de-datos/05_contexto_base_de_datos.md` | Modelo de datos MySQL + MongoDB y reglas del modelo |
+| `docs/base-de-datos/CONTEXTO BD.md` | Modelo de datos MySQL + MongoDB (v0.5) y reglas del modelo |
 | `backend/db/01_modelo_relacional_mysql.sql`, `backend/db/02_colecciones_mongodb.js` | Scripts de BD; **ante cualquier diferencia, mandan los scripts** |
 | `docs/contexto/` | Resumen de la propuesta del proyecto (roles, ciclo del reporte, módulos) |
 
@@ -62,6 +64,7 @@ Errores con el formato común: `{ "error": { "codigo": "...", "mensaje": "..." }
 7. **Bitácora.** Toda escritura se registra en `bitacora`, que no se modifica ni se borra. Las acciones auditables apuntan a `usuario`; los datos de la persona están en `empleado`.
 8. **Sin llaves foráneas entre motores.** Los vínculos MySQL ↔ MongoDB son códigos u ObjectId que valida el backend.
 9. **Seguridad.** No subas secretos ni archivos `.env`. No concatenes datos del usuario en consultas.
+10. **Alcance por DDRISS.** Toda consulta, bandeja y alerta se filtra por la DDRISS del usuario (`empleado.ddriss_id`). Solo el rol `AUTORIDAD` puede no tener DDRISS (NULL), y entonces consulta todo el país; los otros cuatro roles siempre tienen una. Esta regla la valida el backend, porque la base no puede expresarla. El estado del mes (abierto, en cierre, cerrado) y la fecha límite se leen y cambian en `cierre_periodo` de la DDRISS, nunca en `periodo`.
 
 ## 6. Zonas protegidas (solo con autorización explícita en la tarea)
 
@@ -83,7 +86,7 @@ Errores con el formato común: `{ "error": { "codigo": "...", "mensaje": "..." }
 2. Los endpoints que tocaste responden como dice `backend/openapi.yaml` (por ejemplo, desde `/api/docs` o Postman).
 3. Indica qué cambiaste y cómo lo comprobaste.
 
-Entorno local: bases según `docs/base-de-datos/06_guia_instalacion_local.docx` (MySQL en `localhost:3306`, MongoDB en `mongodb://localhost:27017/vacunacion_config`) y `backend/.env` copiado de `backend/.env.example`.
+Entorno local: bases según `docs/base-de-datos/GUIA PARA INSTALACION DE BASE DE DATOS LOCAL.docx` (MySQL en `localhost:3306`, MongoDB en `mongodb://localhost:27017/vacunacion_config`) y `backend/.env` copiado de `backend/.env.example`.
 
 **Pendiente:** los comandos exactos de instalación, arranque, pruebas y lint se definirán cuando exista el código inicial del backend. No los inventes; si los necesitas y no están aquí, pregunta.
 
@@ -97,3 +100,5 @@ Entorno local: bases según `docs/base-de-datos/06_guia_instalacion_local.docx` 
 ## 10. Pendientes del equipo (no los asumas)
 
 Estrategia de ramas, formato de commits, revisión de código, licencia, comandos de arranque y pruebas, estructura del frontend, librería de gráficos y herramienta de PDF.
+
+**Adaptar el backend v0.1 a la BD v0.5** (pospuesto por el equipo; no lo hagas sin que la tarea lo pida): `backend/src/modulos/catalogos/catalogos.service.js` todavía usa `municipio.es_jurisdiccion` (eliminada en v0.5) y lee `fecha_limite_envio` y `estado` de `periodo` (ahora están en `cierre_periodo`). `backend/openapi.yaml` y `docs/backend/INSTRUCCIONES_BACKEND.md` deben reflejar el filtro por DDRISS.

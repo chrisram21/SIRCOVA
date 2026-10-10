@@ -2,7 +2,7 @@
 
 Proyecto de fin de carrera de Ingeniería en Sistemas Informática y Ciencias de la Computación, Universidad Mesoamericana, sede Quetzaltenango (2026).
 
-> **Estado:** en desarrollo. Modelo de datos preliminar v0.4 y backend preliminar v0.1 (8 de octubre de 2026). Este documento resume lo acordado por el equipo y funciona como **contrato técnico**: cualquier cambio a lo que aquí se fija se discute y se registra antes de aplicarse.
+> **Estado:** en desarrollo. Modelo de datos preliminar v0.5 (10 de octubre de 2026), preparado para varias DDRISS, y backend preliminar v0.1 (8 de octubre de 2026), que todavía debe adaptarse a la v0.5. Este documento resume lo acordado por el equipo y funciona como **contrato técnico**: cualquier cambio a lo que aquí se fija se discute y se registra antes de aplicarse.
 
 ---
 
@@ -17,11 +17,13 @@ SIRCOVA es un sistema web centralizado para la **DDRISS San Marcos** (Dirección
 3. la DDRISS revisa, aprueba y cierra cada periodo;
 4. un motor de indicadores calcula cobertura, brecha, deserción y proyección, y los presenta en tablero, mapa, alertas e informes.
 
-**Usuarios (roles):** personal del establecimiento, estadígrafa o revisor de la DDRISS, Epidemiología, Administrador y Autoridades (solo consulta).
+**Usuarios (roles):** personal del establecimiento, estadígrafa o revisor de la DDRISS, Epidemiología, Administrador y Autoridades (solo consulta: de su DDRISS o, si no tiene DDRISS asignada, de todo el país). Los cinco roles están en uso.
 
 ## 2. Alcance
 
 **Incluye:** captura dinámica por establecimiento, validación, flujo de revisión, cierre y rectificación, atribución territorial (municipio de aplicación y de procedencia), poblaciones objetivo, indicadores, informes PDF, alertas, tablero, mapa, auditoría, pruebas de carga y estrés, despliegue en la nube, manuales y capacitación.
+
+**Escalabilidad:** el modelo de datos está preparado para varias DDRISS (tabla `ddriss`, alcance del personal por DDRISS y cierre de periodos por DDRISS). El proyecto implementa y opera **solo la DDRISS San Marcos**; incorporar otra DDRISS sería cargar datos, no modificar tablas.
 
 **No incluye:** historia vacunal por paciente, expedientes, integración directa con SIGSA, reemplazo del sistema nacional del MSPAS ni análisis epidemiológico automático.
 
@@ -50,7 +52,7 @@ El sistema usa **persistencia políglota**: cada motor tiene un rol fijo.
 
 | Motor | Rol | Contenido |
 |---|---|---|
-| **MySQL** | Datos transaccionales | Usuarios y empleados, roles, municipios, establecimientos, vacunas, periodos, poblaciones objetivo, producción, estados y transiciones del reporte, resultados de indicadores, alertas y bitácora (30 tablas, 4 vistas) |
+| **MySQL** | Datos transaccionales | Usuarios y empleados, roles, municipios, establecimientos, vacunas, periodos, poblaciones objetivo, producción, estados y transiciones del reporte, resultados de indicadores, alertas y bitácora, además de las DDRISS y el cierre de periodos por DDRISS (32 tablas, 4 vistas) |
 | **MongoDB** | Configuración versionada | Catálogo de dimensiones, esquemas de captura por vacuna, reglas de validación y configuración de indicadores (4 colecciones) |
 
 Principios del modelo:
@@ -59,8 +61,9 @@ Principios del modelo:
 - **Versionado.** Una versión publicada de un esquema, regla o indicador no se edita; se crea una nueva, y MySQL guarda la versión usada.
 - **Ciclo del reporte (7 estados):** Borrador → Enviado → En revisión → (Corrección solicitada → Borrador) o Aprobado → Cerrado → (Rectificación → Cerrado).
 - **Bitácora inmodificable** para toda acción de escritura.
+- **Preparado para varias DDRISS.** Distritos, establecimientos, personal y alertas pertenecen a una DDRISS; cada DDRISS cierra sus periodos por separado (`cierre_periodo`). Las reglas e indicadores de MongoDB pueden ser nacionales o propios de una DDRISS.
 
-Detalle completo en [`docs/base-de-datos/05_contexto_base_de_datos.md`](docs/base-de-datos/05_contexto_base_de_datos.md). Ante cualquier diferencia, mandan los scripts.
+Detalle completo en [`docs/base-de-datos/CONTEXTO BD.md`](docs/base-de-datos/CONTEXTO%20BD.md). Ante cualquier diferencia, mandan los scripts.
 
 ## 5. Enfoque de desarrollo
 
@@ -113,7 +116,7 @@ La estructura interna de `frontend/` se definirá cuando inicie su desarrollo.
 
 Requisitos: Docker Desktop (recomendado) o MySQL 8 y MongoDB 7 instalados, y Node.js 22 LTS.
 
-1. Crear las bases con los scripts de `backend/db/` siguiendo la [guía de instalación local](docs/base-de-datos/06_guia_instalacion_local.docx). Atención: cada script borra y recrea su base.
+1. Crear las bases con los scripts de `backend/db/` siguiendo la [guía de instalación local](docs/base-de-datos/GUIA%20PARA%20INSTALACION%20DE%20BASE%20DE%20DATOS%20LOCAL.docx). Atención: cada script borra y recrea su base.
 2. Copiar `backend/.env.example` a `backend/.env` y completar los datos de conexión locales.
 3. Levantar la API (`docker compose up` o `npm install` y arranque desde `backend/`) y abrir `/api/docs`.
 
