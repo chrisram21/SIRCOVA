@@ -1,7 +1,21 @@
 -- =============================================================================
 --  Plataforma web de producción de vacunación — DDRISS San Marcos (MSPAS)
 --  Modelo relacional preliminar (MySQL 8.0, InnoDB, utf8mb4)
---  Versión: 0.5 (propuesta para revisión)   Fecha: 2026-10-10
+--  Versión: 0.6 (en curso)   Fecha: 2026-10-10
+--  Cambios v0.6 (información de campo del 10/10/2026; se aplica por bloques):
+--    Bloque A, población por grupo de edad: poblacion_objetivo deja de tener
+--    vacuna_id (el MSPAS envía la población por municipio y grupo de edad, la
+--    misma para todas las vacunas); clasificacion_poblacion usa los
+--    encabezados del 5C; permiso POBLACION_REGISTRAR, por ahora solo para
+--    ADMINISTRADOR (provisional, sujeto a cambios).
+--    Bloque B, dosis que cuentan para cobertura: dosis.completa_esquema (la
+--    dosis que cierra el esquema; con ella la persona cuenta para la
+--    cobertura) y dosis.es_trazadora (dosis con "porcentaje del mes" en el
+--    5C). Semillas de vacunas y dosis del 5C: EJEMPLOS sujetos a cambios hasta
+--    recibir de la DDRISS el número de dosis de cada vacuna.
+--    Bloque C (MongoDB, script v0.4): secciones del formulario por grupo de
+--    edad (encabezados del 5C) y valores de grupo_edad alineados con
+--    clasificacion_poblacion.
 --  Cambios v0.5 (modelo preparado para varias DDRISS; solo se opera San Marcos):
 --    Bloque A, territorio: tabla ddriss; distrito_salud.ddriss_id y
 --    establecimiento.ddriss_id (DDRISS a la que reporta); se elimina
@@ -247,6 +261,8 @@ CREATE TABLE dosis (
   codigo          VARCHAR(20)       NOT NULL COMMENT 'Ej.: D1, D2, D3, R1, R2, UNICA',
   nombre          VARCHAR(60)       NOT NULL,
   orden           TINYINT UNSIGNED  NOT NULL COMMENT 'Secuencia en el esquema; base de la deserción entre dosis',
+  completa_esquema BOOLEAN          NOT NULL DEFAULT FALSE COMMENT 'Dosis que cierra el esquema: con ella la persona cuenta para la cobertura',
+  es_trazadora    BOOLEAN           NOT NULL DEFAULT FALSE COMMENT 'Dosis con porcentaje del mes en el 5C (se mide su cobertura)',
   activa          BOOLEAN           NOT NULL DEFAULT TRUE,
   PRIMARY KEY (id),
   UNIQUE KEY uq_dosis_vacuna_codigo (vacuna_id, codigo),
@@ -255,7 +271,7 @@ CREATE TABLE dosis (
 
 CREATE TABLE clasificacion_poblacion (
   id              SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  codigo          VARCHAR(30)       NOT NULL COMMENT 'Ej.: MENOR_1, UN_ANIO, EMBARAZADAS, NINAS_10',
+  codigo          VARCHAR(30)       NOT NULL COMMENT 'Encabezado del 5C, mismo código que grupo_edad en MongoDB: MENOR_1, 1_A_MENOR_2, 4_ANIOS...',
   descripcion     VARCHAR(120)      NOT NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uq_clasif_pob_codigo (codigo)
@@ -265,20 +281,18 @@ CREATE TABLE poblacion_objetivo (
   id                         INT UNSIGNED      NOT NULL AUTO_INCREMENT,
   municipio_id               SMALLINT UNSIGNED NOT NULL,
   anio                       SMALLINT UNSIGNED NOT NULL,
-  vacuna_id                  SMALLINT UNSIGNED NOT NULL,
   clasificacion_poblacion_id SMALLINT UNSIGNED NOT NULL,
   cantidad                   INT UNSIGNED      NOT NULL,
-  fuente                     VARCHAR(150)      NULL COMMENT 'Ej.: proyección INE / Unidad de Vacunación',
+  fuente                     VARCHAR(150)      NULL COMMENT 'Ej.: archivo de población del MSPAS 2026',
   registrado_por             INT UNSIGNED      NOT NULL,
   creado_en                  DATETIME          NOT NULL DEFAULT CURRENT_TIMESTAMP,
   actualizado_en             DATETIME          NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_pobobj (municipio_id, anio, vacuna_id, clasificacion_poblacion_id),
+  UNIQUE KEY uq_pobobj (municipio_id, anio, clasificacion_poblacion_id),
   CONSTRAINT fk_pobobj_municipio FOREIGN KEY (municipio_id)               REFERENCES municipio (id),
-  CONSTRAINT fk_pobobj_vacuna    FOREIGN KEY (vacuna_id)                  REFERENCES vacuna (id),
   CONSTRAINT fk_pobobj_clasif    FOREIGN KEY (clasificacion_poblacion_id) REFERENCES clasificacion_poblacion (id),
   CONSTRAINT fk_pobobj_usuario   FOREIGN KEY (registrado_por)             REFERENCES usuario (id)
-) ENGINE=InnoDB COMMENT='Denominadores de cobertura por municipio, año, vacuna y clasificación';
+) ENGINE=InnoDB COMMENT='Población por municipio, año y grupo de edad (la misma para todas las vacunas); la registra el Administrador';
 
 -- -----------------------------------------------------------------------------
 -- MÓDULO 3/4. PERIODOS, REPORTES Y FLUJO DE REVISIÓN
@@ -411,7 +425,7 @@ CREATE TABLE detalle_produccion (
 -- dimensión). Los códigos provienen de catalogo_dimensiones en MongoDB y el
 -- backend los valida contra la versión del esquema guardada en reporte_vacuna.
 -- Ejemplo: detalle 15 -> (sexo, F), (grupo_edad, MENOR_1)
---          detalle 16 -> (estado_embarazo, EMBARAZADA), (grupo_edad, 15_49)
+--          detalle 16 -> (estado_embarazo, EMBARAZADA), (grupo_edad, MEF_15_49)
 CREATE TABLE detalle_dimension (
   detalle_id               BIGINT UNSIGNED   NOT NULL,
   dimension_codigo         VARCHAR(30)       NOT NULL COMMENT 'catalogo_dimensiones.codigo',
@@ -758,20 +772,74 @@ INSERT INTO municipio (departamento_id, codigo_ine, nombre) VALUES
 -- Ejemplos de vacunas y dosis (a confirmar contra el 5C vigente).
 -- Los valores de sexo, grupo de edad, embarazo, etc. ya no se siembran aquí:
 -- viven en la colección catalogo_dimensiones de MongoDB.
+-- v0.6: vacunas del 5C según las fotos de un formulario real (julio de 2026).
+-- Son EJEMPLOS sujetos a cambios: la DDRISS entregará la lista vigente y el
+-- número de dosis de cada vacuna. Los ids 1 a 4 se conservan porque los
+-- esquemas de ejemplo de MongoDB los usan.
 INSERT INTO vacuna (codigo, nombre, orden_informe) VALUES
- ('BCG',   'BCG', 1),
- ('PENTA', 'Pentavalente (DPT-HepB-Hib)', 2),
- ('SPR',   'Sarampión, Paperas y Rubéola', 3),
- ('TD',    'Toxoide tetánico y diftérico (Td)', 4);
+ ('BCG',   'BCG', 2),
+ ('PENTA', 'Pentavalente (DPT-HepB-Hib)', 4),
+ ('SPR',   'Sarampión, Paperas y Rubéola', 9),
+ ('TD',    'Toxoide tetánico y diftérico (Td)', 11),
+ ('HEPB',  'Hepatitis B (recién nacido)', 1),
+ ('OPV',   'Antipoliomielítica oral (OPV)', 3),
+ ('ROTA',  'Rotavirus', 5),
+ ('NEUMO', 'Neumococo', 6),
+ ('INFLU', 'Influenza pediátrica', 7),
+ ('DPT',   'DPT (refuerzos)', 8),
+ ('VPH',   'Virus del papiloma humano', 10),
+ ('TDAP',  'Tdap (embarazadas)', 12),
+ ('SR',    'Sarampión y Rubéola (adultos)', 13);
 
-INSERT INTO dosis (vacuna_id, codigo, nombre, orden) VALUES
- (1, 'UNICA', 'Dosis única', 1),
- (2, 'D1', 'Primera dosis', 1), (2, 'D2', 'Segunda dosis', 2), (2, 'D3', 'Tercera dosis', 3),
- (3, 'D1', 'Primera dosis', 1), (3, 'D2', 'Segunda dosis', 2),
- (4, 'D1', 'Primera dosis', 1), (4, 'D2', 'Segunda dosis', 2), (4, 'R1', 'Primer refuerzo', 3);
+-- completa_esquema y es_trazadora también son ejemplos (los trazadores salen
+-- de las columnas "porcentaje del mes" del 5C).
+INSERT INTO dosis (vacuna_id, codigo, nombre, orden, completa_esquema, es_trazadora) VALUES
+ (1,  'UNICA', 'Dosis única',      1, TRUE,  TRUE),
+ (2,  'D1',    'Primera dosis',    1, FALSE, FALSE),
+ (2,  'D2',    'Segunda dosis',    2, FALSE, FALSE),
+ (2,  'D3',    'Tercera dosis',    3, TRUE,  TRUE),
+ (3,  'D1',    'Primera dosis',    1, FALSE, TRUE),
+ (3,  'D2',    'Segunda dosis',    2, TRUE,  FALSE),
+ (4,  'D1',    'Primera dosis',    1, FALSE, FALSE),
+ (4,  'D2',    'Segunda dosis',    2, TRUE,  FALSE),
+ (4,  'R1',    'Primer refuerzo',  3, FALSE, FALSE),
+ (5,  'UNICA', 'Dosis al nacer',   1, TRUE,  TRUE),
+ (6,  'D1',    'Primera dosis',    1, FALSE, FALSE),
+ (6,  'D2',    'Segunda dosis',    2, FALSE, FALSE),
+ (6,  'D3',    'Tercera dosis',    3, TRUE,  TRUE),
+ (6,  'R1',    'Primer refuerzo',  4, FALSE, TRUE),
+ (6,  'R2',    'Segundo refuerzo', 5, FALSE, TRUE),
+ (7,  'D1',    'Primera dosis',    1, FALSE, FALSE),
+ (7,  'D2',    'Segunda dosis',    2, TRUE,  TRUE),
+ (8,  'D1',    'Primera dosis',    1, FALSE, FALSE),
+ (8,  'D2',    'Segunda dosis',    2, FALSE, TRUE),
+ (8,  'R1',    'Refuerzo',         3, TRUE,  TRUE),
+ (9,  'D1',    'Primera dosis',    1, FALSE, FALSE),
+ (9,  'D2',    'Segunda dosis',    2, TRUE,  TRUE),
+ (10, 'R1',    'Primer refuerzo',  1, FALSE, TRUE),
+ (10, 'R2',    'Segundo refuerzo', 2, TRUE,  TRUE),
+ (11, 'D1',    'Primera dosis',    1, FALSE, FALSE),
+ (12, 'UNICA', 'Dosis única',      1, TRUE,  FALSE),
+ (13, 'UNICA', 'Dosis única',      1, TRUE,  FALSE);
 
+-- Grupos de población = encabezados del 5C (a confirmar contra el archivo de
+-- población del MSPAS). Mismos códigos que los valores de grupo_edad en MongoDB.
 INSERT INTO clasificacion_poblacion (codigo, descripcion) VALUES
- ('MENOR_1', 'Población menor de 1 año'),
- ('UN_ANIO', 'Población de 1 año'),
- ('EMBARAZADAS', 'Mujeres embarazadas esperadas'),
- ('MEF', 'Mujeres en edad fértil (15 a 49 años)');
+ ('NACIDOS_VIVOS', 'Nacidos vivos (columna N/V del 5C)'),
+ ('MENOR_1',       'Menores de 1 año'),
+ ('1_A_MENOR_2',   'De 1 a menos de 2 años'),
+ ('4_ANIOS',       'Niñas y niños de 4 años'),
+ ('1_A_4',         'De 1 a menos de 5 años'),
+ ('MEF_15_49',     'Mujeres de 15 a 49 años'),
+ ('EMBARAZADAS',   'Mujeres embarazadas esperadas');
+
+-- Permisos (v0.6). Solo se siembran los que el diseño ya fija; el resto se
+-- define con el backend.
+INSERT INTO permiso (codigo, modulo, descripcion) VALUES
+ ('POBLACION_REGISTRAR', 'CONFIGURACION_CATALOGOS', 'Registrar y actualizar la población anual por municipio y grupo de edad');
+
+-- Por ahora solo el Administrador registra la población (provisional, sujeto a
+-- cambios: pasarlo a otro rol es cambiar esta fila).
+INSERT INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p ON p.codigo = 'POBLACION_REGISTRAR'
+ WHERE r.codigo = 'ADMINISTRADOR';

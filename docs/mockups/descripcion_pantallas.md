@@ -39,13 +39,13 @@ Menú: Inicio (activo), Registro de producción, Revisión y cierre (insignia 6)
 **Fila 3: "Accesos rápidos"**, 4 tarjetas con icono, título y una línea:
 - Indicadores: cobertura, brecha, deserción y proyección.
 - Mapa territorial: dónde se concentra el rezago.
-- Informes: informe consolidado en PDF.
+- Informes: informe consolidado en Excel y PDF.
 - Revisión y cierre: 6 reportes esperan revisión.
 
 ## Pantalla 3. Indicadores (se llega desde el menú)
-**Encabezado:** "INDICADORES DE COBERTURA" y el título "Enero a agosto de 2026". A la derecha, el botón "Exportar PDF".
+**Encabezado:** "INDICADORES DE COBERTURA" y el título "Enero a agosto de 2026". A la derecha, el botón "Exportar Excel" (principal) y, junto a él, "PDF".
 
-**Barra de filtros:** Año 2026 · Periodo Ene a Ago (acumulado) · Vacuna trazadora Pentavalente 3.ª dosis · Municipio Todos (30) · Atribución Por procedencia.
+**Barra de filtros:** Año 2026 · Periodo Ene a Ago (acumulado; rango de meses elegible) · Vacuna trazadora Pentavalente 3.ª dosis · Nivel Departamento / Distrito / Municipio · Municipio Todos (30; selección múltiple) · Agrupar por Sexo / Edad / Sin agrupar · Atribución Por procedencia.
 
 **Fila 1**
 - (2/3 del ancho) **Gráfica de líneas "Avance acumulado y proyección al cierre del año"**, que responde "¿Llegaremos al 95% en diciembre?". Eje X de enero a diciembre y eje Y de 0 a 100%.
@@ -113,7 +113,7 @@ Menú reducido: Inicio, Registro de producción (activo), Mis reportes, Cobertur
 ## Pantalla 6. Mapa territorial
 - Encabezado: "MAPA TERRITORIAL · PENTAVALENTE 3.ª DOSIS · ENE A AGO 2026" y el título "¿Dónde está el rezago de cobertura?". Selector segmentado: **Cobertura** · Brecha · Deserción · Estado del reporte.
 - Interruptor "Atribuir dosis por: **Procedencia** | Lugar de aplicación".
-- Mapa grande de los 30 municipios coloreados por rango, con Tacaná seleccionado (contorno negro) y la leyenda.
+- Mapa grande de los 30 municipios coloreados por rango, con Tacaná seleccionado (contorno negro) y la leyenda. Por defecto colorea el avance contra la meta del mes (población ÷ 12 × número de mes = 100 %), con el semáforo indicado por Epidemiología (pendiente de confirmar): rojo < 80 %, amarillo 80 a 90 %, verde > 90 %. El panel muestra cuántas vacunas faltan para la meta del mes.
 - **Panel derecho "Tacaná"**:
   - **39.8%** Crítico, con una barra de progreso y una marca de meta en 63.3%.
   - Población objetivo (<1 año) 1,790 · Dosis Penta 3 atribuidas 712 · Brecha 422 · Deserción 7.9% · Reporte de agosto: Cerrado.
@@ -138,5 +138,9 @@ Menú reducido: Inicio, Registro de producción (activo), Mis reportes, Cobertur
 - **Personal del establecimiento:** estado y fecha límite de su reporte, validaciones pendientes, cobertura de su municipio y su tendencia mensual, y un acceso directo a Registro.
 - **Estadígrafa:** estado de los reportes del periodo, bandeja de pendientes, alertas de calidad y de proceso, periodos por cerrar y solicitudes de rectificación.
 - **Epidemiología:** el resumen del inicio y, desde el menú, la pantalla completa de Indicadores.
-- **Autoridades (solo consulta):** indicadores clave, avance y proyección, mapa y ranking de municipios, y descarga del informe PDF, sin acciones de edición.
+- **Autoridades (solo consulta):** indicadores clave, avance y proyección, mapa y ranking de municipios, y descarga del informe en Excel o PDF, sin acciones de edición.
 - **Administrador:** usuarios activos, esquemas de captura vigentes o por vencer, cambios en catálogos y actividad de la bitácora.
+
+---
+
+**Ajustes del 10/10/2026** (información de campo, sección 14 del contexto): exportación a Excel como prioridad, filtros de rango de meses, nivel (distrito) y municipios múltiples, agrupación por sexo y semáforo 80/90. El prototipo publicado todavía muestra la versión anterior.

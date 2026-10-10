@@ -374,7 +374,6 @@ paths:
       parameters:
         - { name: anio, in: query, schema: { type: integer } }
         - { name: municipioId, in: query, schema: { type: integer } }
-        - { name: vacunaId, in: query, schema: { type: integer } }
       responses:
         "200": { description: Lista de poblaciones objetivo }
     post:
@@ -390,7 +389,6 @@ paths:
               properties:
                 municipioId: { type: integer }
                 anio: { type: integer }
-                vacunaId: { type: integer }
                 clasificacionPoblacion: { type: string, example: MENOR_1 }
                 cantidad: { type: integer, minimum: 0 }
                 fuente: { type: string }

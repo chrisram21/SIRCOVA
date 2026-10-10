@@ -2,7 +2,7 @@
 
 > Documento de contexto generado a partir de la propuesta *"Propuesta – Vacunas"* (versión recibida el 29 de septiembre de 2026), que ahora comprende la **Introducción y los Capítulos 1 (Marco contextual y conceptual), 2 (Diseño y método), 3 (Monografía de la institución) y 4 (Marco teórico)**. Sirve para que cualquier asistente o colaborador entienda **qué se va a construir, para quién, con qué tecnología y en qué plazos**. No sustituye al documento original: ante cualquier duda, manda el documento.
 >
-> **Versión 2.1 de este contexto** (08/10/2026). Mantiene el resumen de la propuesta de la v2 (29/09/2026) y agrega la **sección 13** con las decisiones de diseño tomadas después (base de datos v0.4, backend y prototipo de pantallas). La sección 12.1 resume qué cambió de la v1 a la v2. La v2 se conserva en `contexto/anteriores/`.
+> **Versión 2.2 de este contexto** (10/10/2026). Mantiene el resumen de la propuesta de la v2 (29/09/2026), la **sección 13** con las decisiones de diseño posteriores (base de datos, backend y prototipo de pantallas) y agrega la **sección 14** con la información de campo reunida el 10/10/2026 (entrevistas a la estadígrafa y a Epidemiología, y fotografías de un 5C real). La sección 12.1 resume qué cambió de la v1 a la v2. Las versiones anteriores se conservan en `contexto/anteriores/`.
 
 ---
 
@@ -112,7 +112,7 @@ Arquitectura web **cliente-servidor** en capas (presentación / lógica de negoc
 | Persistencia documental | **MongoDB** — configuraciones flexibles y versionadas |
 | Gráficos | Librería de gráficos compatible con React |
 | Mapa territorial | **Leaflet + archivos GeoJSON** (municipios de San Marcos) |
-| Generación de PDF | Herramienta o librería compatible con Node.js (sin definir) |
+| Exportación de informes | **Excel (prioritario)** y PDF, con librerías compatibles con Node.js (sin definir). La estadígrafa prefiere Excel (sección 14.1) |
 | Contenedores | **Docker** |
 | Nube | **DigitalOcean**, Droplet (servidor virtual) Linux |
 | Herramientas de apoyo | Git/GitHub, Postman, MySQL Workbench, MongoDB Compass, Draw.io |
@@ -133,7 +133,7 @@ Arquitectura web **cliente-servidor** en capas (presentación / lógica de negoc
 | **Personal del establecimiento / municipio** | Registra y corrige la producción mensual |
 | **Estadígrafa / personal revisor de la DDRISS** | Revisa, solicita correcciones, aprueba y cierra periodos |
 | **Departamento de Epidemiología** | Consulta indicadores, mapas, alertas, brechas, proyecciones e informes |
-| **Administrador** | Gestiona usuarios, catálogos y configuraciones |
+| **Administrador** | Gestiona usuarios, catálogos y configuraciones; **registra y actualiza la población** por municipio y grupo de edad que el MSPAS envía cada año (sección 14.3; decisión provisional, sujeta a cambios) |
 | **Autoridades (solo consulta)** | Acceden a resultados e informes |
 
 Si un usuario no tiene credenciales, el administrador lo registra. Con credenciales incorrectas el sistema muestra error y permite reintentar. El área de tecnología e informática se menciona como beneficiaria de la trazabilidad y como posible responsable del mantenimiento posterior, aunque no aparece como rol propio.
@@ -174,14 +174,14 @@ Las validaciones distinguen **errores** (bloquean el envío: campos incompletos,
 4. **Validación, revisión y cierre de reportes**: consulta de resultados de validación, envío a revisión, revisión, solicitud de corrección, corrección y reenvío, aprobación, cierre de periodo, gestión de rectificaciones.
 5. **Indicadores y análisis de cobertura**: cálculo y consulta de cobertura (producción atribuible ÷ población objetivo), comparación con meta, **brecha** de dosis, **proyección** de cobertura, **tasa de deserción entre dosis**, análisis por municipio y vacuna, comparación entre periodos.
 6. **Consultas y visualización**: consultas con filtros según rol, tablas, gráficos, **tablero de control**, **mapa territorial** de San Marcos, tendencias. (En esta versión, el texto del módulo lista además las mismas funciones de informes y alertas que el módulo 7; ver sección 10.)
-7. **Reportes y alertas**: informe consolidado departamental, por establecimiento/municipio, por vacuna, por periodo (mensual/anual/intervalo); **exportación a PDF**; alertas de reportes pendientes, de calidad, de cobertura bajo meta y de proceso (periodos por cerrar, pendientes de revisión).
+7. **Reportes y alertas**: informe consolidado departamental, por establecimiento/municipio, por vacuna, por periodo (mensual/anual/intervalo), también por **distrito** y con totales agrupados por **sexo**; filtros por rango de fechas y por uno o varios municipios; **exportación a Excel (prioritaria) y PDF**; alertas de reportes pendientes, de calidad, de cobertura bajo meta y de proceso (periodos por cerrar, pendientes de revisión).
 8. **Auditoría y trazabilidad**: bitácora general; filtros por usuario, fecha, tipo de acción, **módulo** o elemento afectado; historiales de producción, del flujo de revisión, de rectificaciones y de configuraciones. Los registros de auditoría **no se pueden modificar** con las funciones ordinarias.
 
 **Cómo encajan:** configuración y registro *generan* la información → validación/revisión/cierre *controla su validez* → indicadores *la procesan* → consultas, reportes y alertas *la presentan* → auditoría *deja evidencia de todo el ciclo*.
 
 ### 5.6 Cálculo de cobertura y metas (marco teórico 4.4)
 - **Cobertura (%) = dosis administradas a la población objetivo ÷ población objetivo estimada × 100**, siempre especificada por vacuna, dosis, grupo poblacional, periodo y territorio.
-- La entrevista **no documenta la fórmula particular de cada vacuna y dosis**; la configuración definitiva de los cálculos deberá respetar los criterios institucionales, sin asumir una sola fórmula para todos los casos.
+- La propuesta **no documenta la fórmula particular de cada vacuna y dosis**. La entrevista con Epidemiología del 10/10/2026 aclaró el método (población anual ÷ 12 × meses transcurridos, igual para todas las vacunas, cada una con su meta) y que cuenta la dosis que **completa el esquema**; el detalle está en la sección 14.3.
 - Coberturas **mayores a 100%** son señal de problemas en el denominador o en los registros y deben revisarse, no aceptarse automáticamente.
 - **Metas:** la DDRISS usa >95% departamental y homogéneo entre municipios; la Agenda de Inmunización 2030 (OMS) fija 90% para indicadores concretos (DTP3, sarampión 2.ª dosis, neumococo 3.ª dosis, VPH). Las metas dependen del indicador, no son un valor universal.
 - **Homogeneidad:** el promedio departamental puede ocultar municipios con cobertura baja; hay que analizar cada municipio.
@@ -202,7 +202,7 @@ Las validaciones distinguen **errores** (bloquean el envío: campos incompletos,
 | **Sprint 2** | 04/10 – 13/10 | **Configuración dinámica y registro de producción:** diseño de estructuras MySQL/MongoDB, esquemas de captura y versiones, poblaciones objetivo, registro de producción con periodo y procedencia territorial |
 | **Sprint 3** | 14/10 – 23/10 | **Validación, revisión y cierre de reportes:** reglas de validación (error/advertencia), control de estados, envío, revisión, corrección, aprobación, cierre, rectificación y registro automático de trazabilidad |
 | **Sprint 4** | 24/10 – 02/11 | **Indicadores, análisis y visualización:** motor de indicadores (cobertura, metas, brechas, deserción, proyección), consultas, tablero, tendencias y mapa Leaflet/GeoJSON |
-| **Sprint 5** | 03/11 – 12/11 | **Reportes, alertas, auditoría y trazabilidad:** informes y exportación PDF, alertas de calidad/cobertura/proceso, consultas de auditoría |
+| **Sprint 5** | 03/11 – 12/11 | **Reportes, alertas, auditoría y trazabilidad:** informes y exportación a Excel y PDF, alertas de calidad/cobertura/proceso, consultas de auditoría |
 | **Fase final** (no es sprint) | 13/11 – 30/11 | Integración y pruebas de sistema (13–16/11), **pruebas de carga y estrés** y verificación de permisos (16–17/11), **pruebas con usuarios** (18–20/11), ajustes (20–23/11), documentación técnica y manual de usuario (18–24/11), **despliegue en DigitalOcean** (24–25/11), verificación en producción (25–26/11), **capacitación** (27–28/11), revisión final y entrega (29–30/11) |
 
 Todas las actividades del cronograma tienen como responsable a "Todos".
@@ -280,7 +280,10 @@ Idea transversal: el sistema **no sustituye a SIGSA** ni es un sistema nacional 
 | **Cobertura** | % de la población objetivo vacunada; meta del MSPAS > 95% |
 | **Brecha** | Dosis aproximadas que faltan para alcanzar la meta |
 | **Deserción entre dosis** | Pérdida de continuidad entre dosis sucesivas de un esquema |
-| **Población objetivo** | Denominador del cálculo de cobertura (por municipio, año, vacuna) |
+| **Población objetivo** | Denominador del cálculo de cobertura, por municipio, año y grupo de edad (los mismos grupos que los encabezados del 5C); el MSPAS la envía cada año y la registra el Administrador |
+| **Meta mensual acumulada** | Población ÷ 12 × número de mes: vacunas que deberían llevarse al corte del mes; es el "100 %" de ese mes |
+| **Esquema completo** | Una persona cuenta para la cobertura de una vacuna cuando recibe la dosis que completa su esquema |
+| **Encabezado del 5C** | Título de grupo de edad (p. ej. "< 1 año", "4 años") que agrupa columnas del formulario; no se llena |
 | **Atribución territorial** | Asignar la dosis al municipio de procedencia de la persona, no solo al lugar de aplicación |
 | **Homogeneidad** | Que la meta se cumpla en cada municipio, no solo en el promedio departamental |
 | **Persistencia políglota** | Usar más de un tipo de base de datos según la naturaleza de los datos (aquí MySQL + MongoDB) |
@@ -291,7 +294,7 @@ Idea transversal: el sistema **no sustituye a SIGSA** ni es un sistema nacional 
 
 ## 11. Alcance: lo que sí y lo que no
 
-**Sí incluye:** captura dinámica por establecimiento, validación, flujo de revisión/cierre/rectificación, atribución territorial, poblaciones objetivo, indicadores (cobertura, brecha, deserción, proyección), informes PDF, alertas, tablero, mapa, auditoría, pruebas de carga y estrés, despliegue en la nube, manuales y capacitación.
+**Sí incluye:** captura dinámica por establecimiento, validación, flujo de revisión/cierre/rectificación, atribución territorial, poblaciones objetivo, indicadores (cobertura, brecha, deserción, proyección), informes en Excel y PDF, alertas, tablero, mapa, auditoría, pruebas de carga y estrés, despliegue en la nube, manuales y capacitación.
 
 **No incluye:** historia vacunal por paciente, datos personales o clínicos, expedientes, integración directa con SIGSA, reemplazo del sistema nacional del MSPAS, ni análisis epidemiológico automático (el sistema proporciona la información; el análisis lo hace Epidemiología).
 
@@ -335,6 +338,7 @@ Estas decisiones no están en el documento de la propuesta; las tomó el equipo 
 - Se confirma **MySQL** como motor relacional. **MongoDB** se justifica porque cada vacuna usa dimensiones distintas (sexo, grupo de edad, embarazo, etc.): las dimensiones se declaran en el esquema de captura y no como columnas fijas. Una vacuna nueva es una fila nueva en MySQL.
 - **`usuario` y `empleado` separados (1:1).** `empleado` guarda los datos del personal (nombre, cargo, correo, teléfono, establecimiento) y puede existir sin cuenta; `usuario` guarda solo el acceso (credenciales, rol, estado). La bitácora y las demás acciones auditables apuntan a `usuario`. Son datos del personal, no de pacientes, así que la restricción de solo datos agregados se mantiene.
 - **`establecimiento`** agrega `direccion`, `telefono`, `correo` y `nombre_contacto` (contacto en texto libre; queda pendiente si pasa a ser una llave foránea a `empleado`).
+- **v0.5 (10/10/2026), varias DDRISS:** el modelo queda preparado para escalar a otras DDRISS aunque solo opere San Marcos (tabla `ddriss`, `cierre_periodo` por mes y DDRISS, `empleado.ddriss_id`; se mantienen los 5 roles). 32 tablas y 4 vistas. Plan en `diseno-bd/plan_v05_multi_ddriss.md`.
 
 **Backend (versión preliminar v0.1, 08/10/2026)** · `backend/INSTRUCCIONES_BACKEND.md` y `backend/openapi.yaml`
 - Node.js 22 LTS + Express en **JavaScript**; MySQL 8 y MongoDB 7; autenticación con JWT.
@@ -345,3 +349,50 @@ Estas decisiones no están en el documento de la propuesta; las tomó el equipo 
 - Paleta verde pastel y celeste, a juego con los colores de la DDRISS. La pantalla de inicio es ligera; las gráficas van en pantallas propias del menú (Indicadores, Mapa territorial).
 - Siete pantallas: inicio de sesión, inicio, indicadores, registro de producción (con una variante de dimensiones), bandeja de revisión, mapa territorial y **auditoría** (bitácora con filtros por fecha, usuario, tipo de acción y elemento afectado, y paginación).
 
+---
+
+## 14. Información de campo del 10/10/2026
+
+Fuente: documento *"Nueva info – SIRCOVA"* redactado por el equipo el 10/10/2026, con entrevistas a la estadígrafa y a la epidemióloga de la DDRISS y tres fotografías de un 5C real (Catarina, julio de 2026). Lo marcado como **pendiente** debe confirmarse con la DDRISS.
+
+### 14.1 Estadígrafa: informes
+- **Formato:** prefiere **Excel**. El PDF sigue siendo útil, pero la exportación a Excel tiene prioridad.
+- **Niveles:** además de la cobertura departamental, quiere ver los datos de cada **municipio** y de cada **distrito**. El mapa cubre parte de esto, pero los informes también deben generarse en esos niveles.
+- **Totales por sexo:** el sistema guarda el detalle (sexo y edad), pero a ella le interesa sobre todo el total por sexo. Ejemplo: 5 niñas de 7 años, 6 de 12 y 3 de 3 suman **14 niñas**; 8 niños de 5 años suman **8 niños**. El informe debe permitir sumar por una dimensión elegida sin perder el detalle almacenado.
+- **Filtros** al generar informes: rango de fechas (mes inicial y final) y uno o varios municipios.
+
+### 14.2 Encabezados del formulario 5C
+Las fotografías muestran que el 5C agrupa sus columnas bajo **encabezados de grupo de edad** que no se llenan, pero orientan al establecimiento:
+
+| Encabezado | Vacunas y dosis que agrupa (según las fotos) |
+|---|---|
+| < 1 año | Hepatitis B, BCG, OPV 1.ª a 3.ª, Pentavalente 1.ª a 3.ª, Rotavirus (esquema de 2 dosis), Neumococo 1.ª y 2.ª, Influenza 1.ª y 2.ª |
+| De 1 a < 2 años | SPR, Neumococo refuerzo, OPV R1, DPT R1 |
+| 4 años | OPV R2, DPT R2 |
+| De 1 a < 5 años | OPV 1.ª a 3.ª, R1 y R2; Pentavalente 1.ª a 3.ª; DPT R1 y R2; SPR (esquemas atrasados) |
+| Mujer de 15 a 49 años · Otros grupos de edad | Td 1.ª a 3.ª, R1 y R2 |
+| Otras vacunas (1) y (2) · Otras vacunas adultos | Columnas libres "especifique la vacuna" |
+
+Consecuencias para el diseño:
+- El **mismo par vacuna-dosis aparece bajo varios encabezados** (OPV 1.ª en "< 1 año" y en "De 1 a < 5 años"). El encabezado equivale a un grupo de edad: el formulario dinámico debe mostrarlo como sección y guardar el grupo de edad correspondiente.
+- El 5C incluye columnas de **población** (N/V = nacidos vivos, 1 año, 4 años) y de **"Porcentaje del mes"** para dosis concretas (Hepatitis B, BCG, OPV 3, Penta 3, Rotavirus 2 o 3, Neumococo 2, Influenza 2, SPR, Neumococo R, OPV R1, DPT R1, OPV R2, DPT R2). En el sistema son valores **calculados**, no capturados, y la lista orienta sobre qué dosis cuentan para la cobertura.
+- Las filas separan el **municipio propio** de "Otros municipios", con una fila por municipio de procedencia; esto confirma la atribución territorial ya diseñada.
+- El formulario impreso (versión 2014) tiene **anotaciones a mano** por cambios del esquema nacional: "Hexa" sobre Pentavalente, columnas reutilizadas (la de Rotavirus de 3 dosis se usa para VPH niño/niña) y columnas libres usadas para Tdap en embarazadas, SPR y SR en adultos. Esto refuerza la necesidad de esquemas de captura versionados.
+
+### 14.3 Epidemiología: cálculo de indicadores
+- **Población:** a inicios de cada año el MSPAS envía la población de cada municipio por grupo de edad. Los grupos son **los mismos encabezados del 5C** (< 1 año, 1 a < 2 años, etc.). La recibe una administradora, así que por ahora la registra y actualiza solo el rol **Administrador** (decisión provisional del 10/10/2026, sujeta a cambios: el equipo no está del todo seguro de quién la registra).
+- **Meta acumulada al mes:** población ÷ 12 = vacunas que deberían aplicarse por mes; multiplicado por el **número de mes** (junio = 6, julio = 7) da cuántas vacunas **deberían** llevarse al corte. Ejemplo: 541 ÷ 12 ≈ 45 al mes; a junio, (541 ÷ 12) × 6 ≈ 270. Con una población de 100, a junio deberían llevarse 50 vacunas: esas 50 son el **100 % de ese mes**.
+- **Comparación para el mapa:** las vacunas reales acumuladas se comparan con esa meta del mes. La diferencia (y el porcentaje real ÷ meta del mes) es lo que colorea el mapa.
+- El **mismo método** se aplica a todas las vacunas; cada una tiene su meta.
+- Al terminar el año se presenta el **acumulado anual**, que es otro informe.
+- Lo importante es que niñas y niños tengan el **esquema completo**: una vacuna cuenta para la cobertura cuando se aplica la dosis que completa el esquema. La DDRISS proporcionará cuántas dosis tiene cada vacuna vigente (**pendiente**).
+- Les serviría ver **cuántas dosis faltan** para la meta (brecha) y, sobre todo, **proyecciones**, que hoy no hacen.
+- **Semáforo del mapa (provisional; cambiará cuando confirmen los rangos exactos):** rojo por debajo de 80 %, amarillo entre 80 % y 90 %, verde por encima de 90 %, medido contra la meta del mes.
+- **Distritos:** se necesitan producción **y** cobertura por distrito. **Pendiente:** el equipo debe confirmar con la DDRISS qué es exactamente un distrito de salud en San Marcos y cuántos municipios tienen más de uno. El encabezado del 5C ya pide "Área de Salud" y "Distrito de Salud" (en la foto: San Marcos y Catarina).
+
+### 14.4 Qué confirma, qué cambia y qué queda pendiente
+- **Confirma:** el prorrateo mensual lineal del denominador (`MENSUAL_LINEAL` en la configuración de indicadores) y la "meta proporcional" de los mockups; la brecha y la proyección; la atribución por procedencia; los esquemas versionados; la captura con detalle por dimensiones.
+- **Cambia o agrega:** Excel como formato prioritario; informes por distrito; totales agrupados por sexo; filtros por fechas y municipios; secciones por grupo de edad en el formulario; población por grupo de edad (no por vacuna) registrada por el Administrador; avance del mapa medido contra la meta del mes (100 %) en lugar de la meta del 95 %; cobertura por distrito; marca de las dosis que cuentan para cobertura; semáforo 80/90 (los ejemplos actuales usan 80/95).
+- **Base de datos (v0.6, 10/10/2026):** aplicados los bloques A (población por grupo de edad), B (dosis que completan el esquema y trazadoras), C (secciones del formulario) y D (avance contra la meta del mes, semáforo 80/90 provisional); el bloque E (cobertura por distrito) está en pausa. Las semillas de vacunas y los rangos del semáforo están sujetos a cambios. Detalle en `diseno-bd/propuesta_v06_nueva_info.md`.
+- **Pendiente con la DDRISS:** número de dosis por vacuna vigente; confirmación del semáforo; cómo se obtiene la población de un distrito cuando no coincide con un municipio; una copia del archivo anual de población.
+- **Aclarado por Chris (10/10/2026):** el multiplicador es el número de mes (no días); las 50 vacunas del ejemplo son una cantidad, no un porcentaje; por ahora la población la registra solo el Administrador (sujeto a cambios); la definición de distrito y su relación con los municipios quedan pendientes.

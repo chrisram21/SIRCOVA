@@ -1,7 +1,19 @@
 // =============================================================================
 //  Plataforma web de producción de vacunación — DDRISS San Marcos (MSPAS)
 //  Diseño preliminar de colecciones MongoDB (MongoDB 7.x, ejecutar con mongosh)
-//  Versión: 0.3 (propuesta para revisión)   Fecha: 2026-10-10
+//  Versión: 0.4 (propuesta para revisión)   Fecha: 2026-10-10
+//  Cambios v0.4 (bloque C de la v0.6 de la BD, información de campo):
+//  esquemas_captura agrega secciones[] = encabezados de grupo de edad del 5C
+//  ("< 1 año", "De 1 a < 5 años"...); cada sección indica su grupo_edad y
+//  qué dosis aparecen en ella, así la misma dosis puede salir en dos
+//  secciones. Los valores de grupo_edad usan los mismos códigos que
+//  clasificacion_poblacion en MySQL (1_ANIO pasa a 1_A_MENOR_2 y 15_49 a
+//  MEF_15_49; nuevos 4_ANIOS y 1_A_4). Nuevo esquema de ejemplo de OPV.
+//  Vacunas, dosis y secciones de las semillas son EJEMPLOS sujetos a cambios.
+//  Bloque D de la v0.6: nuevo tipo_calculo AVANCE_META_MES (dosis acumuladas
+//  ÷ meta del mes, donde meta del mes = población ÷ 12 × número de mes = 100 %),
+//  indicador por defecto del mapa. Semáforo 80/90 PROVISIONAL
+//  (umbrales_provisionales: true) hasta que Epidemiología confirme los rangos.
 //  Cambios v0.3 (modelo preparado para varias DDRISS, igual que MySQL v0.5):
 //  reglas_validacion y configuracion_indicadores agregan "territorio"
 //  (NACIONAL o una DDRISS). Una versión vigente de una DDRISS prevalece sobre
@@ -223,6 +235,21 @@ db_.createCollection("esquemas_captura", {
             }
           }
         },
+        secciones: {
+          bsonType: "array",
+          description: "Encabezados del 5C. Una celda existe solo si su dosis está en la sección de su grupo_edad",
+          items: {
+            bsonType: "object",
+            required: ["codigo", "titulo", "orden", "dosis"],
+            properties: {
+              codigo:     { bsonType: "string" },
+              titulo:     { bsonType: "string", description: "Texto del encabezado, p. ej. '< 1 año'" },
+              orden:      { bsonType: "int" },
+              grupo_edad: { bsonType: ["string", "null"], description: "Valor de grupo_edad que se guarda al capturar en la sección; null si la vacuna no desagrega por edad" },
+              dosis:      { bsonType: "array", minItems: 1, items: { bsonType: "string" }, description: "dosis.codigo que se capturan en esta sección" }
+            }
+          }
+        },
         presentacion: { bsonType: "object" },
         auditoria: auditoria
       }
@@ -314,7 +341,7 @@ db_.createCollection("configuracion_indicadores", {
         version:      { bsonType: "int", minimum: 1 },
         nombre:       { bsonType: "string" },
         descripcion:  { bsonType: "string" },
-        tipo_calculo: { enum: ["COBERTURA", "BRECHA", "DESERCION", "PROYECCION"] },
+        tipo_calculo: { enum: ["COBERTURA", "BRECHA", "DESERCION", "PROYECCION", "AVANCE_META_MES"] },
         aplica_a: {
           bsonType: "array",
           minItems: 1,
@@ -360,6 +387,8 @@ db_.createCollection("configuracion_indicadores", {
           }
         },
         umbrales: { bsonType: "array", description: "Semáforo para tablero y mapa" },
+        umbrales_provisionales: { bsonType: "bool", description: "TRUE: rangos de colores sin confirmar por Epidemiología; cambiarán" },
+        es_indicador_mapa: { bsonType: "bool", description: "TRUE: indicador que el mapa muestra por defecto" },
         parametros:   { bsonType: "object" },
         niveles:      { bsonType: "array", items: { enum: ["MUNICIPIO", "DEPARTAMENTO", "ESTABLECIMIENTO"] } },
         periodicidad: { enum: ["MENSUAL", "TRIMESTRAL", "ANUAL"] },
@@ -411,11 +440,16 @@ db_.catalogo_dimensiones.insertMany([
   {
     codigo: "grupo_edad", nombre: "Grupo de edad", tipo: "RANGO_EDAD", activo: true,
     valores: [
-      { codigo: "MENOR_1", etiqueta: "Menor de 1 año", orden: NumberInt(1), edad_min_meses: NumberInt(0),   edad_max_meses: NumberInt(12),  activo: true },
-      { codigo: "1_ANIO",  etiqueta: "1 año",          orden: NumberInt(2), edad_min_meses: NumberInt(12),  edad_max_meses: NumberInt(24),  activo: true },
-      { codigo: "2_4",     etiqueta: "2 a 4 años",     orden: NumberInt(3), edad_min_meses: NumberInt(24),  edad_max_meses: NumberInt(60),  activo: true },
-      { codigo: "10_14",   etiqueta: "10 a 14 años",   orden: NumberInt(4), edad_min_meses: NumberInt(120), edad_max_meses: NumberInt(180), activo: true },
-      { codigo: "15_49",   etiqueta: "15 a 49 años",   orden: NumberInt(5), edad_min_meses: NumberInt(180), edad_max_meses: NumberInt(600), activo: true }
+      // Encabezados del 5C; mismos códigos que clasificacion_poblacion (MySQL).
+      // 1_A_4 se superpone con 1_A_MENOR_2 y 4_ANIOS: es la sección de esquemas
+      // atrasados del 5C. 2_4 y 10_14 quedan por revisar con la DDRISS.
+      { codigo: "MENOR_1",     etiqueta: "< 1 año",               orden: NumberInt(1), edad_min_meses: NumberInt(0),   edad_max_meses: NumberInt(12),  activo: true },
+      { codigo: "1_A_MENOR_2", etiqueta: "De 1 a < 2 años",       orden: NumberInt(2), edad_min_meses: NumberInt(12),  edad_max_meses: NumberInt(24),  activo: true },
+      { codigo: "4_ANIOS",     etiqueta: "4 años",                orden: NumberInt(3), edad_min_meses: NumberInt(48),  edad_max_meses: NumberInt(60),  activo: true },
+      { codigo: "1_A_4",       etiqueta: "De 1 a < 5 años",       orden: NumberInt(4), edad_min_meses: NumberInt(12),  edad_max_meses: NumberInt(60),  activo: true },
+      { codigo: "2_4",         etiqueta: "2 a 4 años",            orden: NumberInt(5), edad_min_meses: NumberInt(24),  edad_max_meses: NumberInt(60),  activo: true },
+      { codigo: "10_14",       etiqueta: "10 a 14 años",          orden: NumberInt(6), edad_min_meses: NumberInt(120), edad_max_meses: NumberInt(180), activo: true },
+      { codigo: "MEF_15_49",   etiqueta: "Mujer de 15 a 49 años", orden: NumberInt(7), edad_min_meses: NumberInt(180), edad_max_meses: NumberInt(600), activo: true }
     ],
     auditoria: auditoriaEjemplo
   },
@@ -525,9 +559,13 @@ db_.esquemas_captura.insertMany([
       procedencia: { modo: "MUNICIPIO_DETALLADO", permite_no_especificado: true },
       desagregacion: [
         { dimension: "sexo",       valores: ["M", "F"] },
-        { dimension: "grupo_edad", valores: ["MENOR_1", "1_ANIO"] }
+        { dimension: "grupo_edad", valores: ["MENOR_1", "1_A_4"] }
       ]
     },
+    secciones: [
+      { codigo: "MENOR_1", titulo: "< 1 año",         orden: NumberInt(1), grupo_edad: "MENOR_1", dosis: ["D1", "D2", "D3"] },
+      { codigo: "1_A_4",   titulo: "De 1 a < 5 años", orden: NumberInt(2), grupo_edad: "1_A_4",   dosis: ["D1", "D2", "D3"] }
+    ],
     campos_adicionales: [
       { clave: "total_dosis_declarado", etiqueta: "Total de dosis aplicadas (según registro del establecimiento)",
         tipo: "entero", requerido: true, minimo: NumberInt(0), maximo: null,
@@ -540,8 +578,8 @@ db_.esquemas_captura.insertMany([
       { codigo: "SECUENCIA_DOSIS",     version: NumberInt(1) },
       { codigo: "VARIACION_HISTORICA", version: NumberInt(1) }
     ],
-    presentacion: { filas: "dosis", columnas: ["grupo_edad", "sexo"], subtabla_por: "procedencia" },
-    auditoria: { ...auditoriaEjemplo, motivo_cambio: "Se agrega el grupo de 1 año (esquema tardío) y la procedencia por municipio." }
+    presentacion: { filas: "dosis", columnas: ["seccion", "sexo"], subtabla_por: "procedencia" },
+    auditoria: { ...auditoriaEjemplo, motivo_cambio: "Se agrega la sección de 1 a < 5 años (esquema atrasado) y la procedencia por municipio." }
   }
 ]);
 
@@ -563,6 +601,9 @@ db_.esquemas_captura.insertMany([
         { dimension: "sexo", valores: ["M", "F"] }
       ]
     },
+    secciones: [
+      { codigo: "MENOR_1", titulo: "< 1 año", orden: NumberInt(1), grupo_edad: null, dosis: ["UNICA"] }
+    ],
     campos_adicionales: [],
     reglas: [
       { codigo: "CAMPOS_COMPLETOS", version: NumberInt(1) },
@@ -582,20 +623,56 @@ db_.esquemas_captura.insertMany([
         { codigo: "D1", etiqueta: "1.ª dosis" },
         { codigo: "D2", etiqueta: "2.ª dosis" },
         { codigo: "R1", etiqueta: "1.er refuerzo",
-          desagregacion: [ { dimension: "grupo_edad", valores: ["10_14", "15_49"] } ] }
+          desagregacion: [ { dimension: "grupo_edad", valores: ["10_14", "MEF_15_49"] } ] }
       ],
       procedencia: { modo: "MUNICIPIO_DETALLADO", permite_no_especificado: true },
       desagregacion: [
         { dimension: "estado_embarazo", valores: ["EMBARAZADA", "NO_EMBARAZADA"] },
-        { dimension: "grupo_edad",      valores: ["10_14", "15_49"] }
+        { dimension: "grupo_edad",      valores: ["10_14", "MEF_15_49"] }
       ]
     },
+    secciones: [
+      { codigo: "MEF_15_49", titulo: "Mujer de 15 a 49 años", orden: NumberInt(1), grupo_edad: "MEF_15_49", dosis: ["D1", "D2", "R1"] },
+      { codigo: "OTROS",     titulo: "Otros grupos de edad",  orden: NumberInt(2), grupo_edad: "10_14",     dosis: ["D1", "D2", "R1"] }
+    ],
     campos_adicionales: [],
     reglas: [
       { codigo: "CAMPOS_COMPLETOS", version: NumberInt(1) },
       { codigo: "NO_NEGATIVO", version: NumberInt(1) }
     ],
-    presentacion: { filas: "dosis", columnas: ["estado_embarazo", "grupo_edad"] },
+    presentacion: { filas: "dosis", columnas: ["seccion", "estado_embarazo"] },
+    auditoria: auditoriaEjemplo
+  },
+  // OPV: la misma dosis aparece en dos secciones (D1 a D3 en "< 1 año" y en
+  // "De 1 a < 5 años"), y los refuerzos solo en su sección. Ejemplo según el 5C.
+  {
+    _id: ObjectId("66f8a1c2e4b0a1b2c3d4e602"),
+    vacuna: { id: NumberInt(6), codigo: "OPV", nombre: "Antipoliomielítica oral (OPV)" },
+    version: NumberInt(1), estado: "VIGENTE",
+    vigencia: { desde: new Date("2026-10-01"), hasta: null },
+    version_anterior_id: null,
+    dimensiones: {
+      dosis: [
+        { codigo: "D1", etiqueta: "1.ª" }, { codigo: "D2", etiqueta: "2.ª" }, { codigo: "D3", etiqueta: "3.ª" },
+        { codigo: "R1", etiqueta: "R1" },  { codigo: "R2", etiqueta: "R2" }
+      ],
+      procedencia: { modo: "MUNICIPIO_DETALLADO", permite_no_especificado: true },
+      desagregacion: [
+        { dimension: "grupo_edad", valores: ["MENOR_1", "1_A_MENOR_2", "4_ANIOS", "1_A_4"] }
+      ]
+    },
+    secciones: [
+      { codigo: "MENOR_1",     titulo: "< 1 año",         orden: NumberInt(1), grupo_edad: "MENOR_1",     dosis: ["D1", "D2", "D3"] },
+      { codigo: "1_A_MENOR_2", titulo: "De 1 a < 2 años", orden: NumberInt(2), grupo_edad: "1_A_MENOR_2", dosis: ["R1"] },
+      { codigo: "4_ANIOS",     titulo: "4 años",          orden: NumberInt(3), grupo_edad: "4_ANIOS",     dosis: ["R2"] },
+      { codigo: "1_A_4",       titulo: "De 1 a < 5 años", orden: NumberInt(4), grupo_edad: "1_A_4",       dosis: ["D1", "D2", "D3", "R1", "R2"] }
+    ],
+    campos_adicionales: [],
+    reglas: [
+      { codigo: "CAMPOS_COMPLETOS", version: NumberInt(1) },
+      { codigo: "NO_NEGATIVO", version: NumberInt(1) }
+    ],
+    presentacion: { filas: "dosis", columnas: ["seccion"] },
     auditoria: auditoriaEjemplo
   }
 ]);
@@ -664,6 +741,33 @@ db_.configuracion_indicadores.insertMany([
     meta: { valor: 95, unidad: "PORCENTAJE", comparador: ">" },
     parametros: { indicador_base: "COB_PENTA3", metodo: "PROMEDIO_MOVIL", meses_ventana: NumberInt(3), horizonte: "FIN_DE_ANIO" },
     es_estimacion: true
+  },
+  {
+    // Método de Epidemiología (entrevista del 10/10/2026): meta del mes =
+    // población ÷ 12 × número de mes; esa cantidad es el 100 % del mes.
+    // valor = dosis acumuladas ÷ meta del mes × 100; brecha_dosis = meta del mes
+    // menos dosis acumuladas (vacunas que faltan). Es lo que colorea el mapa.
+    ...baseIndicador,
+    codigo: "AVANCE_PENTA3", nombre: "Avance de Pentavalente 3.ª dosis contra la meta del mes",
+    descripcion: "Dosis acumuladas al mes ÷ (población ÷ 12 × número de mes) × 100. La meta del mes vale 100 %.",
+    tipo_calculo: "AVANCE_META_MES",
+    aplica_a: [{ vacuna: "PENTA", dosis: "D3", clasificacion_poblacion: "MENOR_1", filtros_dimension: { grupo_edad: ["MENOR_1"] } }],
+    numerador:   { fuente: "PRODUCCION", estados_reporte: ["CERRADO"], atribucion: "PROCEDENCIA", acumulado: "ANUAL" },
+    denominador: { fuente: "POBLACION_OBJETIVO", prorrateo: "MENSUAL_LINEAL" },
+    meta: { valor: 100, unidad: "PORCENTAJE", comparador: ">=", homogeneidad_municipal: true },
+    // PROVISIONAL: rangos indicados por Epidemiología, pendientes de
+    // confirmar; se publicará una versión nueva con los rangos exactos.
+    umbrales: [
+      { color: "verde",    desde: 90, hasta: null },
+      { color: "amarillo", desde: 80, hasta: 90 },
+      { color: "rojo",     desde: 0,  hasta: 80 }
+    ],
+    umbrales_provisionales: true,
+    es_indicador_mapa: true,
+    parametros: { mostrar_diferencia: true, redondeo: "ARRIBA", minimo_cero: true },
+    niveles: ["MUNICIPIO", "DEPARTAMENTO"],
+    alerta: { generar: true, tipo: "COBERTURA_BAJO_META", rol_destino: ["EPIDEMIOLOGIA", "REVISOR"] },
+    es_estimacion: false
   }
 ]);
 

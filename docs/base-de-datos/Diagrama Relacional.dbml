@@ -1,5 +1,5 @@
 // Plataforma web de producción de vacunación — DDRISS San Marcos (MSPAS)
-// Modelo relacional preliminar v0.5 (MySQL 8.0) en formato DBML para dbdiagram.io
+// Modelo relacional preliminar v0.6 en curso, bloques A a C aplicados (MySQL 8.0) en formato DBML para dbdiagram.io
 // Generado a partir de 01_modelo_relacional_mysql.sql. Las vistas y los datos
 // semilla no se representan en DBML; están en el script SQL.
 // Los grupos de tablas siguen los cuatro grupos de MySQL de la propuesta v2.
@@ -267,6 +267,8 @@ Table "dosis" {
   "codigo" VARCHAR(20) [not null, note: 'Ej.: D1, D2, D3, R1, R2, UNICA']
   "nombre" VARCHAR(60) [not null]
   "orden" TINYINT [not null, note: 'Secuencia en el esquema; base de la deserción entre dosis']
+  "completa_esquema" BOOLEAN [not null, default: FALSE, note: 'Dosis que cierra el esquema: con ella la persona cuenta para la cobertura']
+  "es_trazadora" BOOLEAN [not null, default: FALSE, note: 'Dosis con porcentaje del mes en el 5C (se mide su cobertura)']
   "activa" BOOLEAN [not null, default: TRUE]
 
   Indexes {
@@ -276,7 +278,7 @@ Table "dosis" {
 
 Table "clasificacion_poblacion" {
   "id" SMALLINT [pk, not null, increment]
-  "codigo" VARCHAR(30) [not null, note: 'Ej.: MENOR_1, UN_ANIO, EMBARAZADAS, NINAS_10']
+  "codigo" VARCHAR(30) [not null, note: 'Encabezado del 5C, mismo código que grupo_edad en MongoDB: MENOR_1, 1_A_MENOR_2, 4_ANIOS...']
   "descripcion" VARCHAR(120) [not null]
 
   Indexes {
@@ -289,18 +291,17 @@ Table "poblacion_objetivo" {
   "id" INT [pk, not null, increment]
   "municipio_id" SMALLINT [not null]
   "anio" SMALLINT [not null]
-  "vacuna_id" SMALLINT [not null]
   "clasificacion_poblacion_id" SMALLINT [not null]
   "cantidad" INT [not null]
-  "fuente" VARCHAR(150) [note: 'Ej.: proyección INE / Unidad de Vacunación']
+  "fuente" VARCHAR(150) [note: 'Ej.: archivo de población del MSPAS 2026']
   "registrado_por" INT [not null]
   "creado_en" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
   "actualizado_en" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
 
   Indexes {
-    (municipio_id, anio, vacuna_id, clasificacion_poblacion_id) [unique, name: "uq_pobobj"]
+    (municipio_id, anio, clasificacion_poblacion_id) [unique, name: "uq_pobobj"]
   }
-  Note: 'Denominadores de cobertura por municipio, año, vacuna y clasificación'
+  Note: 'Población por municipio, año y grupo de edad (la misma para todas las vacunas); la registra el Administrador'
 }
 
 Table "periodo" {
@@ -629,8 +630,6 @@ Ref "fk_usuario_creador":"usuario"."id" < "usuario"."creado_por"
 Ref "fk_dosis_vacuna":"vacuna"."id" < "dosis"."vacuna_id"
 
 Ref "fk_pobobj_municipio":"municipio"."id" < "poblacion_objetivo"."municipio_id"
-
-Ref "fk_pobobj_vacuna":"vacuna"."id" < "poblacion_objetivo"."vacuna_id"
 
 Ref "fk_pobobj_clasif":"clasificacion_poblacion"."id" < "poblacion_objetivo"."clasificacion_poblacion_id"
 
