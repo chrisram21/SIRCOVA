@@ -2,7 +2,7 @@
 
 > Documento de contexto generado a partir de la propuesta *"Propuesta – Vacunas"* (versión recibida el 29 de septiembre de 2026), que ahora comprende la **Introducción y los Capítulos 1 (Marco contextual y conceptual), 2 (Diseño y método), 3 (Monografía de la institución) y 4 (Marco teórico)**. Sirve para que cualquier asistente o colaborador entienda **qué se va a construir, para quién, con qué tecnología y en qué plazos**. No sustituye al documento original: ante cualquier duda, manda el documento.
 >
-> **Versión 2.2 de este contexto** (10/10/2026). Mantiene el resumen de la propuesta de la v2 (29/09/2026), la **sección 13** con las decisiones de diseño posteriores (base de datos, backend y prototipo de pantallas) y agrega la **sección 14** con la información de campo reunida el 10/10/2026 (entrevistas a la estadígrafa y a Epidemiología, y fotografías de un 5C real). La sección 12.1 resume qué cambió de la v1 a la v2. Las versiones anteriores se conservan en `contexto/anteriores/`.
+> **Versión 2.3 de este contexto** (17/10/2026). Agrega la **sección 14.5** con las aclaraciones sobre los Excel del 5C (17/10/2026). Mantiene el resumen de la propuesta de la v2 (29/09/2026), la **sección 13** con las decisiones de diseño posteriores (base de datos, backend y prototipo de pantallas) y agrega la **sección 14** con la información de campo reunida el 10/10/2026 (entrevistas a la estadígrafa y a Epidemiología, y fotografías de un 5C real). La sección 12.1 resume qué cambió de la v1 a la v2. Las versiones anteriores se conservan en `contexto/anteriores/`.
 
 ---
 
@@ -38,12 +38,12 @@ Los 30 municipios de San Marcos reportan cada mes cuántas vacunas aplicaron med
 - El país se organiza en **DDRISS** (antes "Direcciones de Área de Salud"). San Marcos está en el suroccidente y tiene **30 municipios**, cada uno con su distrito de salud y sus establecimientos.
 
 ### 3.2 Cómo funciona hoy el proceso
-1. Cada centro de salud llena el formulario **5C / Consolidado Mensual de Vacunación (SIGSA-S5c)**: por **tipo de vacuna, dosis, sexo y grupo de edad**, registra (a) personas del propio municipio vacunadas, (b) personas de otros municipios vacunadas allí, y (c) total de dosis.
+1. Se llena **un formulario 5C / Consolidado Mensual de Vacunación (SIGSA-S5c) por municipio**: un establecimiento (casi siempre el centro de salud) centraliza la información del municipio y lo envía a la DDRISS. Por **tipo de vacuna, dosis y grupo de edad** (sexo solo en algunas vacunas), registra (a) personas del propio municipio vacunadas, (b) personas de otros municipios vacunadas allí, una fila por municipio, más una fila de **Migrantes** (personas de fuera de San Marcos), y (c) total de dosis.
 2. Los registros de los servicios se integran primero en un **consolidado municipal** que se remite a la DDRISS. Centros de salud, CAP y CAIMI usan el 5C; **algunos hospitales manejan sus propios formatos consolidados**.
 3. La estadígrafa recibe las **30 hojas físicas** y las digita en **tres archivos de Excel independientes** (en uso hace más de 15 años):
-   - Excel 1: producción de cada municipio a su **propia población**.
-   - Excel 2: producción brindada a **personas de otros municipios**.
-   - Excel 3: **consolidado total** por centro; es la base del informe de cobertura mensual.
+   - Excel 1 ("5C Inmunizaciones"): producción de cada municipio a su **propia población** (primera fila de cada 5C).
+   - Excel 2 ("… OTROS MUNICIPIOS"): **producción total** de cada municipio, sin importar la procedencia (fila de total del 5C). *Corregido el 17/10/2026: la propuesta lo describía como producción a otros municipios.*
+   - Excel 3 ("… COBERTURA"): dosis **atribuidas al municipio de residencia**, solo de los 30 municipios de San Marcos; copia el Excel 1 y le suma lo que los demás municipios vacunaron a sus residentes. Es la base de la cobertura. Detalle en `contexto/flujo_excel_5c.md`.
 4. Al inicio de cada mes se cita a un representante de cada municipio (**10 personas por día durante 3 días**) para verificar que la digitación del Excel 1 sea correcta.
 5. Con lo verificado, la estadígrafa completa los otros dos archivos y consolida antes de fin de mes. El **área de tecnología e informática** hace una revisión posterior.
 6. La **epidemióloga** usa ese informe en las reuniones del consejo técnico para mostrar el avance de cada municipio frente a la **meta de cobertura del MSPAS: más de 95% a nivel departamental, de forma homogénea entre municipios**.
@@ -284,6 +284,7 @@ Idea transversal: el sistema **no sustituye a SIGSA** ni es un sistema nacional 
 | **Meta mensual acumulada** | Población ÷ 12 × número de mes: vacunas que deberían llevarse al corte del mes; es el "100 %" de ese mes |
 | **Esquema completo** | Una persona cuenta para la cobertura de una vacuna cuando recibe la dosis que completa su esquema |
 | **Encabezado del 5C** | Título de grupo de edad (p. ej. "< 1 año", "4 años") que agrupa columnas del formulario; no se llena |
+| **Migrantes** | Fila del 5C para personas de fuera de San Marcos; cuentan en la producción, no en la cobertura |
 | **Atribución territorial** | Asignar la dosis al municipio de procedencia de la persona, no solo al lugar de aplicación |
 | **Homogeneidad** | Que la meta se cumpla en cada municipio, no solo en el promedio departamental |
 | **Persistencia políglota** | Usar más de un tipo de base de datos según la naturaleza de los datos (aquí MySQL + MongoDB) |
@@ -358,7 +359,7 @@ Fuente: documento *"Nueva info – SIRCOVA"* redactado por el equipo el 10/10/20
 ### 14.1 Estadígrafa: informes
 - **Formato:** prefiere **Excel**. El PDF sigue siendo útil, pero la exportación a Excel tiene prioridad.
 - **Niveles:** además de la cobertura departamental, quiere ver los datos de cada **municipio** y de cada **distrito**. El mapa cubre parte de esto, pero los informes también deben generarse en esos niveles.
-- **Totales por sexo:** el sistema guarda el detalle (sexo y edad), pero a ella le interesa sobre todo el total por sexo. Ejemplo: 5 niñas de 7 años, 6 de 12 y 3 de 3 suman **14 niñas**; 8 niños de 5 años suman **8 niños**. El informe debe permitir sumar por una dimensión elegida sin perder el detalle almacenado.
+- **Totales por sexo:** en el 5C actual el sexo solo se captura en **VPH** y **Tdap de 10 años** (aclarado el 17/10/2026); si otra vacuna lo necesita, se le agrega la dimensión al crearla o editarla. El sistema guarda el detalle (sexo y edad), pero a ella le interesa sobre todo el total por sexo. Ejemplo: 5 niñas de 7 años, 6 de 12 y 3 de 3 suman **14 niñas**; 8 niños de 5 años suman **8 niños**. El informe debe permitir sumar por una dimensión elegida sin perder el detalle almacenado.
 - **Filtros** al generar informes: rango de fechas (mes inicial y final) y uno o varios municipios.
 
 ### 14.2 Encabezados del formulario 5C
@@ -369,13 +370,13 @@ Las fotografías muestran que el 5C agrupa sus columnas bajo **encabezados de gr
 | < 1 año | Hepatitis B, BCG, OPV 1.ª a 3.ª, Pentavalente 1.ª a 3.ª, Rotavirus (esquema de 2 dosis), Neumococo 1.ª y 2.ª, Influenza 1.ª y 2.ª |
 | De 1 a < 2 años | SPR, Neumococo refuerzo, OPV R1, DPT R1 |
 | 4 años | OPV R2, DPT R2 |
-| De 1 a < 5 años | OPV 1.ª a 3.ª, R1 y R2; Pentavalente 1.ª a 3.ª; DPT R1 y R2; SPR (esquemas atrasados) |
+| De 1 a < 6 años | OPV 1.ª a 3.ª, R1 y R2; Pentavalente (hoy Hexavalente) 1.ª a 3.ª; DPT R1 y R2; SPR (esquemas atrasados). *Las fotos decían "< 5"; el Excel y Chris confirman "< 6" (17/10/2026).* |
 | Mujer de 15 a 49 años · Otros grupos de edad | Td 1.ª a 3.ª, R1 y R2 |
 | Otras vacunas (1) y (2) · Otras vacunas adultos | Columnas libres "especifique la vacuna" |
 
 Consecuencias para el diseño:
-- El **mismo par vacuna-dosis aparece bajo varios encabezados** (OPV 1.ª en "< 1 año" y en "De 1 a < 5 años"). El encabezado equivale a un grupo de edad: el formulario dinámico debe mostrarlo como sección y guardar el grupo de edad correspondiente.
-- El 5C incluye columnas de **población** (N/V = nacidos vivos, 1 año, 4 años) y de **"Porcentaje del mes"** para dosis concretas (Hepatitis B, BCG, OPV 3, Penta 3, Rotavirus 2 o 3, Neumococo 2, Influenza 2, SPR, Neumococo R, OPV R1, DPT R1, OPV R2, DPT R2). En el sistema son valores **calculados**, no capturados, y la lista orienta sobre qué dosis cuentan para la cobertura.
+- El **mismo par vacuna-dosis aparece bajo varios encabezados** (OPV 1.ª en "< 1 año" y en "De 1 a < 6 años"). El encabezado equivale a un grupo de edad: el formulario dinámico debe mostrarlo como sección y guardar el grupo de edad correspondiente.
+- El 5C incluye columnas de **población** (N/V = nacidos vivos, 1 año, 4 años) y de **"Porcentaje del mes"** para dosis concretas (Hepatitis B, BCG, OPV 3, Penta 3, Rotavirus 2 o 3, Neumococo 2, Influenza 2, SPR, Neumococo R, OPV R1, DPT R1, OPV R2, DPT R2). La estadígrafa no los llena (los calcula Epidemiología con la población del mes). En el sistema son valores **calculados**, no capturados, y la lista orienta sobre qué dosis cuentan para la cobertura.
 - Las filas separan el **municipio propio** de "Otros municipios", con una fila por municipio de procedencia; esto confirma la atribución territorial ya diseñada.
 - El formulario impreso (versión 2014) tiene **anotaciones a mano** por cambios del esquema nacional: "Hexa" sobre Pentavalente, columnas reutilizadas (la de Rotavirus de 3 dosis se usa para VPH niño/niña) y columnas libres usadas para Tdap en embarazadas, SPR y SR en adultos. Esto refuerza la necesidad de esquemas de captura versionados.
 
@@ -396,3 +397,14 @@ Consecuencias para el diseño:
 - **Base de datos (v0.6, 10/10/2026):** aplicados los bloques A (población por grupo de edad), B (dosis que completan el esquema y trazadoras), C (secciones del formulario) y D (avance contra la meta del mes, semáforo 80/90 provisional); el bloque E (cobertura por distrito) está en pausa. Las semillas de vacunas y los rangos del semáforo están sujetos a cambios. Detalle en `diseno-bd/propuesta_v06_nueva_info.md`.
 - **Pendiente con la DDRISS:** número de dosis por vacuna vigente; confirmación del semáforo; cómo se obtiene la población de un distrito cuando no coincide con un municipio; una copia del archivo anual de población.
 - **Aclarado por Chris (10/10/2026):** el multiplicador es el número de mes (no días); las 50 vacunas del ejemplo son una cantidad, no un porcentaje; por ahora la población la registra solo el Administrador (sujeto a cambios); la definición de distrito y su relación con los municipios quedan pendientes.
+
+### 14.5 Aclaraciones del 17/10/2026: los Excel del 5C
+Fuente: los tres Excel de septiembre y agosto de 2026, el documento de aclaraciones con la estadígrafa y las respuestas de Chris. Análisis completo en `contexto/flujo_excel_5c.md`.
+- **Excel 1** = producción a la población propia; **Excel 2** ("OTROS MUNICIPIOS") = **producción total**; **Excel 3** ("COBERTURA") = dosis atribuidas al municipio de residencia, solo los 30 municipios de San Marcos. Para Epidemiología importan el 1 y el 3.
+- **Un 5C por municipio**, enviado por el establecimiento que centraliza (casi siempre el centro de salud).
+- **Porcentajes:** la estadígrafa no los calcula; envía el Excel 3 a Epidemiología, que calcula con la población del mes.
+- **Sexo:** solo VPH y Tdap de 10 años; en otras vacunas sería una dimensión nueva.
+- **Migrantes:** personas de fuera de San Marcos. Cuentan en la producción total (Excel 2), no en la cobertura (Excel 3).
+- **Encabezado de edad:** "De 1 a < 6 años" (reemplaza "De 1 a < 5 años").
+- **Vacunas:** Hexavalente reemplaza a Pentavalente; las semillas siguen el Registro Único de Vacunación (BD v0.7, sujetas a cambios).
+- **Pendiente:** por qué Hepatitis B y BCG suman más en el Excel 3 que en el 2 (¿5C de hospitales?) y el nombre IPV/OPV en las columnas de "< 1 año".

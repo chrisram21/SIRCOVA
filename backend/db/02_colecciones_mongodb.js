@@ -1,14 +1,20 @@
 // =============================================================================
 //  Plataforma web de producción de vacunación — DDRISS San Marcos (MSPAS)
 //  Diseño preliminar de colecciones MongoDB (MongoDB 7.x, ejecutar con mongosh)
-//  Versión: 0.4 (propuesta para revisión)   Fecha: 2026-10-10
+//  Versión: 0.5 (propuesta para revisión)   Fecha: 2026-10-17
+//  Cambios v0.5 (BD v0.7, Excel del 5C y Registro Único de Vacunación):
+//  el grupo de edad 1_A_4 pasa a 1_A_5 ("De 1 a < 6 años", 12 a 72 meses);
+//  Hexavalente reemplaza a Pentavalente en los esquemas, reglas e indicadores
+//  de ejemplo (PENTA -> HEXA, mismo id 2); el sexo sale de Hexavalente y BCG
+//  porque en el 5C solo se captura en VPH y Tdap de 10 años (nuevo esquema
+//  de ejemplo de VPH por sexo). Todo sigue siendo EJEMPLO sujeto a cambios.
 //  Cambios v0.4 (bloque C de la v0.6 de la BD, información de campo):
 //  esquemas_captura agrega secciones[] = encabezados de grupo de edad del 5C
-//  ("< 1 año", "De 1 a < 5 años"...); cada sección indica su grupo_edad y
+//  ("< 1 año", "De 1 a < 6 años"...); cada sección indica su grupo_edad y
 //  qué dosis aparecen en ella, así la misma dosis puede salir en dos
 //  secciones. Los valores de grupo_edad usan los mismos códigos que
 //  clasificacion_poblacion en MySQL (1_ANIO pasa a 1_A_MENOR_2 y 15_49 a
-//  MEF_15_49; nuevos 4_ANIOS y 1_A_4). Nuevo esquema de ejemplo de OPV.
+//  MEF_15_49; nuevos 4_ANIOS y 1_A_4, hoy 1_A_5). Nuevo esquema de ejemplo de OPV.
 //  Vacunas, dosis y secciones de las semillas son EJEMPLOS sujetos a cambios.
 //  Bloque D de la v0.6: nuevo tipo_calculo AVANCE_META_MES (dosis acumuladas
 //  ÷ meta del mes, donde meta del mes = población ÷ 12 × número de mes = 100 %),
@@ -441,12 +447,12 @@ db_.catalogo_dimensiones.insertMany([
     codigo: "grupo_edad", nombre: "Grupo de edad", tipo: "RANGO_EDAD", activo: true,
     valores: [
       // Encabezados del 5C; mismos códigos que clasificacion_poblacion (MySQL).
-      // 1_A_4 se superpone con 1_A_MENOR_2 y 4_ANIOS: es la sección de esquemas
+      // 1_A_5 se superpone con 1_A_MENOR_2 y 4_ANIOS: es la sección de esquemas
       // atrasados del 5C. 2_4 y 10_14 quedan por revisar con la DDRISS.
       { codigo: "MENOR_1",     etiqueta: "< 1 año",               orden: NumberInt(1), edad_min_meses: NumberInt(0),   edad_max_meses: NumberInt(12),  activo: true },
       { codigo: "1_A_MENOR_2", etiqueta: "De 1 a < 2 años",       orden: NumberInt(2), edad_min_meses: NumberInt(12),  edad_max_meses: NumberInt(24),  activo: true },
       { codigo: "4_ANIOS",     etiqueta: "4 años",                orden: NumberInt(3), edad_min_meses: NumberInt(48),  edad_max_meses: NumberInt(60),  activo: true },
-      { codigo: "1_A_4",       etiqueta: "De 1 a < 5 años",       orden: NumberInt(4), edad_min_meses: NumberInt(12),  edad_max_meses: NumberInt(60),  activo: true },
+      { codigo: "1_A_5",       etiqueta: "De 1 a < 6 años",       orden: NumberInt(4), edad_min_meses: NumberInt(12),  edad_max_meses: NumberInt(72),  activo: true },
       { codigo: "2_4",         etiqueta: "2 a 4 años",            orden: NumberInt(5), edad_min_meses: NumberInt(24),  edad_max_meses: NumberInt(60),  activo: true },
       { codigo: "10_14",       etiqueta: "10 a 14 años",          orden: NumberInt(6), edad_min_meses: NumberInt(120), edad_max_meses: NumberInt(180), activo: true },
       { codigo: "MEF_15_49",   etiqueta: "Mujer de 15 a 49 años", orden: NumberInt(7), edad_min_meses: NumberInt(180), edad_max_meses: NumberInt(600), activo: true }
@@ -500,7 +506,7 @@ db_.reglas_validacion.insertMany([
     codigo: "SECUENCIA_DOSIS", version: NumberInt(1), nombre: "Coherencia entre dosis sucesivas",
     descripcion: "Advierte cuando una dosis posterior supera de forma notable a la anterior en el mismo mes.",
     tipo: "SECUENCIA_DOSIS", ambito: "VACUNA", severidad: "ADVERTENCIA",
-    aplica_a: { vacunas: ["PENTA", "SPR"] }, parametros: { exceso_permitido_pct: 20 },
+    aplica_a: { vacunas: ["HEXA", "SPR"] }, parametros: { exceso_permitido_pct: 20 },
     mensaje: "{dosis_posterior} de {vacuna} supera a {dosis_anterior} en más de {exceso_permitido_pct} %.",
     estado: "VIGENTE", vigencia: { desde: new Date("2026-01-01"), hasta: null }, auditoria: auditoriaEjemplo
   },
@@ -513,14 +519,15 @@ db_.reglas_validacion.insertMany([
   }
 ].map(conTerritorioNacional));
 
-// --- Esquemas de captura (Pentavalente: versión 1 histórica y versión 2 vigente)
-const penta_v1 = ObjectId("66f8a1c2e4b0a1b2c3d4e5f5");
-const penta_v2 = ObjectId("66f8a1c2e4b0a1b2c3d4e5f6"); // el mismo id que usa el ejemplo de reporte_vacuna en MySQL
+// --- Esquemas de captura (Hexavalente: versión 1 histórica y versión 2 vigente)
+// Sin sexo: en el 5C el sexo solo se captura en VPH y Tdap de 10 años.
+const hexa_v1 = ObjectId("66f8a1c2e4b0a1b2c3d4e5f5");
+const hexa_v2 = ObjectId("66f8a1c2e4b0a1b2c3d4e5f6"); // el mismo id que usa el ejemplo de reporte_vacuna en MySQL
 
 db_.esquemas_captura.insertMany([
   {
-    _id: penta_v1,
-    vacuna: { id: NumberInt(2), codigo: "PENTA", nombre: "Pentavalente (DPT-HepB-Hib)" },
+    _id: hexa_v1,
+    vacuna: { id: NumberInt(2), codigo: "HEXA", nombre: "Hexavalente" },
     version: NumberInt(1), estado: "HISTORICO",
     vigencia: { desde: new Date("2026-01-01"), hasta: new Date("2026-09-30") },
     version_anterior_id: null,
@@ -532,7 +539,6 @@ db_.esquemas_captura.insertMany([
       ],
       procedencia: { modo: "PROPIO_Y_OTROS", permite_no_especificado: true },
       desagregacion: [
-        { dimension: "sexo",       valores: ["M", "F"] },
         { dimension: "grupo_edad", valores: ["MENOR_1"] }
       ]
     },
@@ -541,15 +547,15 @@ db_.esquemas_captura.insertMany([
       { codigo: "CAMPOS_COMPLETOS", version: NumberInt(1) },
       { codigo: "NO_NEGATIVO", version: NumberInt(1) }
     ],
-    presentacion: { filas: "dosis", columnas: ["grupo_edad", "sexo"] },
+    presentacion: { filas: "dosis", columnas: ["grupo_edad"] },
     auditoria: auditoriaEjemplo
   },
   {
-    _id: penta_v2,
-    vacuna: { id: NumberInt(2), codigo: "PENTA", nombre: "Pentavalente (DPT-HepB-Hib)" },
+    _id: hexa_v2,
+    vacuna: { id: NumberInt(2), codigo: "HEXA", nombre: "Hexavalente" },
     version: NumberInt(2), estado: "VIGENTE",
     vigencia: { desde: new Date("2026-10-01"), hasta: null },
-    version_anterior_id: penta_v1,
+    version_anterior_id: hexa_v1,
     dimensiones: {
       dosis: [
         { codigo: "D1", etiqueta: "1.ª dosis" },
@@ -558,13 +564,12 @@ db_.esquemas_captura.insertMany([
       ],
       procedencia: { modo: "MUNICIPIO_DETALLADO", permite_no_especificado: true },
       desagregacion: [
-        { dimension: "sexo",       valores: ["M", "F"] },
-        { dimension: "grupo_edad", valores: ["MENOR_1", "1_A_4"] }
+        { dimension: "grupo_edad", valores: ["MENOR_1", "1_A_5"] }
       ]
     },
     secciones: [
       { codigo: "MENOR_1", titulo: "< 1 año",         orden: NumberInt(1), grupo_edad: "MENOR_1", dosis: ["D1", "D2", "D3"] },
-      { codigo: "1_A_4",   titulo: "De 1 a < 5 años", orden: NumberInt(2), grupo_edad: "1_A_4",   dosis: ["D1", "D2", "D3"] }
+      { codigo: "1_A_5",   titulo: "De 1 a < 6 años", orden: NumberInt(2), grupo_edad: "1_A_5",   dosis: ["D1", "D2", "D3"] }
     ],
     campos_adicionales: [
       { clave: "total_dosis_declarado", etiqueta: "Total de dosis aplicadas (según registro del establecimiento)",
@@ -578,13 +583,14 @@ db_.esquemas_captura.insertMany([
       { codigo: "SECUENCIA_DOSIS",     version: NumberInt(1) },
       { codigo: "VARIACION_HISTORICA", version: NumberInt(1) }
     ],
-    presentacion: { filas: "dosis", columnas: ["seccion", "sexo"], subtabla_por: "procedencia" },
-    auditoria: { ...auditoriaEjemplo, motivo_cambio: "Se agrega la sección de 1 a < 5 años (esquema atrasado) y la procedencia por municipio." }
+    presentacion: { filas: "dosis", columnas: ["seccion"], subtabla_por: "procedencia" },
+    auditoria: { ...auditoriaEjemplo, motivo_cambio: "Se agrega la sección de 1 a < 6 años (esquema atrasado) y la procedencia por municipio." }
   }
 ]);
 
 // --- Esquemas con dimensiones distintas ----------------------------------------
-// BCG: solo sexo, sin grupo de edad (dosis única al nacer).
+// BCG: sin desagregación, solo el total de la dosis única al nacer.
+// VPH: por sexo (niñas y niños), una de las dos vacunas del 5C que lo piden.
 // Td:  sin sexo; se desagrega por embarazo y grupo de edad, y el refuerzo R1
 //      solo se reporta por grupo de edad (ejemplo de restricción por dosis).
 db_.esquemas_captura.insertMany([
@@ -597,12 +603,38 @@ db_.esquemas_captura.insertMany([
     dimensiones: {
       dosis: [{ codigo: "UNICA", etiqueta: "Dosis única" }],
       procedencia: { modo: "MUNICIPIO_DETALLADO", permite_no_especificado: true },
-      desagregacion: [
-        { dimension: "sexo", valores: ["M", "F"] }
-      ]
+      desagregacion: []
     },
     secciones: [
       { codigo: "MENOR_1", titulo: "< 1 año", orden: NumberInt(1), grupo_edad: null, dosis: ["UNICA"] }
+    ],
+    campos_adicionales: [],
+    reglas: [
+      { codigo: "CAMPOS_COMPLETOS", version: NumberInt(1) },
+      { codigo: "NO_NEGATIVO", version: NumberInt(1) }
+    ],
+    presentacion: { filas: "dosis", columnas: [] },
+    auditoria: auditoriaEjemplo
+  },
+  {
+    _id: ObjectId("66f8a1c2e4b0a1b2c3d4e603"),
+    vacuna: { id: NumberInt(11), codigo: "VPH", nombre: "Virus del papiloma humano (VPH)" },
+    version: NumberInt(1), estado: "VIGENTE",
+    vigencia: { desde: new Date("2026-10-01"), hasta: null },
+    version_anterior_id: null,
+    dimensiones: {
+      dosis: [
+        { codigo: "D1", etiqueta: "1.ª dosis" },
+        { codigo: "D2", etiqueta: "2.ª dosis" },
+        { codigo: "D3", etiqueta: "3.ª dosis" }
+      ],
+      procedencia: { modo: "MUNICIPIO_DETALLADO", permite_no_especificado: true },
+      desagregacion: [
+        { dimension: "sexo", valores: ["F", "M"] }
+      ]
+    },
+    secciones: [
+      { codigo: "VPH", titulo: "VPH", orden: NumberInt(1), grupo_edad: null, dosis: ["D1", "D2", "D3"] }
     ],
     campos_adicionales: [],
     reglas: [
@@ -644,7 +676,7 @@ db_.esquemas_captura.insertMany([
     auditoria: auditoriaEjemplo
   },
   // OPV: la misma dosis aparece en dos secciones (D1 a D3 en "< 1 año" y en
-  // "De 1 a < 5 años"), y los refuerzos solo en su sección. Ejemplo según el 5C.
+  // "De 1 a < 6 años"), y los refuerzos solo en su sección. Ejemplo según el 5C.
   {
     _id: ObjectId("66f8a1c2e4b0a1b2c3d4e602"),
     vacuna: { id: NumberInt(6), codigo: "OPV", nombre: "Antipoliomielítica oral (OPV)" },
@@ -658,14 +690,14 @@ db_.esquemas_captura.insertMany([
       ],
       procedencia: { modo: "MUNICIPIO_DETALLADO", permite_no_especificado: true },
       desagregacion: [
-        { dimension: "grupo_edad", valores: ["MENOR_1", "1_A_MENOR_2", "4_ANIOS", "1_A_4"] }
+        { dimension: "grupo_edad", valores: ["MENOR_1", "1_A_MENOR_2", "4_ANIOS", "1_A_5"] }
       ]
     },
     secciones: [
       { codigo: "MENOR_1",     titulo: "< 1 año",         orden: NumberInt(1), grupo_edad: "MENOR_1",     dosis: ["D1", "D2", "D3"] },
       { codigo: "1_A_MENOR_2", titulo: "De 1 a < 2 años", orden: NumberInt(2), grupo_edad: "1_A_MENOR_2", dosis: ["R1"] },
       { codigo: "4_ANIOS",     titulo: "4 años",          orden: NumberInt(3), grupo_edad: "4_ANIOS",     dosis: ["R2"] },
-      { codigo: "1_A_4",       titulo: "De 1 a < 5 años", orden: NumberInt(4), grupo_edad: "1_A_4",       dosis: ["D1", "D2", "D3", "R1", "R2"] }
+      { codigo: "1_A_5",       titulo: "De 1 a < 6 años", orden: NumberInt(4), grupo_edad: "1_A_5",       dosis: ["D1", "D2", "D3", "R1", "R2"] }
     ],
     campos_adicionales: [],
     reglas: [
@@ -688,9 +720,9 @@ const baseIndicador = {
 db_.configuracion_indicadores.insertMany([
   {
     ...baseIndicador,
-    codigo: "COB_PENTA3", nombre: "Cobertura de Pentavalente 3.ª dosis en menores de 1 año",
+    codigo: "COB_HEXA3", nombre: "Cobertura de Hexavalente 3.ª dosis en menores de 1 año",
     tipo_calculo: "COBERTURA",
-    aplica_a: [{ vacuna: "PENTA", dosis: "D3", clasificacion_poblacion: "MENOR_1", filtros_dimension: { grupo_edad: ["MENOR_1"] } }],
+    aplica_a: [{ vacuna: "HEXA", dosis: "D3", clasificacion_poblacion: "MENOR_1", filtros_dimension: { grupo_edad: ["MENOR_1"] } }],
     numerador:   { fuente: "PRODUCCION", estados_reporte: ["CERRADO"], atribucion: "PROCEDENCIA", acumulado: "ANUAL" },
     denominador: { fuente: "POBLACION_OBJETIVO", prorrateo: "MENSUAL_LINEAL" },
     meta: { valor: 95, unidad: "PORCENTAJE", comparador: ">", homogeneidad_municipal: true },
@@ -704,10 +736,10 @@ db_.configuracion_indicadores.insertMany([
   },
   {
     ...baseIndicador,
-    codigo: "BRECHA_PENTA3", nombre: "Brecha de Pentavalente 3.ª dosis",
+    codigo: "BRECHA_HEXA3", nombre: "Brecha de Hexavalente 3.ª dosis",
     descripcion: "Dosis aproximadas que faltan para alcanzar la meta: ceil(meta x denominador) - numerador.",
     tipo_calculo: "BRECHA",
-    aplica_a: [{ vacuna: "PENTA", dosis: "D3", clasificacion_poblacion: "MENOR_1", filtros_dimension: { grupo_edad: ["MENOR_1"] } }],
+    aplica_a: [{ vacuna: "HEXA", dosis: "D3", clasificacion_poblacion: "MENOR_1", filtros_dimension: { grupo_edad: ["MENOR_1"] } }],
     numerador:   { fuente: "PRODUCCION", estados_reporte: ["CERRADO"], atribucion: "PROCEDENCIA", acumulado: "ANUAL" },
     denominador: { fuente: "POBLACION_OBJETIVO", prorrateo: "NINGUNO" },
     meta: { valor: 95, unidad: "PORCENTAJE", comparador: ">" },
@@ -716,10 +748,10 @@ db_.configuracion_indicadores.insertMany([
   },
   {
     ...baseIndicador,
-    codigo: "DES_PENTA1_3", nombre: "Tasa de deserción Pentavalente 1.ª a 3.ª dosis",
+    codigo: "DES_HEXA1_3", nombre: "Tasa de deserción Hexavalente 1.ª a 3.ª dosis",
     descripcion: "(D1 - D3) / D1 x 100, acumulado en el año.",
     tipo_calculo: "DESERCION",
-    aplica_a: [{ vacuna: "PENTA", dosis_inicial: "D1", dosis_final: "D3", filtros_dimension: { grupo_edad: ["MENOR_1"] } }],
+    aplica_a: [{ vacuna: "HEXA", dosis_inicial: "D1", dosis_final: "D3", filtros_dimension: { grupo_edad: ["MENOR_1"] } }],
     numerador:   { fuente: "PRODUCCION", estados_reporte: ["CERRADO"], atribucion: "PROCEDENCIA", acumulado: "ANUAL" },
     denominador: { fuente: "PRODUCCION" },
     meta: { valor: 10, unidad: "PORCENTAJE", comparador: "<=" },
@@ -732,14 +764,14 @@ db_.configuracion_indicadores.insertMany([
   },
   {
     ...baseIndicador,
-    codigo: "PROY_COB_PENTA3", nombre: "Proyección de cobertura anual de Pentavalente 3.ª dosis",
+    codigo: "PROY_COB_HEXA3", nombre: "Proyección de cobertura anual de Hexavalente 3.ª dosis",
     descripcion: "Proyecta la cobertura al cierre del año con el ritmo mensual promedio observado.",
     tipo_calculo: "PROYECCION",
-    aplica_a: [{ vacuna: "PENTA", dosis: "D3", clasificacion_poblacion: "MENOR_1" }],
+    aplica_a: [{ vacuna: "HEXA", dosis: "D3", clasificacion_poblacion: "MENOR_1" }],
     numerador:   { fuente: "INDICADOR" },
     denominador: { fuente: "POBLACION_OBJETIVO", prorrateo: "NINGUNO" },
     meta: { valor: 95, unidad: "PORCENTAJE", comparador: ">" },
-    parametros: { indicador_base: "COB_PENTA3", metodo: "PROMEDIO_MOVIL", meses_ventana: NumberInt(3), horizonte: "FIN_DE_ANIO" },
+    parametros: { indicador_base: "COB_HEXA3", metodo: "PROMEDIO_MOVIL", meses_ventana: NumberInt(3), horizonte: "FIN_DE_ANIO" },
     es_estimacion: true
   },
   {
@@ -748,10 +780,10 @@ db_.configuracion_indicadores.insertMany([
     // valor = dosis acumuladas ÷ meta del mes × 100; brecha_dosis = meta del mes
     // menos dosis acumuladas (vacunas que faltan). Es lo que colorea el mapa.
     ...baseIndicador,
-    codigo: "AVANCE_PENTA3", nombre: "Avance de Pentavalente 3.ª dosis contra la meta del mes",
+    codigo: "AVANCE_HEXA3", nombre: "Avance de Hexavalente 3.ª dosis contra la meta del mes",
     descripcion: "Dosis acumuladas al mes ÷ (población ÷ 12 × número de mes) × 100. La meta del mes vale 100 %.",
     tipo_calculo: "AVANCE_META_MES",
-    aplica_a: [{ vacuna: "PENTA", dosis: "D3", clasificacion_poblacion: "MENOR_1", filtros_dimension: { grupo_edad: ["MENOR_1"] } }],
+    aplica_a: [{ vacuna: "HEXA", dosis: "D3", clasificacion_poblacion: "MENOR_1", filtros_dimension: { grupo_edad: ["MENOR_1"] } }],
     numerador:   { fuente: "PRODUCCION", estados_reporte: ["CERRADO"], atribucion: "PROCEDENCIA", acumulado: "ANUAL" },
     denominador: { fuente: "POBLACION_OBJETIVO", prorrateo: "MENSUAL_LINEAL" },
     meta: { valor: 100, unidad: "PORCENTAJE", comparador: ">=", homogeneidad_municipal: true },

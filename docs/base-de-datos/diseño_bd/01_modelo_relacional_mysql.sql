@@ -1,7 +1,15 @@
 -- =============================================================================
 --  Plataforma web de producción de vacunación — DDRISS San Marcos (MSPAS)
 --  Modelo relacional preliminar (MySQL 8.0, InnoDB, utf8mb4)
---  Versión: 0.6 (en curso)   Fecha: 2026-10-10
+--  Versión: 0.7   Fecha: 2026-10-17
+--  Cambios v0.7 (Excel del 5C y Registro Único de Vacunación, 17/10/2026):
+--    establecimiento.reporta_5c (el establecimiento que centraliza y envía el
+--    5C de su municipio, uno por municipio); el municipio 9999 pasa a ser
+--    "Migrantes / fuera de San Marcos"; v_produccion_atribuida (Excel 3) solo
+--    cuenta procedencias del territorio de la DDRISS; grupo 1_A_4 pasa a 1_A_5
+--    ("De 1 a < 6 años"); semillas de vacunas y dosis según el RUV (22
+--    vacunas; Hexavalente reemplaza a Pentavalente con el id 2). Siguen
+--    siendo EJEMPLOS sujetos a cambios.
 --  Cambios v0.6 (información de campo del 10/10/2026; se aplica por bloques):
 --    Bloque A, población por grupo de edad: poblacion_objetivo deja de tener
 --    vacuna_id (el MSPAS envía la población por municipio y grupo de edad, la
@@ -163,6 +171,7 @@ CREATE TABLE establecimiento (
   distrito_salud_id      SMALLINT UNSIGNED NULL COMMENT 'NULL solo para establecimientos externos a la DDRISS',
   municipio_id           SMALLINT UNSIGNED NOT NULL COMMENT 'Municipio de aplicación de sus dosis',
   reporta_produccion     BOOLEAN           NOT NULL DEFAULT TRUE COMMENT 'FALSE si su producción la consolida otro establecimiento',
+  reporta_5c             BOOLEAN           NOT NULL DEFAULT FALSE COMMENT 'TRUE: centraliza y envía el 5C de su municipio (uno por municipio, casi siempre el centro de salud; lo valida el backend). Base de las alertas de reporte pendiente',
   es_externo             BOOLEAN           NOT NULL DEFAULT FALSE COMMENT 'TRUE: su municipio no pertenece al territorio de la DDRISS a la que reporta (p. ej. Coatepeque); lo valida el backend',
   direccion              VARCHAR(255)      NULL COMMENT 'Dirección física (aldea, cantón, zona, calle); el municipio va en municipio_id',
   telefono               VARCHAR(20)       NULL,
@@ -245,7 +254,7 @@ CREATE TABLE usuario (
 
 CREATE TABLE vacuna (
   id              SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  codigo          VARCHAR(20)       NOT NULL COMMENT 'Llave estable compartida con MongoDB (p. ej. PENTA)',
+  codigo          VARCHAR(20)       NOT NULL COMMENT 'Llave estable compartida con MongoDB (p. ej. HEXA)',
   nombre          VARCHAR(120)      NOT NULL,
   descripcion     VARCHAR(255)      NULL,
   orden_informe   SMALLINT UNSIGNED NOT NULL DEFAULT 0,
@@ -407,7 +416,7 @@ CREATE TABLE detalle_produccion (
   id                       BIGINT UNSIGNED   NOT NULL AUTO_INCREMENT,
   reporte_vacuna_id        INT UNSIGNED      NOT NULL,
   dosis_id                 SMALLINT UNSIGNED NOT NULL,
-  municipio_procedencia_id SMALLINT UNSIGNED NOT NULL COMMENT 'Usar el registro 9999 si la procedencia no se conoce',
+  municipio_procedencia_id SMALLINT UNSIGNED NOT NULL COMMENT 'Usar el registro 9999 (Migrantes / fuera de San Marcos) para personas de fuera del departamento o de procedencia desconocida',
   clave_combinacion        VARCHAR(255)      NOT NULL DEFAULT '' COMMENT 'Forma canónica de las dimensiones, ordenadas por código: grupo_edad=MENOR_1|sexo=F. Vacía si la vacuna no desagrega',
   cantidad                 INT UNSIGNED      NOT NULL DEFAULT 0,
   actualizado_por          INT UNSIGNED      NOT NULL,
@@ -675,7 +684,8 @@ SELECT  vp.*, dd.dimension_codigo, dd.valor_codigo
 FROM v_produccion vp
 JOIN detalle_dimension dd ON dd.detalle_id = vp.detalle_id;
 
--- Excel 1 (población propia) + Excel 2 (otros municipios) + Excel 3 (total)
+-- Excel 1 (dosis_poblacion_propia) y Excel 2 (dosis_total: producción total,
+-- incluidos Migrantes). dosis_otros_municipios es la diferencia entre ambos.
 CREATE VIEW v_consolidado_establecimiento AS
 SELECT  periodo_id, anio, mes, ddriss_id, ddriss_codigo,
         establecimiento_id, establecimiento,
@@ -689,15 +699,19 @@ GROUP BY periodo_id, anio, mes, ddriss_id, ddriss_codigo,
          establecimiento_id, establecimiento,
          municipio_aplicacion_id, vacuna_id, dosis_id;
 
--- Numerador de cobertura con atribución por procedencia (solo datos cerrados).
--- ddriss_id es la DDRISS que recibió el reporte; para la cobertura nacional de
--- un municipio se suma sobre todas las DDRISS.
+-- Excel 3: numerador de cobertura con atribución por procedencia (solo datos
+-- cerrados). Solo cuentan las procedencias del departamento de la DDRISS que
+-- recibió el reporte (los 30 municipios de San Marcos); Migrantes (9999) y
+-- otros departamentos quedan fuera, aunque sí suman en la producción total.
 CREATE VIEW v_produccion_atribuida AS
-SELECT  anio, mes, ddriss_id, municipio_procedencia_id AS municipio_id,
-        vacuna_id, dosis_id, SUM(cantidad) AS dosis_atribuidas
-FROM v_produccion
-WHERE estado = 'CERRADO'
-GROUP BY anio, mes, ddriss_id, municipio_procedencia_id, vacuna_id, dosis_id;
+SELECT  vp.anio, vp.mes, vp.ddriss_id, vp.municipio_procedencia_id AS municipio_id,
+        vp.vacuna_id, vp.dosis_id, SUM(vp.cantidad) AS dosis_atribuidas
+FROM v_produccion vp
+JOIN ddriss    dr ON dr.id = vp.ddriss_id
+JOIN municipio mp ON mp.id = vp.municipio_procedencia_id
+WHERE vp.estado = 'CERRADO'
+  AND mp.departamento_id = dr.departamento_id
+GROUP BY vp.anio, vp.mes, vp.ddriss_id, vp.municipio_procedencia_id, vp.vacuna_id, vp.dosis_id;
 
 -- =============================================================================
 -- DATOS SEMILLA MÍNIMOS (catálogos que el diseño necesita para funcionar)
@@ -766,43 +780,55 @@ INSERT INTO municipio (departamento_id, codigo_ine, nombre) VALUES
  (1,'1225','San Cristóbal Cucho'), (1,'1226','Sipacapa'),
  (1,'1227','Esquipulas Palo Gordo'), (1,'1228','Río Blanco'),
  (1,'1229','San Lorenzo'), (1,'1230','La Blanca'),
- (2,'9999','Procedencia no especificada / fuera del departamento'),
+ (2,'9999','Migrantes / fuera de San Marcos'),  -- fila "Migrantes" del 5C; también procedencia desconocida
  (3,'0920','Coatepeque');  -- establecimiento externo que atiende población de San Marcos; verificar código INE
 
--- Ejemplos de vacunas y dosis (a confirmar contra el 5C vigente).
--- Los valores de sexo, grupo de edad, embarazo, etc. ya no se siembran aquí:
+-- Vacunas y dosis (v0.7): columna "Vacuna" y dosis del Registro Único de
+-- Vacunación del MSPAS (16/10/2026) más las vacunas del 5C que no aparecen en
+-- él (BCG, Hepatitis B RN, Rotavirus, Neumococo pediátrico, DPT). Son EJEMPLOS
+-- sujetos a cambios. Hexavalente reemplaza a Pentavalente y conserva su id 2;
+-- los ids 1 a 4 se conservan porque los esquemas de ejemplo de MongoDB los usan.
+-- Los valores de sexo, grupo de edad, embarazo, etc. no se siembran aquí:
 -- viven en la colección catalogo_dimensiones de MongoDB.
--- v0.6: vacunas del 5C según las fotos de un formulario real (julio de 2026).
--- Son EJEMPLOS sujetos a cambios: la DDRISS entregará la lista vigente y el
--- número de dosis de cada vacuna. Los ids 1 a 4 se conservan porque los
--- esquemas de ejemplo de MongoDB los usan.
 INSERT INTO vacuna (codigo, nombre, orden_informe) VALUES
- ('BCG',   'BCG', 2),
- ('PENTA', 'Pentavalente (DPT-HepB-Hib)', 4),
- ('SPR',   'Sarampión, Paperas y Rubéola', 9),
- ('TD',    'Toxoide tetánico y diftérico (Td)', 11),
- ('HEPB',  'Hepatitis B (recién nacido)', 1),
- ('OPV',   'Antipoliomielítica oral (OPV)', 3),
- ('ROTA',  'Rotavirus', 5),
- ('NEUMO', 'Neumococo', 6),
- ('INFLU', 'Influenza pediátrica', 7),
- ('DPT',   'DPT (refuerzos)', 8),
- ('VPH',   'Virus del papiloma humano', 10),
- ('TDAP',  'Tdap (embarazadas)', 12),
- ('SR',    'Sarampión y Rubéola (adultos)', 13);
+ ('BCG',       'BCG', 2),
+ ('HEXA',      'Hexavalente', 4),
+ ('SPR',       'Sarampión, Paperas y Rubéola (SPR)', 9),
+ ('TD',        'Toxoide tetánico y diftérico (Td)', 13),
+ ('HEPB',      'Hepatitis B (recién nacido)', 1),
+ ('OPV',       'Antipoliomielítica oral (OPV)', 5),
+ ('ROTA',      'Rotavirus', 6),
+ ('NEUMO',     'Neumococo pediátrico', 7),
+ ('INFLU_PED', 'Influenza pediátrica', 8),
+ ('DPT',       'DPT (refuerzos)', 10),
+ ('VPH',       'Virus del papiloma humano (VPH)', 11),
+ ('TDAP',      'Tdap', 12),
+ ('SR',        'Sarampión y Rubéola (SR)', 14),
+ ('IPV',       'Antipoliomielítica inactivada (IPV)', 3),
+ ('HEPB_PED',  'Hepatitis B pediátrica', 15),
+ ('HEPB_ADU',  'Hepatitis B para adulto', 16),
+ ('INFLU_EST', 'Influenza estacional', 17),
+ ('NEUMO13',   'Neumococo 13 valente', 18),
+ ('NEUMO23',   'Neumococo 23 valente', 19),
+ ('VARICELA',  'Varicela', 20),
+ ('COVID19',   'COVID-19', 21),
+ ('FA',        'Fiebre amarilla', 22);
 
--- completa_esquema y es_trazadora también son ejemplos (los trazadores salen
--- de las columnas "porcentaje del mes" del 5C).
+-- completa_esquema = última dosis (no refuerzo) de cada vacuna; es_trazadora =
+-- dosis con "porcentaje del mes" en el 5C. Ambos son ejemplos.
 INSERT INTO dosis (vacuna_id, codigo, nombre, orden, completa_esquema, es_trazadora) VALUES
  (1,  'UNICA', 'Dosis única',      1, TRUE,  TRUE),
  (2,  'D1',    'Primera dosis',    1, FALSE, FALSE),
  (2,  'D2',    'Segunda dosis',    2, FALSE, FALSE),
  (2,  'D3',    'Tercera dosis',    3, TRUE,  TRUE),
+ (2,  'R1',    'Primer refuerzo',  4, FALSE, FALSE),
  (3,  'D1',    'Primera dosis',    1, FALSE, TRUE),
  (3,  'D2',    'Segunda dosis',    2, TRUE,  FALSE),
  (4,  'D1',    'Primera dosis',    1, FALSE, FALSE),
- (4,  'D2',    'Segunda dosis',    2, TRUE,  FALSE),
- (4,  'R1',    'Primer refuerzo',  3, FALSE, FALSE),
+ (4,  'D2',    'Segunda dosis',    2, FALSE, FALSE),
+ (4,  'D3',    'Tercera dosis',    3, TRUE,  FALSE),
+ (4,  'R1',    'Primer refuerzo',  4, FALSE, FALSE),
+ (4,  'R2',    'Segundo refuerzo', 5, FALSE, FALSE),
  (5,  'UNICA', 'Dosis al nacer',   1, TRUE,  TRUE),
  (6,  'D1',    'Primera dosis',    1, FALSE, FALSE),
  (6,  'D2',    'Segunda dosis',    2, FALSE, FALSE),
@@ -812,15 +838,47 @@ INSERT INTO dosis (vacuna_id, codigo, nombre, orden, completa_esquema, es_trazad
  (7,  'D1',    'Primera dosis',    1, FALSE, FALSE),
  (7,  'D2',    'Segunda dosis',    2, TRUE,  TRUE),
  (8,  'D1',    'Primera dosis',    1, FALSE, FALSE),
- (8,  'D2',    'Segunda dosis',    2, FALSE, TRUE),
- (8,  'R1',    'Refuerzo',         3, TRUE,  TRUE),
+ (8,  'D2',    'Segunda dosis',    2, TRUE,  TRUE),
+ (8,  'R1',    'Primer refuerzo',  3, FALSE, TRUE),
  (9,  'D1',    'Primera dosis',    1, FALSE, FALSE),
- (9,  'D2',    'Segunda dosis',    2, TRUE,  TRUE),
+ (9,  'D2',    'Segunda dosis',    2, FALSE, TRUE),
+ (9,  'D3',    'Tercera dosis',    3, TRUE,  FALSE),
+ (9,  'R1',    'Primer refuerzo',  4, FALSE, FALSE),
  (10, 'R1',    'Primer refuerzo',  1, FALSE, TRUE),
  (10, 'R2',    'Segundo refuerzo', 2, TRUE,  TRUE),
  (11, 'D1',    'Primera dosis',    1, FALSE, FALSE),
- (12, 'UNICA', 'Dosis única',      1, TRUE,  FALSE),
- (13, 'UNICA', 'Dosis única',      1, TRUE,  FALSE);
+ (11, 'D2',    'Segunda dosis',    2, FALSE, FALSE),
+ (11, 'D3',    'Tercera dosis',    3, TRUE,  FALSE),
+ (12, 'D1',    'Primera dosis',    1, FALSE, FALSE),
+ (12, 'D2',    'Segunda dosis',    2, FALSE, FALSE),
+ (12, 'D3',    'Tercera dosis',    3, TRUE,  FALSE),
+ (12, 'R1',    'Primer refuerzo',  4, FALSE, FALSE),
+ (12, 'R2',    'Segundo refuerzo', 5, FALSE, FALSE),
+ (12, 'R3',    'Tercer refuerzo',  6, FALSE, FALSE),
+ (13, 'D1',    'Primera dosis',    1, FALSE, FALSE),
+ (13, 'D2',    'Segunda dosis',    2, TRUE,  FALSE),
+ (14, 'D1',    'Primera dosis',    1, FALSE, FALSE),
+ (14, 'D2',    'Segunda dosis',    2, TRUE,  FALSE),
+ (15, 'D1',    'Primera dosis',    1, FALSE, FALSE),
+ (15, 'D2',    'Segunda dosis',    2, FALSE, FALSE),
+ (15, 'D3',    'Tercera dosis',    3, TRUE,  FALSE),
+ (16, 'D1',    'Primera dosis',    1, FALSE, FALSE),
+ (16, 'D2',    'Segunda dosis',    2, FALSE, FALSE),
+ (16, 'D3',    'Tercera dosis',    3, TRUE,  FALSE),
+ (17, 'D1',    'Primera dosis',    1, FALSE, FALSE),
+ (17, 'D2',    'Segunda dosis',    2, TRUE,  FALSE),
+ (17, 'R1',    'Primer refuerzo',  3, FALSE, FALSE),
+ (18, 'D1',    'Primera dosis',    1, FALSE, FALSE),
+ (18, 'D2',    'Segunda dosis',    2, TRUE,  FALSE),
+ (19, 'D1',    'Primera dosis',    1, FALSE, FALSE),
+ (19, 'D2',    'Segunda dosis',    2, FALSE, FALSE),
+ (19, 'D3',    'Tercera dosis',    3, TRUE,  FALSE),
+ (20, 'D1',    'Primera dosis',    1, TRUE,  FALSE),
+ (20, 'R1',    'Primer refuerzo',  2, FALSE, FALSE),
+ (21, 'D1',    'Primera dosis',    1, FALSE, FALSE),
+ (21, 'D2',    'Segunda dosis',    2, FALSE, FALSE),
+ (21, 'D3',    'Tercera dosis',    3, TRUE,  FALSE),
+ (22, 'D1',    'Primera dosis',    1, TRUE,  FALSE);
 
 -- Grupos de población = encabezados del 5C (a confirmar contra el archivo de
 -- población del MSPAS). Mismos códigos que los valores de grupo_edad en MongoDB.
@@ -829,7 +887,7 @@ INSERT INTO clasificacion_poblacion (codigo, descripcion) VALUES
  ('MENOR_1',       'Menores de 1 año'),
  ('1_A_MENOR_2',   'De 1 a menos de 2 años'),
  ('4_ANIOS',       'Niñas y niños de 4 años'),
- ('1_A_4',         'De 1 a menos de 5 años'),
+ ('1_A_5',         'De 1 a menos de 6 años'),
  ('MEF_15_49',     'Mujeres de 15 a 49 años'),
  ('EMBARAZADAS',   'Mujeres embarazadas esperadas');
 

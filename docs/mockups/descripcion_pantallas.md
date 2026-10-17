@@ -3,18 +3,21 @@
 Plataforma web de la DDRISS San Marcos (MSPAS, Guatemala) para registrar, revisar y analizar la producción mensual de vacunación de 30 municipios. Todo en español. Solo datos agregados, nunca datos de pacientes. Los datos de ejemplo son ficticios.
 
 ## Estilo general
-- Escritorio, 1440 px de ancho. Menú lateral verde pastel (#dcefe5) de 240 px con el logo "SIRCOVA · DDRISS San Marcos" (cuadro verde menta #7cc4a4 con una cruz blanca); el texto del menú va en verde oscuro (#2d5446). La opción activa tiene fondo celeste (#c6e2f7) y texto azul oscuro. Al pie del menú, el usuario y su rol.
-- Fondo menta muy claro (#f2f7f5), tarjetas blancas con borde fino (#dbe7e1) y esquinas de 12 px. Las tarjetas de resumen alternan fondo celeste (#e6f2fb) y verde pastel (#e5f4ec).
+- Paleta basada en el logo del MSPAS: azul marino #2c4660 (color institucional) y celeste #5aa0d0 (la barra vertical del logo), sobre fondos claros y fríos. Pocos colores fuertes; el resto son grises azulados suaves para que no se sienta saturado.
+- Escritorio, 1440 px de ancho. Menú lateral de 240 px en gris azulado muy claro (#edf3f9) con un borde fino a la derecha (#e0e7ef). Lleva el logo "SIRCOVA · DDRISS San Marcos" (cuadro azul marino #2c4660 con una cruz blanca) y el texto del menú en azul grisáceo (#34506b). La opción activa tiene fondo celeste claro (#dbeaf6) y texto azul (#1d4a72). Al pie del menú, el usuario y su rol en un recuadro #e1eaf3.
+- Fondo general #f5f8fb. Tarjetas blancas con borde fino (#e0e7ef) y esquinas de 12 px. Las tarjetas de resumen alternan celeste muy claro (#e6f2fb) y gris azulado (#f0f4f8).
+- Texto principal azul marino oscuro (#1f3247), texto secundario #5f6e7d.
 - Tipografía IBM Plex Sans; cifras en IBM Plex Mono.
-- Color de acción principal: verde #357d5f con texto blanco. Enlaces en azul #2a6f9e.
-- Colores de datos: azul (#3d85c6) y celeste (#b9dcf6) para los datos y el cumplimiento; naranja pastel (#f0a877) y coral (#e8877a) para el rezago. El valor siempre va escrito junto al color.
-- Escala de cobertura en 4 rangos: En meta (63.3% o más) azul #3d85c6; Cerca (55 a 63.2%) celeste #b9dcf6; Bajo (45 a 54.9%) durazno #f7cfa6; Crítico (menos de 45%) coral #e8877a.
+- Color de acción principal: azul marino #2c4660 con texto blanco. Enlaces en azul #2f6fa6.
+- Colores de datos: azul medio (#4683bb) y celeste (#b5d4ee) para los datos y el cumplimiento; durazno (#eeb48c) y coral suave (#e0998d) para el rezago. Los colores de estado (error en rojo, advertencia en ámbar, éxito en verde) se mantienen solo para mensajes. El valor siempre va escrito junto al color.
+- Escala de cobertura en 4 rangos: En meta (63.3% o más) azul #4683bb; Cerca (55 a 63.2%) celeste #b5d4ee; Bajo (45 a 54.9%) durazno #f4d6b8; Crítico (menos de 45%) coral #e0998d.
+- Estados de reporte: Cerrado #2f5f8a, Aprobado #7fb2dc, En revisión #b5d4ee, Corrección solicitada #eeb48c, Enviado o sin enviar gris #e3e6e4.
 - Las proyecciones van punteadas, sobre fondo gris claro y con la etiqueta "Estimación".
 
 ---
 
 ## Pantalla 1. Inicio de sesión
-- Dividida en dos. A la izquierda (620 px), un panel verde pastel con el logo y texto en verde oscuro, el título "Producción de vacunación del departamento de San Marcos, en un solo lugar.", un subtítulo ("Registro mensual por establecimiento, revisión y cierre de periodos, e indicadores de cobertura para los 30 municipios.") y al pie "DDRISS San Marcos · MSPAS".
+- Dividida en dos. A la izquierda (620 px), un panel gris azulado claro (#edf3f9) con una línea celeste (#5aa0d0) en el borde derecho, el logo y el texto en azul marino, el título "Producción de vacunación del departamento de San Marcos, en un solo lugar.", un subtítulo ("Registro mensual por establecimiento, revisión y cierre de periodos, e indicadores de cobertura para los 30 municipios.") y al pie "DDRISS San Marcos · MSPAS".
 - A la derecha, un formulario centrado: título "Iniciar sesión", alerta roja "Usuario o contraseña incorrectos. Intente de nuevo.", campos Usuario o correo institucional y Contraseña (este con borde rojo), casilla "Recordar este equipo", enlace "¿Olvidó su contraseña?", botón "Ingresar" y la nota "¿No tiene cuenta? El administrador registra a cada usuario y le asigna su rol."
 
 ## Pantalla 2. Inicio (resumen ligero; ejemplo con el rol Epidemiología)
@@ -22,8 +25,8 @@ Menú: Inicio (activo), Registro de producción, Revisión y cierre (insignia 6)
 
 **Encabezado:** "Buenos días" y debajo "Resumen del departamento de San Marcos · enero a agosto de 2026". A la derecha: "Datos de periodos cerrados · actualizado 28/09/2026".
 
-**Fila 1: 4 tarjetas de resumen** (fondos celeste y verde pastel alternados)
-1. Cobertura departamental (Penta 3): **57.1%**, con la nota "6.2 puntos bajo la meta proporcional de 63.3%".
+**Fila 1: 4 tarjetas de resumen** (fondos celeste y gris azulado alternados)
+1. Cobertura departamental (Hexa 3): **57.1%**, con la nota "6.2 puntos bajo la meta proporcional de 63.3%".
 2. Municipios en meta: **11 de 30** (19 municipios con brecha).
 3. Reportes de agosto cerrados: **14 de 30** (el cierre vence el 30/09).
 4. Alertas activas: **5** (1 crítica, 1 seria y 3 advertencias).
@@ -31,7 +34,7 @@ Menú: Inicio (activo), Registro de producción, Revisión y cierre (insignia 6)
 **Fila 2 (dos columnas)**
 - **"Avance del cierre de agosto"**: una barra apilada delgada con Cerrado 14, Aprobado 5, En revisión 4, Corrección solicitada 3 y Enviado o sin enviar 4, su leyenda en dos columnas y el enlace "Ir a revisión".
 - **"Alertas que requieren acción"**: las 3 más importantes, cada una con una etiqueta de severidad:
-  - Crítica: Tacaná, Sibinal y Concepción Tutuapa están bajo 45% de cobertura en Penta 3.
+  - Crítica: Tacaná, Sibinal y Concepción Tutuapa están bajo 45% de cobertura en Hexa 3.
   - Seria: Ocós y Sibinal no han enviado el reporte de agosto.
   - Advertencia: Malacatán atribuye 38% de sus dosis a otros municipios.
   - Enlace "Ver las 5".
@@ -45,27 +48,27 @@ Menú: Inicio (activo), Registro de producción, Revisión y cierre (insignia 6)
 ## Pantalla 3. Indicadores (se llega desde el menú)
 **Encabezado:** "INDICADORES DE COBERTURA" y el título "Enero a agosto de 2026". A la derecha, el botón "Exportar Excel" (principal) y, junto a él, "PDF".
 
-**Barra de filtros:** Año 2026 · Periodo Ene a Ago (acumulado; rango de meses elegible) · Vacuna trazadora Pentavalente 3.ª dosis · Nivel Departamento / Distrito / Municipio · Municipio Todos (30; selección múltiple) · Agrupar por Sexo / Edad / Sin agrupar · Atribución Por procedencia.
+**Barra de filtros:** Año 2026 · Periodo Ene a Ago (acumulado; rango de meses elegible) · Vacuna trazadora Hexavalente 3.ª dosis · Nivel Departamento / Distrito / Municipio · Municipio Todos (30; selección múltiple) · Agrupar por Sexo / Edad / Sin agrupar · Atribución Por procedencia.
 
 **Fila 1**
 - (2/3 del ancho) **Gráfica de líneas "Avance acumulado y proyección al cierre del año"**, que responde "¿Llegaremos al 95% en diciembre?". Eje X de enero a diciembre y eje Y de 0 a 100%.
   - Real (línea azul sólida): Ene 6.4, Feb 13.3, Mar 20.9, Abr 27.8, May 35.2, Jun 42.0, Jul 49.3, Ago 57.1.
   - Proyección (azul punteada, sobre fondo gris claro con la etiqueta "Estimación"): Sep 64.5, Oct 71.9, Nov 79.3, Dic 86.7, con una banda celeste de 81.8 a 91.6 en diciembre.
   - Meta proporcional (línea gris): recta de 7.9% en enero a 95% en diciembre.
-- (1/3) **Barras "Cobertura por vacuna"** con línea de meta en 63.3%: BCG 68.4, Hepatitis B RN 61.2, Penta 1 61.4, IPV 1 61.0, Neumococo 2 59.1, Rotavirus 2 58.8, Penta 3 57.1 (resaltada), bOPV 3 56.3, SPR 1 55.6, SPR 2 48.2.
+- (1/3) **Barras "Cobertura por vacuna"** con línea de meta en 63.3%: BCG 68.4, Hepatitis B RN 61.2, Hexa 1 61.4, IPV 1 61.0, Neumococo 2 59.1, Rotavirus 2 58.8, Hexa 3 57.1 (resaltada), bOPV 3 56.3, SPR 1 55.6, SPR 2 48.2.
 
 **Fila 2**
 - (1/2) **Barras horizontales "Cobertura por municipio"**, ordenadas de mayor a menor, con la leyenda de los 4 rangos arriba y una línea punteada en "Meta 63.3%":
   Río Blanco 74.1, San Antonio Sacatepéquez 72.5, San Pedro Sacatepéquez 71.2, Esquipulas Palo Gordo 70.4, San Rafael Pie de la Cuesta 69.8, El Quetzal 68.3, Tejutla 67.4, San Marcos 66.8, El Rodeo 65.2, San Pablo 64.9, San Cristóbal Cucho 63.8, Pajapita 62.1, San Miguel Ixtahuacán 61.5, El Tumbador 60.1, Ayutla 59.4, Comitancillo 58.7, San Lorenzo 58.2, Nuevo Progreso 57.3, La Reforma 56.9, Ixchiguán 55.2, La Blanca 54.8, Catarina 53.6, Malacatán 52.4, Sipacapa 51.3, San José Ojetenam 49.6, Tajumulco 48.9, Ocós 46.7, Concepción Tutuapa 44.1, Sibinal 42.3, Tacaná 39.8.
 - (1/2, dos tarjetas apiladas)
   - **Barras "Brecha a la meta proporcional"** (dosis que faltan; total 1,801), los 8 municipios más altos: Tacaná 422, Concepción Tutuapa 312, Tajumulco 222, Malacatán 180, Sibinal 82, Comitancillo 74, Ocós 71, Catarina 61.
-  - **Barras "Deserción entre Penta 1 y Penta 3"** (departamento: 7.0%), con una línea de umbral en 10%. Sobre el umbral, en naranja pastel: La Blanca 12.0, Catarina 11.9, El Quetzal 11.1, El Tumbador 10.9, San Lorenzo 10.6. Bajo el umbral, en celeste: Malacatán 9.2, El Rodeo 9.0, Ayutla 8.5.
+  - **Barras "Deserción entre Hexa 1 y Hexa 3"** (departamento: 7.0%), con una línea de umbral en 10%. Sobre el umbral, en naranja pastel: La Blanca 12.0, Catarina 11.9, El Quetzal 11.1, El Tumbador 10.9, San Lorenzo 10.6. Bajo el umbral, en celeste: Malacatán 9.2, El Rodeo 9.0, Ayutla 8.5.
 
 ## Pantalla 4. Registro de producción (rol Personal del establecimiento)
 Menú reducido: Inicio, Registro de producción (activo), Mis reportes, Cobertura de mi municipio. Usuario: C/S Tacaná.
 - Encabezado: "REGISTRO DE PRODUCCIÓN · CENTRO DE SALUD TACANÁ" y el título "Reporte mensual de septiembre de 2026". A la derecha, los pasos de estado: **Borrador** (activo) › Enviado › En revisión › Aprobado › Cerrado.
-- Pestañas de vacunas: BCG ✓, Hepatitis B ✓, **Pentavalente** (activa), IPV/bOPV, Rotavirus, Neumococo, SPR, DPT refuerzos, Td.
-- **Tarjeta A. "Dosis aplicadas a residentes de Tacaná"**, con el subtítulo "Formulario generado por el esquema de captura: Pentavalente, versión 3, vigente desde 01/01/2026". Tabla con filas 1.ª, 2.ª y 3.ª dosis y columnas Menor de 1 año / 1 año / 2 a 4 años, cada una dividida en Hombres y Mujeres, más una columna Total. Los valores se editan en campos numéricos:
+- Pestañas de vacunas: BCG ✓, Hepatitis B ✓, **Hexavalente** (activa), IPV/bOPV, Rotavirus, Neumococo, SPR, DPT refuerzos, Td.
+- **Tarjeta A. "Dosis aplicadas a residentes de Tacaná"**, con el subtítulo "Formulario generado por el esquema de captura: Hexavalente, versión 3, vigente desde 01/01/2026". Tabla con filas 1.ª, 2.ª y 3.ª dosis y columnas Menor de 1 año / 1 año / 2 a 4 años, cada una dividida en Hombres y Mujeres, más una columna Total. Los valores se editan en campos numéricos:
   - 1.ª: 78, 74, 4, 3, 1, 0 = 160
   - 2.ª: 71, 69, 5, 4, 0, 1 = 150
   - 3.ª: 62, (vacío, con borde rojo), 8 (con borde amarillo), 7, 1, 0 = —
@@ -108,15 +111,15 @@ Menú reducido: Inicio, Registro de producción (activo), Mis reportes, Cobertur
   - Advertencia de atribución: "38% frente a un promedio de 21% en los últimos 6 meses."
   - Mini gráfica de barras con los 6 meses (Mar 1,120 a Ago 1,184).
   - Campo de observaciones.
-  - Botones "Solicitar corrección" (borde naranja) y "Aprobar" (verde). Nota: "Cada acción queda en la bitácora de revisión."
+  - Botones "Solicitar corrección" (borde naranja) y "Aprobar" (azul marino). Nota: "Cada acción queda en la bitácora de revisión."
 
 ## Pantalla 6. Mapa territorial
-- Encabezado: "MAPA TERRITORIAL · PENTAVALENTE 3.ª DOSIS · ENE A AGO 2026" y el título "¿Dónde está el rezago de cobertura?". Selector segmentado: **Cobertura** · Brecha · Deserción · Estado del reporte.
+- Encabezado: "MAPA TERRITORIAL · HEXAVALENTE 3.ª DOSIS · ENE A AGO 2026" y el título "¿Dónde está el rezago de cobertura?". Selector segmentado: **Cobertura** · Brecha · Deserción · Estado del reporte.
 - Interruptor "Atribuir dosis por: **Procedencia** | Lugar de aplicación".
-- Mapa grande de los 30 municipios coloreados por rango, con Tacaná seleccionado (contorno negro) y la leyenda. Por defecto colorea el avance contra la meta del mes (población ÷ 12 × número de mes = 100 %), con el semáforo indicado por Epidemiología (pendiente de confirmar): rojo < 80 %, amarillo 80 a 90 %, verde > 90 %. El panel muestra cuántas vacunas faltan para la meta del mes.
+- Mapa grande de los 30 municipios coloreados por rango, con Tacaná seleccionado (contorno negro) y la leyenda. Por defecto colorea el avance contra la meta del mes (población ÷ 12 × número de mes = 100 %), con el semáforo indicado por Epidemiología (pendiente de confirmar): menos de 80 %, de 80 a 90 % y más de 90 %. Esos rangos se dibujan en tonos pastel en lugar de rojo, amarillo y verde intensos: coral (#e0998d) para menos de 80 %, durazno (#f4d6b8) de 80 a 90 % y verde pastel (#b9dcc3) para 90 % o más. Este verde se usa solo en el mapa. El panel muestra cuántas vacunas faltan para la meta del mes.
 - **Panel derecho "Tacaná"**:
   - **39.8%** Crítico, con una barra de progreso y una marca de meta en 63.3%.
-  - Población objetivo (<1 año) 1,790 · Dosis Penta 3 atribuidas 712 · Brecha 422 · Deserción 7.9% · Reporte de agosto: Cerrado.
+  - Población objetivo (<1 año) 1,790 · Dosis Hexa 3 atribuidas 712 · Brecha 422 · Deserción 7.9% · Reporte de agosto: Cerrado.
   - Desglose de la atribución: aplicadas en Tacaná 745, menos 51 a residentes de otros municipios, más 18 a residentes de Tacaná vacunados en otros municipios, igual a 712 atribuidas.
   - Botón "Ver informe del municipio".
 
@@ -126,7 +129,7 @@ Menú reducido: Inicio, Registro de producción (activo), Mis reportes, Cobertur
 - Resumen sobre la tabla: "248 registros entre el 01/09/2026 y el 07/10/2026", 14 usuarios y 3 rectificaciones.
 - Tabla con Fecha y hora · Usuario (con su rol) · Acción (etiqueta de color) · Elemento afectado · Detalle:
   - 07/10 16:42 · Estadígrafa · Cambio de estado · Reporte agosto, Malacatán · En revisión → Aprobado
-  - 07/10 16:05 · Administrador · Rectificación · Reporte julio (cerrado), Tajumulco · fila expandida con valor anterior (Penta 3 · menor de 1 año · hombres = 58), valor nuevo (64) y justificación de la solicitud RCT-0012 autorizada por Epidemiología
+  - 07/10 16:05 · Administrador · Rectificación · Reporte julio (cerrado), Tajumulco · fila expandida con valor anterior (Hexa 3 · menor de 1 año · hombres = 58), valor nuevo (64) y justificación de la solicitud RCT-0012 autorizada por Epidemiología
   - 07/10 15:31 · C/S Tacaná · Edición · Reporte septiembre (borrador) · 12 campos modificados
   - 07/10 14:58 · Administrador · Configuración · Esquema de captura Td, versión 2 → 3
   - Otras filas: corrección solicitada, exportación de PDF, inicio de sesión, desactivación de un usuario (se puede restaurar), cambio de población objetivo y cierre del periodo de julio.

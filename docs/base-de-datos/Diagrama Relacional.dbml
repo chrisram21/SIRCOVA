@@ -1,5 +1,5 @@
 // Plataforma web de producción de vacunación — DDRISS San Marcos (MSPAS)
-// Modelo relacional preliminar v0.6 en curso, bloques A a C aplicados (MySQL 8.0) en formato DBML para dbdiagram.io
+// Modelo relacional preliminar v0.7 (MySQL 8.0) en formato DBML para dbdiagram.io
 // Generado a partir de 01_modelo_relacional_mysql.sql. Las vistas y los datos
 // semilla no se representan en DBML; están en el script SQL.
 // Los grupos de tablas siguen los cuatro grupos de MySQL de la propuesta v2.
@@ -183,6 +183,7 @@ Table "establecimiento" {
   "distrito_salud_id" SMALLINT [note: 'NULL solo para establecimientos externos a la DDRISS']
   "municipio_id" SMALLINT [not null, note: 'Municipio de aplicación de sus dosis']
   "reporta_produccion" BOOLEAN [not null, default: TRUE, note: 'FALSE si su producción la consolida otro establecimiento']
+  "reporta_5c" BOOLEAN [not null, default: FALSE, note: 'TRUE: centraliza y envía el 5C de su municipio (uno por municipio, casi siempre el centro de salud; lo valida el backend). Base de las alertas de reporte pendiente']
   "es_externo" BOOLEAN [not null, default: FALSE, note: 'TRUE: su municipio no pertenece al territorio de la DDRISS a la que reporta (p. ej. Coatepeque); lo valida el backend']
   "direccion" VARCHAR(255) [note: 'Dirección física (aldea, cantón, zona, calle); el municipio va en municipio_id']
   "telefono" VARCHAR(20)
@@ -249,7 +250,7 @@ Table "usuario" {
 
 Table "vacuna" {
   "id" SMALLINT [pk, not null, increment]
-  "codigo" VARCHAR(20) [not null, note: 'Llave estable compartida con MongoDB (p. ej. PENTA)']
+  "codigo" VARCHAR(20) [not null, note: 'Llave estable compartida con MongoDB (p. ej. HEXA)']
   "nombre" VARCHAR(120) [not null]
   "descripcion" VARCHAR(255)
   "orden_informe" SMALLINT [not null, default: 0]
@@ -402,7 +403,7 @@ Table "detalle_produccion" {
   "id" BIGINT [pk, not null, increment]
   "reporte_vacuna_id" INT [not null]
   "dosis_id" SMALLINT [not null]
-  "municipio_procedencia_id" SMALLINT [not null, note: 'Usar el registro 9999 si la procedencia no se conoce']
+  "municipio_procedencia_id" SMALLINT [not null, note: 'Usar el registro 9999 (Migrantes / fuera de San Marcos) para personas de fuera del departamento o de procedencia desconocida']
   "clave_combinacion" VARCHAR(255) [not null, default: '', note: 'Forma canónica de las dimensiones, ordenadas por código: grupo_edad=MENOR_1|sexo=F. Vacía si la vacuna no desagrega']
   "cantidad" INT [not null, default: 0]
   "actualizado_por" INT [not null]

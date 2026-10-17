@@ -2,7 +2,7 @@
 
 > **Para qué sirve este documento.** Da contexto preciso sobre la base de datos del proyecto a otros agentes de IA y a los integrantes del equipo. Resume qué se trabajó, cómo está organizada la persistencia (MySQL + MongoDB) y qué es y para qué sirve cada tabla y cada colección.
 >
-> **Estado:** modelo preliminar **v0.6 en curso** (10 de octubre de 2026): v0.5 (preparado para varias DDRISS) más los bloques A a D de la v0.6 (población por grupo de edad, dosis que cuentan para cobertura, secciones del formulario y avance contra la meta del mes). El modelo se sigue refinando por sprint.
+> **Estado:** modelo preliminar **v0.7** (17 de octubre de 2026): v0.5 (preparado para varias DDRISS), los bloques A a D de la v0.6 (población por grupo de edad, dosis que cuentan para cobertura, secciones del formulario y avance contra la meta del mes) y la v0.7 (Excel del 5C y semillas del Registro Único de Vacunación). El modelo se sigue refinando por sprint.
 >
 > **Fuente de verdad:** si este resumen y los scripts difieren, mandan los scripts.
 > - `01_modelo_relacional_mysql.sql`: DDL de MySQL 8.0.
@@ -39,7 +39,8 @@
 | **v0.3** | 2026-09-29 | Alineación con la **propuesta v2**. "Corrección solicitada" regresa a **Borrador** (antes iba a Enviado). Se asigna un revisor al pasar a En revisión (`revisor_id`, `asignado_en`). Nuevos tipos de establecimiento (CAIMI, centro comunitario, casa materna, otra institución). Se admiten establecimientos **externos** (caso Coatepeque, Quetzaltenango). |
 | **v0.4** | 2026-10-08 | **Normalización de usuario:** se separa `empleado` (datos del personal) de `usuario` (solo datos de acceso), con relación 1:1. Se agregan **dirección y contacto** a `establecimiento`. |
 | **v0.5** | 2026-10-10 | **Modelo preparado para varias DDRISS**, operando solo San Marcos. Bloque A: tabla `ddriss`, `distrito_salud.ddriss_id`, `establecimiento.ddriss_id` (DDRISS a la que reporta) y se elimina `municipio.es_jurisdiccion`. Bloque B: `empleado.ddriss_id`; los 5 roles se conservan y `AUTORIDAD` sin DDRISS es la autoridad nacional. Bloque C: `periodo` queda como calendario común y la nueva tabla `cierre_periodo` guarda el estado del mes por DDRISS; `alerta.ddriss_id`; las vistas exponen la DDRISS. MongoDB (script v0.3): campo `territorio` en reglas e indicadores. |
-| **v0.6** (en curso) | 2026-10-10 | Información de campo (entrevistas a la estadígrafa y a Epidemiología). **Bloque A:** `poblacion_objetivo` sin `vacuna_id` (población por municipio, año y grupo de edad), semillas de `clasificacion_poblacion` según los encabezados del 5C y permiso `POBLACION_REGISTRAR` solo para el Administrador (provisional). **Bloque B:** `dosis.completa_esquema` y `dosis.es_trazadora`; 13 vacunas del 5C como semillas de ejemplo. **Bloque C** (MongoDB, script v0.4): `esquemas_captura.secciones[]` y valores de `grupo_edad` con los códigos de `clasificacion_poblacion`; esquema de ejemplo de OPV. **Bloque D** (MongoDB): tipo `AVANCE_META_MES` e indicador `AVANCE_PENTA3` para el mapa, semáforo 80/90 provisional. Bloque E en pausa. |
+| **v0.6** | 2026-10-10 | Información de campo (entrevistas a la estadígrafa y a Epidemiología). **Bloque A:** `poblacion_objetivo` sin `vacuna_id` (población por municipio, año y grupo de edad), semillas de `clasificacion_poblacion` según los encabezados del 5C y permiso `POBLACION_REGISTRAR` solo para el Administrador (provisional). **Bloque B:** `dosis.completa_esquema` y `dosis.es_trazadora`; 13 vacunas del 5C como semillas de ejemplo. **Bloque C** (MongoDB, script v0.4): `esquemas_captura.secciones[]` y valores de `grupo_edad` con los códigos de `clasificacion_poblacion`; esquema de ejemplo de OPV. **Bloque D** (MongoDB): tipo `AVANCE_META_MES` e indicador `AVANCE_PENTA3` para el mapa, semáforo 80/90 provisional. Bloque E en pausa. |
+| **v0.7** | 2026-10-17 | Excel del 5C y Registro Único de Vacunación. `establecimiento.reporta_5c` (el que envía el 5C de su municipio, uno por municipio); municipio `9999` = "Migrantes / fuera de San Marcos"; `v_produccion_atribuida` (Excel 3) solo cuenta procedencias del departamento de la DDRISS; grupo `1_A_4` → `1_A_5` ("De 1 a < 6 años"); 22 vacunas semilla (Hexavalente reemplaza a Pentavalente con el id 2, `INFLU` → `INFLU_PED`). MongoDB (script v0.5): `PENTA` → `HEXA` en ejemplos e indicadores; sexo solo en VPH (y Tdap de 10 años), nuevo esquema de ejemplo de VPH. |
 
 Entregables generados en el hilo, todos en `/mnt/project-files/diseno-bd/`:
 
@@ -54,10 +55,11 @@ Entregables generados en el hilo, todos en `/mnt/project-files/diseno-bd/`:
 | `06_guia_instalacion_local.docx` | Guía corta para crear ambas bases en local |
 | `plan_v05_multi_ddriss.md` | Plan de la v0.5 y su avance por bloques |
 | `propuesta_v06_nueva_info.md` | Propuesta de la v0.6 por bloques; A a D aplicados, E en pausa |
+| `propuesta_v07_semillas_ruv.md` | Semillas de vacunas y dosis de la v0.7 (Registro Único de Vacunación), aplicada |
 | `_archivo/diagramas_chen/` | Diagramas de Chen de la v0.4; archivados, ya no se actualizan |
 
 **Verificación realizada:**
-- El DDL v0.6 (bloque A) se ejecutó en MariaDB (sustituyendo la colación `utf8mb4_0900_ai_ci` por `utf8mb4_unicode_ci`). Crea 32 tablas, 4 vistas y 72 llaves foráneas; el permiso `POBLACION_REGISTRAR` queda asignado al Administrador.
+- El DDL v0.7 se ejecutó en MariaDB (sustituyendo la colación `utf8mb4_0900_ai_ci` por `utf8mb4_unicode_ci`). Crea 32 tablas, 4 vistas y 72 llaves foráneas; el permiso `POBLACION_REGISTRAR` queda asignado al Administrador; siembra 22 vacunas y 62 dosis.
 - Con datos de prueba se comprobaron las vistas, el rechazo de duplicados y la restricción de una cuenta por empleado. En v0.5 también: establecimientos ligados a la DDRISS (incluido el externo de Coatepeque), rechazo de una DDRISS inexistente, un empleado sin DDRISS (autoridad nacional), dos DDRISS con estados distintos en el mismo mes, el rechazo de un cierre sin responsable o duplicado, y las vistas y alertas filtradas por DDRISS.
 - El DBML se convierte de vuelta a SQL y produce las mismas 32 tablas y 72 llaves foráneas.
 - El script de MongoDB **no se ha ejecutado contra un servidor MongoDB real**. En v0.4 se ejecutó con un simulador en Node que valida cada documento de ejemplo contra los `$jsonSchema` y comprueba que las secciones usen dosis y grupos de edad declarados en el esquema y en el catálogo.
@@ -79,7 +81,7 @@ Entregables generados en el hilo, todos en `/mnt/project-files/diseno-bd/`:
 - **Referencias a MongoDB:**
   - `*_mongo_id` (CHAR(24)) guarda un ObjectId.
   - `*_codigo` + `*_version` identifican una versión de regla o indicador.
-- **Procedencia desconocida o de otro departamento:** municipio especial con `codigo_ine = '9999'`.
+- **Migrantes, procedencia desconocida o de otro departamento:** municipio especial con `codigo_ine = '9999'` ("Migrantes / fuera de San Marcos"). Cuenta en la producción total, no en la cobertura.
 
 ---
 
@@ -120,7 +122,7 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 **`municipio`**: catálogo de municipios (INE). Incluye municipios de fuera de la DDRISS para registrar la procedencia.
 - Columnas: `id`, `departamento_id` → departamento, `codigo_ine` (único; también es la llave del GeoJSON de Leaflet), `nombre`, `activo`.
 - En v0.5 se eliminó `es_jurisdiccion`: un municipio pertenece a una DDRISS si alguno de sus distritos de salud pertenece a ella.
-- Semillas: los 30 municipios de San Marcos (códigos 1201 a 1230), `9999` Procedencia no especificada y `0920` Coatepeque.
+- Semillas: los 30 municipios de San Marcos (códigos 1201 a 1230), `9999` Migrantes / fuera de San Marcos y `0920` Coatepeque.
 
 **`ddriss`** (nueva en v0.5): Direcciones Departamentales de Redes Integradas de Servicios de Salud. Sirve para que el modelo admita varias DDRISS; su territorio son los municipios de sus distritos.
 - Columnas: `id`, `codigo` (único; provisional `DDRISS_SM`), `nombre`, `departamento_id` → departamento (sede; un departamento puede tener más de una DDRISS), `activo`.
@@ -136,15 +138,15 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 **`establecimiento`**: establecimientos de salud e instituciones que reportan producción.
 - Identificación: `id`, `codigo` (único), `nombre`.
 - Ubicación y clasificación: `tipo_establecimiento_id` → tipo_establecimiento, `ddriss_id` → ddriss (v0.5, obligatorio: DDRISS **a la que reporta**; coincide con la de su distrito salvo en los externos), `distrito_salud_id` → distrito_salud (NULL solo si es externo), `municipio_id` → municipio (es el **municipio de aplicación** de sus dosis).
-- Banderas: `reporta_produccion` (FALSE si otro establecimiento consolida su producción), `es_externo` (TRUE si su municipio no pertenece al territorio de la DDRISS a la que reporta, como Coatepeque con San Marcos; lo valida el backend), `activo`.
+- Banderas: `reporta_produccion` (FALSE si otro establecimiento consolida su producción), `reporta_5c` (v0.7: TRUE en el establecimiento que centraliza y envía el 5C de su municipio, uno por municipio, casi siempre el centro de salud; lo valida el backend y alimenta las alertas de reporte pendiente), `es_externo` (TRUE si su municipio no pertenece al territorio de la DDRISS a la que reporta, como Coatepeque con San Marcos; lo valida el backend), `activo`.
 - **Dirección y contacto (v0.4):** `direccion` (dirección física; el municipio va aparte), `telefono`, `correo`, `nombre_contacto` (persona de contacto en texto libre).
 - Auditoría: `creado_en`, `actualizado_en`.
 
 ### 4.2 Catálogos sanitarios (6 tablas)
 
 **`vacuna`**: catálogo de vacunas, la *identidad* de cada una. Cómo se captura cada vacuna está en MongoDB.
-- Columnas: `id`, `codigo` (único; llave compartida con MongoDB, por ejemplo `PENTA`), `nombre`, `descripcion`, `orden_informe`, `activa`, `creado_en`.
-- Semillas de ejemplo (v0.6, según el 5C; sujetas a cambios): HEPB, BCG, OPV, PENTA, ROTA, NEUMO, INFLU, DPT, SPR, VPH, TD, TDAP y SR. Los ids 1 a 4 (BCG, PENTA, SPR, TD) se conservan porque MongoDB los usa.
+- Columnas: `id`, `codigo` (único; llave compartida con MongoDB, por ejemplo `HEXA`), `nombre`, `descripcion`, `orden_informe`, `activa`, `creado_en`.
+- Semillas de ejemplo (v0.7, Registro Único de Vacunación más las del 5C que no aparecen en él; sujetas a cambios), 22 vacunas: BCG, HEXA, SPR, TD, HEPB (recién nacido), OPV, ROTA, NEUMO (pediátrico), INFLU_PED, DPT (refuerzos), VPH, TDAP, SR, IPV, HEPB_PED, HEPB_ADU, INFLU_EST, NEUMO13, NEUMO23, VARICELA, COVID19 y FA. Hexavalente reemplaza a Pentavalente; los ids 1 a 4 (BCG, HEXA, SPR, TD) se conservan porque MongoDB los usa. Detalle de dosis en `propuesta_v07_semillas_ruv.md`.
 
 **`dosis`**: dosis de cada vacuna. Su `orden` sostiene el cálculo de deserción entre dosis.
 - Columnas: `id`, `vacuna_id` → vacuna, `codigo` (D1, D2, D3, R1, UNICA…), `nombre`, `orden`, `completa_esquema` (v0.6: la dosis que cierra el esquema; con ella la persona cuenta para la cobertura), `es_trazadora` (v0.6: dosis con "porcentaje del mes" en el 5C; puede haber varias por vacuna), `activa`.
@@ -153,7 +155,7 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 
 **`clasificacion_poblacion`**: tipos de población que sirven de **denominador** de la cobertura.
 - Columnas: `id`, `codigo` (único), `descripcion`.
-- Semillas (v0.6, encabezados del 5C; mismos códigos que `grupo_edad` en MongoDB): `NACIDOS_VIVOS`, `MENOR_1`, `1_A_MENOR_2`, `4_ANIOS`, `1_A_4`, `MEF_15_49`, `EMBARAZADAS`.
+- Semillas (v0.6, encabezados del 5C; mismos códigos que `grupo_edad` en MongoDB): `NACIDOS_VIVOS`, `MENOR_1`, `1_A_MENOR_2`, `4_ANIOS`, `1_A_5` (v0.7: "De 1 a < 6 años", antes `1_A_4`), `MEF_15_49`, `EMBARAZADAS`.
 - No confundir con `tipo_establecimiento` ni con las dimensiones de MongoDB: estas desagregan el *numerador*.
 
 **`poblacion_objetivo`**: denominadores de cobertura, es decir cuántas personas hay por municipio, año y grupo de edad. El MSPAS la envía a inicios de año y es la misma para todas las vacunas; la registra y actualiza el Administrador (permiso `POBLACION_REGISTRAR`, provisional).
@@ -257,8 +259,8 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 |---|---|
 | `v_produccion` | Une detalle, reporte, periodo, DDRISS que recibió el reporte (`ddriss_id`, `ddriss_codigo`), establecimiento, municipios de aplicación y procedencia, vacuna y dosis. Incluye `es_poblacion_propia` (procedencia = municipio de aplicación). Es la base de las demás vistas. |
 | `v_produccion_dimension` | `v_produccion` más una fila por dimensión (`dimension_codigo`, `valor_codigo`). Sirve para filtrar o agrupar por cualquier dimensión, por ejemplo `dimension_codigo='grupo_edad' AND valor_codigo='MENOR_1'`. |
-| `v_consolidado_establecimiento` | Reproduce los **tres Excel** que hoy lleva la estadígrafa: dosis a población propia (Excel 1), dosis a otros municipios (Excel 2) y total (Excel 3). Toma reportes APROBADO, CERRADO y RECTIFICACION. Agrupa también por DDRISS. |
-| `v_produccion_atribuida` | Numerador de cobertura **por municipio de procedencia** y DDRISS que recibió el reporte. Solo toma reportes CERRADO. Para la cobertura nacional de un municipio se suma sobre todas las DDRISS. |
+| `v_consolidado_establecimiento` | Reproduce el **Excel 1** (`dosis_poblacion_propia`) y el **Excel 2**, que es la producción total incluidos Migrantes (`dosis_total`); `dosis_otros_municipios` es la diferencia. Toma reportes APROBADO, CERRADO y RECTIFICACION. Agrupa también por DDRISS. |
+| `v_produccion_atribuida` | Reproduce el **Excel 3**: numerador de cobertura **por municipio de procedencia** y DDRISS que recibió el reporte. Solo toma reportes CERRADO y (v0.7) solo procedencias del departamento de esa DDRISS, así que Migrantes (9999) y otros departamentos quedan fuera. |
 
 ---
 
@@ -289,9 +291,11 @@ Ejemplos incluidos en el script:
 
 | Vacuna | Dosis | Desagregación |
 |---|---|---|
-| Pentavalente v1 (histórica) | D1 a D3 | Sexo y grupo de edad |
-| Pentavalente v2 (vigente) | D1 a D3 | Sexo y grupo de edad |
-| BCG | Única | Solo sexo |
+| Hexavalente v1 (histórica) | D1 a D3 | Grupo de edad |
+| Hexavalente v2 (vigente) | D1 a D3 | Grupo de edad; secciones "< 1 año" y "De 1 a < 6 años" |
+| BCG | Única | Sin desagregación |
+| VPH | D1 a D3 | Sexo (en el 5C solo VPH y Tdap de 10 años lo usan) |
+| OPV | D1 a D3, R1, R2 | Grupo de edad; cuatro secciones |
 | Td | D1, D2, R1 | Estado de embarazo y grupo de edad, sin sexo; R1 solo por edad |
 
 **`reglas_validacion`**: reglas declarativas que se ejecutan antes de enviar un reporte. `tipo` elige un validador que ya existe en el backend y `parametros` lo configura.
@@ -319,11 +323,11 @@ Ejemplos:
 
 | Indicador | Cálculo |
 |---|---|
-| COB_PENTA3 | Cobertura de D3 en menores de 1 año; meta > 95 % |
-| BRECHA_PENTA3 | Dosis faltantes para alcanzar la meta |
-| DES_PENTA1_3 | Deserción (D1 − D3) / D1; aceptable ≤ 10 % |
-| PROY_COB_PENTA3 | Proyección a fin de año, marcada como estimación |
-| AVANCE_PENTA3 | (v0.6) Dosis acumuladas ÷ (población ÷ 12 × número de mes) × 100; la meta del mes vale 100 % y las vacunas que faltan van en `brecha_dosis`. Indicador por defecto del mapa (`es_indicador_mapa`); semáforo 80/90 **provisional** (`umbrales_provisionales: true`) |
+| COB_HEXA3 | Cobertura de D3 en menores de 1 año; meta > 95 % |
+| BRECHA_HEXA3 | Dosis faltantes para alcanzar la meta |
+| DES_HEXA1_3 | Deserción (D1 − D3) / D1; aceptable ≤ 10 % |
+| PROY_COB_HEXA3 | Proyección a fin de año, marcada como estimación |
+| AVANCE_HEXA3 | (v0.6) Dosis acumuladas ÷ (población ÷ 12 × número de mes) × 100; la meta del mes vale 100 % y las vacunas que faltan van en `brecha_dosis`. Indicador por defecto del mapa (`es_indicador_mapa`); semáforo 80/90 **provisional** (`umbrales_provisionales: true`) |
 
 ---
 
@@ -375,7 +379,7 @@ No hay llaves foráneas entre motores. Los vínculos son estos:
 Valores elegidos por el equipo de diseño que deben validarse:
 - Grupos de edad, vacunas y dosis de las semillas son **ejemplos**; deben sustituirse por los del 5C vigente.
 - Códigos INE de los municipios (1201 a 1230, y 0920 para Coatepeque) **por verificar** contra el catálogo INE y el GeoJSON.
-- Semáforo del mapa 80/90 % (provisional: cambiará cuando Epidemiología confirme los rangos exactos), umbral de deserción ≤ 10 %, semáforo 95/80 % de `COB_PENTA3`, prorrateo mensual lineal del denominador y proyección por promedio móvil de 3 meses: **por confirmar con Epidemiología**.
+- Semáforo del mapa 80/90 % (provisional: cambiará cuando Epidemiología confirme los rangos exactos), umbral de deserción ≤ 10 %, semáforo 95/80 % de `COB_HEXA3`, prorrateo mensual lineal del denominador y proyección por promedio móvil de 3 meses: **por confirmar con Epidemiología**.
 - El contacto del establecimiento es texto libre; podría pasar a ser una llave foránea a `empleado` si el equipo lo decide.
 - El código de la DDRISS (`DDRISS_SM`) es provisional, y falta confirmar si algún departamento tiene más de una DDRISS.
 
