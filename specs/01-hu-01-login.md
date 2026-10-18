@@ -1,6 +1,6 @@
 # SPEC 01 — Inicio de sesión (backend)
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-01 (parte backend; la pantalla de inicio de sesión va en el spec siguiente)
 > **Depende de:** —
 > **Fecha:** 2026-10-18
