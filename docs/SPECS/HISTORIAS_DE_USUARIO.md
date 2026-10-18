@@ -2,7 +2,7 @@
 
 Sistema web para gestionar, validar y analizar la producción de vacunación de la DDRISS San Marcos.
 
-Versión 3 · 17/10/2026 (correcciones del equipo y ajustes acordados en HU-31, 35, 42, 43, 50 y 52) · 60 historias · 280 story points. Basado en el contexto del proyecto v2.2 (incluye la información de campo del 10/10/2026), la descripción de pantallas y el diseño de base de datos v0.6.
+Versión 5 · 18/10/2026 (sincronizada con el Word revisado por el equipo; incluye las aclaraciones del 17 y 18/10, la BD v0.8 y las tecnologías elegidas) · 60 historias · 280 story points. Basado en el contexto del proyecto v2.4 (incluye la información de campo del 10/10/2026 y las aclaraciones del 17 y 18/10/2026), la descripción de pantallas, el diseño de base de datos v0.8 y la guía de desarrollo.
 
 ## 1. Formato de cada historia
 
@@ -174,21 +174,21 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Criterios de aceptación:**
 - [ ] Puedo buscar por nombre o usuario.
 - [ ] Puedo filtrar por rol, establecimiento y activo/inactivo.
-- [ ] El listado se pagina y nunca muestra contraseñas.
+- [ ] El listado se página y nunca muestra contraseñas.
 
 #### HU-08. Gestionar el catálogo territorial
 
-> **Como** administrador, **quiero** consultar y mantener departamentos, municipios, DDRISS y distritos de salud, **para** que la producción y los indicadores se asignen al territorio correcto.
+> **Como** administrador, **quiero** consultar los departamentos, municipios, DDRISS y distritos de salud, **para** que la producción y los indicadores se asignen al territorio correcto.
 
 | Para quién | Story points | Sprint | Responsable |
 |---|---|---|---|
 | Administrador | 3 | S1 | Andrea López |
 
-**Cómo se hará:** Tablas `departamento`, `municipio`, `ddriss` y `distrito_salud`; carga inicial con los 30 municipios de San Marcos y el municipio especial de procedencia desconocida; endpoint `GET /municipios`.
+**Cómo se hará:** Tablas `departamento`, `municipio`, `ddriss` y `distrito_salud`; carga inicial con los 30 municipios de San Marcos y el registro 9999 «Migrantes / fuera de San Marcos»; endpoint `GET /municipios`.
 
 **Criterios de aceptación:**
 - [ ] El catálogo trae cargados los 30 municipios de San Marcos.
-- [ ] Existe un municipio especial para procedencia desconocida.
+- [ ] Existe el registro especial «Migrantes / fuera de San Marcos» (9999), que también se usa para procedencia desconocida.
 - [ ] Puedo registrar y editar distritos de salud ligados a un municipio.
 - [ ] No puedo eliminar un municipio que ya tiene producción registrada.
 
@@ -200,11 +200,12 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 |---|---|---|---|
 | Administrador | 5 | S1 | Andrea López |
 
-**Cómo se hará:** Pantalla de establecimientos; endpoints `GET/POST /establecimientos` y `PATCH /establecimientos/{id}`; tablas `establecimiento` y `tipo_establecimiento` (CS, CAP, CAIMI, puesto, CC, CM, hospital, institución).
+**Cómo se hará:** Pantalla de establecimientos; endpoints `GET/POST /establecimientos` y `PATCH /establecimientos/{id}`; tablas `establecimiento` (marcas `reporta_5c`, `solo_cobertura` y `es_externo`) y `tipo_establecimiento` (CS, CAP, CAIMI, puesto, CC, CM, hospital, institución).
 
 **Criterios de aceptación:**
 - [ ] Puedo registrar un establecimiento con tipo, municipio, distrito, dirección, teléfono, correo y contacto.
-- [ ] Puedo marcar un establecimiento como externo (por ejemplo, el de Coatepeque).
+- [ ] Puedo marcar qué establecimientos envían el 5C (31: el que centraliza cada municipio y el Hospital de San Marcos).
+- [ ] Puedo marcar un establecimiento cuya producción solo cuenta para cobertura (Hospital de San Marcos) y uno externo (por ejemplo, el de Coatepeque).
 - [ ] Un establecimiento desactivado no puede crear reportes nuevos.
 - [ ] Puedo filtrar el listado por municipio y tipo.
 
@@ -216,12 +217,12 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 |---|---|---|---|
 | Administrador | 5 | S1 | Luis Suárez |
 
-**Cómo se hará:** Tablas `vacuna` y `dosis` (campos `completa_esquema` y `es_trazadora`); endpoints `GET/POST /vacunas`; carga inicial de las vacunas del 5C.
+**Cómo se hará:** Tablas `vacuna` y `dosis` (campos `completa_esquema` y `es_trazadora`); endpoints `GET/POST /vacunas`; carga inicial según el Registro Único de Vacunación (21 vacunas; Polio agrupa IPV y OPV y Hexavalente reemplaza a Pentavalente).
 
 **Criterios de aceptación:**
 - [ ] Puedo agregar una vacuna nueva sin cambiar el código del sistema.
 - [ ] Cada dosis tiene un orden y un tipo (primera, segunda, refuerzo, etc.).
-- [ ] Puedo marcar qué dosis completa el esquema.
+- [ ] Puedo marcar qué dosis completa el esquema (la última dosis sin contar refuerzos).
 - [ ] Una vacuna desactivada ya no aparece en reportes nuevos, pero sí en los históricos.
 
 #### HU-11. Navegación y pantalla inicial según el rol
@@ -232,7 +233,7 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 |---|---|---|---|
 | Todos los roles | 3 | S1 | Luis Suárez |
 
-**Cómo se hará:** Layout en React con barra de navegación que se arma con los permisos del token; rutas protegidas; paleta verde pastel y celeste definida por el equipo.
+**Cómo se hará:** Layout en React con barra de navegación que se arma con los permisos del token; rutas protegidas; menú con el componente Sidebar de shadcn/ui y paleta en azules y celestes del MSPAS (azul marino #2c4660, celeste #5aa0d0) definida en las variables del tema.
 
 **Criterios de aceptación:**
 - [ ] Cada rol ve solo las opciones de menú que le corresponden.
@@ -264,7 +265,7 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 |---|---|---|---|
 | Administrador | 5 | S2 | Andrea López |
 
-**Cómo se hará:** Pantalla de población por año y municipio; endpoint `POST /poblaciones-objetivo`; tablas `poblacion_objetivo` y `clasificacion_poblacion` (grupos = encabezados del 5C).
+**Cómo se hará:** Pantalla de población por año y municipio; endpoint `POST /poblaciones-objetivo`; tablas `poblacion_objetivo` y `clasificacion_poblacion` (grupos = encabezados del 5C, como «< 1 año» y «De 1 a < 6 años»).
 
 **Criterios de aceptación:**
 - [ ] Puedo registrar la población por municipio, año y grupo de edad.
@@ -280,7 +281,7 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 |---|---|---|---|
 | Administrador | 5 | S2 | Andrea López |
 
-**Cómo se hará:** Carga de archivo en React; endpoint que lee el Excel con una librería de Node.js, valida las filas y muestra una vista previa antes de guardar.
+**Cómo se hará:** Carga de archivo en React; endpoint que lee el Excel con ExcelJS, valida las filas y muestra una vista previa antes de guardar.
 
 **Criterios de aceptación:**
 - [ ] El sistema muestra una vista previa con las filas válidas y las que tienen error.
@@ -289,7 +290,7 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 
 #### HU-15. Gestionar el catálogo de dimensiones
 
-> **Como** administrador, **quiero** definir las dimensiones de captura (sexo, grupo de edad, embarazo, etc.) y sus valores, **para** que cada vacuna pueda desagregarse de forma distinta sin cambiar la base de datos.
+> **Como** administrador, **quiero** definir las dimensiones de captura (grupo de edad, sexo, presentación IPV u OPV, etc.) y sus valores, **para** que cada vacuna pueda desagregarse de forma distinta sin cambiar la base de datos.
 
 | Para quién | Story points | Sprint | Responsable |
 |---|---|---|---|
@@ -355,16 +356,17 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 |---|---|---|---|
 | Personal de establecimiento | 3 | S2 | Christian Ramírez |
 
-**Cómo se hará:** Endpoint `POST /reportes`; tabla `reporte_produccion` en estado Borrador; el establecimiento se toma del usuario.
+**Cómo se hará:** Endpoint `POST /reportes`; tabla `reporte_produccion` en estado Borrador; el establecimiento se toma del usuario y debe tener `reporta_5c`.
 
 **Criterios de aceptación:**
 - [ ] Solo puedo elegir periodos abiertos.
+- [ ] Solo los establecimientos que envían el 5C (uno por municipio y el Hospital de San Marcos) pueden crear reportes.
 - [ ] No puedo crear dos reportes del mismo establecimiento para el mismo periodo.
 - [ ] El reporte nace en estado Borrador.
 
 #### HU-20. Capturar la producción con el formulario dinámico
 
-> **Como** personal del establecimiento, **quiero** llenar la producción por vacuna, dosis, sexo y grupo de edad en un formulario generado desde el esquema vigente, **para** reemplazar el 5C físico y la digitación posterior en Excel.
+> **Como** personal del establecimiento, **quiero** llenar la producción por vacuna, dosis y grupo de edad, y por sexo u otra dimensión solo en las vacunas que la usan, en un formulario generado desde el esquema vigente, **para** reemplazar el proceso físico de envio del formulario 5C físico y la digitación posterior en Excel.
 
 | Para quién | Story points | Sprint | Responsable |
 |---|---|---|---|
@@ -373,7 +375,7 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Cómo se hará:** Endpoint `GET /reportes/{id}/formulario` que arma el formulario desde MongoDB; componente React que lo dibuja por secciones; se guarda en `reporte_vacuna`, `detalle_produccion` y `detalle_dimension`.
 
 **Criterios de aceptación:**
-- [ ] El formulario muestra solo las dosis y dimensiones del esquema vigente de cada vacuna.
+- [ ] El formulario muestra solo las dosis y dimensiones del esquema vigente de cada vacuna (por ejemplo, sexo solo en VPH y Tdap de 10 años, IPV u OPV en cada dosis de Polio).
 - [ ] Solo acepta cantidades enteras no negativas.
 - [ ] Los totales por fila y columna se calculan en pantalla.
 - [ ] No se guarda ningún dato personal de pacientes.
@@ -386,11 +388,11 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 |---|---|---|---|
 | Personal de establecimiento | 5 | S2 | Kenneth García |
 
-**Cómo se hará:** Filas por municipio de procedencia en el formulario (municipio propio y "otros municipios"); campo `municipio_procedencia` en `detalle_produccion`.
+**Cómo se hará:** Filas por municipio de procedencia en el formulario (municipio propio, "otros municipios" y Migrantes); campo `municipio_procedencia_id` en `detalle_produccion`.
 
 **Criterios de aceptación:**
 - [ ] Por defecto, la procedencia es el municipio del establecimiento.
-- [ ] Puedo agregar filas para otros municipios o para procedencia desconocida.
+- [ ] Puedo agregar filas para otros municipios de San Marcos o para Migrantes (fuera de San Marcos o procedencia desconocida).
 - [ ] No se permite repetir la misma combinación de vacuna, dosis, dimensiones y procedencia.
 
 #### HU-22. Guardar el borrador y continuar después
@@ -541,7 +543,7 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Cómo se hará:** Tarea programada (cron) que al vencer la fecha límite pasa `cierre_periodo` de ABIERTO a EN_CIERRE; endpoint `POST /periodos/{id}/cerrar` para el cierre final, que pasa los reportes aprobados a Cerrado y dispara el cálculo de indicadores.
 
 **Criterios de aceptación:**
-- [ ] Al vencer la fecha límite de envío, la entrega se cierra automáticamente (EN_CIERRE): no se crean reportes nuevos, pero los que están en revisión o devueltos siguen su ciclo.
+- [ ] Al vencer la fecha límite de envío, la entrega se cierra automáticamente: no se crean reportes nuevos, pero los que están en revisión o devueltos siguen su ciclo.
 - [ ] El cierre final lo hace la estadígrafa; el sistema muestra cuántos reportes faltan por aprobar antes de cerrar.
 - [ ] Al cerrar, todos los reportes aprobados del periodo pasan a Cerrado.
 - [ ] Un reporte cerrado no se edita por el procedimiento ordinario.
@@ -605,8 +607,8 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 
 **Criterios de aceptación:**
 - [ ] Puedo definir la meta de cada indicador.
-- [ ] Puedo indicar qué dosis cuenta para el numerador (la que completa el esquema).
-- [ ] Puedo definir los umbrales del semáforo (rojo, amarillo y verde) que usa el mapa.
+- [ ] Puedo indicar qué dosis cuenta para el numerador (la que completa el esquema, es decir, la última dosis sin refuerzos).
+- [ ] Puedo definir los umbrales del semáforo que usa el mapa.
 - [ ] Un cambio de configuración crea una versión nueva y no altera resultados anteriores.
 
 #### HU-36. Calcular la cobertura contra la meta del mes
@@ -617,11 +619,11 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 |---|---|---|---|
 | Epidemiología | 8 | S4 | Christian Ramírez |
 
-**Cómo se hará:** Servicio de cálculo en el backend; endpoint `POST /indicadores/corridas`; usa solo reportes cerrados y atribuye por municipio de procedencia; guarda en `corrida_calculo` y `resultado_indicador`.
+**Cómo se hará:** Servicio de cálculo en el backend; endpoint `POST /indicadores/corridas`; usa solo reportes cerrados y la vista `v_produccion_atribuida` (Excel 3); guarda en `corrida_calculo` y `resultado_indicador`.
 
 **Criterios de aceptación:**
 - [ ] Meta del mes = población ÷ 12 × número de mes, y el avance es dosis acumuladas ÷ meta del mes × 100.
-- [ ] Las dosis se asignan al municipio de procedencia.
+- [ ] Las dosis se asignan al municipio de residencia (procedencia); las de Migrantes no cuentan para la cobertura y las del Hospital de San Marcos sí.
 - [ ] Un caso de prueba con datos conocidos (por ejemplo, 541 de población a junio ≈ 270 dosis) da el resultado esperado.
 - [ ] Cada resultado guarda la versión de configuración usada.
 
@@ -676,7 +678,7 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 |---|---|---|---|
 | Epidemiología / Autoridad | 5 | S4 | Kenneth García |
 
-**Cómo se hará:** Pantalla inicial en React con tarjetas (reportes pendientes, avance general, alertas activas) según el rol.
+**Cómo se hará:** Pantalla inicial en React con tarjetas (componente Card de shadcn/ui): reportes pendientes, avance general y alertas activas según el rol.
 
 **Criterios de aceptación:**
 - [ ] La pantalla muestra solo tarjetas de resumen, sin gráficas pesadas.
@@ -691,7 +693,7 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 |---|---|---|---|
 | Epidemiología | 8 | S4 | Kenneth García |
 
-**Cómo se hará:** Pantalla de indicadores con librería de gráficas para React; endpoint `GET /indicadores/resultados` con filtros.
+**Cómo se hará:** Pantalla de indicadores con gráficas de Recharts a través del componente Chart de shadcn/ui (toman los colores del tema); endpoint `GET /indicadores/resultados` con filtros.
 
 **Criterios de aceptación:**
 - [ ] Puedo filtrar por vacuna, municipio, distrito y rango de meses.
@@ -706,7 +708,7 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 |---|---|---|---|
 | Epidemiología / Autoridad | 8 | S4 | Andrea López |
 
-**Cómo se hará:** Mapa con Leaflet y GeoJSON de los 30 municipios; el color sale de los resultados de indicadores; umbrales tomados de `configuracion_indicadores` (propuesta: rojo < 80 %, amarillo 80-90 %, verde > 90 %).
+**Cómo se hará:** Mapa con Leaflet y GeoJSON de los 30 municipios; el color sale de los resultados de indicadores; umbrales tomados de `configuracion_indicadores` (provisional: coral < 80 %, durazno 80-90 %, verde pastel ≥ 90 %, en tonos suaves en lugar de rojo, amarillo y verde intensos).
 
 **Criterios de aceptación:**
 - [ ] Cada municipio se colorea según su avance para la vacuna y el mes elegidos.
@@ -721,7 +723,7 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 |---|---|---|---|
 | Epidemiología | 5 | S4 | Andrea López |
 
-**Cómo se hará:** Gráfica de líneas en la pantalla de indicadores con series por periodo.
+**Cómo se hará:** Gráfica de líneas de Recharts (componente Chart de shadcn/ui) en la pantalla de indicadores, con series por periodo.
 
 **Criterios de aceptación:**
 - [ ] Puedo elegir dos o más periodos para comparar.
@@ -751,9 +753,10 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 |---|---|---|---|
 | Estadígrafa / Epidemiología | 8 | S5 | Kenneth García |
 
-**Cómo se hará:** Pantalla de informes; consultas sobre `v_consolidado_establecimiento` y demás vistas de MySQL; solo usa reportes cerrados salvo que se indique lo contrario.
+**Cómo se hará:** Pantalla de informes; consultas sobre `v_consolidado_establecimiento` (Excel 1 y 2) y `v_produccion_atribuida` (Excel 3); solo usa reportes cerrados salvo que se indique lo contrario.
 
 **Criterios de aceptación:**
+- [ ] Puedo generar los tres informes que hoy hace la estadígrafa: producción a la población propia (Excel 1), producción total con Migrantes (Excel 2) y dosis por municipio de residencia (Excel 3).
 - [ ] Puedo elegir mes inicial y final y uno o varios municipios.
 - [ ] Puedo elegir el nivel: departamento, municipio, distrito o establecimiento.
 - [ ] Los totales coinciden con la suma de los reportes cerrados del periodo.
@@ -766,7 +769,7 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 |---|---|---|---|
 | Estadígrafa / revisor | 5 | S5 | Andrea López |
 
-**Cómo se hará:** Parámetro de agrupación en la consulta del informe sobre `detalle_dimension`.
+**Cómo se hará:** Parámetro de agrupación en la consulta del informe sobre `v_produccion_dimension`; la agrupación por sexo aplica a las vacunas que registran sexo (VPH y Tdap de 10 años).
 
 **Criterios de aceptación:**
 - [ ] Al agrupar por sexo, el informe suma todas las edades de cada sexo (ejemplo: 5 + 6 + 3 niñas = 14).
@@ -781,7 +784,7 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 |---|---|---|---|
 | Estadígrafa / Epidemiología | 5 | S5 | Luis Suárez |
 
-**Cómo se hará:** Generación de .xlsx en el backend con una librería de Node.js; botón de exportación en cada informe.
+**Cómo se hará:** Generación de .xlsx en el backend con ExcelJS, respetando los permisos y la DDRISS del usuario; botón de exportación en cada informe.
 
 **Criterios de aceptación:**
 - [ ] El archivo respeta los filtros y la agrupación elegidos.
@@ -796,7 +799,7 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 |---|---|---|---|
 | Epidemiología / Autoridad | 3 | S5 | Christian Ramírez |
 
-**Cómo se hará:** Generación de PDF en el backend con una librería de Node.js.
+**Cómo se hará:** Generación de PDF en el backend con pdfmake, con la fuente IBM Plex Sans para que se vea como la aplicación.
 
 **Criterios de aceptación:**
 - [ ] El PDF incluye título, filtros usados, tabla y fecha de generación.
@@ -827,8 +830,8 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Cómo se hará:** Tarea programada (cron) en el backend que revisa fechas límite y estados y guarda en la tabla `alerta`.
 
 **Criterios de aceptación:**
-- [ ] Se genera una alerta cuando un establecimiento no envió su reporte al vencer la fecha límite.
-- [ ] Se genera una alerta cuando un reporte lleva más de N días sin revisar; N es un valor fijo en la configuración del backend (pendiente de confirmar con la estadígrafa).
+- [ ] Se genera una alerta cuando un establecimiento que envía el 5C no envió su reporte al vencer la fecha límite.
+- [ ] Se genera una alerta cuando un reporte lleva más de N días sin revisar; N es un valor fijo definido en el backend (pendiente de confirmar con la estadígrafa).
 - [ ] No se duplican alertas del mismo tipo para el mismo reporte.
 
 #### HU-51. Alertas de cobertura y de calidad
@@ -842,7 +845,7 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Cómo se hará:** Se generan al terminar cada corrida de indicadores y se guardan en `alerta` con su DDRISS.
 
 **Criterios de aceptación:**
-- [ ] Se crea una alerta cuando el avance de un municipio queda bajo el umbral rojo.
+- [ ] Se crea una alerta cuando el avance de un municipio queda en el rango más bajo del semáforo (menos de 80 %, provisional).
 - [ ] Se crea una alerta cuando la cobertura supera el 100 %.
 - [ ] Cada alerta indica municipio, vacuna, periodo y valor.
 
@@ -988,4 +991,4 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - El número de días para la alerta de reportes sin revisar (HU-50) debe confirmarse con la estadígrafa.
 - Los informes y la cobertura por distrito (HU-41, HU-45) dependen de que la DDRISS aclare qué es un distrito de salud y cuántos hay por municipio.
 - El registro de la población (HU-13, HU-14) se asignó al rol Administrador de forma provisional, según lo acordado el 10/10/2026.
-- Las historias de los sprints 1 y 2 ya pueden estar avanzadas en el repositorio; se recomienda marcar en el tablero las que estén terminadas.
+- Los story points no cambiaron con las actualizaciones de la versión 4: los ajustes precisan datos y tecnologías, pero no agregan trabajo significativo.
