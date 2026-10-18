@@ -1,6 +1,6 @@
-const fs = require('node:fs');
-const mysql = require('mysql2/promise');
-const entorno = require('./entorno');
+import fs from 'node:fs';
+import mysql from 'mysql2/promise';
+import entorno from './entorno.js';
 
 const pool = mysql.createPool({
   host: entorno.mysql.host,
@@ -13,4 +13,4 @@ const pool = mysql.createPool({
   connectionLimit: 10,
 });
 
-module.exports = pool;
+export default pool;

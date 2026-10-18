@@ -1,6 +1,6 @@
-const sistemaService = require('./sistema.service');
+import * as sistemaService from './sistema.service.js';
 
-async function salud(req, res) {
+export async function salud(req, res) {
   const estados = await sistemaService.obtenerSalud();
 
   if (estados.mysql === 'ok' && estados.mongo === 'ok') {
@@ -15,5 +15,3 @@ async function salud(req, res) {
     },
   });
 }
-
-module.exports = { salud };

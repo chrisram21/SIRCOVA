@@ -1,4 +1,4 @@
-const path = require('node:path');
+import path from 'node:path';
 
 const obligatorias = [
   'PORT',
@@ -10,6 +10,7 @@ const obligatorias = [
   'MYSQL_SSL_CA',
   'MONGO_URI',
   'MONGO_DB',
+  'CORS_ORIGEN',
 ];
 
 const faltantes = obligatorias.filter((nombre) => !process.env[nombre]);
@@ -17,9 +18,9 @@ if (faltantes.length > 0) {
   throw new Error(`Faltan variables de entorno: ${faltantes.join(', ')}`);
 }
 
-const raizBackend = path.resolve(__dirname, '..', '..');
+const raizBackend = path.resolve(import.meta.dirname, '..', '..');
 
-module.exports = {
+export default {
   puerto: Number(process.env.PORT),
   mysql: {
     host: process.env.MYSQL_HOST,
@@ -34,5 +35,6 @@ module.exports = {
     uri: process.env.MONGO_URI,
     baseDatos: process.env.MONGO_DB,
   },
+  corsOrigen: process.env.CORS_ORIGEN,
   rutaOpenapi: path.join(raizBackend, 'openapi.yaml'),
 };

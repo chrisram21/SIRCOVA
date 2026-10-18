@@ -1,7 +1,7 @@
-const app = require('./app');
-const entorno = require('./config/entorno');
-const pool = require('./config/mysql');
-const { cliente } = require('./config/mongodb');
+import app from './app.js';
+import entorno from './config/entorno.js';
+import pool from './config/mysql.js';
+import { cliente } from './config/mongodb.js';
 
 // Arranca aunque una base no responda, para que /salud pueda informarlo.
 const servidor = app.listen(entorno.puerto, () => {

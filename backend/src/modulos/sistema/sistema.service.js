@@ -1,5 +1,5 @@
-const pool = require('../../config/mysql');
-const { obtenerDb } = require('../../config/mongodb');
+import pool from '../../config/mysql.js';
+import { obtenerDb } from '../../config/mongodb.js';
 
 const TIEMPO_LIMITE_MS = 5000;
 
@@ -21,12 +21,10 @@ async function comprobar(nombre, prueba) {
   }
 }
 
-async function obtenerSalud() {
+export async function obtenerSalud() {
   const [mysql, mongo] = await Promise.all([
     comprobar('MySQL', () => pool.query('SELECT 1')),
     comprobar('MongoDB', async () => (await obtenerDb()).command({ ping: 1 })),
   ]);
   return { mysql, mongo };
 }
-
-module.exports = { obtenerSalud };
