@@ -11,8 +11,6 @@ const obligatorias = [
   'MONGO_URI',
   'MONGO_DB',
   'CORS_ORIGEN',
-  'JWT_SECRET',
-  'JWT_EXPIRACION',
 ];
 
 const faltantes = obligatorias.filter((nombre) => !process.env[nombre]);
@@ -36,10 +34,6 @@ export default {
   mongo: {
     uri: process.env.MONGO_URI,
     baseDatos: process.env.MONGO_DB,
-  },
-  jwt: {
-    secreto: process.env.JWT_SECRET,
-    expiracion: process.env.JWT_EXPIRACION,
   },
   corsOrigen: process.env.CORS_ORIGEN,
   rutaOpenapi: path.join(raizBackend, 'openapi.yaml'),
