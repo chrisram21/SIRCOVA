@@ -4,6 +4,10 @@
 // semilla no se representan en DBML; están en el script SQL.
 // Los grupos de tablas siguen los cuatro grupos de MySQL de la propuesta v2.
 
+// Para ver el diagrama desde Visual Code descargar la extensión: marketplace.visualstudio.com/items?itemName=dbdiagram.dbdiagram-vscode
+// Si por alguna razón no carga la previsualización reducir la versión de la extensión a la 0.4.0 y desactivar la actualización automatica.
+// Esto es es debido a un error entre la versión 0.5.0 y las rutas absolutas en Windows. Puede que en el futuro se corrija y se pueda actualizar la extensión a la versión más reciente.
+
 Project vacunacion_ddriss {
   database_type: 'MySQL'
   Note: '''
