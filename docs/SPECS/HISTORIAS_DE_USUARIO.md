@@ -15,7 +15,7 @@ Versión 5 · 18/10/2026 (sincronizada con el Word revisado por el equipo; inclu
 | **Criterios de aceptación** | Condiciones verificables para dar la historia por terminada |
 | **Story points, sprint y responsable** | Esfuerzo estimado, incremento donde se desarrolla e integrante a cargo |
 
-Una historia se considera terminada cuando cumple sus criterios de aceptación, tiene pruebas unitarias o de integración del backend, está integrada con el frontend y fue revisada por otro integrante.
+Una historia se considera terminada cuando cumple sus criterios de aceptación, tiene pruebas unitarias o de integración del backend, está integrada con el frontend y se integró a `main` mediante un pull request (no requiere la aprobación de otro integrante; ver `AGENTS.md`, sección 7). Si una historia se divide en varios specs, solo se considera terminada cuando todos sus specs están implementados.
 
 ## 2. Criterios para asignar los story points
 
@@ -82,6 +82,8 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [ ] Con credenciales incorrectas muestra un mensaje de error genérico y permite reintentar.
 - [ ] Un usuario desactivado no puede iniciar sesión.
 - [ ] La contraseña nunca se guarda ni se devuelve en texto plano.
+
+**Avance:** en curso. La parte backend está implementada en `specs/01-hu-01-login.md` (`POST /auth/login`, bloqueo por intentos, bitácora y middleware `autenticar`). Falta la parte frontend: el proyecto de React y la pantalla de inicio de sesión (spec 02). Los criterios se marcan cuando ambas partes estén integradas.
 
 #### HU-02. Cerrar sesión y expiración de la sesión
 

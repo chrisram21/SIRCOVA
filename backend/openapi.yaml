@@ -67,6 +67,13 @@ paths:
     post:
       tags: [Autenticación]
       summary: Iniciar sesión
+      description: |
+        Devuelve un JWT (HS256) que vence según `JWT_EXPIRACION` y contiene `sub`, `rol`, `permisos`,
+        `ddrissId`, `establecimientoId` y `municipioId`.
+
+        Al 5.º intento fallido seguido la cuenta se bloquea 15 minutos; ese mismo intento ya responde 423.
+        Un usuario inexistente y una contraseña incorrecta responden el mismo 401.
+        Los 403 solo se devuelven si la contraseña es correcta.
       security: []
       requestBody:
         required: true
@@ -86,14 +93,41 @@ paths:
               schema:
                 type: object
                 properties:
-                  token: { type: string }
+                  token: { type: string, example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... }
                   usuario: { $ref: "#/components/schemas/UsuarioSesion" }
-        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "400":
+          description: Falta el nombre de usuario o la contraseña
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: Debe indicar el nombre de usuario y la contraseña. }
+        "401":
+          description: Usuario inexistente o contraseña incorrecta (mismo cuerpo en ambos casos)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: CREDENCIALES_INVALIDAS, mensaje: Usuario o contraseña incorrectos. }
+        "403":
+          description: Contraseña correcta, pero la cuenta está desactivada o no tiene alcance asignado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                desactivada:
+                  value:
+                    error: { codigo: CUENTA_DESACTIVADA, mensaje: Su cuenta está desactivada; contacte al administrador. }
+                sinAlcance:
+                  value:
+                    error: { codigo: CUENTA_SIN_ALCANCE, mensaje: Su cuenta no tiene una DDRISS o un establecimiento asignado; contacte al administrador. }
         "423":
           description: Cuenta bloqueada por intentos fallidos
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: CUENTA_BLOQUEADA, mensaje: Su cuenta está bloqueada por 15 minutos por intentos fallidos. }
 
   /auth/logout:
     post:
@@ -760,10 +794,17 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
     NoAutenticado:
-      description: Sin sesión o credenciales incorrectas
+      description: Falta el token o no es válido (NO_AUTENTICADO), o el token venció (SESION_VENCIDA)
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            noAutenticado:
+              value:
+                error: { codigo: NO_AUTENTICADO, mensaje: Debe iniciar sesión. }
+            sesionVencida:
+              value:
+                error: { codigo: SESION_VENCIDA, mensaje: Su sesión venció; inicie sesión de nuevo. }
     NoEncontrado:
       description: No existe o está fuera del alcance del usuario
       content:
@@ -807,6 +848,7 @@ components:
           properties:
             nombres: { type: string }
             apellidos: { type: string }
+            ddrissId: { type: integer, nullable: true, description: NULL solo para AUTORIDAD de nivel nacional }
             establecimientoId: { type: integer, nullable: true }
             municipioId: { type: integer, nullable: true }
 

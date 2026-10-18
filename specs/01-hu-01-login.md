@@ -1,6 +1,6 @@
 # SPEC 01 — Inicio de sesión (backend)
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-01 (parte backend; la pantalla de inicio de sesión va en el spec siguiente)
 > **Depende de:** —
 > **Fecha:** 2026-10-18
@@ -206,7 +206,8 @@ backend/
 - **Sí:** el script registra `CREAR` en la bitácora con `usuario_id` NULL (proceso manual, regla 7).
 - **Sí:** bcrypt con costo 12. Es un equilibrio entre seguridad y tiempo de respuesta.
 - **Sí:** pruebas de integración contra las bases de prueba, con un usuario de prueba indicado en `.env`. Siguen la regla de no usar servidores simulados.
-- **Sí:** las pruebas pueden modificar directamente al usuario de prueba (activo, intentos, bloqueo, DDRISS) y lo restauran al terminar. Esos cambios no pasan por la API, así que no van a la bitácora; solo ocurren en la base de prueba.
+- **Sí:** el intento que bloquea la cuenta deja dos filas en la bitácora: `LOGIN_FALLIDO` (el intento falló) y `CUENTA_BLOQUEADA` (la cuenta quedó bloqueada). Así el registro es más completo. Decidido durante la implementación.
+- **Sí:** las pruebas pueden modificar directamente al usuario de prueba (activo, intentos, bloqueo, DDRISS, y temporalmente su rol y su establecimiento para probar el rol `ESTABLECIMIENTO`) y lo restauran al terminar. Esos cambios no pasan por la API, así que no van a la bitácora; solo ocurren en la base de prueba.
 - **Sí:** `process.loadEnvFile` en el archivo de preparación de Vitest, para cargar `.env` sin dependencias nuevas.
 - **Sí:** comparar las fechas del bloqueo con `NOW()` de MySQL. Evita diferencias entre la hora del servidor de Node y la de Aiven.
 
