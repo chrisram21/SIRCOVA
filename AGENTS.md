@@ -115,6 +115,7 @@ Reglas del frontend:
 ## 7. Cómo trabajar
 
 - **Specs y ramas:** cada historia de usuario se trabaja como un spec en `specs/NN-slug.md`, y cada spec en su propia rama `spec-NN-slug`, creada desde `main`. Solo se implementa un spec en estado Aprobado. La rama se integra a `main` cuando el spec cumple sus criterios de aceptación y pasa a Implementado.
+- **Pull requests:** cada rama se integra a `main` siempre mediante un pull request, que queda como registro del cambio. No necesita la aprobación de otro integrante: quien lo abre puede integrarlo, para no frenar a quien trabaja solo. La revisión de otro integrante es opcional.
 - **Contrato primero:** si creas o cambias un endpoint, actualiza `backend/openapi.yaml` antes de programarlo.
 - Limita tus cambios a lo que pide la tarea.
 - Documentación, mensajes de la API y nombres de carpetas y módulos en **español**. En la BD: `snake_case`, singular.
@@ -148,4 +149,4 @@ Entorno de desarrollo: se trabaja contra las bases de prueba en Aiven (MySQL) y 
 
 ## 10. Pendientes del equipo (no los asumas)
 
-Formato de commits, revisión de código (incluye cómo se integra cada rama a `main`) y licencia.
+Formato de commits y licencia.
