@@ -22,6 +22,8 @@ Proyecto de fin de carrera (Universidad Mesoamericana, Quetzaltenango, 2026). **
 | `docs/contexto/` | Resumen de la propuesta del proyecto (roles, ciclo del reporte, módulos) |
 | `docs/mockups/descripcion_pantallas.md` | Descripción de las pantallas, estilo general y su implementación en React |
 | `docs/mockups/pantallas/*.html` | Pantallas de referencia del frontend. `Plan.html` es el plan de gráficas, no una pantalla |
+| `docs/SPECS/HISTORIAS_DE_USUARIO.md` | Historias de usuario (HU-01 a HU-60) con sus criterios de aceptación |
+| `specs/NN-slug.md` | Specs: uno por historia de usuario; describe qué se implementa y cómo se verifica |
 
 ## 3. Stack (no agregar nada fuera de esta lista sin autorización)
 
@@ -112,6 +114,7 @@ Reglas del frontend:
 
 ## 7. Cómo trabajar
 
+- **Specs y ramas:** cada historia de usuario se trabaja como un spec en `specs/NN-slug.md`, y cada spec en su propia rama `spec-NN-slug`, creada desde `main`. Solo se implementa un spec en estado Aprobado. La rama se integra a `main` cuando el spec cumple sus criterios de aceptación y pasa a Implementado.
 - **Contrato primero:** si creas o cambias un endpoint, actualiza `backend/openapi.yaml` antes de programarlo.
 - Limita tus cambios a lo que pide la tarea.
 - Documentación, mensajes de la API y nombres de carpetas y módulos en **español**. En la BD: `snake_case`, singular.
@@ -145,4 +148,4 @@ Entorno de desarrollo: se trabaja contra las bases de prueba en Aiven (MySQL) y 
 
 ## 10. Pendientes del equipo (no los asumas)
 
-Estrategia de ramas, formato de commits, revisión de código y licencia.
+Formato de commits, revisión de código (incluye cómo se integra cada rama a `main`) y licencia.

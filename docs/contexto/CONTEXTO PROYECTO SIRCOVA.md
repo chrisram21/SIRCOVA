@@ -2,7 +2,7 @@
 
 > Documento de contexto generado a partir de la propuesta *"Propuesta – Vacunas"* (versión recibida el 29 de septiembre de 2026), que ahora comprende la **Introducción y los Capítulos 1 (Marco contextual y conceptual), 2 (Diseño y método), 3 (Monografía de la institución) y 4 (Marco teórico)**. Sirve para que cualquier asistente o colaborador entienda **qué se va a construir, para quién, con qué tecnología y en qué plazos**. No sustituye al documento original: ante cualquier duda, manda el documento.
 >
-> **Versión 2.4 de este contexto** (18/10/2026). Agrega la **sección 14.6** (hospitales y Polio, 18/10/2026); la v2.3 agregó la **sección 14.5** con las aclaraciones sobre los Excel del 5C (17/10/2026). Mantiene el resumen de la propuesta de la v2 (29/09/2026), la **sección 13** con las decisiones de diseño posteriores (base de datos, backend y prototipo de pantallas) y agrega la **sección 14** con la información de campo reunida el 10/10/2026 (entrevistas a la estadígrafa y a Epidemiología, y fotografías de un 5C real). La sección 12.1 resume qué cambió de la v1 a la v2. Las versiones anteriores se conservan en `contexto/anteriores/`.
+> **Versión 2.5 de este contexto** (18/10/2026). Actualiza las tecnologías del frontend, los gráficos y los informes (secciones 5.2 y 13), la paleta de colores y el semáforo del mapa (secciones 13 y 14.3), y agrega la base de datos de pruebas (sección 13). La v2.4 agregó la **sección 14.6** (hospitales y Polio, 18/10/2026); la v2.3 agregó la **sección 14.5** con las aclaraciones sobre los Excel del 5C (17/10/2026). Mantiene el resumen de la propuesta de la v2 (29/09/2026), la **sección 13** con las decisiones de diseño posteriores (base de datos, backend y prototipo de pantallas) y agrega la **sección 14** con la información de campo reunida el 10/10/2026 (entrevistas a la estadígrafa y a Epidemiología, y fotografías de un 5C real). La sección 12.1 resume qué cambió de la v1 a la v2. Las versiones anteriores se conservan en `contexto/anteriores/`.
 
 ---
 
@@ -106,13 +106,13 @@ Arquitectura web **cliente-servidor** en capas (presentación / lógica de negoc
 
 | Capa | Tecnología |
 |---|---|
-| Interfaz web | **React** (opciones según rol) |
+| Interfaz web | **React + Vite** en JavaScript, con **Tailwind CSS, shadcn/ui y Radix UI** (opciones según rol) |
 | API y lógica de negocio | **Node.js + Express.js** en **JavaScript**, API REST documentada con **OpenAPI 3** (ver sección 13) |
 | Persistencia relacional | **MySQL** — datos estructurados y transaccionales |
 | Persistencia documental | **MongoDB** — configuraciones flexibles y versionadas |
-| Gráficos | Librería de gráficos compatible con React |
+| Gráficos | **Recharts**, a través del componente Chart de shadcn/ui, con los colores del tema |
 | Mapa territorial | **Leaflet + archivos GeoJSON** (municipios de San Marcos) |
-| Exportación de informes | **Excel (prioritario)** y PDF, con librerías compatibles con Node.js (sin definir). La estadígrafa prefiere Excel (sección 14.1) |
+| Exportación de informes | **Excel (prioritario) con ExcelJS** y **PDF con pdfmake**, generados en el backend para respetar permisos y quedar en la bitácora. La estadígrafa prefiere Excel (sección 14.1) |
 | Contenedores | **Docker** |
 | Nube | **DigitalOcean**, Droplet (servidor virtual) Linux |
 | Herramientas de apoyo | Git/GitHub, Postman, MySQL Workbench, MongoDB Compass, Draw.io |
@@ -346,8 +346,12 @@ Estas decisiones no están en el documento de la propuesta; las tomó el equipo 
 - Endpoints bajo `/api/v1`, definidos en **OpenAPI 3** (38 operaciones principales) y visibles con Swagger UI en `/api/docs`.
 - El estado de un reporte **solo cambia por un endpoint** (`POST /reportes/{id}/transiciones`), y solo si la transición está permitida para el rol del usuario.
 
+**Base de datos de pruebas (18/10/2026)** · `despliegue/plan_atlas_mysql.md` y `despliegue/guia_atlas_aiven.md`
+- Mientras se desarrolla, el equipo comparte una base de pruebas en servicios gratuitos: **MongoDB Atlas (M0)** y **Aiven for MySQL (Free)**, con conexión cifrada y un usuario por integrante. El despliegue real sigue siendo en DigitalOcean.
+
 **Prototipo de pantallas** · `mockups/descripcion_pantallas.md`
-- Paleta verde pastel y celeste, a juego con los colores de la DDRISS. La pantalla de inicio es ligera; las gráficas van en pantallas propias del menú (Indicadores, Mapa territorial).
+- Paleta en azules y celestes suaves tomada del logo del MSPAS (azul marino #2c4660 y celeste #5aa0d0), sin colores saturados; rojo, ámbar y verde solo para mensajes de estado. Fuente IBM Plex Sans. *Reemplaza la paleta verde pastel inicial (17/10/2026).* La pantalla de inicio es ligera; las gráficas van en pantallas propias del menú (Indicadores, Mapa territorial).
+- En React, los colores van como variables del tema de shadcn/ui y cada pantalla reproduce el HTML de `mockups/pantallas/` con sus componentes (18/10/2026).
 - Siete pantallas: inicio de sesión, inicio, indicadores, registro de producción (con una variante de dimensiones), bandeja de revisión, mapa territorial y **auditoría** (bitácora con filtros por fecha, usuario, tipo de acción y elemento afectado, y paginación).
 
 ---
@@ -388,7 +392,7 @@ Consecuencias para el diseño:
 - Al terminar el año se presenta el **acumulado anual**, que es otro informe.
 - Lo importante es que niñas y niños tengan el **esquema completo**: una vacuna cuenta para la cobertura cuando se aplica la dosis que completa el esquema. La DDRISS proporcionará cuántas dosis tiene cada vacuna vigente (**pendiente**).
 - Les serviría ver **cuántas dosis faltan** para la meta (brecha) y, sobre todo, **proyecciones**, que hoy no hacen.
-- **Semáforo del mapa (provisional; cambiará cuando confirmen los rangos exactos):** rojo por debajo de 80 %, amarillo entre 80 % y 90 %, verde por encima de 90 %, medido contra la meta del mes.
+- **Semáforo del mapa (provisional; cambiará cuando confirmen los rangos exactos):** rojo por debajo de 80 %, amarillo entre 80 % y 90 %, verde por encima de 90 %, medido contra la meta del mes. En el sistema se dibujan en tonos suaves: coral (< 80 %), durazno (80 a 90 %) y verde pastel (≥ 90 %); ese verde se usa solo en el mapa (17/10/2026).
 - **Distritos:** se necesitan producción **y** cobertura por distrito. **Pendiente:** el equipo debe confirmar con la DDRISS qué es exactamente un distrito de salud en San Marcos y cuántos municipios tienen más de uno. El encabezado del 5C ya pide "Área de Salud" y "Distrito de Salud" (en la foto: San Marcos y Catarina).
 
 ### 14.4 Qué confirma, qué cambia y qué queda pendiente

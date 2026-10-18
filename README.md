@@ -100,7 +100,9 @@ Resumen de esas reglas:
 │   ├── contexto/          ← resumen de la propuesta del proyecto
 │   ├── base-de-datos/     ← documento de diseño, contexto de BD, diagramas, guía de instalación local
 │   ├── backend/           ← INSTRUCCIONES_BACKEND.md
-│   └── mockups/           ← descripción de pantallas y pantallas de referencia (pantallas/*.html)
+│   ├── mockups/           ← descripción de pantallas y pantallas de referencia (pantallas/*.html)
+│   └── SPECS/             ← HISTORIAS_DE_USUARIO.md
+├── specs/                 ← un spec por historia de usuario (NN-slug.md)
 ├── backend/
 │   ├── openapi.yaml
 │   ├── .env.example       ← variables sin valores reales
@@ -144,7 +146,8 @@ Los comandos exactos del paso 3 quedan **pendientes** hasta que exista el códig
 - Los archivos de cada módulo usan sufijos técnicos en inglés (`.routes.js`, `.controller.js`, `.service.js`), por ejemplo `sistema.controller.js`.
 - No se suben secretos ni archivos `.env`.
 - Consultas a la base siempre parametrizadas.
-- **Pendientes:** estrategia de ramas, formato de commits, revisión de código y licencia del repositorio.
+- **Ramas:** una por spec (`spec-NN-slug`), creada desde `main`; cada spec corresponde a una historia de usuario (detalle en `AGENTS.md`, sección 7).
+- **Pendientes:** formato de commits, revisión de código y licencia del repositorio.
 
 ## 10. Equipo
 
