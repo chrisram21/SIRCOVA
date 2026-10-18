@@ -147,7 +147,7 @@ Los comandos exactos del paso 3 quedan **pendientes** hasta que exista el códig
 - No se suben secretos ni archivos `.env`.
 - Consultas a la base siempre parametrizadas.
 - **Ramas:** una por spec (`spec-NN-slug`), creada desde `main`; cada spec corresponde a una historia de usuario (detalle en `AGENTS.md`, sección 7).
-- **Pull requests:** toda rama se integra a `main` mediante un pull request. No requiere aprobación de otro integrante; la revisión es opcional.
+- **Pull requests:** toda rama se integra a `main` mediante un pull request, con *squash and merge*, y después se borra. No requiere aprobación de otro integrante; la revisión es opcional.
 - **Pendientes:** formato de commits y licencia del repositorio.
 
 ## 10. Equipo
