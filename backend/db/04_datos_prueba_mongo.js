@@ -25,6 +25,7 @@
 // 03_datos_prueba_mysql.sql: 1 = admin.prueba, 4 = epidemiologia.
 // =============================================================================
 
+
 const db_ = db.getSiblingDB("vacunacion_config");
 
 const hexa_v2 = ObjectId("66f8a1c2e4b0a1b2c3d4e5f6");
