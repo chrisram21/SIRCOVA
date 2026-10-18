@@ -2,7 +2,7 @@
 
 Proyecto de fin de carrera de Ingeniería en Sistemas Informática y Ciencias de la Computación, Universidad Mesoamericana, sede Quetzaltenango (2026).
 
-> **Estado:** en desarrollo. Modelo de datos preliminar: MySQL v0.7 y MongoDB v0.5 (17 de octubre de 2026), preparado para varias DDRISS. El backend está en pausa: el código de `backend/src/` corresponde a una versión anterior del modelo y el equipo lo rehará. Este documento resume lo acordado por el equipo y funciona como **contrato técnico**: cualquier cambio a lo que aquí se fija se discute y se registra antes de aplicarse.
+> **Estado:** en desarrollo. Modelo de datos preliminar: MySQL v0.8 y MongoDB v0.6 (18 de octubre de 2026), preparado para varias DDRISS. El backend está en pausa: el código de `backend/src/` corresponde a una versión anterior del modelo y el equipo lo rehará. Este documento resume lo acordado por el equipo y funciona como **contrato técnico**: cualquier cambio a lo que aquí se fija se discute y se registra antes de aplicarse.
 
 ---
 

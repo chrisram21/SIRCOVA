@@ -17,7 +17,7 @@ Proyecto de fin de carrera (Universidad Mesoamericana, Quetzaltenango, 2026). **
 | `README.md` | Alcance, tecnologías acordadas, estructura del repositorio |
 | `docs/backend/INSTRUCCIONES_BACKEND.md` | Estructura del backend, capas, formato de error, reglas |
 | `backend/openapi.yaml` | Contrato de la API: todos los endpoints bajo `/api/v1` |
-| `docs/base-de-datos/CONTEXTO BD.md` | Modelo de datos (MySQL v0.7, MongoDB v0.5) y reglas del modelo |
+| `docs/base-de-datos/CONTEXTO BD.md` | Modelo de datos (MySQL v0.8, MongoDB v0.6) y reglas del modelo |
 | `backend/db/01_modelo_relacional_mysql.sql`, `backend/db/02_colecciones_mongodb.js` | Scripts de BD; **ante cualquier diferencia, mandan los scripts** |
 | `docs/contexto/` | Resumen de la propuesta del proyecto (roles, ciclo del reporte, módulos) |
 
