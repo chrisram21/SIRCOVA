@@ -2,7 +2,7 @@
 
 > Documento de contexto generado a partir de la propuesta *"Propuesta – Vacunas"* (versión recibida el 29 de septiembre de 2026), que ahora comprende la **Introducción y los Capítulos 1 (Marco contextual y conceptual), 2 (Diseño y método), 3 (Monografía de la institución) y 4 (Marco teórico)**. Sirve para que cualquier asistente o colaborador entienda **qué se va a construir, para quién, con qué tecnología y en qué plazos**. No sustituye al documento original: ante cualquier duda, manda el documento.
 >
-> **Versión 2.3 de este contexto** (17/10/2026). Agrega la **sección 14.5** con las aclaraciones sobre los Excel del 5C (17/10/2026). Mantiene el resumen de la propuesta de la v2 (29/09/2026), la **sección 13** con las decisiones de diseño posteriores (base de datos, backend y prototipo de pantallas) y agrega la **sección 14** con la información de campo reunida el 10/10/2026 (entrevistas a la estadígrafa y a Epidemiología, y fotografías de un 5C real). La sección 12.1 resume qué cambió de la v1 a la v2. Las versiones anteriores se conservan en `contexto/anteriores/`.
+> **Versión 2.4 de este contexto** (18/10/2026). Agrega la **sección 14.6** (hospitales y Polio, 18/10/2026); la v2.3 agregó la **sección 14.5** con las aclaraciones sobre los Excel del 5C (17/10/2026). Mantiene el resumen de la propuesta de la v2 (29/09/2026), la **sección 13** con las decisiones de diseño posteriores (base de datos, backend y prototipo de pantallas) y agrega la **sección 14** con la información de campo reunida el 10/10/2026 (entrevistas a la estadígrafa y a Epidemiología, y fotografías de un 5C real). La sección 12.1 resume qué cambió de la v1 a la v2. Las versiones anteriores se conservan en `contexto/anteriores/`.
 
 ---
 
@@ -38,7 +38,7 @@ Los 30 municipios de San Marcos reportan cada mes cuántas vacunas aplicaron med
 - El país se organiza en **DDRISS** (antes "Direcciones de Área de Salud"). San Marcos está en el suroccidente y tiene **30 municipios**, cada uno con su distrito de salud y sus establecimientos.
 
 ### 3.2 Cómo funciona hoy el proceso
-1. Se llena **un formulario 5C / Consolidado Mensual de Vacunación (SIGSA-S5c) por municipio**: un establecimiento (casi siempre el centro de salud) centraliza la información del municipio y lo envía a la DDRISS. Por **tipo de vacuna, dosis y grupo de edad** (sexo solo en algunas vacunas), registra (a) personas del propio municipio vacunadas, (b) personas de otros municipios vacunadas allí, una fila por municipio, más una fila de **Migrantes** (personas de fuera de San Marcos), y (c) total de dosis.
+1. Se llena **un formulario 5C / Consolidado Mensual de Vacunación (SIGSA-S5c) por municipio**: un establecimiento (casi siempre el centro de salud) centraliza la información del municipio y lo envía a la DDRISS. Además, el **Hospital de San Marcos** envía su propio 5C, así que la DDRISS recibe **31** (ver sección 14.6). Por **tipo de vacuna, dosis y grupo de edad** (sexo solo en algunas vacunas), registra (a) personas del propio municipio vacunadas, (b) personas de otros municipios vacunadas allí, una fila por municipio, más una fila de **Migrantes** (personas de fuera de San Marcos), y (c) total de dosis.
 2. Los registros de los servicios se integran primero en un **consolidado municipal** que se remite a la DDRISS. Centros de salud, CAP y CAIMI usan el 5C; **algunos hospitales manejan sus propios formatos consolidados**.
 3. La estadígrafa recibe las **30 hojas físicas** y las digita en **tres archivos de Excel independientes** (en uso hace más de 15 años):
    - Excel 1 ("5C Inmunizaciones"): producción de cada municipio a su **propia población** (primera fila de cada 5C).
@@ -407,4 +407,11 @@ Fuente: los tres Excel de septiembre y agosto de 2026, el documento de aclaracio
 - **Migrantes:** personas de fuera de San Marcos. Cuentan en la producción total (Excel 2), no en la cobertura (Excel 3).
 - **Encabezado de edad:** "De 1 a < 6 años" (reemplaza "De 1 a < 5 años").
 - **Vacunas:** Hexavalente reemplaza a Pentavalente; las semillas siguen el Registro Único de Vacunación (BD v0.7, sujetas a cambios).
-- **Pendiente:** por qué Hepatitis B y BCG suman más en el Excel 3 que en el 2 (¿5C de hospitales?) y el nombre IPV/OPV en las columnas de "< 1 año".
+- ~~Pendiente: por qué Hepatitis B y BCG suman más en el Excel 3 que en el 2 y el nombre IPV/OPV en las columnas de "< 1 año".~~ Aclarado el 18/10/2026 (sección 14.6).
+
+### 14.6 Aclaraciones del 18/10/2026: hospitales y Polio
+- **Hospital de Malacatán:** reporta al Centro de Salud de Malacatán (no con un 5C propio); el centro de salud incluye esos datos en su 5C y entran en los **tres Excel**.
+- **Hospital de San Marcos** (cabecera, donde está la DDRISS): envía **otro 5C directo a la DDRISS**, cuyos datos **solo cuentan en el Excel 3** (cobertura). Por eso el Excel 3 superaba al total en Hepatitis B y BCG, que son dosis del recién nacido.
+- En total la DDRISS recibe **31 formularios 5C**: 30 de los municipios y 1 del Hospital de San Marcos.
+- **IPV y OPV:** son la misma vacuna (polio); lo que cambia es la vía de administración. Cada dosis puede aplicarse como una u otra (p. ej. 1.ª IPV, 2.ª OPV, 3.ª OPV). El sistema las trata como una sola vacuna, **Polio**, y registra en cada dosis si fue IPV u OPV. Ese dato es un **valor agregado**: Epidemiología puede consultarlo si lo necesita.
+- **Base de datos v0.8:** `establecimiento.solo_cobertura` (caso Hospital de San Marcos), `reporta_5c` para los 31, vacuna `POLIO` con la dimensión `presentacion` (IPV u OPV). Detalle en `diseno-bd/03_documento_diseno_bd.md`.

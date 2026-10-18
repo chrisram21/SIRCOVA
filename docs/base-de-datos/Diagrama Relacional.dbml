@@ -1,5 +1,5 @@
 // Plataforma web de producción de vacunación — DDRISS San Marcos (MSPAS)
-// Modelo relacional preliminar v0.7 (MySQL 8.0) en formato DBML para dbdiagram.io
+// Modelo relacional preliminar v0.8 (MySQL 8.0) en formato DBML para dbdiagram.io
 // Generado a partir de 01_modelo_relacional_mysql.sql. Las vistas y los datos
 // semilla no se representan en DBML; están en el script SQL.
 // Los grupos de tablas siguen los cuatro grupos de MySQL de la propuesta v2.
@@ -183,7 +183,8 @@ Table "establecimiento" {
   "distrito_salud_id" SMALLINT [note: 'NULL solo para establecimientos externos a la DDRISS']
   "municipio_id" SMALLINT [not null, note: 'Municipio de aplicación de sus dosis']
   "reporta_produccion" BOOLEAN [not null, default: TRUE, note: 'FALSE si su producción la consolida otro establecimiento']
-  "reporta_5c" BOOLEAN [not null, default: FALSE, note: 'TRUE: centraliza y envía el 5C de su municipio (uno por municipio, casi siempre el centro de salud; lo valida el backend). Base de las alertas de reporte pendiente']
+  "reporta_5c" BOOLEAN [not null, default: FALSE, note: 'TRUE: envía un 5C a la DDRISS. Son 31: el establecimiento que centraliza cada municipio (casi siempre el centro de salud) y el Hospital de San Marcos. Base de las alertas de reporte pendiente']
+  "solo_cobertura" BOOLEAN [not null, default: FALSE, note: 'TRUE: su producción solo cuenta en la cobertura (Excel 3), no en la producción del municipio (Excel 1 y 2). Caso Hospital de San Marcos']
   "es_externo" BOOLEAN [not null, default: FALSE, note: 'TRUE: su municipio no pertenece al territorio de la DDRISS a la que reporta (p. ej. Coatepeque); lo valida el backend']
   "direccion" VARCHAR(255) [note: 'Dirección física (aldea, cantón, zona, calle); el municipio va en municipio_id']
   "telefono" VARCHAR(20)

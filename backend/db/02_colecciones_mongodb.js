@@ -1,7 +1,11 @@
 // =============================================================================
 //  Plataforma web de producción de vacunación — DDRISS San Marcos (MSPAS)
 //  Diseño preliminar de colecciones MongoDB (MongoDB 7.x, ejecutar con mongosh)
-//  Versión: 0.5 (propuesta para revisión)   Fecha: 2026-10-17
+//  Versión: 0.6 (propuesta para revisión)   Fecha: 2026-10-18
+//  Cambios v0.6 (BD v0.8): IPV y OPV se fusionan en la vacuna POLIO (id 6);
+//  nueva dimensión "presentacion" (IPV u OPV) para registrar cómo se aplicó
+//  cada dosis. Es información adicional: la cobertura y la deserción cuentan
+//  las dosis de Polio sin importar la presentación.
 //  Cambios v0.5 (BD v0.7, Excel del 5C y Registro Único de Vacunación):
 //  el grupo de edad 1_A_4 pasa a 1_A_5 ("De 1 a < 6 años", 12 a 72 meses);
 //  Hexavalente reemplaza a Pentavalente en los esquemas, reglas e indicadores
@@ -467,6 +471,15 @@ db_.catalogo_dimensiones.insertMany([
       { codigo: "NO_EMBARAZADA", etiqueta: "No embarazada", orden: NumberInt(2), activo: true }
     ],
     auditoria: auditoriaEjemplo
+  },
+  {
+    codigo: "presentacion", nombre: "Presentación", tipo: "CATEGORICA", activo: true,
+    descripcion: "Cómo se aplicó la dosis de una vacuna con varias presentaciones (p. ej. Polio: IPV inyectada u OPV oral).",
+    valores: [
+      { codigo: "IPV", etiqueta: "IPV (inactivada, inyectada)", orden: NumberInt(1), activo: true },
+      { codigo: "OPV", etiqueta: "OPV (oral)",                  orden: NumberInt(2), activo: true }
+    ],
+    auditoria: auditoriaEjemplo
   }
 ]);
 
@@ -675,11 +688,12 @@ db_.esquemas_captura.insertMany([
     presentacion: { filas: "dosis", columnas: ["seccion", "estado_embarazo"] },
     auditoria: auditoriaEjemplo
   },
-  // OPV: la misma dosis aparece en dos secciones (D1 a D3 en "< 1 año" y en
-  // "De 1 a < 6 años"), y los refuerzos solo en su sección. Ejemplo según el 5C.
+  // Polio: la misma dosis aparece en dos secciones (D1 a D3 en "< 1 año" y en
+  // "De 1 a < 6 años"), y los refuerzos solo en su sección. Cada dosis se
+  // registra como IPV u OPV (dimensión presentacion). Ejemplo según el 5C.
   {
     _id: ObjectId("66f8a1c2e4b0a1b2c3d4e602"),
-    vacuna: { id: NumberInt(6), codigo: "OPV", nombre: "Antipoliomielítica oral (OPV)" },
+    vacuna: { id: NumberInt(6), codigo: "POLIO", nombre: "Polio (IPV u OPV por dosis)" },
     version: NumberInt(1), estado: "VIGENTE",
     vigencia: { desde: new Date("2026-10-01"), hasta: null },
     version_anterior_id: null,
@@ -690,7 +704,8 @@ db_.esquemas_captura.insertMany([
       ],
       procedencia: { modo: "MUNICIPIO_DETALLADO", permite_no_especificado: true },
       desagregacion: [
-        { dimension: "grupo_edad", valores: ["MENOR_1", "1_A_MENOR_2", "4_ANIOS", "1_A_5"] }
+        { dimension: "grupo_edad",   valores: ["MENOR_1", "1_A_MENOR_2", "4_ANIOS", "1_A_5"] },
+        { dimension: "presentacion", valores: ["IPV", "OPV"] }
       ]
     },
     secciones: [
@@ -704,7 +719,7 @@ db_.esquemas_captura.insertMany([
       { codigo: "CAMPOS_COMPLETOS", version: NumberInt(1) },
       { codigo: "NO_NEGATIVO", version: NumberInt(1) }
     ],
-    presentacion: { filas: "dosis", columnas: ["seccion"] },
+    presentacion: { filas: "dosis", columnas: ["seccion", "presentacion"] },
     auditoria: auditoriaEjemplo
   }
 ]);
