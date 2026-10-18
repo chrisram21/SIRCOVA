@@ -30,10 +30,13 @@ security:
   - bearerAuth: []
 
 paths:
-  /health:
+  /salud:
     get:
       tags: [Sistema]
       summary: Estado de la API y de las conexiones a MySQL y MongoDB
+      description: |
+        Comprueba cada base con un tiempo límite de 5 segundos. Solo informa `ok` o `error`;
+        el detalle técnico de la falla queda en el registro del servidor, nunca en la respuesta.
       security: []
       responses:
         "200":
@@ -43,15 +46,21 @@ paths:
               schema:
                 type: object
                 properties:
-                  mysql: { type: string, example: ok }
-                  mongo: { type: string, example: ok }
-        
+                  estado: { type: string, example: ok }
+                  mysql: { type: string, enum: [ok, error], example: ok }
+                  mongo: { type: string, enum: [ok, error], example: ok }
         "503":
           description: Una o ambas bases de datos no responden
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  codigo: BD_NO_DISPONIBLE
+                  mensaje: Una o más bases de datos no responden.
+                  detalles:
+                    - { mysql: ok, mongo: error }
 
   # ---------------------------------------------------------------- Autenticación
   /auth/login:

@@ -16,3 +16,5 @@ Las reglas completas del proyecto están en `AGENTS.md` y se aplican sin excepci
 ## Notas de contexto
 
 Una nota por línea, corta y con la fecha (AAAA-MM-DD): decisiones, convenciones o trampas que conviene recordar al trabajar.
+
+- 2026-10-18: MongoDB se usa siempre con `obtenerDb()` de `src/config/mongodb.js`; si la conexión automática del driver falla, el cliente queda cerrado ("Topology is closed") y no reintenta.
