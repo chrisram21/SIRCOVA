@@ -2,7 +2,7 @@
 
 Proyecto de fin de carrera de Ingeniería en Sistemas Informática y Ciencias de la Computación, Universidad Mesoamericana, sede Quetzaltenango (2026).
 
-> **Estado:** en desarrollo. Modelo de datos preliminar v0.5 (10 de octubre de 2026), preparado para varias DDRISS, y backend preliminar v0.1 (8 de octubre de 2026), que todavía debe adaptarse a la v0.5. Este documento resume lo acordado por el equipo y funciona como **contrato técnico**: cualquier cambio a lo que aquí se fija se discute y se registra antes de aplicarse.
+> **Estado:** en desarrollo. Modelo de datos preliminar: MySQL v0.7 y MongoDB v0.5 (17 de octubre de 2026), preparado para varias DDRISS. El backend está en pausa: el código de `backend/src/` corresponde a una versión anterior del modelo y el equipo lo rehará. Este documento resume lo acordado por el equipo y funciona como **contrato técnico**: cualquier cambio a lo que aquí se fija se discute y se registra antes de aplicarse.
 
 ---
 
@@ -116,7 +116,7 @@ La estructura interna de `frontend/` se definirá cuando inicie su desarrollo.
 
 Requisitos: Docker Desktop (recomendado) o MySQL 8 y MongoDB 7 instalados, y Node.js 22 LTS.
 
-1. Crear las bases con los scripts de `backend/db/` siguiendo la [guía de instalación local](docs/base-de-datos/GUIA%20PARA%20INSTALACION%20DE%20BASE%20DE%20DATOS%20LOCAL.docx). Atención: cada script borra y recrea su base.
+1. Crear las bases con los scripts de `backend/db/` siguiendo la [guía de instalación local](docs/base-de-datos/GUIA%20DE%20INSTALACION%20DE%20BASE%20DE%20DATOS.docx). Atención: cada script borra y recrea su base.
 2. Copiar `backend/.env.example` a `backend/.env` y completar los datos de conexión locales.
 3. Levantar la API (`docker compose up` o `npm install` y arranque desde `backend/`) y abrir `/api/docs`.
 
