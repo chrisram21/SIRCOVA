@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Registro de producción</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',system-ui,sans-serif;background:#f5f8fb;color:#1f3247}
+a{color:#2c4660}a:hover{color:#1f3247}
+.card{background:#ffffff;border:1px solid #e0e7ef;border-radius:10px;padding:20px 22px;box-sizing:border-box}
+.nav{display:flex;align-items:center;gap:12px;height:40px;padding:0 14px;border-radius:8px;color:#34506b;font-size:14px;text-decoration:none}
+.nav:hover{background:#dfe9f3;color:#1f3247}
+.on{background:#dbeaf6;color:#1d4a72;font-weight:600}
+.bw{margin-left:auto;background:#f6d7a8;color:#6b3f00;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px}
+.bc{margin-left:auto;background:#f4c1b6;color:#7a2618;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px}
+.tab{height:36px;padding:0 14px;border-radius:18px;border:1px solid #d5dee8;background:#ffffff;font:inherit;font-size:13px;color:#3c4f63;display:flex;align-items:center}
+.t{border-collapse:collapse;width:100%;font-size:13px}
+.t th{font-weight:600;color:#5f6e7d;font-size:12px;text-align:center;padding:6px 4px;border-bottom:1px solid #e5ebf1}
+.t th.l,.t td.l{text-align:left}
+.t td{padding:5px 4px;border-bottom:1px solid #eff3f7;text-align:center}
+.c{width:62px;height:32px;border:1px solid #d5dee8;border-radius:6px;text-align:right;padding:0 8px;font-family:'IBM Plex Mono',monospace;font-size:13px;background:#ffffff;box-sizing:border-box}
+.tot{font-family:'IBM Plex Mono',monospace;font-weight:600}
+.btn{height:42px;padding:0 18px;border-radius:8px;font:inherit;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1060px; display: flex">
+<nav aria-label="Menú principal" style="width: 240px; flex-shrink: 0; background: #edf3f9; border-right: 1px solid #e0e7ef; padding: 22px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; align-items: center; gap: 10px; padding: 0 10px 22px">
+<svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><rect x="1" y="1" width="28" height="28" rx="7" fill="#2c4660"></rect><path d="M15 7v16M7 15h16" stroke="#ffffff" stroke-width="3" stroke-linecap="round"></path></svg>
+<div style="display: flex; flex-direction: column"><span style="font-weight: 700; font-size: 17px; letter-spacing: 0.02em; color: #1f3247">SIRCOVA</span><span style="color: #5f6e7d; font-size: 11px">DDRISS San Marcos</span></div>
+</div>
+<a class="nav" href="Main.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 11 12 4l9 7"></path><path d="M5 10v10h14V10"></path></svg>Inicio</a>
+<a class="nav on" href="Registro.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>Registro de producción</a>
+<a class="nav" href="Revision.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>Revisión y cierre<span class="bw">6</span></a>
+<a class="nav" href="Indicadores.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3v18h18"></path><path d="M7 15l4-4 3 3 5-6"></path></svg>Indicadores</a>
+<a class="nav" href="Mapa.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"></path><path d="M9 4v14M15 6v14"></path></svg>Mapa territorial</a>
+<a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"></path><path d="M14 3v6h6M8 13h8M8 17h5"></path></svg>Informes</a>
+<a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg>Alertas<span class="bc">5</span></a>
+<a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>Auditoría</a>
+<a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg>Configuración</a>
+<div style="margin-top: auto; padding: 14px 12px; border-radius: 10px; background: #e1eaf3; display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 13px; font-weight: 600">C/S Tacaná</span>
+<span style="color: #4a5d70; font-size: 12px">Rol: Personal del establecimiento</span>
+</div>
+</nav>
+
+<main style="flex-grow: 1; padding: 26px 32px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px">
+<header style="display: flex; justify-content: space-between; align-items: flex-end">
+<div>
+<p style="margin: 0; font-size: 12.5px; color: #5f6e7d; letter-spacing: 0.04em; text-transform: uppercase">Registro de producción · Centro de Salud Tacaná · Municipio de Tacaná</p>
+<h1 style="margin: 4px 0 0; font-size: 26px; font-weight: 700">Reporte mensual de septiembre de 2026</h1>
+</div>
+<ol aria-label="Estado del reporte" style="list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; font-size: 12.5px">
+<li style="padding: 6px 12px; border-radius: 16px; background: #2c4660; color: #ffffff; font-weight: 600">Borrador</li>
+<li style="padding: 6px 12px; border-radius: 16px; background: #e5ebf1; color: #5f6e7d">Enviado</li>
+<li style="padding: 6px 12px; border-radius: 16px; background: #e5ebf1; color: #5f6e7d">En revisión</li>
+<li style="padding: 6px 12px; border-radius: 16px; background: #e5ebf1; color: #5f6e7d">Aprobado</li>
+<li style="padding: 6px 12px; border-radius: 16px; background: #e5ebf1; color: #5f6e7d">Cerrado</li>
+</ol>
+</header>
+
+<div role="tablist" aria-label="Vacunas" style="display: flex; gap: 8px; flex-wrap: wrap">
+<button type="button" class="tab" role="tab">BCG <span style="margin-left: 6px; color: #0f7a3a">✓</span></button>
+<button type="button" class="tab" role="tab">Hepatitis B <span style="margin-left: 6px; color: #0f7a3a">✓</span></button>
+<button type="button" class="tab" role="tab" aria-selected="true" style="background: #dbeaf6; color: #1d4a72; border-color: #a7cbe8; font-weight: 600">Hexavalente</button>
+<button type="button" class="tab" role="tab">IPV / bOPV</button>
+<button type="button" class="tab" role="tab">Rotavirus</button>
+<button type="button" class="tab" role="tab">Neumococo</button>
+<button type="button" class="tab" role="tab">SPR</button>
+<button type="button" class="tab" role="tab">DPT refuerzos</button>
+<button type="button" class="tab" role="tab">Td</button>
+</div>
+
+<div style="display: flex; gap: 18px; align-items: flex-start">
+<div style="flex-grow: 1; display: flex; flex-direction: column; gap: 16px">
+<section class="card" style="display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; justify-content: space-between; align-items: flex-start">
+<div>
+<h2 style="margin: 0; font-size: 16px">A. Dosis aplicadas a residentes de Tacaná</h2>
+<p style="margin: 2px 0 0; font-size: 12.5px; color: #5f6e7d">Formulario generado por el esquema de captura: Hexavalente, versión 3, vigente desde 01/01/2026</p>
+</div>
+<span style="font-size: 12px; padding: 4px 10px; border-radius: 12px; background: #e6efe9; color: #1d5b3a; white-space: nowrap">Guardado hace 1 min</span>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-radius: 8px; background: #eef6fc; font-size: 12.5px; color: #1f4760">
+<span>Dimensiones de este esquema:</span>
+<span style="padding: 3px 10px; border-radius: 12px; background: #ffffff; border: 1px solid #b5d4ee; font-weight: 600">Dosis</span>
+<span style="padding: 3px 10px; border-radius: 12px; background: #ffffff; border: 1px solid #b5d4ee; font-weight: 600">Grupo de edad</span>
+<span style="padding: 3px 10px; border-radius: 12px; background: #ffffff; border: 1px solid #b5d4ee; font-weight: 600">Sexo</span>
+<span style="margin-left: auto; color: #3c5566">Las columnas cambian según la vacuna. <a href="Registro-Td.dc.html">Ver ejemplo con Td</a></span>
+</div>
+<table class="t">
+<thead>
+<tr><th class="l" rowspan="2">Dosis</th><th colspan="2">Menor de 1 año</th><th colspan="2">1 año</th><th colspan="2">2 a 4 años</th><th rowspan="2">Total</th></tr>
+<tr><th>Hombres</th><th>Mujeres</th><th>Hombres</th><th>Mujeres</th><th>Hombres</th><th>Mujeres</th></tr>
+</thead>
+<tbody>
+<tr><td class="l">1.ª dosis</td><td><input class="c" value="78" aria-label="1.ª dosis, menor de 1 año, hombres"></td><td><input class="c" value="74" aria-label="1.ª dosis, menor de 1 año, mujeres"></td><td><input class="c" value="4" aria-label="1.ª dosis, 1 año, hombres"></td><td><input class="c" value="3" aria-label="1.ª dosis, 1 año, mujeres"></td><td><input class="c" value="1" aria-label="1.ª dosis, 2 a 4 años, hombres"></td><td><input class="c" value="0" aria-label="1.ª dosis, 2 a 4 años, mujeres"></td><td class="tot">160</td></tr>
+<tr><td class="l">2.ª dosis</td><td><input class="c" value="71" aria-label="2.ª dosis, menor de 1 año, hombres"></td><td><input class="c" value="69" aria-label="2.ª dosis, menor de 1 año, mujeres"></td><td><input class="c" value="5" aria-label="2.ª dosis, 1 año, hombres"></td><td><input class="c" value="4" aria-label="2.ª dosis, 1 año, mujeres"></td><td><input class="c" value="0" aria-label="2.ª dosis, 2 a 4 años, hombres"></td><td><input class="c" value="1" aria-label="2.ª dosis, 2 a 4 años, mujeres"></td><td class="tot">150</td></tr>
+<tr><td class="l">3.ª dosis</td><td><input class="c" value="62" aria-label="3.ª dosis, menor de 1 año, hombres"></td><td><input class="c" value="" aria-label="3.ª dosis, menor de 1 año, mujeres" style="border: 2px solid #b73a3a; background: #fdf3f3"></td><td><input class="c" value="8" aria-label="3.ª dosis, 1 año, hombres" style="border: 2px solid #c98500; background: #fff8e8"></td><td><input class="c" value="7" aria-label="3.ª dosis, 1 año, mujeres"></td><td><input class="c" value="1" aria-label="3.ª dosis, 2 a 4 años, hombres"></td><td><input class="c" value="0" aria-label="3.ª dosis, 2 a 4 años, mujeres"></td><td class="tot" style="color: #8a2424">—</td></tr>
+</tbody>
+</table>
+</section>
+
+<section class="card" style="display: flex; flex-direction: column; gap: 12px">
+<div>
+<h2 style="margin: 0; font-size: 16px">B. Dosis aplicadas a personas de otros municipios</h2>
+<p style="margin: 2px 0 0; font-size: 12.5px; color: #5f6e7d">Se atribuyen al municipio de procedencia al calcular la cobertura. Solo cantidades, sin datos personales.</p>
+</div>
+<table class="t">
+<thead>
+<tr><th class="l">Municipio de procedencia</th><th class="l">Dosis</th><th class="l">Grupo de edad</th><th>Hombres</th><th>Mujeres</th><th>Total</th><th><span style="position: absolute; left: -9999px">Acciones</span></th></tr>
+</thead>
+<tbody>
+<tr><td class="l">Sibinal</td><td class="l">1.ª dosis</td><td class="l">Menor de 1 año</td><td><input class="c" value="2" aria-label="Hombres"></td><td><input class="c" value="1" aria-label="Mujeres"></td><td class="tot">3</td><td><button type="button" aria-label="Quitar fila" style="border: 0; background: none; color: #5f6e7d; cursor: pointer; height: 32px; width: 32px">✕</button></td></tr>
+<tr><td class="l">Sibinal</td><td class="l">3.ª dosis</td><td class="l">Menor de 1 año</td><td><input class="c" value="1" aria-label="Hombres"></td><td><input class="c" value="2" aria-label="Mujeres"></td><td class="tot">3</td><td><button type="button" aria-label="Quitar fila" style="border: 0; background: none; color: #5f6e7d; cursor: pointer; height: 32px; width: 32px">✕</button></td></tr>
+<tr><td class="l">San José Ojetenam</td><td class="l">2.ª dosis</td><td class="l">Menor de 1 año</td><td><input class="c" value="1" aria-label="Hombres"></td><td><input class="c" value="0" aria-label="Mujeres"></td><td class="tot">1</td><td><button type="button" aria-label="Quitar fila" style="border: 0; background: none; color: #5f6e7d; cursor: pointer; height: 32px; width: 32px">✕</button></td></tr>
+<tr><td class="l">Guatemala (otro departamento)</td><td class="l">1.ª dosis</td><td class="l">1 año</td><td><input class="c" value="0" aria-label="Hombres"></td><td><input class="c" value="1" aria-label="Mujeres"></td><td class="tot">1</td><td><button type="button" aria-label="Quitar fila" style="border: 0; background: none; color: #5f6e7d; cursor: pointer; height: 32px; width: 32px">✕</button></td></tr>
+</tbody>
+</table>
+<button type="button" style="align-self: flex-start; height: 38px; padding: 0 14px; border-radius: 8px; border: 1px dashed #8b97a3; background: none; font: inherit; font-size: 13px; color: #2c4660; font-weight: 600; cursor: pointer">+ Agregar municipio de procedencia</button>
+</section>
+</div>
+
+<aside style="width: 340px; flex-shrink: 0; display: flex; flex-direction: column; gap: 16px">
+<section class="card" style="display: flex; flex-direction: column; gap: 12px">
+<h2 style="margin: 0; font-size: 16px">Validación automática</h2>
+<div style="display: flex; gap: 10px; padding: 12px; border-radius: 8px; background: #fbeaea">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b73a3a" stroke-width="2.2" aria-hidden="true" style="flex-shrink: 0"><circle cx="12" cy="12" r="9"></circle><path d="m15 9-6 6M9 9l6 6"></path></svg>
+<div style="display: flex; flex-direction: column; gap: 3px; font-size: 13px"><strong style="color: #8a2424">Error · bloquea el envío</strong><span>Falta la 3.ª dosis en mujeres menores de 1 año. Escriba 0 si no hubo.</span></div>
+</div>
+<div style="display: flex; gap: 10px; padding: 12px; border-radius: 8px; background: #fff5dd">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a16207" stroke-width="2.2" aria-hidden="true" style="flex-shrink: 0"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"></path><path d="M12 9v4M12 17h.01"></path></svg>
+<div style="display: flex; flex-direction: column; gap: 3px; font-size: 13px"><strong style="color: #7a4a06">Advertencia</strong><span>En 1 año, la 3.ª dosis (15) supera a la 1.ª (7). Confirme si son esquemas atrasados.</span></div>
+</div>
+<div style="display: flex; gap: 10px; padding: 12px; border-radius: 8px; background: #fff5dd">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a16207" stroke-width="2.2" aria-hidden="true" style="flex-shrink: 0"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"></path><path d="M12 9v4M12 17h.01"></path></svg>
+<div style="display: flex; flex-direction: column; gap: 3px; font-size: 13px"><strong style="color: #7a4a06">Advertencia</strong><span>La 1.ª dosis es 18% menor que el promedio de los últimos 3 meses.</span></div>
+</div>
+</section>
+<section class="card" style="display: flex; flex-direction: column; gap: 10px; font-size: 13px">
+<h2 style="margin: 0; font-size: 16px">Resumen del reporte</h2>
+<div style="display: flex; justify-content: space-between"><span>Vacunas completas</span><strong>2 de 9</strong></div>
+<div style="display: flex; justify-content: space-between"><span>Dosis a residentes (Hexavalente)</span><strong>310 + pendiente</strong></div>
+<div style="display: flex; justify-content: space-between"><span>Dosis a otros municipios</span><strong>8</strong></div>
+<div style="display: flex; justify-content: space-between"><span>Fecha límite de envío</span><strong>05/10/2026</strong></div>
+</section>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<button type="button" class="btn" disabled style="justify-content: center; background: #b9c4d0; color: #ffffff; border: 0; cursor: not-allowed">Enviar a revisión</button>
+<button type="button" class="btn" style="justify-content: center; background: #ffffff; color: #2c4660; border: 1px solid #2c4660">Guardar borrador</button>
+<p style="margin: 0; font-size: 12px; color: #5f6e7d">Corrija el error para poder enviar. Las advertencias no bloquean el envío; la estadígrafa las verá.</p>
+</div>
+</aside>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1060}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Mapa territorial</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',system-ui,sans-serif;background:#f5f8fb;color:#1f3247}
+a{color:#2c4660}a:hover{color:#1f3247}
+.card{background:#ffffff;border:1px solid #e0e7ef;border-radius:10px;box-sizing:border-box}
+.nav{display:flex;align-items:center;gap:12px;height:40px;padding:0 14px;border-radius:8px;color:#34506b;font-size:14px;text-decoration:none}
+.nav:hover{background:#dfe9f3;color:#1f3247}
+.on{background:#dbeaf6;color:#1d4a72;font-weight:600}
+.bw{margin-left:auto;background:#f6d7a8;color:#6b3f00;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px}
+.bc{margin-left:auto;background:#f4c1b6;color:#7a2618;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px}
+.seg{height:36px;padding:0 14px;border:0;background:none;font:inherit;font-size:13px;color:#3c4f63;border-radius:6px}
+.tile{border-radius:8px;padding:9px 10px;display:flex;flex-direction:column;justify-content:space-between;box-sizing:border-box}
+.tn{font-size:12.5px;line-height:1.2;font-weight:500}
+.tv{font-size:17px;font-family:'IBM Plex Mono',monospace;font-weight:500}
+.kv{display:flex;justify-content:space-between;font-size:13.5px;padding:7px 0;border-bottom:1px solid #eff3f7}
+.kv strong{font-family:'IBM Plex Mono',monospace}
+</style>
+</helmet>
+<div style="width: 1440px; height: 960px; display: flex">
+<nav aria-label="Menú principal" style="width: 240px; flex-shrink: 0; background: #edf3f9; border-right: 1px solid #e0e7ef; padding: 22px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; align-items: center; gap: 10px; padding: 0 10px 22px">
+<svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><rect x="1" y="1" width="28" height="28" rx="7" fill="#2c4660"></rect><path d="M15 7v16M7 15h16" stroke="#ffffff" stroke-width="3" stroke-linecap="round"></path></svg>
+<div style="display: flex; flex-direction: column"><span style="font-weight: 700; font-size: 17px; letter-spacing: 0.02em; color: #1f3247">SIRCOVA</span><span style="color: #5f6e7d; font-size: 11px">DDRISS San Marcos</span></div>
+</div>
+<a class="nav" href="Main.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 11 12 4l9 7"></path><path d="M5 10v10h14V10"></path></svg>Inicio</a>
+<a class="nav" href="Registro.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>Registro de producción</a>
+<a class="nav" href="Revision.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>Revisión y cierre<span class="bw">6</span></a>
+<a class="nav" href="Indicadores.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3v18h18"></path><path d="M7 15l4-4 3 3 5-6"></path></svg>Indicadores</a>
+<a class="nav on" href="Mapa.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"></path><path d="M9 4v14M15 6v14"></path></svg>Mapa territorial</a>
+<a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"></path><path d="M14 3v6h6M8 13h8M8 17h5"></path></svg>Informes</a>
+<a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg>Alertas<span class="bc">5</span></a>
+<a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>Auditoría</a>
+<a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg>Configuración</a>
+<div style="margin-top: auto; padding: 14px 12px; border-radius: 10px; background: #e1eaf3; display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 13px; font-weight: 600">Usuario de Epidemiología</span>
+<span style="color: #4a5d70; font-size: 12px">Rol: Epidemiología</span>
+</div>
+</nav>
+
+<main style="flex-grow: 1; padding: 26px 32px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px">
+<header style="display: flex; justify-content: space-between; align-items: flex-end">
+<div>
+<p style="margin: 0; font-size: 12.5px; color: #5f6e7d; letter-spacing: 0.04em; text-transform: uppercase">Mapa territorial · Hexavalente 3.ª dosis · Ene a Ago 2026</p>
+<h1 style="margin: 4px 0 0; font-size: 26px; font-weight: 700">¿Dónde está el rezago de cobertura?</h1>
+</div>
+<div role="group" aria-label="Indicador" style="display: flex; padding: 3px; border-radius: 8px; background: #e5ebf1">
+<button type="button" class="seg" aria-pressed="true" style="background: #ffffff; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.08)">Cobertura</button>
+<button type="button" class="seg">Brecha</button>
+<button type="button" class="seg">Deserción</button>
+<button type="button" class="seg">Estado del reporte</button>
+</div>
+</header>
+
+<div style="display: flex; gap: 18px; flex-grow: 1">
+<section class="card" style="flex-grow: 1; padding: 20px 22px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px">
+<span style="color: #5f6e7d">Clic en un municipio para ver su detalle</span>
+<div role="group" aria-label="Atribución" style="display: flex; gap: 6px; align-items: center"><span style="color: #5f6e7d">Atribuir dosis por:</span><button type="button" class="seg" aria-pressed="true" style="background: #dbeaf6; color: #1d4a72">Procedencia</button><button type="button" class="seg" style="border: 1px solid #d5dee8">Lugar de aplicación</button></div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); grid-template-rows: repeat(6, 104px); gap: 6px">
+<div class="tile" style="grid-column: 1; grid-row: 1; background: #e0998d; color: #3a0d06"><span class="tn">Sibinal</span><span class="tv">42.3%</span></div>
+<div class="tile" style="grid-column: 2; grid-row: 1; background: #e0998d; color: #3a0d06; box-shadow: 0 0 0 3px #ffffff, 0 0 0 6px #1f3247"><span class="tn">Tacaná</span><span class="tv">39.8%</span></div>
+<div class="tile" style="grid-column: 3; grid-row: 1; background: #e0998d; color: #3a0d06"><span class="tn">San José Ojetenam</span><span class="tv">49.6%</span></div>
+<div class="tile" style="grid-column: 4; grid-row: 1; background: #f4d6b8; color: #4a2c12"><span class="tn">Ixchiguán</span><span class="tv">55.2%</span></div>
+<div class="tile" style="grid-column: 5; grid-row: 1; background: #e0998d; color: #3a0d06"><span class="tn">Concepción Tutuapa</span><span class="tv">44.1%</span></div>
+<div class="tile" style="grid-column: 3; grid-row: 2; background: #e0998d; color: #3a0d06"><span class="tn">Tajumulco</span><span class="tv">48.9%</span></div>
+<div class="tile" style="grid-column: 4; grid-row: 2; background: #b9dcc3; color: #1d4a2e"><span class="tn">Tejutla</span><span class="tv">67.4%</span></div>
+<div class="tile" style="grid-column: 5; grid-row: 2; background: #b9dcc3; color: #1d4a2e"><span class="tn">Comitancillo</span><span class="tv">58.7%</span></div>
+<div class="tile" style="grid-column: 6; grid-row: 2; background: #b9dcc3; color: #1d4a2e"><span class="tn">San Miguel Ixtahuacán</span><span class="tv">61.5%</span></div>
+<div class="tile" style="grid-column: 1; grid-row: 3; background: #f4d6b8; color: #4a2c12"><span class="tn">Malacatán</span><span class="tv">52.4%</span></div>
+<div class="tile" style="grid-column: 2; grid-row: 3; background: #b9dcc3; color: #1d4a2e"><span class="tn">San Pablo</span><span class="tv">64.9%</span></div>
+<div class="tile" style="grid-column: 3; grid-row: 3; background: #b9dcc3; color: #1d4a2e"><span class="tn">San Rafael Pie de la Cuesta</span><span class="tv">69.8%</span></div>
+<div class="tile" style="grid-column: 4; grid-row: 3; background: #b9dcc3; color: #1d4a2e"><span class="tn">San Lorenzo</span><span class="tv">58.2%</span></div>
+<div class="tile" style="grid-column: 5; grid-row: 3; background: #b9dcc3; color: #1d4a2e"><span class="tn">Río Blanco</span><span class="tv">74.1%</span></div>
+<div class="tile" style="grid-column: 6; grid-row: 3; background: #f4d6b8; color: #4a2c12"><span class="tn">Sipacapa</span><span class="tv">51.3%</span></div>
+<div class="tile" style="grid-column: 1; grid-row: 4; background: #f4d6b8; color: #4a2c12"><span class="tn">Catarina</span><span class="tv">53.6%</span></div>
+<div class="tile" style="grid-column: 2; grid-row: 4; background: #b9dcc3; color: #1d4a2e"><span class="tn">El Tumbador</span><span class="tv">60.1%</span></div>
+<div class="tile" style="grid-column: 3; grid-row: 4; background: #b9dcc3; color: #1d4a2e"><span class="tn">Esquipulas Palo Gordo</span><span class="tv">70.4%</span></div>
+<div class="tile" style="grid-column: 4; grid-row: 4; background: #b9dcc3; color: #1d4a2e"><span class="tn">San Marcos</span><span class="tv">66.8%</span></div>
+<div class="tile" style="grid-column: 5; grid-row: 4; background: #b9dcc3; color: #1d4a2e"><span class="tn">San Pedro Sacatepéquez</span><span class="tv">71.2%</span></div>
+<div class="tile" style="grid-column: 6; grid-row: 4; background: #b9dcc3; color: #1d4a2e"><span class="tn">San Antonio Sacatepéquez</span><span class="tv">72.5%</span></div>
+<div class="tile" style="grid-column: 1; grid-row: 5; background: #b9dcc3; color: #1d4a2e"><span class="tn">Ayutla</span><span class="tv">59.4%</span></div>
+<div class="tile" style="grid-column: 2; grid-row: 5; background: #b9dcc3; color: #1d4a2e"><span class="tn">Pajapita</span><span class="tv">62.1%</span></div>
+<div class="tile" style="grid-column: 3; grid-row: 5; background: #b9dcc3; color: #1d4a2e"><span class="tn">El Rodeo</span><span class="tv">65.2%</span></div>
+<div class="tile" style="grid-column: 4; grid-row: 5; background: #b9dcc3; color: #1d4a2e"><span class="tn">Nuevo Progreso</span><span class="tv">57.3%</span></div>
+<div class="tile" style="grid-column: 5; grid-row: 5; background: #b9dcc3; color: #1d4a2e"><span class="tn">San Cristóbal Cucho</span><span class="tv">63.8%</span></div>
+<div class="tile" style="grid-column: 1; grid-row: 6; background: #e0998d; color: #3a0d06"><span class="tn">Ocós</span><span class="tv">46.7%</span></div>
+<div class="tile" style="grid-column: 2; grid-row: 6; background: #f4d6b8; color: #4a2c12"><span class="tn">La Blanca</span><span class="tv">54.8%</span></div>
+<div class="tile" style="grid-column: 3; grid-row: 6; background: #b9dcc3; color: #1d4a2e"><span class="tn">El Quetzal</span><span class="tv">68.3%</span></div>
+<div class="tile" style="grid-column: 4; grid-row: 6; background: #f4d6b8; color: #4a2c12"><span class="tn">La Reforma</span><span class="tv">56.9%</span></div>
+<div style="grid-column: 5 / span 2; grid-row: 6; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; font-size: 12px; color: #3c4f63; padding-left: 10px">
+<span style="font-weight: 600; color: #1f3247">Avance contra la meta del mes</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 12px; height: 12px; border-radius: 3px; background: #b9dcc3"></span>90% o más</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 12px; height: 12px; border-radius: 3px; background: #f4d6b8"></span>80 a 89.9%</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 12px; height: 12px; border-radius: 3px; background: #e0998d"></span>Menos de 80%</span>
+</div>
+</div>
+<p style="margin: 0; font-size: 12px; color: #5f6e7d">Vista esquemática para el prototipo. En el sistema se dibuja con Leaflet sobre los límites oficiales de los 30 municipios (GeoJSON), con zoom y tooltip.</p>
+</section>
+
+<aside class="card" style="width: 340px; flex-shrink: 0; padding: 20px 22px; display: flex; flex-direction: column; gap: 12px">
+<div>
+<p style="margin: 0; font-size: 12px; color: #5f6e7d">Municipio seleccionado</p>
+<h2 style="margin: 2px 0 0; font-size: 22px">Tacaná</h2>
+</div>
+<div style="display: flex; align-items: baseline; gap: 10px">
+<span style="font-size: 38px; font-weight: 700">39.8%</span>
+<span style="font-size: 13px; color: #8a2424; font-weight: 600">63% de la meta del mes</span>
+</div>
+<div style="position: relative; height: 10px; border-radius: 5px; background: #e5ebf1" aria-hidden="true">
+<span style="position: absolute; left: 0; top: 0; bottom: 0; width: 39.8%; background: #e0998d; border-radius: 5px"></span>
+<span style="position: absolute; left: 63.3%; top: -4px; bottom: -4px; border-left: 2px solid #1f3247"></span>
+</div>
+<div style="display: flex; flex-direction: column">
+<div class="kv"><span>Población objetivo (menores de 1 año)</span><strong>1,790</strong></div>
+<div class="kv"><span>Dosis Hexa 3 atribuidas</span><strong>712</strong></div>
+<div class="kv"><span>Brecha a la meta proporcional</span><strong>422</strong></div>
+<div class="kv"><span>Deserción Hexa 1 a Hexa 3</span><strong>7.9%</strong></div>
+<div class="kv"><span>Reporte de agosto</span><span style="font-weight: 600; color: #2f5f8a">Cerrado</span></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+<strong>Atribución territorial</strong>
+<div class="kv" style="border: 0; padding: 2px 0"><span>Aplicadas en Tacaná</span><strong>745</strong></div>
+<div class="kv" style="border: 0; padding: 2px 0"><span>menos: a residentes de otros municipios</span><strong>−51</strong></div>
+<div class="kv" style="border: 0; padding: 2px 0"><span>más: a residentes de Tacaná en otros municipios</span><strong>+18</strong></div>
+<div class="kv" style="border-top: 1px solid #d5dee8; border-bottom: 0; padding-top: 6px"><span>Atribuidas a Tacaná</span><strong>712</strong></div>
+</div>
+<a href="#" style="margin-top: auto; height: 42px; border-radius: 8px; background: #2c4660; color: #ffffff; font-weight: 600; font-size: 14px; display: flex; align-items: center; justify-content: center; text-decoration: none">Ver informe del municipio</a>
+</aside>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":960}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

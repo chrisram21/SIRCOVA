@@ -2,7 +2,7 @@
 
 Proyecto de fin de carrera de Ingeniería en Sistemas Informática y Ciencias de la Computación, Universidad Mesoamericana, sede Quetzaltenango (2026).
 
-> **Estado:** en desarrollo. Modelo de datos preliminar: MySQL v0.8 y MongoDB v0.6 (18 de octubre de 2026), preparado para varias DDRISS. El backend está en pausa: el código de `backend/src/` corresponde a una versión anterior del modelo y el equipo lo rehará. Este documento resume lo acordado por el equipo y funciona como **contrato técnico**: cualquier cambio a lo que aquí se fija se discute y se registra antes de aplicarse.
+> **Estado:** en desarrollo. Modelo de datos preliminar: MySQL v0.8 y MongoDB v0.6 (18 de octubre de 2026), preparado para varias DDRISS. El backend se rehace desde cero sobre este modelo y se desarrolla en paralelo con el frontend. Este documento resume lo acordado por el equipo y funciona como **contrato técnico**: cualquier cambio a lo que aquí se fija se discute y se registra antes de aplicarse.
 
 ---
 
@@ -33,18 +33,22 @@ SIRCOVA es un sistema web centralizado para la **DDRISS San Marcos** (Dirección
 
 | Capa | Tecnología |
 |---|---|
-| Interfaz web | React |
+| Interfaz web | React con Vite, en JavaScript (JSX), con Tailwind CSS, shadcn/ui y Radix UI |
 | API y lógica de negocio | Node.js 22 LTS + Express, en JavaScript (API REST) |
 | Documentación de la API | OpenAPI 3 (`openapi.yaml`), visible con Swagger UI en `/api/docs` |
 | Base de datos relacional | MySQL 8 (`vacunacion_ddriss`), conexión con `mysql2` |
 | Base de datos documental | MongoDB 7 (`vacunacion_config`), controlador oficial `mongodb` |
-| Autenticación | JWT; contraseñas con bcrypt o argon2 |
+| Autenticación | JWT; contraseñas con bcrypt |
 | Mapa | Leaflet + GeoJSON de los municipios de San Marcos |
+| Gráficos | Recharts, a través del componente Chart de shadcn |
+| Informes | Excel con ExcelJS y PDF con pdfmake, generados en el backend |
 | Contenedores | Docker y Docker Compose |
 | Despliegue | DigitalOcean, Droplet Linux (fase final) |
 | Apoyo | Git/GitHub, Postman, MySQL Workbench, MongoDB Compass, Draw.io |
 
-**Pendientes de decisión:** librería de gráficos para React y herramienta de generación de PDF. No se agregan librerías fuera de esta lista sin acuerdo del equipo.
+Los Excel y PDF se generan en el backend (un endpoint devuelve el archivo) para que respeten los permisos y el alcance por DDRISS y para que la exportación quede en la bitácora; el frontend solo los descarga.
+
+La lista de dependencias permitidas del backend y del frontend está en `AGENTS.md` (sección 3). No se agregan librerías fuera de esa lista sin acuerdo del equipo.
 
 ## 4. Bases de datos
 
@@ -68,7 +72,7 @@ Detalle completo en [`docs/base-de-datos/CONTEXTO BD.md`](docs/base-de-datos/CON
 ## 5. Enfoque de desarrollo
 
 - **Metodología:** Scrum por incrementos funcionales (5 sprints entre el 24 de septiembre y el 12 de noviembre de 2026, más una fase final de pruebas, despliegue y capacitación hasta el 30 de noviembre).
-- **Orden actual:** primero el **backend** (API documentada en OpenAPI); el **frontend** en React se construye después, sobre esa API. La regla es *contrato primero*: si se agrega o cambia un endpoint, se actualiza `openapi.yaml` antes de programarlo.
+- **Orden de trabajo:** backend y frontend se desarrollan **en paralelo**. En cada spec, primero se escribe el contrato en `backend/openapi.yaml`, después el endpoint y después la pantalla, que consume la API real conectada a las bases de prueba (Aiven MySQL y MongoDB Atlas). No se usan servidores simulados. La regla es *contrato primero*: si se agrega o cambia un endpoint, se actualiza `openapi.yaml` antes de programarlo.
 
 ## 6. Trabajo con agentes de IA
 
@@ -81,7 +85,7 @@ Resumen de esas reglas:
 1. Antes de trabajar, leer la documentación de `docs/` y `openapi.yaml`.
 2. Respetar la estructura de carpetas y las capas (rutas, controlador, servicio).
 3. Cumplir las reglas del negocio: solo datos agregados, permisos en el backend, cambios de estado solo por `POST /reportes/{id}/transiciones`, versiones inmutables y bitácora.
-4. No cambiar el modelo de datos ni los scripts de BD, no agregar librerías y no desactivar pruebas sin autorización.
+4. No cambiar el modelo de datos ni los scripts de BD, no agregar librerías fuera de la lista de `AGENTS.md` y no desactivar pruebas sin autorización.
 5. Limitar los cambios a la tarea, verificar que la API arranca y que los endpoints tocados responden según `openapi.yaml`, e indicar qué se cambió y cómo se comprobó.
 6. Detenerse y preguntar si la tarea contradice la documentación o toca la base de datos, los permisos o los estados del reporte.
 
@@ -96,7 +100,7 @@ Resumen de esas reglas:
 │   ├── contexto/          ← resumen de la propuesta del proyecto
 │   ├── base-de-datos/     ← documento de diseño, contexto de BD, diagramas, guía de instalación local
 │   ├── backend/           ← INSTRUCCIONES_BACKEND.md
-│   └── mockups/           ← descripción de pantallas
+│   └── mockups/           ← descripción de pantallas y pantallas de referencia (pantallas/*.html)
 ├── backend/
 │   ├── openapi.yaml
 │   ├── .env.example       ← variables sin valores reales
@@ -107,20 +111,32 @@ Resumen de esas reglas:
 │       ├── config/, middlewares/
 │       └── modulos/       ← auth, usuarios, catalogos, configuracion, produccion,
 │                            revision, indicadores, auditoria
-└── frontend/              ← pendiente (React)
+└── frontend/              ← React + Vite
+    ├── components.json    ← configuración de shadcn
+    ├── .env.example
+    └── src/
+        ├── main.jsx, App.jsx
+        ├── index.css      ← Tailwind y variables del tema (colores del MSPAS)
+        ├── api/           ← cliente único de la API
+        ├── components/ui/ ← componentes generados por shadcn
+        ├── lib/utils.js   ← función cn de shadcn
+        ├── componentes/   ← componentes propios
+        └── paginas/       ← una carpeta por pantalla
 ```
 
-La estructura interna de `frontend/` se definirá cuando inicie su desarrollo.
+`components/ui/` y `lib/` quedan en inglés porque los genera shadcn; el resto del código propio va en español. Las reglas del frontend están en `AGENTS.md` (sección 4).
 
 ## 8. Entorno local (resumen)
 
-Requisitos: Docker Desktop (recomendado) o MySQL 8 y MongoDB 7 instalados, y Node.js 22 LTS.
+Requisitos: Node.js 22 LTS. El desarrollo se hace contra las **bases de prueba** en Aiven (MySQL) y MongoDB Atlas.
 
-1. Crear las bases con los scripts de `backend/db/` siguiendo la [guía de instalación local](docs/base-de-datos/GUIA%20DE%20INSTALACION%20DE%20BASE%20DE%20DATOS.docx). Atención: cada script borra y recrea su base.
-2. Copiar `backend/.env.example` a `backend/.env` y completar los datos de conexión locales.
-3. Levantar la API (`docker compose up` o `npm install` y arranque desde `backend/`) y abrir `/api/docs`.
+1. Copiar `backend/.env.example` a `backend/.env` y completar los datos de conexión de las bases de prueba. Guardar el certificado CA de Aiven en `backend/certs/ca.pem` (la carpeta `certs/` no se sube).
+2. Copiar `frontend/.env.example` a `frontend/.env`.
+3. Levantar la API desde `backend/` y abrir `/api/docs`; levantar el frontend con Vite desde `frontend/`.
 
-Los comandos exactos del paso 3 quedan **pendientes** hasta que exista el código inicial del backend.
+Alternativa sin conexión: Docker Desktop o MySQL 8 y MongoDB 7 instalados, con las bases creadas por los scripts de `backend/db/` según la [guía de instalación local](docs/base-de-datos/GUIA%20DE%20INSTALACION%20DE%20BASE%20DE%20DATOS.docx). Atención: cada script borra y recrea su base.
+
+Los comandos exactos del paso 3 quedan **pendientes** hasta que exista el código inicial del backend y del frontend.
 
 ## 9. Convenciones
 

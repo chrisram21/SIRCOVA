@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Inicio</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',system-ui,sans-serif;background:#f5f8fb;color:#1f3247}
+a{color:#2f6fa6}a:hover{color:#1d557b}
+.card{background:#ffffff;border:1px solid #e0e7ef;border-radius:12px;padding:20px 22px;box-sizing:border-box}
+.ctitle{margin:0;font-size:15px;font-weight:600}
+.csub{margin:2px 0 0;font-size:12.5px;color:#5f6e7d}
+.nav{display:flex;align-items:center;gap:12px;height:40px;padding:0 14px;border-radius:8px;color:#34506b;font-size:14px;text-decoration:none}
+.nav:hover{background:#dfe9f3;color:#1f3247}
+.on{background:#dbeaf6;color:#1d4a72;font-weight:600}
+.bw{margin-left:auto;background:#f6d7a8;color:#6b3f00;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px}
+.bc{margin-left:auto;background:#f4c1b6;color:#7a2618;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px}
+.quick{display:flex;flex-direction:column;gap:10px;text-decoration:none;color:#1f3247;padding:20px;border-radius:12px;border:1px solid #e0e7ef;background:#ffffff}
+.quick:hover{border-color:#a7cbe8;color:#1f3247}
+.qi{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; display: flex; background: #f5f8fb">
+
+<nav aria-label="Menú principal" style="width: 240px; flex-shrink: 0; background: #edf3f9; border-right: 1px solid #e0e7ef; padding: 22px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; align-items: center; gap: 10px; padding: 0 10px 22px">
+<svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><rect x="1" y="1" width="28" height="28" rx="7" fill="#2c4660"></rect><path d="M15 7v16M7 15h16" stroke="#ffffff" stroke-width="3" stroke-linecap="round"></path></svg>
+<div style="display: flex; flex-direction: column"><span style="font-weight: 700; font-size: 17px; letter-spacing: 0.02em; color: #1f3247">SIRCOVA</span><span style="color: #5f6e7d; font-size: 11px">DDRISS San Marcos</span></div>
+</div>
+<a class="nav on" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 11 12 4l9 7"></path><path d="M5 10v10h14V10"></path></svg>Inicio</a>
+<a class="nav" href="Registro.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>Registro de producción</a>
+<a class="nav" href="Revision.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>Revisión y cierre<span class="bw">6</span></a>
+<a class="nav" href="Indicadores.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3v18h18"></path><path d="M7 15l4-4 3 3 5-6"></path></svg>Indicadores</a>
+<a class="nav" href="Mapa.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"></path><path d="M9 4v14M15 6v14"></path></svg>Mapa territorial</a>
+<a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"></path><path d="M14 3v6h6M8 13h8M8 17h5"></path></svg>Informes</a>
+<a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg>Alertas<span class="bc">5</span></a>
+<a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>Auditoría</a>
+<a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg>Configuración</a>
+<div style="margin-top: auto; padding: 14px 12px; border-radius: 10px; background: #e1eaf3; display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 13px; font-weight: 600">Usuario de Epidemiología</span>
+<span style="color: #4a5d70; font-size: 12px">Rol: Epidemiología</span>
+</div>
+</nav>
+
+<main style="flex-grow: 1; padding: 32px 40px; box-sizing: border-box; display: flex; flex-direction: column; gap: 24px">
+<header style="display: flex; justify-content: space-between; align-items: flex-end">
+<div>
+<h1 style="margin: 0; font-size: 28px; font-weight: 700">Buenos días</h1>
+<p style="margin: 4px 0 0; font-size: 15px; color: #5f6e7d">Resumen del departamento de San Marcos · enero a agosto de 2026</p>
+</div>
+<span style="font-size: 12.5px; color: #5f6e7d">Datos de periodos cerrados · actualizado 28/09/2026</span>
+</header>
+
+<section aria-label="Resumen" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px">
+<div class="card" style="display: flex; flex-direction: column; gap: 8px; background: #e6f2fb; border-color: #cfe4f5">
+<span style="font-size: 13px; color: #3c5566">Cobertura departamental (Hexa 3)</span>
+<span style="font-size: 36px; font-weight: 700; line-height: 1">57.1%</span>
+<span style="font-size: 12.5px; color: #8a3b12">6.2 puntos bajo la meta proporcional de 63.3%</span>
+</div>
+<div class="card" style="display: flex; flex-direction: column; gap: 8px; background: #f0f4f8; border-color: #dfe6ee">
+<span style="font-size: 13px; color: #4a5d70">Municipios en meta</span>
+<span style="font-size: 36px; font-weight: 700; line-height: 1">11 <span style="font-size: 18px; font-weight: 500; color: #5f6e7d">de 30</span></span>
+<span style="font-size: 12.5px; color: #4a5d70">19 municipios con brecha</span>
+</div>
+<div class="card" style="display: flex; flex-direction: column; gap: 8px; background: #e6f2fb; border-color: #cfe4f5">
+<span style="font-size: 13px; color: #3c5566">Reportes de agosto cerrados</span>
+<span style="font-size: 36px; font-weight: 700; line-height: 1">14 <span style="font-size: 18px; font-weight: 500; color: #5f6e7d">de 30</span></span>
+<span style="font-size: 12.5px; color: #3c5566">El cierre vence el 30/09</span>
+</div>
+<div class="card" style="display: flex; flex-direction: column; gap: 8px; background: #f0f4f8; border-color: #dfe6ee">
+<span style="font-size: 13px; color: #4a5d70">Alertas activas</span>
+<span style="font-size: 36px; font-weight: 700; line-height: 1">5</span>
+<span style="font-size: 12.5px; color: #4a5d70">1 crítica · 1 seria · 3 advertencias</span>
+</div>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+<div class="card" style="display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; justify-content: space-between; align-items: flex-start">
+<div>
+<h2 class="ctitle">Avance del cierre de agosto</h2>
+<p class="csub">Estado de los reportes de los 30 municipios</p>
+</div>
+<a href="Revision.dc.html" style="font-size: 13px; font-weight: 600">Ir a revisión</a>
+</div>
+<div style="display: flex; gap: 2px; height: 16px" aria-hidden="true">
+<span style="flex-grow: 14; background: #2f5f8a; border-radius: 4px 0 0 4px"></span>
+<span style="flex-grow: 5; background: #7fb2dc"></span>
+<span style="flex-grow: 4; background: #b5d4ee"></span>
+<span style="flex-grow: 3; background: #eeb48c"></span>
+<span style="flex-grow: 4; background: #e3e6e4; border-radius: 0 4px 4px 0"></span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px; font-size: 13.5px">
+<div style="display: flex; align-items: center; gap: 10px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #2f5f8a"></span>Cerrado<strong style="margin-left: auto">14</strong></div>
+<div style="display: flex; align-items: center; gap: 10px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #7fb2dc"></span>Aprobado<strong style="margin-left: auto">5</strong></div>
+<div style="display: flex; align-items: center; gap: 10px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #b5d4ee"></span>En revisión<strong style="margin-left: auto">4</strong></div>
+<div style="display: flex; align-items: center; gap: 10px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #eeb48c"></span>Corrección solicitada<strong style="margin-left: auto">3</strong></div>
+<div style="display: flex; align-items: center; gap: 10px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #e3e6e4"></span>Enviado o sin enviar<strong style="margin-left: auto">4</strong></div>
+</div>
+</div>
+
+<div class="card" style="display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px">
+<div>
+<h2 class="ctitle">Alertas que requieren acción</h2>
+<p class="csub">Las más importantes de esta semana</p>
+</div>
+<a href="#" style="font-size: 13px; font-weight: 600">Ver las 5</a>
+</div>
+<div style="display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid #e8edf3; align-items: flex-start">
+<span style="font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 10px; background: #f4c1b6; color: #7a2618; white-space: nowrap">Crítica</span>
+<span style="font-size: 13.5px">Tacaná, Sibinal y Concepción Tutuapa están bajo 45% de cobertura en Hexa 3.</span>
+</div>
+<div style="display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid #e8edf3; align-items: flex-start">
+<span style="font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 10px; background: #f6d7a8; color: #6b3f00; white-space: nowrap">Seria</span>
+<span style="font-size: 13.5px">Ocós y Sibinal no han enviado el reporte de agosto.</span>
+</div>
+<div style="display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid #e8edf3; align-items: flex-start">
+<span style="font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 10px; background: #fbeccb; color: #6b4a00; white-space: nowrap">Advertencia</span>
+<span style="font-size: 13.5px">Malacatán atribuye 38% de sus dosis a otros municipios.</span>
+</div>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 12px">
+<h2 class="ctitle">Accesos rápidos</h2>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px">
+<a class="quick" href="Indicadores.dc.html">
+<span class="qi" style="background: #d9ecfa; color: #1f5f8f"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3v18h18"></path><path d="M7 15l4-4 3 3 5-6"></path></svg></span>
+<strong style="font-size: 15px">Indicadores</strong>
+<span style="font-size: 13px; color: #5f6e7d">Cobertura, brecha, deserción y proyección por municipio y vacuna.</span>
+</a>
+<a class="quick" href="Mapa.dc.html">
+<span class="qi" style="background: #e9eef4; color: #2c4660"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"></path><path d="M9 4v14M15 6v14"></path></svg></span>
+<strong style="font-size: 15px">Mapa territorial</strong>
+<span style="font-size: 13px; color: #5f6e7d">Dónde se concentra el rezago en los 30 municipios.</span>
+</a>
+<a class="quick" href="#">
+<span class="qi" style="background: #d9ecfa; color: #1f5f8f"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"></path><path d="M14 3v6h6M8 13h8M8 17h5"></path></svg></span>
+<strong style="font-size: 15px">Informes</strong>
+<span style="font-size: 13px; color: #5f6e7d">Informe consolidado mensual y anual en PDF.</span>
+</a>
+<a class="quick" href="Revision.dc.html">
+<span class="qi" style="background: #e9eef4; color: #2c4660"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg></span>
+<strong style="font-size: 15px">Revisión y cierre</strong>
+<span style="font-size: 13px; color: #5f6e7d">6 reportes esperan revisión.</span>
+</a>
+</div>
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

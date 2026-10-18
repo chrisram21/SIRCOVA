@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Plan de gráficas</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',system-ui,sans-serif;background:#ffffff;color:#1f3247}
+.t{border-collapse:collapse;width:100%;font-size:13.5px;line-height:1.45}
+.t th{text-align:left;font-size:12px;color:#5f6e7d;font-weight:600;padding:10px 12px;border-bottom:2px solid #1f3247;text-transform:uppercase;letter-spacing:0.04em}
+.t td{padding:11px 12px;border-bottom:1px solid #e5ebf1;vertical-align:top}
+.t td:nth-child(2){font-weight:600}.t td:first-child{color:#2f6fa6;font-weight:600}
+h2{margin:0;font-size:19px}
+.rc{display:flex;flex-direction:column;gap:6px;padding:16px;border:1px solid #e5ebf1;border-radius:10px;font-size:13.5px;line-height:1.45}
+.rc strong{font-size:14.5px}
+</style>
+</helmet>
+<div style="width: 1200px; height: 1600px; box-sizing: border-box; padding: 56px 64px; display: flex; flex-direction: column; gap: 28px">
+<div>
+<p style="margin: 0; font-size: 12.5px; color: #5f6e7d; letter-spacing: 0.04em; text-transform: uppercase">Sprint 2 · Prototipo de interfaz · Propuesta preliminar</p>
+<h1 style="margin: 6px 0 0; font-size: 32px">Plan de pantallas y gráficas</h1>
+<p style="margin: 8px 0 0; font-size: 15px; color: #3c4f63; max-width: 900px; line-height: 1.5">Cada gráfica responde una pregunta concreta de un rol. Todas se alimentan del motor de indicadores con periodos cerrados y datos agregados; ninguna muestra información de pacientes.</p>
+</div>
+
+<section style="display: flex; flex-direction: column; gap: 10px">
+<h2>Qué va en cada pantalla</h2><p style="margin: 0; font-size: 14px; color: #3c4f63">El inicio queda como resumen ligero (4 tarjetas, avance del cierre, 3 alertas y accesos rápidos). Las gráficas de análisis viven en Indicadores y en Mapa territorial, a las que se llega desde el menú.</p>
+<table class="t">
+<thead><tr><th style="width: 110px">Pantalla</th><th style="width: 180px">Componente</th><th style="width: 170px">Tipo</th><th>Pregunta que responde</th><th style="width: 200px">Roles</th><th style="width: 290px">Cálculo o fuente</th></tr></thead>
+<tbody>
+<tr><td>Inicio</td><td>Indicadores clave</td><td>4 tarjetas numéricas</td><td>¿Cómo vamos en general este año?</td><td>Epidemiología, autoridades, estadígrafa</td><td>Cobertura, municipios en meta, reportes cerrados y alertas activas.</td></tr>
+<tr><td>Indicadores</td><td>Avance y proyección</td><td>Línea acumulada con proyección punteada y banda</td><td>¿Llegaremos al 95% en diciembre al ritmo actual?</td><td>Epidemiología, autoridades</td><td>Acumulado real por mes frente a meta lineal (95% × mes ÷ 12). Proyección con el ritmo de los últimos 3 meses, siempre marcada como estimación.</td></tr>
+<tr><td>Inicio</td><td>Avance del cierre</td><td>Barra apilada de 30 municipios</td><td>¿Cuánto falta para cerrar el periodo?</td><td>Estadígrafa, Epidemiología</td><td>Conteo de reportes por estado (Borrador a Cerrado) del mes en curso.</td></tr>
+<tr><td>Indicadores</td><td>Cobertura por municipio</td><td>Barras horizontales ordenadas con línea de meta</td><td>¿Qué municipios van atrasados?</td><td>Epidemiología, autoridades</td><td>Dosis atribuidas por procedencia ÷ población objetivo del municipio.</td></tr>
+<tr><td>Mapa</td><td>Mapa de cobertura</td><td>Mapa coroplético (Leaflet + GeoJSON), 4 rangos</td><td>¿Dónde se concentra geográficamente el rezago?</td><td>Epidemiología, autoridades</td><td>Mismo indicador que las barras; permite cambiar a brecha, deserción o estado del reporte.</td></tr>
+<tr><td>Indicadores</td><td>Cobertura por vacuna</td><td>Barras horizontales con línea de meta</td><td>¿Qué biológico está más rezagado?</td><td>Epidemiología</td><td>Cobertura departamental por vacuna y dosis.</td></tr>
+<tr><td>Indicadores</td><td>Brecha a la meta</td><td>Barras de los 8 municipios con mayor brecha</td><td>¿Cuántas dosis faltan y dónde?</td><td>Epidemiología, autoridades</td><td>Población objetivo × meta proporcional − dosis atribuidas.</td></tr><tr><td>Indicadores</td><td>Deserción entre dosis</td><td>Barras con umbral de 10%</td><td>¿Dónde se pierden niños entre la 1.ª y la 3.ª dosis?</td><td>Epidemiología</td><td>(Hexa 1 − Hexa 3) ÷ Hexa 1, por municipio; se muestran los 8 más altos.</td></tr>
+<tr><td>Inicio</td><td>Alertas</td><td>Las 3 más importantes, con severidad</td><td>¿Qué requiere acción esta semana?</td><td>Todos, filtradas por rol</td><td>Reglas de alerta configurables: cobertura bajo meta, reportes pendientes, calidad y proceso.</td></tr>
+</tbody>
+</table>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 12px">
+<h2>La pantalla inicial según el rol</h2>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px">
+<div class="rc"><strong>Personal del establecimiento</strong><span>Estado y fecha límite de su reporte, validaciones pendientes, cobertura de su municipio con su tendencia mensual. Botón directo a Registro de producción.</span></div>
+<div class="rc"><strong>Estadígrafa o revisor</strong><span>Estado de reportes del periodo, bandeja de pendientes, alertas de calidad y de proceso, periodos por cerrar y solicitudes de rectificación.</span></div>
+<div class="rc"><strong>Epidemiología</strong><span>El resumen del inicio y, desde el menú, la pantalla completa de Indicadores con filtros por año, periodo, vacuna, municipio y regla de atribución.</span></div>
+<div class="rc"><strong>Autoridades (solo consulta)</strong><span>Indicadores clave, avance y proyección, mapa y ranking de municipios, con descarga del informe en PDF. Sin acciones de edición.</span></div>
+<div class="rc"><strong>Administrador</strong><span>Usuarios activos, esquemas de captura vigentes y próximos a vencer, cambios recientes en catálogos y actividad de la bitácora.</span></div>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 10px">
+<h2>Decisiones tomadas en el mockup</h2>
+<ul style="margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6; color: #2b2a27">
+<li>La meta se compara de forma proporcional al mes (a agosto, 63.3% = 95% × 8 ÷ 12), porque la cobertura acumulada nunca llega a 95% antes de diciembre.</li>
+<li>Hexavalente 3.ª dosis es la vacuna trazadora por defecto; el filtro permite cambiarla.</li>
+<li>La cobertura se atribuye por municipio de procedencia por defecto; el usuario puede cambiar a lugar de aplicación.</li>
+<li>Los indicadores usan solo periodos cerrados, para que el tablero no cambie mientras se revisa.</li>
+<li>Las proyecciones van punteadas, sobre fondo gris y con la palabra «estimación».</li>
+<li>Colores: azul para datos y cumplimiento, naranja y rojo para rezago; el valor siempre va escrito para no depender solo del color.</li>
+<li>Librería sugerida: Recharts o Apache ECharts para React; Leaflet con react-leaflet para el mapa.</li>
+</ul>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 10px">
+<h2>Por validar con la epidemióloga y la estadígrafa</h2>
+<ul style="margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6; color: #2b2a27">
+<li>¿Qué vacuna o vacunas trazadoras usan hoy en el informe del consejo técnico?</li>
+<li>¿Prefieren ver la meta proporcional al mes o la meta anual de 95%?</li>
+<li>¿Qué umbral de deserción usan como aceptable (el mockup asume 10%)?</li>
+<li>¿De dónde salen las poblaciones objetivo por municipio y cada cuánto se actualizan?</li>
+</ul>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":1600}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

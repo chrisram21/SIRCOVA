@@ -147,3 +147,46 @@ Menú reducido: Inicio, Registro de producción (activo), Mis reportes, Cobertur
 ---
 
 **Ajustes del 10/10/2026** (información de campo, sección 14 del contexto): exportación a Excel como prioridad, filtros de rango de meses, nivel (distrito) y municipios múltiples, agrupación por sexo y semáforo 80/90. El prototipo publicado todavía muestra la versión anterior.
+
+---
+
+## Implementación en React
+
+**Tema.** Los colores del "Estilo general" pasan a las variables del tema de shadcn en `frontend/src/index.css`:
+
+| Variable | Color |
+|---|---|
+| `--primary` | #2c4660 |
+| `--primary-foreground` | #ffffff |
+| `--background` | #f5f8fb |
+| `--foreground` | #1f3247 |
+| `--muted-foreground` | #5f6e7d |
+| `--border` | #e0e7ef |
+| `--input` | #d5dee8 |
+| `--ring` | #5aa0d0 |
+| `--accent` | #dbeaf6 |
+| `--accent-foreground` | #1d4a72 |
+| `--sidebar` | #edf3f9 |
+| `--destructive` | #b73a3a |
+
+Los colores de estado del reporte, de la escala de cobertura y del semáforo del mapa van como variables propias en el mismo archivo, con los valores de "Estilo general" y de la pantalla 6. Fuente IBM Plex Sans y cifras en IBM Plex Mono. Radio base (`--radius`) de 8 px; shadcn calcula `rounded-xl` en 12 px, que es el radio de las tarjetas.
+
+**Componentes de shadcn por elemento:**
+
+| Elemento | Componente |
+|---|---|
+| Menú lateral | Sidebar |
+| Botones | Button |
+| Campos | Input y Label |
+| Tablas de la bandeja, la auditoría y el registro | Table |
+| Tarjetas de resumen | Card |
+| Estados del reporte y severidad de alertas | Badge |
+| Mensajes de validación y error del login | Alert |
+| Filtros | Select, Popover y Calendar |
+| Pestañas de vacunas y selector del mapa | Tabs o ToggleGroup |
+| Paginación | Pagination |
+| Observaciones | Textarea |
+| Confirmaciones (aprobar, cerrar periodo) | AlertDialog |
+| Avisos de guardado | Sonner |
+
+Las medidas de 1440 px son de referencia; la app se adapta al ancho de la ventana.

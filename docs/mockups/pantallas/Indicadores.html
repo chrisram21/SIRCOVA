@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Indicadores</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',system-ui,sans-serif;background:#f5f8fb;color:#1f3247}
+a{color:#2f6fa6}a:hover{color:#1d557b}
+.card{background:#ffffff;border:1px solid #e0e7ef;border-radius:12px;padding:20px 22px;box-sizing:border-box}
+.ctitle{margin:0;font-size:15px;font-weight:600}
+.csub{margin:2px 0 0;font-size:12.5px;color:#5f6e7d}
+.nav{display:flex;align-items:center;gap:12px;height:40px;padding:0 14px;border-radius:8px;color:#34506b;font-size:14px;text-decoration:none}
+.nav:hover{background:#dfe9f3;color:#1f3247}
+.on{background:#dbeaf6;color:#1d4a72;font-weight:600}
+.bw{margin-left:auto;background:#f6d7a8;color:#6b3f00;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px}
+.bc{margin-left:auto;background:#f4c1b6;color:#7a2618;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px}
+.sel{height:36px;padding:0 12px;border:1px solid #d5dee8;border-radius:8px;background:#ffffff;font:inherit;font-size:13px;color:#1f3247;display:flex;align-items:center;gap:8px}
+.brow{display:flex;align-items:center;gap:10px;height:17px}
+.blab{width:178px;font-size:12px;color:#3c4f63;text-align:right;white-space:nowrap}
+.bbar{height:11px;border-radius:0 3px 3px 0}
+.bval{font-size:11.5px;font-family:'IBM Plex Mono',monospace;color:#3c4f63}
+.m4{background:#4683bb}.m3{background:#b5d4ee}.m2{background:#f4d6b8}.m1{background:#e0998d}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1380px; display: flex; background: #f5f8fb">
+
+<nav aria-label="Menú principal" style="width: 240px; flex-shrink: 0; background: #edf3f9; border-right: 1px solid #e0e7ef; padding: 22px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; align-items: center; gap: 10px; padding: 0 10px 22px">
+<svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><rect x="1" y="1" width="28" height="28" rx="7" fill="#2c4660"></rect><path d="M15 7v16M7 15h16" stroke="#ffffff" stroke-width="3" stroke-linecap="round"></path></svg>
+<div style="display: flex; flex-direction: column"><span style="font-weight: 700; font-size: 17px; letter-spacing: 0.02em; color: #1f3247">SIRCOVA</span><span style="color: #5f6e7d; font-size: 11px">DDRISS San Marcos</span></div>
+</div>
+<a class="nav" href="Main.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 11 12 4l9 7"></path><path d="M5 10v10h14V10"></path></svg>Inicio</a>
+<a class="nav" href="Registro.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>Registro de producción</a>
+<a class="nav" href="Revision.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>Revisión y cierre<span class="bw">6</span></a>
+<a class="nav on" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3v18h18"></path><path d="M7 15l4-4 3 3 5-6"></path></svg>Indicadores</a>
+<a class="nav" href="Mapa.dc.html"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"></path><path d="M9 4v14M15 6v14"></path></svg>Mapa territorial</a>
+<a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"></path><path d="M14 3v6h6M8 13h8M8 17h5"></path></svg>Informes</a>
+<a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"></path></svg>Alertas<span class="bc">5</span></a>
+<a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>Auditoría</a>
+<a class="nav" href="#"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg>Configuración</a>
+<div style="margin-top: auto; padding: 14px 12px; border-radius: 10px; background: #e1eaf3; display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 13px; font-weight: 600">Usuario de Epidemiología</span>
+<span style="color: #4a5d70; font-size: 12px">Rol: Epidemiología</span>
+</div>
+</nav>
+
+<main style="flex-grow: 1; padding: 32px 40px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px">
+<header style="display: flex; align-items: flex-end; justify-content: space-between">
+<div>
+<p style="margin: 0; font-size: 12.5px; color: #5f6e7d; letter-spacing: 0.04em; text-transform: uppercase">Indicadores de cobertura</p>
+<h1 style="margin: 4px 0 0; font-size: 26px; font-weight: 700">Enero a agosto de 2026</h1>
+</div>
+<button type="button" class="sel" style="cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"></path></svg>Exportar PDF</button>
+</header>
+
+<div role="group" aria-label="Filtros" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap">
+<label class="sel">Año <strong>2026</strong></label>
+<label class="sel">Periodo <strong>Ene a Ago (acumulado)</strong></label>
+<label class="sel">Vacuna trazadora <strong>Hexavalente 3.ª dosis</strong></label>
+<label class="sel">Municipio <strong>Todos (30)</strong></label>
+<label class="sel">Atribución <strong>Por procedencia</strong></label>
+</div>
+
+<section style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px">
+<div class="card" style="grid-column: span 2; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; align-items: flex-start">
+<div>
+<h2 class="ctitle">Avance acumulado y proyección al cierre del año</h2>
+<p class="csub">¿Llegaremos al 95% en diciembre al ritmo actual?</p>
+</div>
+<div style="display: flex; gap: 14px; font-size: 12px; color: #3c4f63; align-items: center">
+<span style="display: flex; align-items: center; gap: 6px"><svg width="22" height="10" aria-hidden="true"><path d="M1 5h20" stroke="#4683bb" stroke-width="2.5"></path></svg>Real</span>
+<span style="display: flex; align-items: center; gap: 6px"><svg width="22" height="10" aria-hidden="true"><path d="M1 5h20" stroke="#4683bb" stroke-width="2" stroke-dasharray="4 3"></path></svg>Proyección</span>
+<span style="display: flex; align-items: center; gap: 6px"><svg width="22" height="10" aria-hidden="true"><path d="M1 5h20" stroke="#6b7a8a" stroke-width="1.5"></path></svg>Meta proporcional</span>
+</div>
+</div>
+<svg width="690" height="278" viewBox="0 0 620 250" role="img" aria-label="Cobertura acumulada real de enero a agosto, de 6.4% a 57.1%, y proyección de 64.5% en septiembre a 86.7% en diciembre, frente a una meta que llega a 95%">
+<g stroke="#e5ebf1" stroke-width="1">
+<line x1="48" y1="16" x2="584" y2="16"></line><line x1="48" y1="66" x2="584" y2="66"></line><line x1="48" y1="116" x2="584" y2="116"></line><line x1="48" y1="166" x2="584" y2="166"></line>
+</g>
+<line x1="48" y1="216" x2="584" y2="216" stroke="#c8d2dd" stroke-width="1"></line>
+<g font-family="IBM Plex Mono, monospace" font-size="10" fill="#6b7a8a" text-anchor="end">
+<text x="40" y="219">0%</text><text x="40" y="169">25%</text><text x="40" y="119">50%</text><text x="40" y="69">75%</text><text x="40" y="19">100%</text>
+</g>
+<g font-family="IBM Plex Sans, sans-serif" font-size="10.5" fill="#6b7a8a" text-anchor="middle">
+<text x="48" y="234">Ene</text><text x="96.7" y="234">Feb</text><text x="145.5" y="234">Mar</text><text x="194.2" y="234">Abr</text><text x="242.9" y="234">May</text><text x="291.6" y="234">Jun</text><text x="340.4" y="234">Jul</text><text x="389.1" y="234">Ago</text><text x="437.8" y="234">Sep</text><text x="486.5" y="234">Oct</text><text x="535.3" y="234">Nov</text><text x="584" y="234">Dic</text>
+</g>
+<rect x="389.1" y="12" width="194.9" height="204" fill="#f1f4f8"></rect>
+<text x="396" y="28" font-family="IBM Plex Sans, sans-serif" font-size="10" fill="#6b7a8a">Estimación</text>
+<polygon points="389.1,101.8 437.8,84.4 486.5,67.2 535.3,49.8 584.0,32.8 584.0,52.4 535.3,65.0 486.5,77.2 437.8,89.6 389.1,101.8" fill="#b5d4ee" opacity="0.6"></polygon>
+<line x1="48" y1="200.2" x2="584" y2="26" stroke="#6b7a8a" stroke-width="1.5"></line>
+<polyline points="48.0,203.2 96.7,189.4 145.5,174.2 194.2,160.4 242.9,145.6 291.6,132.0 340.4,117.4 389.1,101.8" fill="none" stroke="#4683bb" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></polyline>
+<polyline points="389.1,101.8 437.8,87.0 486.5,72.2 535.3,57.4 584.0,42.6" fill="none" stroke="#4683bb" stroke-width="2" stroke-dasharray="5 4"></polyline>
+<circle cx="389.1" cy="101.8" r="4.5" fill="#4683bb" stroke="#ffffff" stroke-width="2"></circle>
+<circle cx="584" cy="42.6" r="4" fill="#ffffff" stroke="#4683bb" stroke-width="2"></circle>
+<text x="380" y="96" text-anchor="end" font-family="IBM Plex Sans, sans-serif" font-size="11" font-weight="600" fill="#1f3247">57.1% real</text>
+<text x="578" y="62" text-anchor="end" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="#1f3247">86.7% estimado</text>
+<text x="578" y="21" text-anchor="end" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="#3c4f63">Meta 95%</text>
+</svg>
+<p style="margin: 0; font-size: 12px; color: #5f6e7d">La proyección usa el ritmo de los últimos 3 meses; la banda muestra el rango probable. Es una estimación, no un dato registrado.</p>
+</div>
+
+<div class="card" style="display: flex; flex-direction: column; gap: 12px">
+<div>
+<h2 class="ctitle">Cobertura por vacuna</h2>
+<p class="csub">¿Qué biológico está más rezagado?</p>
+</div>
+<div style="position: relative; display: flex; flex-direction: column; gap: 7px; padding-top: 18px">
+<span style="position: absolute; left: 248px; top: 0; bottom: 0; border-left: 1.5px dashed #3c4f63"></span>
+<span style="position: absolute; left: 253px; top: -2px; font-size: 11px; color: #3c4f63">Meta 63.3%</span>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 92px">BCG</span><span class="bbar m4" style="width: 158px"></span><span class="bval">68.4</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 92px">Hepatitis B RN</span><span class="bbar m4" style="width: 141px"></span><span class="bval">61.2</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 92px">Hexa 1</span><span class="bbar m4" style="width: 141px"></span><span class="bval">61.4</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 92px">IPV 1</span><span class="bbar m4" style="width: 140px"></span><span class="bval">61.0</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 92px">Neumococo 2</span><span class="bbar m4" style="width: 136px"></span><span class="bval">59.1</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 92px">Rotavirus 2</span><span class="bbar m4" style="width: 135px"></span><span class="bval">58.8</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 92px; font-weight: 700">Hexa 3</span><span class="bbar" style="width: 131px; background: #2c4660"></span><span class="bval" style="font-weight: 600">57.1</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 92px">bOPV 3</span><span class="bbar m4" style="width: 129px"></span><span class="bval">56.3</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 92px">SPR 1</span><span class="bbar m4" style="width: 128px"></span><span class="bval">55.6</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 92px">SPR 2</span><span class="bbar m4" style="width: 111px"></span><span class="bval">48.2</span></div>
+</div>
+<p style="margin: 0; font-size: 12px; color: #5f6e7d">Escala de 0 a 100%. Hexa 3 resaltada por ser la trazadora del filtro.</p>
+</div>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start">
+<div class="card" style="display: flex; flex-direction: column; gap: 12px">
+<div>
+<h2 class="ctitle">Cobertura por municipio</h2>
+<p class="csub">¿Qué municipios van atrasados? Hexa 3 acumulada, de mayor a menor</p>
+</div>
+<div style="display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: #3c4f63">
+<span style="display: flex; align-items: center; gap: 6px"><span class="m4" style="width: 12px; height: 12px; border-radius: 3px"></span>En meta</span>
+<span style="display: flex; align-items: center; gap: 6px"><span class="m3" style="width: 12px; height: 12px; border-radius: 3px"></span>Cerca (55 a 63.2%)</span>
+<span style="display: flex; align-items: center; gap: 6px"><span class="m2" style="width: 12px; height: 12px; border-radius: 3px"></span>Bajo (45 a 54.9%)</span>
+<span style="display: flex; align-items: center; gap: 6px"><span class="m1" style="width: 12px; height: 12px; border-radius: 3px"></span>Crítico (menos de 45%)</span>
+</div>
+<div style="position: relative; display: flex; flex-direction: column; gap: 1px; padding-top: 16px">
+<span style="position: absolute; left: 391px; top: 0; bottom: 0; width: 0; border-left: 1.5px dashed #3c4f63"></span>
+<span style="position: absolute; left: 396px; top: -2px; font-size: 11px; color: #3c4f63">Meta 63.3%</span>
+<div class="brow"><span class="blab">Río Blanco</span><span class="bbar m4" style="width: 237px"></span><span class="bval">74.1</span></div>
+<div class="brow"><span class="blab">San Antonio Sacatepéquez</span><span class="bbar m4" style="width: 232px"></span><span class="bval">72.5</span></div>
+<div class="brow"><span class="blab">San Pedro Sacatepéquez</span><span class="bbar m4" style="width: 228px"></span><span class="bval">71.2</span></div>
+<div class="brow"><span class="blab">Esquipulas Palo Gordo</span><span class="bbar m4" style="width: 225px"></span><span class="bval">70.4</span></div>
+<div class="brow"><span class="blab">San Rafael Pie de la Cuesta</span><span class="bbar m4" style="width: 223px"></span><span class="bval">69.8</span></div>
+<div class="brow"><span class="blab">El Quetzal</span><span class="bbar m4" style="width: 219px"></span><span class="bval">68.3</span></div>
+<div class="brow"><span class="blab">Tejutla</span><span class="bbar m4" style="width: 216px"></span><span class="bval">67.4</span></div>
+<div class="brow"><span class="blab">San Marcos</span><span class="bbar m4" style="width: 214px"></span><span class="bval">66.8</span></div>
+<div class="brow"><span class="blab">El Rodeo</span><span class="bbar m4" style="width: 209px"></span><span class="bval">65.2</span></div>
+<div class="brow"><span class="blab">San Pablo</span><span class="bbar m4" style="width: 208px"></span><span class="bval">64.9</span></div>
+<div class="brow"><span class="blab">San Cristóbal Cucho</span><span class="bbar m4" style="width: 204px"></span><span class="bval">63.8</span></div>
+<div class="brow"><span class="blab">Pajapita</span><span class="bbar m3" style="width: 199px"></span><span class="bval">62.1</span></div>
+<div class="brow"><span class="blab">San Miguel Ixtahuacán</span><span class="bbar m3" style="width: 197px"></span><span class="bval">61.5</span></div>
+<div class="brow"><span class="blab">El Tumbador</span><span class="bbar m3" style="width: 192px"></span><span class="bval">60.1</span></div>
+<div class="brow"><span class="blab">Ayutla</span><span class="bbar m3" style="width: 190px"></span><span class="bval">59.4</span></div>
+<div class="brow"><span class="blab">Comitancillo</span><span class="bbar m3" style="width: 188px"></span><span class="bval">58.7</span></div>
+<div class="brow"><span class="blab">San Lorenzo</span><span class="bbar m3" style="width: 186px"></span><span class="bval">58.2</span></div>
+<div class="brow"><span class="blab">Nuevo Progreso</span><span class="bbar m3" style="width: 183px"></span><span class="bval">57.3</span></div>
+<div class="brow"><span class="blab">La Reforma</span><span class="bbar m3" style="width: 182px"></span><span class="bval">56.9</span></div>
+<div class="brow"><span class="blab">Ixchiguán</span><span class="bbar m3" style="width: 177px"></span><span class="bval">55.2</span></div>
+<div class="brow"><span class="blab">La Blanca</span><span class="bbar m2" style="width: 175px"></span><span class="bval">54.8</span></div>
+<div class="brow"><span class="blab">Catarina</span><span class="bbar m2" style="width: 172px"></span><span class="bval">53.6</span></div>
+<div class="brow"><span class="blab">Malacatán</span><span class="bbar m2" style="width: 168px"></span><span class="bval">52.4</span></div>
+<div class="brow"><span class="blab">Sipacapa</span><span class="bbar m2" style="width: 164px"></span><span class="bval">51.3</span></div>
+<div class="brow"><span class="blab">San José Ojetenam</span><span class="bbar m2" style="width: 159px"></span><span class="bval">49.6</span></div>
+<div class="brow"><span class="blab">Tajumulco</span><span class="bbar m2" style="width: 156px"></span><span class="bval">48.9</span></div>
+<div class="brow"><span class="blab">Ocós</span><span class="bbar m2" style="width: 149px"></span><span class="bval">46.7</span></div>
+<div class="brow"><span class="blab">Concepción Tutuapa</span><span class="bbar m1" style="width: 141px"></span><span class="bval">44.1</span></div>
+<div class="brow"><span class="blab">Sibinal</span><span class="bbar m1" style="width: 135px"></span><span class="bval">42.3</span></div>
+<div class="brow"><span class="blab">Tacaná</span><span class="bbar m1" style="width: 127px"></span><span class="bval">39.8</span></div>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 16px">
+<div class="card" style="display: flex; flex-direction: column; gap: 12px">
+<div>
+<h2 class="ctitle">Brecha a la meta proporcional</h2>
+<p class="csub">¿Cuántas dosis faltan y dónde? 8 municipios con mayor brecha (total 1,801)</p>
+</div>
+<div style="display: flex; flex-direction: column; gap: 7px">
+<div class="brow" style="height: 20px"><span class="blab" style="width: 140px">Tacaná</span><span class="bbar" style="width: 250px; background: #eeb48c"></span><span class="bval">422</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 140px">Concepción Tutuapa</span><span class="bbar" style="width: 185px; background: #eeb48c"></span><span class="bval">312</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 140px">Tajumulco</span><span class="bbar" style="width: 131px; background: #eeb48c"></span><span class="bval">222</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 140px">Malacatán</span><span class="bbar" style="width: 107px; background: #eeb48c"></span><span class="bval">180</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 140px">Sibinal</span><span class="bbar" style="width: 49px; background: #eeb48c"></span><span class="bval">82</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 140px">Comitancillo</span><span class="bbar" style="width: 44px; background: #eeb48c"></span><span class="bval">74</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 140px">Ocós</span><span class="bbar" style="width: 42px; background: #eeb48c"></span><span class="bval">71</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 140px">Catarina</span><span class="bbar" style="width: 36px; background: #eeb48c"></span><span class="bval">61</span></div>
+</div>
+<p style="margin: 0; font-size: 12px; color: #5f6e7d">Dosis de Hexa 3 que faltan para llegar a 63.3% de la población objetivo de cada municipio.</p>
+</div>
+
+<div class="card" style="display: flex; flex-direction: column; gap: 12px">
+<div>
+<h2 class="ctitle">Deserción entre Hexa 1 y Hexa 3</h2>
+<p class="csub">¿Dónde se pierden niños entre dosis? 8 municipios más altos (departamento: 7.0%)</p>
+</div>
+<div style="position: relative; display: flex; flex-direction: column; gap: 7px; padding-top: 18px">
+<span style="position: absolute; left: 282px; top: 0; bottom: 0; border-left: 1.5px dashed #3c4f63"></span>
+<span style="position: absolute; left: 287px; top: -2px; font-size: 11px; color: #3c4f63">Umbral 10%</span>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 140px">La Blanca</span><span class="bbar" style="width: 158px; background: #eeb48c"></span><span class="bval">12.0%</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 140px">Catarina</span><span class="bbar" style="width: 157px; background: #eeb48c"></span><span class="bval">11.9%</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 140px">El Quetzal</span><span class="bbar" style="width: 147px; background: #eeb48c"></span><span class="bval">11.1%</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 140px">El Tumbador</span><span class="bbar" style="width: 144px; background: #eeb48c"></span><span class="bval">10.9%</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 140px">San Lorenzo</span><span class="bbar" style="width: 140px; background: #eeb48c"></span><span class="bval">10.6%</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 140px">Malacatán</span><span class="bbar m3" style="width: 121px"></span><span class="bval">9.2%</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 140px">El Rodeo</span><span class="bbar m3" style="width: 119px"></span><span class="bval">9.0%</span></div>
+<div class="brow" style="height: 20px"><span class="blab" style="width: 140px">Ayutla</span><span class="bbar m3" style="width: 112px"></span><span class="bval">8.5%</span></div>
+</div>
+<p style="margin: 0; font-size: 12px; color: #5f6e7d">(Hexa 1 − Hexa 3) ÷ Hexa 1. En naranja, los que superan el umbral.</p>
+</div>
+</div>
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1380}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -11,3 +11,8 @@ Las reglas completas del proyecto están en `AGENTS.md` y se aplican sin excepci
 - No ejecutes los scripts de `backend/db/` ni comandos que borren datos sin autorización explícita: recrean la base desde cero.
 - No hagas commits ni push salvo que se pida. La estrategia de ramas y el formato de commits están **pendientes**.
 - Responde en español y, al terminar, resume qué cambiaste y cómo lo verificaste (sección 8 de `AGENTS.md`).
+- Comentarios en el código solo donde no se explica solo (sección 7 de `AGENTS.md`); lo que haya que recordar para después va en "Notas de contexto", al final de este archivo.
+
+## Notas de contexto
+
+Una nota por línea, corta y con la fecha (AAAA-MM-DD): decisiones, convenciones o trampas que conviene recordar al trabajar.
