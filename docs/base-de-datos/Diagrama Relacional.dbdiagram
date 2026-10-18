@@ -1,0 +1,1289 @@
+{
+  "version": "3.0.0",
+  "darkMode": true,
+  "gridEnabling": false,
+  "currentViewName": null,
+  "defaultView": {
+    "detailLevel": "All",
+    "relationshipMode": "All",
+    "tablePositions": [
+      {
+        "name": "rol",
+        "schemaName": "public",
+        "x": 38.089962438616794,
+        "y": -705.4280748191966
+      },
+      {
+        "name": "permiso",
+        "schemaName": "public",
+        "x": 45.215267119346095,
+        "y": -482
+      },
+      {
+        "name": "rol_permiso",
+        "schemaName": "public",
+        "x": -344.2802734375,
+        "y": -616
+      },
+      {
+        "name": "departamento",
+        "schemaName": "public",
+        "x": -132.24629675282534,
+        "y": -133.77678460713094
+      },
+      {
+        "name": "municipio",
+        "schemaName": "public",
+        "x": 366.0726886308621,
+        "y": -167.60758474491797
+      },
+      {
+        "name": "distrito_salud",
+        "schemaName": "public",
+        "x": 373.6803546464871,
+        "y": -461.344124898484
+      },
+      {
+        "name": "tipo_establecimiento",
+        "schemaName": "public",
+        "x": 1415.398843210921,
+        "y": -493.09110090571403
+      },
+      {
+        "name": "establecimiento",
+        "schemaName": "public",
+        "x": 834.092117590877,
+        "y": -586.2934152770983
+      },
+      {
+        "name": "empleado",
+        "schemaName": "public",
+        "x": 38.089962438616794,
+        "y": -1189.094710626303
+      },
+      {
+        "name": "usuario",
+        "schemaName": "public",
+        "x": 824.4074602860678,
+        "y": -1217.3612543039615
+      },
+      {
+        "name": "vacuna",
+        "schemaName": "public",
+        "x": 1755.5893339702375,
+        "y": 696.225337444139
+      },
+      {
+        "name": "dosis",
+        "schemaName": "public",
+        "x": 1768.3322538921125,
+        "y": 1037.8278526900542
+      },
+      {
+        "name": "clasificacion_poblacion",
+        "schemaName": "public",
+        "x": 1365.2986621155342,
+        "y": 964.8340061027716
+      },
+      {
+        "name": "poblacion_objetivo",
+        "schemaName": "public",
+        "x": 848.2757761344374,
+        "y": 755.7089812528792
+      },
+      {
+        "name": "periodo",
+        "schemaName": "public",
+        "x": 2488.570865246456,
+        "y": 4.6764699854848
+      },
+      {
+        "name": "estado_reporte",
+        "schemaName": "public",
+        "x": -153.89846871702727,
+        "y": 569.7559700837726
+      },
+      {
+        "name": "transicion_estado",
+        "schemaName": "public",
+        "x": -168.56650148985176,
+        "y": 807.9027524697085
+      },
+      {
+        "name": "reporte_produccion",
+        "schemaName": "public",
+        "x": 5058.900390625,
+        "y": 158
+      },
+      {
+        "name": "reporte_vacuna",
+        "schemaName": "public",
+        "x": 5845.48779296875,
+        "y": 116
+      },
+      {
+        "name": "detalle_produccion",
+        "schemaName": "public",
+        "x": 6646.537109375,
+        "y": 95
+      },
+      {
+        "name": "detalle_dimension",
+        "schemaName": "public",
+        "x": 7343.10009765625,
+        "y": 378
+      },
+      {
+        "name": "historial_estado_reporte",
+        "schemaName": "public",
+        "x": 5845.48779296875,
+        "y": 418
+      },
+      {
+        "name": "observacion_revision",
+        "schemaName": "public",
+        "x": 7343.10009765625,
+        "y": 12
+      },
+      {
+        "name": "resultado_validacion",
+        "schemaName": "public",
+        "x": 7343.10009765625,
+        "y": 552
+      },
+      {
+        "name": "solicitud_rectificacion",
+        "schemaName": "public",
+        "x": 5845.48779296875,
+        "y": 720
+      },
+      {
+        "name": "rectificacion_detalle",
+        "schemaName": "public",
+        "x": 7343.10009765625,
+        "y": 982
+      },
+      {
+        "name": "corrida_calculo",
+        "schemaName": "public",
+        "x": 4292.14892578125,
+        "y": 609
+      },
+      {
+        "name": "resultado_indicador",
+        "schemaName": "public",
+        "x": 5058.900390625,
+        "y": 833
+      },
+      {
+        "name": "alerta",
+        "schemaName": "public",
+        "x": 5883.106493358098,
+        "y": 1130.2006840056058
+      },
+      {
+        "name": "bitacora",
+        "schemaName": "public",
+        "x": 4292.14892578125,
+        "y": 975
+      },
+      {
+        "name": "ddriss",
+        "schemaName": "public",
+        "x": -344.2802734375,
+        "y": 1724.2006840056058
+      },
+      {
+        "name": "cierre_periodo",
+        "schemaName": "public",
+        "x": -10.17578125,
+        "y": 1724.2006840056058
+      }
+    ],
+    "tableGroupCollapseStates": [],
+    "stickyNoteLayouts": [],
+    "referencePaths": [
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "rol",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "rol_id"
+        ],
+        "secondTableName": "rol_permiso",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "permiso",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "permiso_id"
+        ],
+        "secondTableName": "rol_permiso",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "departamento",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "departamento_id"
+        ],
+        "secondTableName": "municipio",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "departamento",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "departamento_id"
+        ],
+        "secondTableName": "ddriss",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "ddriss",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "ddriss_id"
+        ],
+        "secondTableName": "distrito_salud",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "municipio",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "municipio_id"
+        ],
+        "secondTableName": "distrito_salud",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "ddriss",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "ddriss_id"
+        ],
+        "secondTableName": "establecimiento",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "tipo_establecimiento",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "tipo_establecimiento_id"
+        ],
+        "secondTableName": "establecimiento",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "distrito_salud",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "distrito_salud_id"
+        ],
+        "secondTableName": "establecimiento",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "municipio",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "municipio_id"
+        ],
+        "secondTableName": "establecimiento",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "ddriss",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "ddriss_id"
+        ],
+        "secondTableName": "empleado",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "establecimiento",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "establecimiento_id"
+        ],
+        "secondTableName": "empleado",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "municipio",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "municipio_id"
+        ],
+        "secondTableName": "empleado",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "empleado",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "empleado_id"
+        ],
+        "secondTableName": "usuario",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "rol",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "rol_id"
+        ],
+        "secondTableName": "usuario",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "usuario",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "creado_por"
+        ],
+        "secondTableName": "usuario",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "vacuna",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "vacuna_id"
+        ],
+        "secondTableName": "dosis",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "municipio",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "municipio_id"
+        ],
+        "secondTableName": "poblacion_objetivo",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "clasificacion_poblacion",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "clasificacion_poblacion_id"
+        ],
+        "secondTableName": "poblacion_objetivo",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "usuario",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "registrado_por"
+        ],
+        "secondTableName": "poblacion_objetivo",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "periodo",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "periodo_id"
+        ],
+        "secondTableName": "cierre_periodo",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "ddriss",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "ddriss_id"
+        ],
+        "secondTableName": "cierre_periodo",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "usuario",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "cerrado_por"
+        ],
+        "secondTableName": "cierre_periodo",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "codigo"
+        ],
+        "firstTableName": "estado_reporte",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "estado_origen"
+        ],
+        "secondTableName": "transicion_estado",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "codigo"
+        ],
+        "firstTableName": "estado_reporte",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "estado_destino"
+        ],
+        "secondTableName": "transicion_estado",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "rol",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "rol_id"
+        ],
+        "secondTableName": "transicion_estado",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "establecimiento",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "establecimiento_id"
+        ],
+        "secondTableName": "reporte_produccion",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "periodo",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "periodo_id"
+        ],
+        "secondTableName": "reporte_produccion",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "codigo"
+        ],
+        "firstTableName": "estado_reporte",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "estado"
+        ],
+        "secondTableName": "reporte_produccion",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "usuario",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "creado_por"
+        ],
+        "secondTableName": "reporte_produccion",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "usuario",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "revisor_id"
+        ],
+        "secondTableName": "reporte_produccion",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "usuario",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "aprobado_por"
+        ],
+        "secondTableName": "reporte_produccion",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "reporte_produccion",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "reporte_id"
+        ],
+        "secondTableName": "reporte_vacuna",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "vacuna",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "vacuna_id"
+        ],
+        "secondTableName": "reporte_vacuna",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "reporte_vacuna",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "reporte_vacuna_id"
+        ],
+        "secondTableName": "detalle_produccion",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "dosis",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "dosis_id"
+        ],
+        "secondTableName": "detalle_produccion",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "municipio",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "municipio_procedencia_id"
+        ],
+        "secondTableName": "detalle_produccion",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "usuario",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "actualizado_por"
+        ],
+        "secondTableName": "detalle_produccion",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "detalle_produccion",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "detalle_id"
+        ],
+        "secondTableName": "detalle_dimension",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "reporte_produccion",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "reporte_id"
+        ],
+        "secondTableName": "historial_estado_reporte",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "codigo"
+        ],
+        "firstTableName": "estado_reporte",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "estado_anterior"
+        ],
+        "secondTableName": "historial_estado_reporte",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "codigo"
+        ],
+        "firstTableName": "estado_reporte",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "estado_nuevo"
+        ],
+        "secondTableName": "historial_estado_reporte",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "usuario",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "usuario_id"
+        ],
+        "secondTableName": "historial_estado_reporte",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "reporte_produccion",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "reporte_id"
+        ],
+        "secondTableName": "observacion_revision",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "reporte_vacuna",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "reporte_vacuna_id"
+        ],
+        "secondTableName": "observacion_revision",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "detalle_produccion",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "detalle_id"
+        ],
+        "secondTableName": "observacion_revision",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "usuario",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "usuario_id"
+        ],
+        "secondTableName": "observacion_revision",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "reporte_produccion",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "reporte_id"
+        ],
+        "secondTableName": "resultado_validacion",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "reporte_vacuna",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "reporte_vacuna_id"
+        ],
+        "secondTableName": "resultado_validacion",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "detalle_produccion",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "detalle_id"
+        ],
+        "secondTableName": "resultado_validacion",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "reporte_produccion",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "reporte_id"
+        ],
+        "secondTableName": "solicitud_rectificacion",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "usuario",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "solicitado_por"
+        ],
+        "secondTableName": "solicitud_rectificacion",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "usuario",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "resuelto_por"
+        ],
+        "secondTableName": "solicitud_rectificacion",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "solicitud_rectificacion",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "solicitud_id"
+        ],
+        "secondTableName": "rectificacion_detalle",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "detalle_produccion",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "detalle_id"
+        ],
+        "secondTableName": "rectificacion_detalle",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "reporte_vacuna",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "reporte_vacuna_id"
+        ],
+        "secondTableName": "rectificacion_detalle",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "dosis",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "dosis_id"
+        ],
+        "secondTableName": "rectificacion_detalle",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "municipio",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "municipio_procedencia_id"
+        ],
+        "secondTableName": "rectificacion_detalle",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "usuario",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "disparada_por"
+        ],
+        "secondTableName": "corrida_calculo",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "corrida_calculo",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "corrida_id"
+        ],
+        "secondTableName": "resultado_indicador",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "municipio",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "municipio_id"
+        ],
+        "secondTableName": "resultado_indicador",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "vacuna",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "vacuna_id"
+        ],
+        "secondTableName": "resultado_indicador",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "dosis",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "dosis_id"
+        ],
+        "secondTableName": "resultado_indicador",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "ddriss",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "ddriss_id"
+        ],
+        "secondTableName": "alerta",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "periodo",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "periodo_id"
+        ],
+        "secondTableName": "alerta",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "municipio",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "municipio_id"
+        ],
+        "secondTableName": "alerta",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "establecimiento",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "establecimiento_id"
+        ],
+        "secondTableName": "alerta",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "reporte_produccion",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "reporte_id"
+        ],
+        "secondTableName": "alerta",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "resultado_indicador",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "resultado_indicador_id"
+        ],
+        "secondTableName": "alerta",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "rol",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "rol_destino_id"
+        ],
+        "secondTableName": "alerta",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "usuario",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "atendida_por"
+        ],
+        "secondTableName": "alerta",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "usuario",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "usuario_id"
+        ],
+        "secondTableName": "bitacora",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      }
+    ]
+  },
+  "views": {}
+}
