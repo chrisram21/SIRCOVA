@@ -1,6 +1,6 @@
 # SPEC 02 — Inicio de sesión (frontend)
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-01 (parte frontend; la parte backend está en el SPEC 01)
 > **Depende de:** SPEC 01
 > **Fecha:** 2026-10-19
