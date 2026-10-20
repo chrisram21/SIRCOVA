@@ -991,6 +991,28 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [ ] Existe una sección del manual para cada uno de los 5 roles.
 - [ ] Se realiza la capacitación y se registra la asistencia.
 
+### Historias agregadas después de la planificación
+
+> **Nota del equipo:** estas historias surgieron durante el desarrollo. Siguen la numeración después de HU-60 para no alterar la secuencia planificada; su sprint, sus story points y su responsable se asignan cuando se decida trabajarlas, y no cuentan en los totales de las secciones 3 y 4 hasta entonces.
+
+#### HU-61. Gestionar los permisos de cada rol
+
+> **Como** administrador, **quiero** ver los permisos del sistema y asignarlos o quitarlos a cada rol desde una pantalla, **para** ajustar las funciones de cada rol sin editar los scripts de la base de datos.
+
+| Para quién | Story points | Sprint | Responsable |
+|---|---|---|---|
+| Administrador | Por estimar | Sin asignar | Sin asignar |
+
+**Cómo se hará:** Pantalla de roles y permisos en React, solo para el Administrador; endpoints para listar los roles y los permisos y para asignar o quitar un permiso a un rol; tabla `rol_permiso`. Usa el mecanismo de permisos granulares de HU-06 (`specs/04-hu-06-permisos-por-rol.md`).
+
+**Criterios de aceptación:**
+- [ ] Solo el Administrador puede ver la pantalla y usar sus endpoints, con un permiso propio.
+- [ ] Puedo ver qué permisos tiene cada rol, agrupados por módulo.
+- [ ] Puedo asignar o quitar un permiso a un rol, y el cambio aplica desde el siguiente inicio de sesión de los usuarios de ese rol.
+- [ ] Desde la pantalla no se crean, renombran ni borran códigos de permiso; los códigos nuevos se crean con `backend/db/05_permisos_mysql.sql`.
+- [ ] No se puede quitar al Administrador el permiso para gestionar permisos.
+- [ ] Cada asignación o retiro queda registrado en la bitácora con el usuario que lo hizo.
+
 ## 6. Notas y pendientes
 
 - Los umbrales del semáforo (HU-42) y las alertas de cobertura (HU-51) usan la propuesta 80/90 %, pendiente de confirmar con Epidemiología; por eso se definen en la configuración de indicadores (HU-35).
@@ -998,3 +1020,4 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - Los informes y la cobertura por distrito (HU-41, HU-45) dependen de que la DDRISS aclare qué es un distrito de salud y cuántos hay por municipio.
 - El registro de la población (HU-13, HU-14) se asignó al rol Administrador de forma provisional, según lo acordado el 10/10/2026.
 - Los story points no cambiaron con las actualizaciones de la versión 4: los ajustes precisan datos y tecnologías, pero no agregan trabajo significativo.
+- 2026-10-20: HU-06 pasó a seguridad granular (un permiso por función) y se agregó HU-61 (gestión de permisos por rol, solo Administrador), todavía sin estimar ni asignar. Los totales de las secciones 3 y 4 siguen contando 60 historias y 280 story points.
