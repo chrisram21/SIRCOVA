@@ -40,6 +40,11 @@ export function ProveedorSesion({ children }) {
     terminar(null)
   }
 
+  // Solo sirve para mostrar u ocultar elementos; quien decide el acceso es el backend.
+  function tienePermiso(codigo) {
+    return sesion?.usuario?.permisos?.includes(codigo) ?? false
+  }
+
   useEffect(() => alPerderSesion((error) => terminar(error.mensaje)), [])
 
   const token = sesion?.token
@@ -71,7 +76,7 @@ export function ProveedorSesion({ children }) {
     }
   }, [token])
 
-  return <ContextoSesion.Provider value={{ sesion, aviso, iniciar, cerrar }}>{children}</ContextoSesion.Provider>
+  return <ContextoSesion.Provider value={{ sesion, aviso, iniciar, cerrar, tienePermiso }}>{children}</ContextoSesion.Provider>
 }
 
 export function useSesion() {

@@ -136,6 +136,36 @@ test('iniciar() borra el aviso', () => {
   expect(aviso()).toBe('')
 })
 
+function SondaPermiso({ codigo }) {
+  const { tienePermiso } = useSesion()
+  return <p data-testid="permiso">{String(tienePermiso(codigo))}</p>
+}
+
+function montarPermiso(codigo, permisos) {
+  if (permisos) {
+    const sesion = crearSesion(120)
+    guardarSesion({ ...sesion, usuario: { ...sesion.usuario, permisos } })
+  }
+  render(
+    <ProveedorSesion>
+      <SondaPermiso codigo={codigo} />
+    </ProveedorSesion>,
+  )
+  return screen.getByTestId('permiso').textContent
+}
+
+test('tienePermiso: sin sesión devuelve false', () => {
+  expect(montarPermiso('POBLACION_REGISTRAR')).toBe('false')
+})
+
+test('tienePermiso: devuelve true si la sesión incluye el código', () => {
+  expect(montarPermiso('POBLACION_REGISTRAR', ['POBLACION_REGISTRAR', 'USUARIO_CREAR'])).toBe('true')
+})
+
+test('tienePermiso: devuelve false si la sesión no incluye el código', () => {
+  expect(montarPermiso('USUARIO_DESACTIVAR', ['POBLACION_REGISTRAR', 'USUARIO_CREAR'])).toBe('false')
+})
+
 test('sin sesión no revisa nada ni llama a la API', () => {
   render(
     <ProveedorSesion>
