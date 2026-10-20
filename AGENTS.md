@@ -42,7 +42,7 @@ Los Excel y PDF se generan en el backend (un endpoint devuelve el archivo) para 
 **Dependencias permitidas:**
 
 - **Backend:** `express`, `mysql2`, `mongodb`, `jsonwebtoken`, `bcrypt`, `cors`, `swagger-ui-express`, `yaml`, `exceljs`, `pdfmake`. Pruebas: `vitest` y `supertest`.
-- **Frontend:** `react`, `react-dom`, `react-router-dom`, `tailwindcss`, `@tailwindcss/vite`, las que instala la CLI de shadcn al agregar un componente (`radix-ui`, `class-variance-authority`, `clsx`, `tailwind-merge`, `lucide-react`, `tw-animate-css`, y `recharts` con el componente Chart), `leaflet` y `react-leaflet`. Desarrollo y pruebas: `vite`, `@vitejs/plugin-react`, `vitest`, `@testing-library/react` y `jsdom`.
+- **Frontend:** `react`, `react-dom`, `react-router-dom`, `tailwindcss`, `@tailwindcss/vite`, las que instala la CLI de shadcn al agregar un componente (`radix-ui`, `class-variance-authority`, `cn`, `shadcn`, `lucide-react`, `tw-animate-css`, y `recharts` con el componente Chart; con el preset `radix-nova`, `cn` reemplaza a `clsx` + `tailwind-merge` y `shadcn` aporta `shadcn/tailwind.css`), `leaflet` y `react-leaflet`. Desarrollo y pruebas: `vite`, `@vitejs/plugin-react`, `vitest`, `@testing-library/react` y `jsdom`.
 
 ## 4. Estructura y capas
 
@@ -139,7 +139,13 @@ Al terminar, indica qué cambiaste y cómo lo comprobaste.
 
 Entorno de desarrollo: se trabaja contra las bases de prueba en Aiven (MySQL) y MongoDB Atlas, con `backend/.env` copiado de `backend/.env.example` y el certificado de Aiven en `backend/certs/`. Como alternativa, se pueden usar bases locales según `docs/base-de-datos/GUIA DE INSTALACION DE BASE DE DATOS.docx` (MySQL en `localhost:3306`, MongoDB en `mongodb://localhost:27017/vacunacion_config`).
 
-**Pendiente:** los comandos exactos de instalación, arranque, pruebas y lint del backend y del frontend se definirán cuando exista el código inicial. No los inventes; si los necesitas y no están aquí, pregunta.
+Comandos del frontend, desde `frontend/` (con `frontend/.env` copiado de `frontend/.env.example`):
+
+- `npm install`: instala las dependencias.
+- `npm run dev`: levanta la app con Vite en `http://localhost:5173`.
+- `npm test`: corre las pruebas con Vitest.
+
+**Pendiente:** los comandos exactos del backend y el lint del frontend se definirán más adelante. No los inventes; si los necesitas y no están aquí, pregunta.
 
 ## 9. Detente y pregunta si
 

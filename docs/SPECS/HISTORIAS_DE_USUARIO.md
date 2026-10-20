@@ -78,12 +78,12 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Cómo se hará:** Pantalla de inicio de sesión en React; endpoint `POST /auth/login` en Express que verifica la contraseña cifrada (bcrypt) en la tabla `usuario` y devuelve un token JWT con el rol y los permisos.
 
 **Criterios de aceptación:**
-- [ ] Con credenciales correctas el sistema abre la pantalla inicial de mi rol.
-- [ ] Con credenciales incorrectas muestra un mensaje de error genérico y permite reintentar.
-- [ ] Un usuario desactivado no puede iniciar sesión.
-- [ ] La contraseña nunca se guarda ni se devuelve en texto plano.
+- [x] Con credenciales correctas el sistema abre la pantalla inicial de mi rol.
+- [x] Con credenciales incorrectas muestra un mensaje de error genérico y permite reintentar.
+- [x] Un usuario desactivado no puede iniciar sesión.
+- [x] La contraseña nunca se guarda ni se devuelve en texto plano.
 
-**Avance:** en curso. La parte backend está implementada en `specs/01-hu-01-login.md` (`POST /auth/login`, bloqueo por intentos, bitácora y middleware `autenticar`). Falta la parte frontend: el proyecto de React y la pantalla de inicio de sesión (spec 02). Los criterios se marcan cuando ambas partes estén integradas.
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 02 a `main`. La parte backend está en `specs/01-hu-01-login.md` (`POST /auth/login`, bloqueo por intentos, bitácora y middleware `autenticar`) y la parte frontend en `specs/02-hu-01-login-frontend.md` (proyecto de React, pantalla de inicio de sesión, sesión en `sessionStorage` y página `/inicio` provisional), verificada contra la API real el 2026-10-19. La "pantalla inicial de mi rol" es por ahora la página `/inicio` provisional; la pantalla propia de cada rol llega con HU-11.
 
 #### HU-02. Cerrar sesión y expiración de la sesión
 
