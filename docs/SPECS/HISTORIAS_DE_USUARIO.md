@@ -149,21 +149,23 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [ ] Puedo restaurar una cuenta desactivada.
 - [ ] Cada cambio queda registrado en la bitácora con el usuario que lo hizo.
 
-#### HU-06. Control de acceso por rol y permiso
+#### HU-06. Control de acceso por permiso y ámbito
 
-> **Como** administrador, **quiero** que cada rol tenga permisos definidos y que el sistema los aplique en cada acción, **para** que nadie pueda ver o modificar información que no le corresponde.
+> **Como** administrador, **quiero** que cada función del sistema exija su propio permiso y que los roles agrupen esos permisos, **para** que nadie pueda ver o modificar información que no le corresponde y para poder dar o quitar funciones a un rol sin cambiar el sistema.
 
 | Para quién | Story points | Sprint | Responsable |
 |---|---|---|---|
 | Administrador | 5 | S1 | Kenneth García |
 
-**Cómo se hará:** Tablas `rol`, `permiso` y `rol_permiso`; middleware de Express que revisa el permiso requerido por cada ruta y el ámbito (establecimiento o DDRISS) del usuario.
+**Cómo se hará:** Tablas `permiso` (un código por función, con la forma `ENTIDAD_ACCION`, por ejemplo `REPORTE_APROBAR`) y `rol_permiso`; middleware de Express `requierePermiso(codigo)` en cada ruta, que lee los permisos del token; utilidades de ámbito (establecimiento o DDRISS) para las consultas; y una guardia que impide escrituras al rol `AUTORIDAD`. La matriz de qué rol tiene qué permiso no se fija aquí: cada historia crea los permisos de sus endpoints y los asigna.
 
 **Criterios de aceptación:**
-- [ ] Una ruta sin el permiso necesario responde 403.
-- [ ] El personal de establecimiento solo ve los reportes de su establecimiento.
-- [ ] La autoridad tiene acceso de solo consulta.
-- [ ] Los permisos se prueban con al menos un caso permitido y uno denegado por rol.
+- [ ] Cada endpoint protegido declara el código de permiso que exige, en su ruta y en `openapi.yaml`.
+- [ ] Una petición sin ese permiso responde 403, aunque el rol tenga otros permisos del mismo módulo.
+- [ ] Asignar o quitar un permiso a un rol en `rol_permiso` cambia el acceso desde el siguiente inicio de sesión, sin cambiar el código.
+- [ ] El personal de establecimiento solo ve los recursos de su establecimiento y el resto de los roles solo los de su DDRISS; un recurso fuera de ese ámbito responde 404.
+- [ ] La autoridad tiene acceso de solo consulta, aunque por error se le asigne un permiso de escritura.
+- [ ] El mecanismo se prueba con al menos un caso permitido y uno denegado; cada historia posterior agrega las pruebas de los permisos de sus propios endpoints.
 
 #### HU-07. Consultar el listado de usuarios
 
