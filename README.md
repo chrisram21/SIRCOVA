@@ -134,11 +134,18 @@ Requisitos: Node.js 22 LTS. El desarrollo se hace contra las **bases de prueba**
 
 1. Copiar `backend/.env.example` a `backend/.env` y completar los datos de conexión de las bases de prueba. Guardar el certificado CA de Aiven en `backend/certs/ca.pem` (la carpeta `certs/` no se sube).
 2. Copiar `frontend/.env.example` a `frontend/.env`.
-3. Levantar la API desde `backend/` y abrir `/api/docs`; levantar el frontend con Vite desde `frontend/`.
+3. Levantar la API desde `backend/` y abrir `/api/docs`; levantar el frontend con Vite desde `frontend/`:
+
+   ```bash
+   cd frontend
+   npm install
+   npm run dev   # http://localhost:5173
+   npm test      # pruebas con Vitest
+   ```
 
 Alternativa sin conexión: Docker Desktop o MySQL 8 y MongoDB 7 instalados, con las bases creadas por los scripts de `backend/db/` según la [guía de instalación local](docs/base-de-datos/GUIA%20DE%20INSTALACION%20DE%20BASE%20DE%20DATOS.docx). Atención: cada script borra y recrea su base.
 
-Los comandos exactos del paso 3 quedan **pendientes** hasta que exista el código inicial del backend y del frontend.
+Los comandos exactos del backend en el paso 3 quedan **pendientes**.
 
 ## 9. Convenciones
 
