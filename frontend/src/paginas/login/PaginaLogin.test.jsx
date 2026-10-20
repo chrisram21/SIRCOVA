@@ -1,11 +1,12 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import App from '@/App.jsx'
 import { iniciarSesion } from '@/api/auth.js'
-import { ErrorApi } from '@/api/cliente.js'
+import { ErrorApi, solicitar } from '@/api/cliente.js'
+import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 
-vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn() }))
+vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn(async () => null) }))
 
 const MENSAJE_CREDENCIALES = 'Usuario o contraseña incorrectos.'
 
@@ -131,4 +132,59 @@ test('mientras la petición está en curso el botón dice "Ingresando…" y est�
 
   resolver(crearRespuestaLogin())
   expect(await screen.findByText('Hola, Juan Pérez')).toBeTruthy()
+})
+
+describe('aviso de sesión cerrada', () => {
+  const MENSAJE_VENCIDA = 'Su sesión venció; inicie sesión de nuevo.'
+
+  // Abre /inicio con sesión y hace que una petición responda 401, como pasaría con un token vencido.
+  async function perderSesionPor401() {
+    guardarSesion(crearRespuestaLogin())
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        status: 401,
+        ok: false,
+        json: async () => ({ error: { codigo: 'SESION_VENCIDA', mensaje: MENSAJE_VENCIDA } }),
+      })),
+    )
+    render(
+      <MemoryRouter initialEntries={['/inicio']}>
+        <ProveedorSesion>
+          <App />
+        </ProveedorSesion>
+      </MemoryRouter>,
+    )
+    await act(() => solicitar('/algo').catch(() => {}))
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  test('sin aviso no se muestra la alerta informativa', () => {
+    abrirLogin()
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  test('tras un 401 lleva a /login y muestra el aviso informativo, no la alerta de error', async () => {
+    await perderSesionPor401()
+
+    expect(screen.getByRole('heading', { name: 'Iniciar sesión' })).toBeTruthy()
+    const avisoMostrado = screen.getByRole('status')
+    expect(avisoMostrado.textContent).toContain(MENSAJE_VENCIDA)
+    expect(avisoMostrado.className).not.toContain('destructive')
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  test('el aviso desaparece al enviar el formulario', async () => {
+    await perderSesionPor401()
+    iniciarSesion.mockRejectedValueOnce(new ErrorApi(401, 'CREDENCIALES_INVALIDAS', MENSAJE_CREDENCIALES))
+
+    llenarYEnviar('jperez', 'incorrecta')
+
+    expect((await screen.findByRole('alert')).textContent).toContain(MENSAJE_CREDENCIALES)
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(sessionStorage.getItem('sircova.sesion')).toBeNull()
+  })
 })

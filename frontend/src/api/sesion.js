@@ -9,6 +9,25 @@ function leerPayload(token) {
   return JSON.parse(new TextDecoder().decode(bytes))
 }
 
+// Vencimiento del token en milisegundos, o null si el token está mal formado.
+export function leerVencimiento(token) {
+  try {
+    const { exp } = leerPayload(token)
+    return typeof exp === 'number' ? exp * 1000 : null
+  } catch {
+    return null
+  }
+}
+
+// Token tal como está guardado, sin revisar si venció ni borrar nada.
+export function leerTokenGuardado() {
+  try {
+    return JSON.parse(sessionStorage.getItem(CLAVE))?.token ?? null
+  } catch {
+    return null
+  }
+}
+
 export function guardarSesion(sesion) {
   sessionStorage.setItem(CLAVE, JSON.stringify(sesion))
 }

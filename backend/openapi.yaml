@@ -133,8 +133,26 @@ paths:
     post:
       tags: [Autenticación]
       summary: Cerrar sesión
+      description: |
+        Registra el cierre en la bitácora (acción `LOGOUT` con el motivo). No revoca el token:
+        sigue siendo válido hasta su `exp`, pero el frontend ya lo borró.
+
+        El cuerpo es opcional; sin `motivo` se registra `MANUAL`.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CierreSesionEntrada" }
       responses:
-        "204": { description: Sesión cerrada }
+        "204": { description: Cierre de sesión registrado }
+        "400":
+          description: El motivo no es MANUAL ni INACTIVIDAD
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: El motivo del cierre de sesión no es válido. }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
 
   /auth/yo:
     get:
@@ -851,6 +869,15 @@ components:
             ddrissId: { type: integer, nullable: true, description: NULL solo para AUTORIDAD de nivel nacional }
             establecimientoId: { type: integer, nullable: true }
             municipioId: { type: integer, nullable: true }
+
+    CierreSesionEntrada:
+      type: object
+      properties:
+        motivo:
+          type: string
+          enum: [MANUAL, INACTIVIDAD]
+          default: MANUAL
+          description: MANUAL si el usuario pulsó "Cerrar sesión"; INACTIVIDAD si el frontend la cerró por inactividad
 
     EmpleadoEntrada:
       type: object

@@ -10,6 +10,7 @@ const HASH_FICTICIO = '$2b$12$YoGDls95Ec5nVQ1mAJIxA.RNOKGr3YCDvCzFdvzP18Zj2yYCV4
 
 const MAXIMO_INTENTOS = 5;
 const MINUTOS_BLOQUEO = 15;
+const MOTIVOS_CIERRE = ['MANUAL', 'INACTIVIDAD'];
 
 const errores = {
   entradaInvalida: () => new ErrorApi(400, 'ENTRADA_INVALIDA', 'Debe indicar el nombre de usuario y la contraseña.'),
@@ -19,6 +20,7 @@ const errores = {
     new ErrorApi(403, 'CUENTA_SIN_ALCANCE', 'Su cuenta no tiene una DDRISS o un establecimiento asignado; contacte al administrador.'),
   bloqueada: () =>
     new ErrorApi(423, 'CUENTA_BLOQUEADA', `Su cuenta está bloqueada por ${MINUTOS_BLOQUEO} minutos por intentos fallidos.`),
+  motivoInvalido: () => new ErrorApi(400, 'ENTRADA_INVALIDA', 'El motivo del cierre de sesión no es válido.'),
 };
 
 const esTextoConContenido = (valor) => typeof valor === 'string' && valor.trim() !== '';
@@ -171,4 +173,21 @@ export async function iniciarSesion(datos, contexto) {
 
   if (resultado.error) throw resultado.error;
   return resultado.sesion;
+}
+
+// El token no se revoca: sigue sirviendo hasta su exp, pero el frontend ya lo borró.
+export async function cerrarSesion(usuario, datos, contexto) {
+  const motivo = datos.motivo === undefined ? 'MANUAL' : datos.motivo;
+  if (!MOTIVOS_CIERRE.includes(motivo)) throw errores.motivoInvalido();
+
+  await registrarBitacora(pool, {
+    usuarioId: usuario.id,
+    modulo: 'USUARIOS',
+    accion: 'LOGOUT',
+    entidad: 'usuario',
+    entidadId: usuario.id,
+    valoresNuevos: { motivo },
+    ipOrigen: contexto.ip,
+    agenteUsuario: contexto.agente,
+  });
 }
