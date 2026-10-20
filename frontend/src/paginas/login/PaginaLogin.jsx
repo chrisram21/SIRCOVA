@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { CircleAlert } from 'lucide-react'
+import { CircleAlert, Info } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -24,13 +24,14 @@ function Logo() {
 }
 
 export default function PaginaLogin() {
-  const { iniciar } = useSesion()
+  const { aviso, iniciar } = useSesion()
   const navegar = useNavigate()
   const refContrasena = useRef(null)
   const [nombreUsuario, setNombreUsuario] = useState('')
   const [contrasena, setContrasena] = useState('')
   const [error, setError] = useState(null)
   const [enviando, setEnviando] = useState(false)
+  const [avisoVisible, setAvisoVisible] = useState(true)
 
   const completo = nombreUsuario.trim() !== '' && contrasena !== ''
 
@@ -39,6 +40,7 @@ export default function PaginaLogin() {
     if (!completo || enviando) return
     setEnviando(true)
     setError(null)
+    setAvisoVisible(false)
     try {
       const respuesta = await iniciarSesion(nombreUsuario.trim(), contrasena)
       iniciar(respuesta)
@@ -83,6 +85,13 @@ export default function PaginaLogin() {
               Use las credenciales que le asignó el administrador.
             </p>
           </div>
+
+          {aviso && avisoVisible && (
+            <Alert role="status" className="border-ring/40 bg-accent text-accent-foreground">
+              <Info />
+              <AlertDescription className="text-accent-foreground">{aviso}</AlertDescription>
+            </Alert>
+          )}
 
           {error && (
             <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">

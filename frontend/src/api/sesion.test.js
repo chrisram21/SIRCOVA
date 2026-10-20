@@ -1,4 +1,4 @@
-import { borrarSesion, guardarSesion, leerSesion } from './sesion.js'
+import { borrarSesion, guardarSesion, leerSesion, leerVencimiento } from './sesion.js'
 
 const CLAVE = 'sircova.sesion'
 
@@ -57,4 +57,14 @@ test('borrarSesion elimina la clave', () => {
   guardarSesion(crearSesion(3600))
   borrarSesion()
   expect(sessionStorage.getItem(CLAVE)).toBeNull()
+})
+
+test('leerVencimiento devuelve el exp del token en milisegundos', () => {
+  const exp = Math.floor(Date.now() / 1000) + 3600
+  expect(leerVencimiento(crearToken({ sub: '7', exp }))).toBe(exp * 1000)
+})
+
+test('leerVencimiento da null con un token mal formado o sin exp', () => {
+  expect(leerVencimiento('no-es-un-jwt')).toBeNull()
+  expect(leerVencimiento(crearToken({ sub: '7' }))).toBeNull()
 })

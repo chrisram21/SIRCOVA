@@ -1,6 +1,8 @@
-import { leerSesion } from './sesion.js'
+import { leerSesion, leerTokenGuardado } from './sesion.js'
 
 const URL_BASE = import.meta.env.VITE_API_URL
+
+let manejadorSesionPerdida = null
 
 export class ErrorApi extends Error {
   constructor(status, codigo, mensaje) {
@@ -12,11 +14,28 @@ export class ErrorApi extends Error {
   }
 }
 
+// Registra la función que se llama cuando una petición con token responde 401. Devuelve cómo quitarla.
+export function alPerderSesion(manejador) {
+  manejadorSesionPerdida = manejador
+  return () => {
+    if (manejadorSesionPerdida === manejador) manejadorSesionPerdida = null
+  }
+}
+
+function crearError(status, datos) {
+  // Los 5xx no muestran el mensaje del backend, aunque venga en el formato común.
+  const error = datos?.error
+  if (status < 500 && typeof error?.codigo === 'string' && typeof error?.mensaje === 'string') {
+    return new ErrorApi(status, error.codigo, error.mensaje)
+  }
+  return new ErrorApi(status, 'ERROR_INESPERADO', 'Ocurrió un error inesperado. Intente de nuevo.')
+}
+
 export async function solicitar(ruta, { metodo = 'GET', cuerpo } = {}) {
   const encabezados = { Accept: 'application/json' }
   if (cuerpo !== undefined) encabezados['Content-Type'] = 'application/json'
-  const sesion = leerSesion()
-  if (sesion) encabezados.Authorization = `Bearer ${sesion.token}`
+  const token = leerSesion()?.token ?? null
+  if (token) encabezados.Authorization = `Bearer ${token}`
 
   let respuesta
   try {
@@ -40,10 +59,10 @@ export async function solicitar(ruta, { metodo = 'GET', cuerpo } = {}) {
 
   if (respuesta.ok) return datos
 
-  // Los 5xx no muestran el mensaje del backend, aunque venga en el formato común.
-  const error = datos?.error
-  if (respuesta.status < 500 && typeof error?.codigo === 'string' && typeof error?.mensaje === 'string') {
-    throw new ErrorApi(respuesta.status, error.codigo, error.mensaje)
+  const error = crearError(respuesta.status, datos)
+  // Si la sesión ya se cerró o cambió mientras tanto, este 401 no debe cerrar la sesión actual.
+  if (respuesta.status === 401 && token && leerTokenGuardado() === token) {
+    manejadorSesionPerdida?.(error)
   }
-  throw new ErrorApi(respuesta.status, 'ERROR_INESPERADO', 'Ocurrió un error inesperado. Intente de nuevo.')
+  throw error
 }

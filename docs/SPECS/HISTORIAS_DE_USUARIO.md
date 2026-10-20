@@ -96,9 +96,11 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Cómo se hará:** Botón de cierre en la barra de navegación; endpoint `POST /auth/logout`; el token tiene tiempo de vida limitado y el frontend redirige al inicio de sesión cuando expira.
 
 **Criterios de aceptación:**
-- [ ] Al cerrar sesión se elimina el token y vuelvo a la pantalla de inicio de sesión.
-- [ ] Con un token vencido, cualquier petición responde 401 y el frontend pide iniciar sesión de nuevo.
-- [ ] El inicio y el cierre de sesión quedan en la bitácora.
+- [x] Al cerrar sesión se elimina el token y vuelvo a la pantalla de inicio de sesión.
+- [x] Con un token vencido, cualquier petición responde 401 y el frontend pide iniciar sesión de nuevo.
+- [x] El inicio y el cierre de sesión quedan en la bitácora.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 03 a `main`. Backend y frontend van en un solo spec, `specs/03-hu-02-cerrar-sesion.md`: `POST /auth/logout` (protegido con `autenticar`, registra `LOGOUT` con el motivo `MANUAL` o `INACTIVIDAD`), cierre por 30 minutos de inactividad, cierre al vencer el JWT, manejo global del 401 y aviso informativo en `/login`. Verificado contra la API real el 2026-10-19. El token no se revoca al cerrar sesión: sigue siendo válido hasta su vencimiento (riesgo aceptado en los specs 01 y 03). El botón "Cerrar sesión" está por ahora en la página `/inicio` provisional; pasa a la barra de navegación con HU-11.
 
 #### HU-03. Cambiar mi contraseña
 

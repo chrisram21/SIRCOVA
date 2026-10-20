@@ -7,7 +7,7 @@ import entorno from '../src/config/entorno.js';
 import { autenticar } from '../src/middlewares/autenticar.js';
 import { manejarErrores } from '../src/middlewares/errores.js';
 
-// App mínima solo para la prueba: el middleware todavía no protege ninguna ruta real.
+// App mínima solo para la prueba: así se revisa req.usuario sin depender de una ruta real.
 const appPrueba = express();
 appPrueba.get('/protegida', autenticar, (req, res) => res.json(req.usuario));
 appPrueba.use(manejarErrores);
