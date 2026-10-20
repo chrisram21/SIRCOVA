@@ -11,6 +11,14 @@ info:
     El sistema maneja solo datos agregados: ningún endpoint recibe ni devuelve datos de pacientes.
 
     Todas las rutas, salvo `/salud` y `/auth/login`, exigen el encabezado `Authorization: Bearer <token>`.
+
+    **Permisos.** Cada función exige su propio permiso, con la forma `ENTIDAD_ACCION` (por ejemplo,
+    `USUARIO_CREAR`). Cada operación protegida declara el suyo con la extensión `x-permiso: CODIGO` y
+    documenta la respuesta `"403": { $ref: "#/components/responses/SinPermiso" }`. El rol `AUTORIDAD`
+    es de solo consulta: recibe 403 en cualquier método distinto de `GET` aunque tenga el permiso.
+    `/salud`, `POST /auth/login`, `POST /auth/logout` y `GET /auth/yo` no llevan permiso.
+    Un recurso fuera del ámbito del usuario (su establecimiento o su DDRISS) responde 404, igual que
+    uno que no existe.
 servers:
   - url: http://localhost:3000/api/v1
     description: Desarrollo local
@@ -823,11 +831,20 @@ components:
             sesionVencida:
               value:
                 error: { codigo: SESION_VENCIDA, mensaje: Su sesión venció; inicie sesión de nuevo. }
+    SinPermiso:
+      description: El usuario no tiene el permiso de la operación, o su rol es de solo consulta
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: SIN_PERMISO, mensaje: No tiene permiso para realizar esta acción. }
     NoEncontrado:
       description: No existe o está fuera del alcance del usuario
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: NO_ENCONTRADO, mensaje: El recurso solicitado no existe. }
     Conflicto:
       description: Duplicado o versionFila desactualizada
       content:
