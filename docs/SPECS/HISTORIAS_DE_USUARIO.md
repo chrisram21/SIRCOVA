@@ -883,10 +883,12 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Cómo se hará:** Función `registrarBitacora` del servicio de auditoría, que cada servicio llama dentro de la misma transacción del cambio, para que la fila se confirme o se revierta junto con él. Escribe en la tabla `bitacora` (usuario, acción, módulo, elemento, valores anteriores y nuevos, fecha, IP y agente). Módulos y acciones salen de constantes validadas. Los campos sensibles se quitan solos. Triggers de MySQL impiden modificar o borrar filas, y no hay rutas de edición ni de borrado.
 
 **Criterios de aceptación:**
-- [ ] Se registran los inicios y cierres de sesión, toda escritura (usuarios, catálogos, producción, estados y configuración, incluida la de MongoDB), las exportaciones y los accesos denegados (403); cada historia registra sus propias escrituras.
-- [ ] Ninguna función del sistema ni ninguna sentencia SQL permite modificar o borrar la bitácora.
-- [ ] Cada registro guarda los valores anteriores y nuevos cuando aplica: el objeto creado al crear y solo los campos que cambiaron al actualizar.
-- [ ] Ningún registro contiene contraseñas, sus hashes ni tokens.
+- [x] Se registran los inicios y cierres de sesión, toda escritura (usuarios, catálogos, producción, estados y configuración, incluida la de MongoDB), las exportaciones y los accesos denegados (403); cada historia registra sus propias escrituras.
+- [x] Ninguna función del sistema ni ninguna sentencia SQL permite modificar o borrar la bitácora.
+- [x] Cada registro guarda los valores anteriores y nuevos cuando aplica: el objeto creado al crear y solo los campos que cambiaron al actualizar.
+- [x] Ningún registro contiene contraseñas, sus hashes ni tokens.
+
+**Avance:** criterios cumplidos a nivel de mecanismo; queda terminada al integrar el spec 05 a `main`. Se adelantó del Sprint 5 para fijar la regla antes de crear endpoints. Está en `specs/05-hu-53-bitacora-auditoria.md`: constantes `MODULOS` y `ACCIONES` validadas en `registrarBitacora`, limpieza automática de campos sensibles, `diferencias(antes, despues)`, `contextoAuditoria(req)` (login y logout ya lo usan), `enTransaccion(fn)` para "cambio + bitácora (+ MongoDB)", registro `SISTEMA`/`ACCESO_DENEGADO` en cada 403 de `requierePermiso` y triggers que impiden `UPDATE` y `DELETE` en `backend/db/06_bitacora_inmutable_mysql.sql`. Verificado contra la base de prueba el 2026-10-20: el 06 corrió dos veces sin error y los intentos de modificar o borrar fallan. Todavía no hay endpoints de escritura de negocio ni escrituras en MongoDB: cada historia que los cree registra los suyos con esta convención (criterios 1 y 3). La consulta de la bitácora es HU-54.
 
 #### HU-54. Consultar la auditoría
 
