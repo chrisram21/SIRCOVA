@@ -310,3 +310,446 @@ describe('POST /usuarios', () => {
     expect(res.body.error.codigo).toBe('SIN_PERMISO');
   });
 });
+
+// HU-05. Mismas reglas que arriba, con su propio prefijo: el personal se crea con la API y se borra en afterAll.
+describe('HU-05: cuentas existentes', () => {
+  const PREFIJO_HU05 = 'vitest-hu05-';
+  let roles;
+
+  const pedir = (metodo, ruta, credencial = token) =>
+    request(app)[metodo](`/api/v1${ruta}`).set('Authorization', `Bearer ${credencial}`);
+
+  async function crearPersonal({ empleado = {}, rol = 'REVISOR' } = {}) {
+    const alta = await registrar({
+      nombres: 'Prueba',
+      apellidos: 'HU-05',
+      correo: `${PREFIJO_HU05}${unico()}@prueba.local`,
+      ...empleado,
+    });
+    expect(alta.status).toBe(201);
+    const cuenta = await request(app)
+      .post('/api/v1/usuarios')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ empleadoId: alta.body.id, nombreUsuario: `${PREFIJO_HU05}${unico()}`, contrasenaTemporal: 'Temporal-2026', rolId: roles[rol] });
+    expect(cuenta.status).toBe(201);
+    return { empleado: alta.body, usuario: cuenta.body };
+  }
+
+  const desactivarPorSql = (id) =>
+    pool.query('UPDATE usuario SET activo = FALSE, desactivado_en = NOW() WHERE id = ?', [id]);
+
+  const bitacoraDe = async (entidad, id, accion) => {
+    const [filas] = await pool.query(
+      `SELECT usuario_id, valores_anteriores, valores_nuevos FROM bitacora
+        WHERE entidad = ? AND entidad_id = ? AND accion = ? ORDER BY id`,
+      [entidad, String(id), accion],
+    );
+    return filas;
+  };
+
+  beforeAll(async () => {
+    const [filas] = await pool.query('SELECT id, codigo FROM rol');
+    roles = Object.fromEntries(filas.map((r) => [r.codigo, r.id]));
+  });
+
+  afterAll(async () => {
+    await pool.query('DELETE FROM usuario WHERE nombre_usuario LIKE ?', [`${PREFIJO_HU05}%`]);
+    await pool.query('DELETE FROM empleado WHERE correo LIKE ?', [`${PREFIJO_HU05}%`]);
+  });
+
+  describe('GET /usuarios y GET /usuarios/{id}', () => {
+    it('GET /usuarios devuelve solo las cuentas de su DDRISS, activas y desactivadas, sin hash ni contraseña', async () => {
+      const activa = await crearPersonal({ empleado: { establecimientoId: establecimientoActivo.id, cargo: 'Enfermera' } });
+      const desactivada = await crearPersonal();
+      await desactivarPorSql(desactivada.usuario.id);
+      const [[{ total }]] = await pool.query(
+        'SELECT COUNT(*) AS total FROM usuario u JOIN empleado e ON e.id = u.empleado_id WHERE e.ddriss_id = ?',
+        [administrador.ddrissId],
+      );
+      const [[{ hash }]] = await pool.query('SELECT hash_contrasena AS hash FROM usuario WHERE id = ?', [activa.usuario.id]);
+
+      const res = await pedir('get', '/usuarios');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveLength(total);
+      expect(res.body.every((u) => u.empleado.ddrissId === administrador.ddrissId)).toBe(true);
+      expect(JSON.stringify(res.body)).not.toContain(hash);
+      for (const clave of ['hashContrasena', 'intentosFallidos', 'bloqueadoHasta']) {
+        expect(res.body[0]).not.toHaveProperty(clave);
+      }
+
+      const filaActiva = res.body.find((u) => u.id === activa.usuario.id);
+      expect(filaActiva).toEqual({
+        ...activa.usuario,
+        ultimoAcceso: null,
+        desactivadoEn: null,
+        empleado: {
+          ...activa.empleado,
+          establecimientoNombre: expect.any(String),
+          municipioNombre: expect.any(String),
+        },
+      });
+
+      const filaDesactivada = res.body.find((u) => u.id === desactivada.usuario.id);
+      expect(filaDesactivada.activo).toBe(false);
+      // La fecha debe ser la de ahora en UTC: si saliera corrida por la zona horaria, quedaría a horas de distancia.
+      expect(Math.abs(Date.parse(filaDesactivada.desactivadoEn) - Date.now())).toBeLessThan(5 * 60_000);
+    });
+
+    it('GET /usuarios/{id} devuelve la misma cuenta que el listado', async () => {
+      const { usuario } = await crearPersonal();
+
+      const detalle = await pedir('get', `/usuarios/${usuario.id}`);
+      const listado = await pedir('get', '/usuarios');
+
+      expect(detalle.status).toBe(200);
+      expect(detalle.body).toEqual(listado.body.find((u) => u.id === usuario.id));
+    });
+
+    it('GET /usuarios/{id} de otra DDRISS o inexistente responde 404 NO_ENCONTRADO', async () => {
+      const { usuario } = await crearPersonal();
+      const otraDdriss = firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['USUARIO_CONSULTAR'] });
+
+      for (const [ruta, credencial] of [
+        [`/usuarios/${usuario.id}`, otraDdriss],
+        ['/usuarios/999999999', token],
+        ['/usuarios/abc', token],
+      ]) {
+        const res = await pedir('get', ruta, credencial);
+        expect(res.status).toBe(404);
+        expect(res.body.error.codigo).toBe('NO_ENCONTRADO');
+      }
+
+      const listadoAjeno = await pedir('get', '/usuarios', otraDdriss);
+      expect(listadoAjeno.status).toBe(200);
+      expect(listadoAjeno.body).toEqual([]);
+    });
+
+    it('sin USUARIO_CONSULTAR responde 403 SIN_PERMISO', async () => {
+      const sinPermiso = firmar({ permisos: ['USUARIO_CREAR'] });
+
+      for (const ruta of ['/usuarios', `/usuarios/${administrador.id}`]) {
+        const res = await pedir('get', ruta, sinPermiso);
+        expect(res.status).toBe(403);
+        expect(res.body.error.codigo).toBe('SIN_PERMISO');
+      }
+    });
+  });
+
+  describe('PATCH /usuarios/{id}', () => {
+    const cambiarRol = (id, cuerpo, credencial) => pedir('patch', `/usuarios/${id}`, credencial).send(cuerpo);
+
+    it('cambia el rol y registra ACTUALIZAR con el rol antes y después', async () => {
+      const { usuario } = await crearPersonal();
+
+      const res = await cambiarRol(usuario.id, { rolId: roles.EPIDEMIOLOGIA });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ id: usuario.id, rol: 'EPIDEMIOLOGIA', activo: true });
+      const filas = await bitacoraDe('usuario', usuario.id, 'ACTUALIZAR');
+      expect(filas).toHaveLength(1);
+      expect(filas[0]).toEqual({
+        usuario_id: administrador.id,
+        valores_anteriores: { rol: 'REVISOR' },
+        valores_nuevos: { rol: 'EPIDEMIOLOGIA' },
+      });
+    });
+
+    it('el mismo rol responde 200 sin fila nueva en la bitácora', async () => {
+      const { usuario } = await crearPersonal();
+
+      const res = await cambiarRol(usuario.id, { rolId: roles.REVISOR });
+
+      expect(res.status).toBe(200);
+      expect(res.body.rol).toBe('REVISOR');
+      expect(await bitacoraDe('usuario', usuario.id, 'ACTUALIZAR')).toHaveLength(0);
+    });
+
+    it('la cuenta propia responde 422 CUENTA_PROPIA y una desactivada 409 CUENTA_DESACTIVADA', async () => {
+      const propia = await cambiarRol(administrador.id, { rolId: roles.REVISOR });
+      expect(propia.status).toBe(422);
+      expect(propia.body.error.codigo).toBe('CUENTA_PROPIA');
+
+      const { usuario } = await crearPersonal();
+      await desactivarPorSql(usuario.id);
+      const desactivada = await cambiarRol(usuario.id, { rolId: roles.EPIDEMIOLOGIA });
+      expect(desactivada.status).toBe(409);
+      expect(desactivada.body.error.codigo).toBe('CUENTA_DESACTIVADA');
+    });
+
+    it('un rol inexistente responde 422 ROL_INVALIDO y ESTABLECIMIENTO sin establecimiento 422 EMPLEADO_SIN_ESTABLECIMIENTO', async () => {
+      const { usuario } = await crearPersonal();
+
+      const inexistente = await cambiarRol(usuario.id, { rolId: 999 });
+      expect(inexistente.status).toBe(422);
+      expect(inexistente.body.error.codigo).toBe('ROL_INVALIDO');
+
+      const sinEstablecimiento = await cambiarRol(usuario.id, { rolId: roles.ESTABLECIMIENTO });
+      expect(sinEstablecimiento.status).toBe(422);
+      expect(sinEstablecimiento.body.error.codigo).toBe('EMPLEADO_SIN_ESTABLECIMIENTO');
+
+      const conEstablecimiento = await crearPersonal({ empleado: { establecimientoId: establecimientoActivo.id } });
+      const permitido = await cambiarRol(conEstablecimiento.usuario.id, { rolId: roles.ESTABLECIMIENTO });
+      expect(permitido.status).toBe(200);
+      expect(permitido.body.rol).toBe('ESTABLECIMIENTO');
+    });
+
+    it('un campo distinto de rolId o sin rolId responde 400, y otra DDRISS 404', async () => {
+      const { usuario } = await crearPersonal();
+
+      for (const cuerpo of [{ rolId: roles.EPIDEMIOLOGIA, activo: false }, {}, { rolId: 'REVISOR' }]) {
+        const res = await cambiarRol(usuario.id, cuerpo);
+        expect(res.status).toBe(400);
+        expect(res.body.error.codigo).toBe('ENTRADA_INVALIDA');
+      }
+
+      const otraDdriss = firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['USUARIO_EDITAR'] });
+      const ajena = await cambiarRol(usuario.id, { rolId: roles.EPIDEMIOLOGIA }, otraDdriss);
+      expect(ajena.status).toBe(404);
+      expect(ajena.body.error.codigo).toBe('NO_ENCONTRADO');
+    });
+
+    it('sin USUARIO_EDITAR responde 403 SIN_PERMISO', async () => {
+      const { usuario } = await crearPersonal();
+
+      const res = await cambiarRol(usuario.id, { rolId: roles.EPIDEMIOLOGIA }, firmar({ permisos: ['USUARIO_CONSULTAR'] }));
+
+      expect(res.status).toBe(403);
+      expect(res.body.error.codigo).toBe('SIN_PERMISO');
+    });
+  });
+
+  describe('POST /usuarios/{id}/desactivar y /restaurar', () => {
+    const desactivar = (id, credencial) => pedir('post', `/usuarios/${id}/desactivar`, credencial);
+    const restaurar = (id, credencial) => pedir('post', `/usuarios/${id}/restaurar`, credencial);
+
+    const estadoEnBase = async (id) => {
+      const [[fila]] = await pool.query(
+        `SELECT u.activo, u.desactivado_en, u.intentos_fallidos, u.bloqueado_hasta, e.activo AS empleado_activo
+           FROM usuario u JOIN empleado e ON e.id = u.empleado_id WHERE u.id = ?`,
+        [id],
+      );
+      return fila;
+    };
+
+    it('desactivar deja la cuenta inactiva, el empleado activo y una fila DESACTIVAR', async () => {
+      const { usuario } = await crearPersonal();
+
+      const res = await desactivar(usuario.id);
+
+      expect(res.status).toBe(200);
+      expect(res.body.activo).toBe(false);
+      expect(Math.abs(Date.parse(res.body.desactivadoEn) - Date.now())).toBeLessThan(5 * 60_000);
+      const enBase = await estadoEnBase(usuario.id);
+      expect(enBase.activo).toBe(0);
+      expect(enBase.desactivado_en).not.toBeNull();
+      expect(enBase.empleado_activo).toBe(1);
+      expect(await bitacoraDe('usuario', usuario.id, 'DESACTIVAR')).toEqual([
+        { usuario_id: administrador.id, valores_anteriores: { activo: true }, valores_nuevos: { activo: false } },
+      ]);
+      // Las acciones pasadas de la cuenta siguen en la bitácora.
+      expect(await bitacoraDe('usuario', usuario.id, 'CREAR')).toHaveLength(1);
+    });
+
+    it('una cuenta desactivada no puede iniciar sesión y su token ya emitido recibe 401 CUENTA_DESACTIVADA', async () => {
+      const { usuario } = await crearPersonal();
+      // Token con los mismos datos que daría el login de esa cuenta; nunca se inicia sesión con ella mientras está activa.
+      const tokenDeLaCuenta = jwt.sign(
+        { rol: 'REVISOR', permisos: ['ROL_CONSULTAR'], ddrissId: administrador.ddrissId, establecimientoId: null, municipioId: null },
+        entorno.jwt.secreto,
+        { algorithm: 'HS256', subject: String(usuario.id), expiresIn: '5m' },
+      );
+      expect((await pedir('get', '/roles', tokenDeLaCuenta)).status).toBe(200);
+
+      expect((await desactivar(usuario.id)).status).toBe(200);
+
+      const conToken = await pedir('get', '/roles', tokenDeLaCuenta);
+      expect(conToken.status).toBe(401);
+      expect(conToken.body.error.codigo).toBe('CUENTA_DESACTIVADA');
+
+      // El LOGIN_FALLIDO guarda el id solo en entidad_id, sin llave foránea, así que la cuenta se puede borrar después.
+      const login = await request(app)
+        .post('/api/v1/auth/login')
+        .send({ nombreUsuario: usuario.nombreUsuario, contrasena: 'Temporal-2026' });
+      expect(login.status).toBe(403);
+      expect(login.body.error.codigo).toBe('CUENTA_DESACTIVADA');
+    });
+
+    it('restaurar deja la cuenta activa, sin fecha de desactivación ni bloqueo, y una fila REACTIVAR', async () => {
+      const { usuario } = await crearPersonal();
+      await desactivar(usuario.id);
+      await pool.query(
+        'UPDATE usuario SET intentos_fallidos = 3, bloqueado_hasta = NOW() + INTERVAL 1 HOUR WHERE id = ?',
+        [usuario.id],
+      );
+
+      const res = await restaurar(usuario.id);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ activo: true, desactivadoEn: null });
+      expect(await estadoEnBase(usuario.id)).toMatchObject({
+        activo: 1,
+        desactivado_en: null,
+        intentos_fallidos: 0,
+        bloqueado_hasta: null,
+      });
+      expect(await bitacoraDe('usuario', usuario.id, 'REACTIVAR')).toEqual([
+        { usuario_id: administrador.id, valores_anteriores: { activo: false }, valores_nuevos: { activo: true } },
+      ]);
+    });
+
+    it('repetir desactivar o restaurar responde 200 sin fila nueva', async () => {
+      const { usuario } = await crearPersonal();
+
+      expect((await desactivar(usuario.id)).status).toBe(200);
+      expect((await desactivar(usuario.id)).status).toBe(200);
+      expect((await restaurar(usuario.id)).status).toBe(200);
+      expect((await restaurar(usuario.id)).status).toBe(200);
+
+      expect(await bitacoraDe('usuario', usuario.id, 'DESACTIVAR')).toHaveLength(1);
+      expect(await bitacoraDe('usuario', usuario.id, 'REACTIVAR')).toHaveLength(1);
+    });
+
+    it('desactivar la cuenta propia responde 422 CUENTA_PROPIA', async () => {
+      const res = await desactivar(administrador.id);
+
+      expect(res.status).toBe(422);
+      expect(res.body.error.codigo).toBe('CUENTA_PROPIA');
+    });
+
+    it('restaurar una cuenta con el empleado inactivo responde 409 EMPLEADO_INACTIVO', async () => {
+      const { usuario, empleado } = await crearPersonal();
+      await desactivar(usuario.id);
+      await pool.query('UPDATE empleado SET activo = FALSE WHERE id = ?', [empleado.id]);
+
+      const res = await restaurar(usuario.id);
+
+      expect(res.status).toBe(409);
+      expect(res.body.error.codigo).toBe('EMPLEADO_INACTIVO');
+    });
+
+    it('otra DDRISS responde 404 y sin USUARIO_DESACTIVAR 403', async () => {
+      const { usuario } = await crearPersonal();
+      const otraDdriss = firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['USUARIO_DESACTIVAR'] });
+      const sinPermiso = firmar({ permisos: ['USUARIO_EDITAR'] });
+
+      for (const accion of [desactivar, restaurar]) {
+        const ajena = await accion(usuario.id, otraDdriss);
+        expect(ajena.status).toBe(404);
+        expect(ajena.body.error.codigo).toBe('NO_ENCONTRADO');
+
+        const prohibida = await accion(usuario.id, sinPermiso);
+        expect(prohibida.status).toBe(403);
+        expect(prohibida.body.error.codigo).toBe('SIN_PERMISO');
+      }
+    });
+  });
+
+  describe('PATCH /empleados/{id}', () => {
+    const editar = (id, cuerpo, credencial) => pedir('patch', `/empleados/${id}`, credencial).send(cuerpo);
+    let otroMunicipioId;
+
+    beforeAll(async () => {
+      [[{ id: otroMunicipioId }]] = await pool.query(
+        `SELECT m.id FROM municipio m JOIN ddriss d ON d.departamento_id = m.departamento_id
+          WHERE d.id = ? AND m.activo = TRUE AND m.id <> ? ORDER BY m.id LIMIT 1`,
+        [administrador.ddrissId, establecimientoActivo.municipio_id],
+      );
+    });
+
+    it('cambiar el cargo responde 200 y deja una fila ACTUALIZAR solo con el cargo; sin cambios, ninguna', async () => {
+      const { empleado } = await crearPersonal({ empleado: { cargo: 'Enfermera' } });
+
+      const res = await editar(empleado.id, { cargo: 'Epidemióloga', nombres: 'Prueba' });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ ...empleado, cargo: 'Epidemióloga' });
+      expect(await bitacoraDe('empleado', empleado.id, 'ACTUALIZAR')).toEqual([
+        { usuario_id: administrador.id, valores_anteriores: { cargo: 'Enfermera' }, valores_nuevos: { cargo: 'Epidemióloga' } },
+      ]);
+
+      const igual = await editar(empleado.id, { cargo: 'Epidemióloga' });
+      expect(igual.status).toBe(200);
+      expect(await bitacoraDe('empleado', empleado.id, 'ACTUALIZAR')).toHaveLength(1);
+    });
+
+    it('poner un establecimiento copia su municipio; quitarlo y poner un municipio guarda el municipio', async () => {
+      const { empleado } = await crearPersonal();
+
+      const conEstablecimiento = await editar(empleado.id, { establecimientoId: establecimientoActivo.id });
+      expect(conEstablecimiento.status).toBe(200);
+      expect(conEstablecimiento.body).toMatchObject({
+        establecimientoId: establecimientoActivo.id,
+        municipioId: establecimientoActivo.municipio_id,
+      });
+
+      const conMunicipio = await editar(empleado.id, { establecimientoId: null, municipioId: otroMunicipioId });
+      expect(conMunicipio.status).toBe(200);
+      expect(conMunicipio.body).toMatchObject({ establecimientoId: null, municipioId: otroMunicipioId });
+      const [[fila]] = await pool.query('SELECT establecimiento_id, municipio_id FROM empleado WHERE id = ?', [empleado.id]);
+      expect(fila).toEqual({ establecimiento_id: null, municipio_id: otroMunicipioId });
+    });
+
+    it('quitar el establecimiento a un empleado con cuenta ESTABLECIMIENTO responde 422 EMPLEADO_SIN_ESTABLECIMIENTO', async () => {
+      const { empleado } = await crearPersonal({
+        empleado: { establecimientoId: establecimientoActivo.id },
+        rol: 'ESTABLECIMIENTO',
+      });
+
+      const res = await editar(empleado.id, { establecimientoId: null });
+
+      expect(res.status).toBe(422);
+      expect(res.body.error.codigo).toBe('EMPLEADO_SIN_ESTABLECIMIENTO');
+    });
+
+    it('nombres vacíos, cuerpo vacío, ddrissId, activo o establecimiento y municipio juntos responden 400', async () => {
+      const { empleado } = await crearPersonal({ empleado: { establecimientoId: establecimientoActivo.id } });
+
+      for (const cuerpo of [
+        { nombres: '  ' },
+        {},
+        { ddrissId: administrador.ddrissId },
+        { activo: false },
+        { establecimientoId: establecimientoActivo.id, municipioId: otroMunicipioId },
+        { municipioId: otroMunicipioId },
+      ]) {
+        const res = await editar(empleado.id, cuerpo);
+        expect(res.status).toBe(400);
+        expect(res.body.error.codigo).toBe('ENTRADA_INVALIDA');
+      }
+    });
+
+    it('un correo de otro empleado responde 409 CORREO_DUPLICADO', async () => {
+      const uno = await crearPersonal();
+      const otro = await crearPersonal();
+
+      const res = await editar(uno.empleado.id, { correo: otro.empleado.correo });
+
+      expect(res.status).toBe(409);
+      expect(res.body.error.codigo).toBe('CORREO_DUPLICADO');
+    });
+
+    it('un empleado con la cuenta desactivada responde 409 CUENTA_DESACTIVADA y uno de otra DDRISS 404', async () => {
+      const { empleado, usuario } = await crearPersonal();
+      const otraDdriss = firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['EMPLEADO_EDITAR'] });
+
+      const ajena = await editar(empleado.id, { cargo: 'Otro' }, otraDdriss);
+      expect(ajena.status).toBe(404);
+      expect(ajena.body.error.codigo).toBe('NO_ENCONTRADO');
+
+      await desactivarPorSql(usuario.id);
+      const desactivada = await editar(empleado.id, { cargo: 'Otro' });
+      expect(desactivada.status).toBe(409);
+      expect(desactivada.body.error.codigo).toBe('CUENTA_DESACTIVADA');
+    });
+
+    it('sin EMPLEADO_EDITAR responde 403 SIN_PERMISO', async () => {
+      const { empleado } = await crearPersonal();
+
+      const res = await editar(empleado.id, { cargo: 'Otro' }, firmar({ permisos: ['USUARIO_EDITAR'] }));
+
+      expect(res.status).toBe(403);
+      expect(res.body.error.codigo).toBe('SIN_PERMISO');
+    });
+  });
+});

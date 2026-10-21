@@ -13,6 +13,7 @@ import {
   Users,
 } from 'lucide-react'
 import PaginaInicio from '@/paginas/inicio/PaginaInicio.jsx'
+import PaginaEditarUsuario from '@/paginas/usuarios/PaginaEditarUsuario.jsx'
 import PaginaRegistrarPersonal from '@/paginas/usuarios/PaginaRegistrarPersonal.jsx'
 import PaginaUsuarios from '@/paginas/usuarios/PaginaUsuarios.jsx'
 
@@ -37,6 +38,7 @@ const opcionesMenu = [
     pagina: PaginaUsuarios,
     subrutas: [
       { titulo: 'Registrar personal', ruta: '/usuarios/nuevo', permiso: 'EMPLEADO_CREAR', pagina: PaginaRegistrarPersonal },
+      { titulo: 'Editar usuario', ruta: '/usuarios/:id/editar', permiso: 'USUARIO_EDITAR', pagina: PaginaEditarUsuario },
     ],
   },
   { titulo: 'Configuración', ruta: '/configuracion', permiso: 'CONFIGURACION_CONSULTAR', icono: Settings },

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../src/app.js';
@@ -8,13 +8,33 @@ import pool from '../src/config/mysql.js';
 let token;
 let administrador;
 
-// Firma un token con el mismo usuario de prueba pero otros datos, para los casos sin permiso o de otro ámbito.
-const firmar = (datos) =>
+// autenticar compara el rol, el establecimiento y el municipio del token con los de la cuenta, así que los
+// casos de otro rol usan cuentas propias, creadas por SQL con este prefijo y borradas en afterAll.
+// Nunca se inicia sesión con ellas: la bitácora tendría una llave foránea a la cuenta.
+const PREFIJO = 'vitest-hu05-cat-';
+
+const firmarPara = (id, datos) =>
   jwt.sign(
     { rol: 'ADMINISTRADOR', permisos: [], ddrissId: administrador.ddrissId, establecimientoId: null, municipioId: null, ...datos },
     entorno.jwt.secreto,
-    { algorithm: 'HS256', subject: String(administrador.id), expiresIn: '5m' },
+    { algorithm: 'HS256', subject: String(id), expiresIn: '5m' },
   );
+
+// Firma un token con el mismo usuario de prueba pero otros permisos o DDRISS, para los casos sin permiso o de otro ámbito.
+const firmar = (datos) => firmarPara(administrador.id, datos);
+
+async function crearCuentaPrueba(nombre, rol, { ddrissId, establecimientoId = null }) {
+  const [empleado] = await pool.query(
+    `INSERT INTO empleado (nombres, apellidos, correo, establecimiento_id, ddriss_id) VALUES ('Prueba', 'HU-05', ?, ?, ?)`,
+    [`${PREFIJO}${nombre}@prueba.local`, establecimientoId, ddrissId],
+  );
+  const [usuario] = await pool.query(
+    `INSERT INTO usuario (empleado_id, nombre_usuario, hash_contrasena, rol_id)
+     SELECT ?, ?, 'sin-contrasena', id FROM rol WHERE codigo = ?`,
+    [empleado.insertId, `${PREFIJO}${nombre}`, rol],
+  );
+  return usuario.insertId;
+}
 
 const consultar = (ruta, credencial = token) =>
   request(app).get(`/api/v1${ruta}`).set('Authorization', `Bearer ${credencial}`);
@@ -26,6 +46,11 @@ beforeAll(async () => {
   if (res.status !== 200) throw new Error(`No se pudo iniciar sesión con el usuario de prueba (${res.status})`);
   token = res.body.token;
   administrador = { id: res.body.usuario.id, ddrissId: res.body.usuario.empleado.ddrissId };
+});
+
+afterAll(async () => {
+  await pool.query('DELETE FROM usuario WHERE nombre_usuario LIKE ?', [`${PREFIJO}%`]);
+  await pool.query('DELETE FROM empleado WHERE correo LIKE ?', [`${PREFIJO}%`]);
 });
 
 describe('GET /roles', () => {
@@ -75,7 +100,12 @@ describe('GET /municipios', () => {
   it('la autoridad nacional recibe todos los municipios activos', async () => {
     const [[{ total }]] = await pool.query('SELECT COUNT(*) AS total FROM municipio WHERE activo = TRUE');
 
-    const res = await consultar('/municipios', firmar({ rol: 'AUTORIDAD', ddrissId: null, permisos: ['MUNICIPIO_CONSULTAR'] }));
+    const autoridad = await crearCuentaPrueba('autoridad', 'AUTORIDAD', { ddrissId: null });
+
+    const res = await consultar(
+      '/municipios',
+      firmarPara(autoridad, { rol: 'AUTORIDAD', ddrissId: null, permisos: ['MUNICIPIO_CONSULTAR'] }),
+    );
 
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(total);
@@ -128,10 +158,14 @@ describe('GET /establecimientos', () => {
       administrador.ddrissId,
     ]);
     if (!establecimiento) return;
+    const personal = await crearCuentaPrueba('establecimiento', 'ESTABLECIMIENTO', {
+      ddrissId: administrador.ddrissId,
+      establecimientoId: establecimiento.id,
+    });
 
     const res = await consultar(
       '/establecimientos',
-      firmar({ rol: 'ESTABLECIMIENTO', establecimientoId: establecimiento.id, permisos: ['ESTABLECIMIENTO_CONSULTAR'] }),
+      firmarPara(personal, { rol: 'ESTABLECIMIENTO', establecimientoId: establecimiento.id, permisos: ['ESTABLECIMIENTO_CONSULTAR'] }),
     );
 
     expect(res.status).toBe(200);
