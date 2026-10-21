@@ -20,4 +20,5 @@ Una nota por línea, corta y con la fecha (AAAA-MM-DD): decisiones, convenciones
 
 - 2026-10-18: MongoDB se usa siempre con `obtenerDb()` de `src/config/mongodb.js`; si la conexión automática del driver falla, el cliente queda cerrado ("Topology is closed") y no reintenta.
 - 2026-10-19: el frontend usa shadcn con el preset `radix-nova`; `cn` sale del paquete `cn` (no de `clsx` + `tailwind-merge`): `src/lib/utils.js` solo lo reexporta y los componentes de `components/ui/` lo importan de `"cn"` directamente.
+- 2026-10-20: permisos granulares (SPEC 04): cada endpoint de negocio lleva `autenticar` + `requierePermiso('ENTIDAD_ACCION')` y `x-permiso` en el contrato; los permisos se crean y asignan en `backend/db/05_permisos_mysql.sql` (idempotente, no recrea la base) y aplican desde el siguiente login. El ámbito se filtra con `filtroAlcance`/`verificarAlcance` de `modulos/auth/alcance.service.js`.
 - 2026-10-18: el backend usa ES modules (`"type": "module"`): `import`/`export`, extensión `.js` obligatoria en las rutas relativas y `import.meta.dirname` en lugar de `__dirname`.

@@ -160,12 +160,14 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Cómo se hará:** Tablas `permiso` (un código por función, con la forma `ENTIDAD_ACCION`, por ejemplo `REPORTE_APROBAR`) y `rol_permiso`; middleware de Express `requierePermiso(codigo)` en cada ruta, que lee los permisos del token; utilidades de ámbito (establecimiento o DDRISS) para las consultas; y una guardia que impide escrituras al rol `AUTORIDAD`. La matriz de qué rol tiene qué permiso no se fija aquí: cada historia crea los permisos de sus endpoints y los asigna.
 
 **Criterios de aceptación:**
-- [ ] Cada endpoint protegido declara el código de permiso que exige, en su ruta y en `openapi.yaml`.
-- [ ] Una petición sin ese permiso responde 403, aunque el rol tenga otros permisos del mismo módulo.
-- [ ] Asignar o quitar un permiso a un rol en `rol_permiso` cambia el acceso desde el siguiente inicio de sesión, sin cambiar el código.
-- [ ] El personal de establecimiento solo ve los recursos de su establecimiento y el resto de los roles solo los de su DDRISS; un recurso fuera de ese ámbito responde 404.
-- [ ] La autoridad tiene acceso de solo consulta, aunque por error se le asigne un permiso de escritura.
-- [ ] El mecanismo se prueba con al menos un caso permitido y uno denegado; cada historia posterior agrega las pruebas de los permisos de sus propios endpoints.
+- [x] Cada endpoint protegido declara el código de permiso que exige, en su ruta y en `openapi.yaml`.
+- [x] Una petición sin ese permiso responde 403, aunque el rol tenga otros permisos del mismo módulo.
+- [x] Asignar o quitar un permiso a un rol en `rol_permiso` cambia el acceso desde el siguiente inicio de sesión, sin cambiar el código.
+- [x] El personal de establecimiento solo ve los recursos de su establecimiento y el resto de los roles solo los de su DDRISS; un recurso fuera de ese ámbito responde 404.
+- [x] La autoridad tiene acceso de solo consulta, aunque por error se le asigne un permiso de escritura.
+- [x] El mecanismo se prueba con al menos un caso permitido y uno denegado; cada historia posterior agrega las pruebas de los permisos de sus propios endpoints.
+
+**Avance:** criterios cumplidos a nivel de mecanismo; queda terminada al integrar el spec 04 a `main`. Está en `specs/04-hu-06-permisos-por-rol.md`: middleware `requierePermiso(codigo)` (403 `SIN_PERMISO`, con la guardia de solo consulta de `AUTORIDAD`), utilidades de ámbito `filtroAlcance` y `verificarAlcance` (404 `NO_ENCONTRADO`), catálogo idempotente `backend/db/05_permisos_mysql.sql`, convención `x-permiso` y respuesta `SinPermiso` en el contrato, y `tienePermiso()` en `useSesion()`. Verificado contra la base de prueba el 2026-10-20: al quitar `POBLACION_REGISTRAR` al Administrador el siguiente inicio de sesión recibe 403, y al correr el 05 vuelve a recibir 200. Todavía no existe ningún endpoint de negocio: los criterios 1 y 4 se aplican en cada historia que cree endpoints (declarar `x-permiso`, usar `requierePermiso` y filtrar con las utilidades de ámbito). La matriz de permisos por rol no está definida; la pantalla para gestionarla es HU-61.
 
 #### HU-07. Consultar el listado de usuarios
 
