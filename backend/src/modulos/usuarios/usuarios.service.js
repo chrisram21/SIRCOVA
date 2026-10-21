@@ -1,3 +1,4 @@
+import bcrypt from 'bcrypt';
 import pool, { enTransaccion } from '../../config/mysql.js';
 import { ErrorApi } from '../../middlewares/errores.js';
 import { registrarBitacora, MODULOS, ACCIONES } from '../auditoria/auditoria.service.js';
@@ -10,13 +11,31 @@ const errores = {
     new ErrorApi(422, 'ESTABLECIMIENTO_INVALIDO', 'El establecimiento no existe, está inactivo o no es de su DDRISS.'),
   municipioInvalido: () =>
     new ErrorApi(422, 'MUNICIPIO_INVALIDO', 'El municipio no existe, está inactivo o no es del departamento de su DDRISS.'),
+  empleadoNoEncontrado: () => new ErrorApi(404, 'NO_ENCONTRADO', 'El empleado no existe.'),
+  empleadoConCuenta: () => new ErrorApi(409, 'EMPLEADO_CON_CUENTA', 'El empleado ya tiene una cuenta.'),
+  nombreUsuarioDuplicado: () => new ErrorApi(409, 'NOMBRE_USUARIO_DUPLICADO', 'Ya existe ese nombre de usuario.'),
+  rolInvalido: () => new ErrorApi(422, 'ROL_INVALIDO', 'El rol no existe.'),
+  sinEstablecimiento: () =>
+    new ErrorApi(
+      422,
+      'EMPLEADO_SIN_ESTABLECIMIENTO',
+      'Para el rol de personal del establecimiento, el empleado debe tener un establecimiento.',
+    ),
 };
 
 // Nombre de la llave única de MySQL → error que se responde si dos peticiones chocan.
 const DUPLICADOS = {
   uq_empleado_correo: errores.correoDuplicado,
   uq_empleado_codigo: errores.codigoDuplicado,
+  uq_usuario_empleado: errores.empleadoConCuenta,
+  uq_usuario_usuario: errores.nombreUsuarioDuplicado,
 };
+
+const COSTO_BCRYPT = 12;
+const NOMBRE_USUARIO = /^\S{3,50}$/;
+const LARGO_MINIMO_CONTRASENA = 8;
+// bcrypt solo usa los primeros 72 bytes; una contraseña más larga se aceptaría truncada.
+const BYTES_MAXIMOS_CONTRASENA = 72;
 
 function traducirDuplicado(err) {
   if (err.code !== 'ER_DUP_ENTRY') return err;
@@ -127,6 +146,91 @@ export async function registrarEmpleado(cuerpo, administrador, contexto) {
         valoresNuevos: empleado,
       });
       return empleado;
+    });
+  } catch (err) {
+    throw traducirDuplicado(err);
+  }
+}
+
+function idObligatorio(valor, campo) {
+  if (!Number.isInteger(valor) || valor <= 0) throw errores.entradaInvalida(`Debe indicar ${campo}.`);
+  return valor;
+}
+
+function leerCuenta(cuerpo) {
+  const { nombreUsuario, contrasenaTemporal } = cuerpo;
+  if (typeof nombreUsuario !== 'string' || !NOMBRE_USUARIO.test(nombreUsuario)) {
+    throw errores.entradaInvalida('El nombre de usuario debe tener de 3 a 50 caracteres, sin espacios.');
+  }
+  if (
+    typeof contrasenaTemporal !== 'string' ||
+    contrasenaTemporal.length < LARGO_MINIMO_CONTRASENA ||
+    Buffer.byteLength(contrasenaTemporal) > BYTES_MAXIMOS_CONTRASENA
+  ) {
+    throw errores.entradaInvalida(
+      `La contraseña temporal debe tener de ${LARGO_MINIMO_CONTRASENA} a ${BYTES_MAXIMOS_CONTRASENA} caracteres.`,
+    );
+  }
+  return {
+    empleadoId: idObligatorio(cuerpo.empleadoId, 'el empleado'),
+    nombreUsuario,
+    contrasenaTemporal,
+    rolId: idObligatorio(cuerpo.rolId, 'el rol'),
+  };
+}
+
+export async function crearCuenta(cuerpo, administrador, contexto) {
+  const datos = leerCuenta(cuerpo ?? {});
+  // Se calcula antes de abrir la transacción para no retener los bloqueos mientras bcrypt trabaja.
+  const hash = await bcrypt.hash(datos.contrasenaTemporal, COSTO_BCRYPT);
+
+  try {
+    return await enTransaccion(async (conexion) => {
+      const [[empleado]] = await conexion.query(
+        'SELECT id, activo, ddriss_id, establecimiento_id FROM empleado WHERE id = ? FOR UPDATE',
+        [datos.empleadoId],
+      );
+      // Uno inactivo o de otra DDRISS responde igual que uno que no existe (regla 10).
+      if (!empleado || !empleado.activo || empleado.ddriss_id !== administrador.ddrissId) {
+        throw errores.empleadoNoEncontrado();
+      }
+
+      const [conCuenta] = await conexion.query('SELECT id FROM usuario WHERE empleado_id = ?', [empleado.id]);
+      if (conCuenta.length > 0) throw errores.empleadoConCuenta();
+
+      const [[rol]] = await conexion.query('SELECT id, codigo, nombre FROM rol WHERE id = ?', [datos.rolId]);
+      if (!rol) throw errores.rolInvalido();
+      // Sin establecimiento, el login de esa cuenta respondería CUENTA_SIN_ALCANCE.
+      if (rol.codigo === 'ESTABLECIMIENTO' && empleado.establecimiento_id == null) throw errores.sinEstablecimiento();
+
+      const [repetido] = await conexion.query('SELECT id FROM usuario WHERE nombre_usuario = ?', [datos.nombreUsuario]);
+      if (repetido.length > 0) throw errores.nombreUsuarioDuplicado();
+
+      const [resultado] = await conexion.query(
+        `INSERT INTO usuario (empleado_id, nombre_usuario, hash_contrasena, rol_id, debe_cambiar_contrasena, creado_por)
+         VALUES (?, ?, ?, ?, TRUE, ?)`,
+        [empleado.id, datos.nombreUsuario, hash, rol.id, administrador.id],
+      );
+      const usuario = {
+        id: resultado.insertId,
+        empleadoId: empleado.id,
+        nombreUsuario: datos.nombreUsuario,
+        rol: rol.codigo,
+        rolNombre: rol.nombre,
+        activo: true,
+        debeCambiarContrasena: true,
+      };
+
+      // Se guarda el objeto de la respuesta y no el cuerpo: contrasenaTemporal no está entre los campos sensibles.
+      await registrarBitacora(conexion, {
+        ...contexto,
+        modulo: MODULOS.USUARIOS,
+        accion: ACCIONES.CREAR,
+        entidad: 'usuario',
+        entidadId: usuario.id,
+        valoresNuevos: usuario,
+      });
+      return usuario;
     });
   } catch (err) {
     throw traducirDuplicado(err);

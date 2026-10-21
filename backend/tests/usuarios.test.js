@@ -171,3 +171,142 @@ describe('POST /empleados', () => {
     expect(res.body.error.codigo).toBe('SIN_PERMISO');
   });
 });
+
+describe('POST /usuarios', () => {
+  const CONTRASENA = 'Temporal-hu04';
+  let roles;
+
+  const crearCuenta = (cuerpo, credencial = token) =>
+    request(app).post('/api/v1/usuarios').set('Authorization', `Bearer ${credencial}`).send(cuerpo);
+
+  const nuevoEmpleado = async (extra) => (await registrar(minimo(extra))).body;
+  const nombreUnico = () => `${PREFIJO}${unico()}`;
+  const cuenta = (empleado, extra = {}) => ({
+    empleadoId: empleado.id,
+    nombreUsuario: nombreUnico(),
+    contrasenaTemporal: CONTRASENA,
+    rolId: roles.REVISOR,
+    ...extra,
+  });
+
+  beforeAll(async () => {
+    const [filas] = await pool.query('SELECT id, codigo FROM rol');
+    roles = Object.fromEntries(filas.map((r) => [r.codigo, r.id]));
+  });
+
+  it('responde 201 sin contraseña ni hash, guarda bcrypt y el administrador que la creó, y registra la bitácora', async () => {
+    const empleado = await nuevoEmpleado();
+    const cuerpo = cuenta(empleado);
+
+    const res = await crearCuenta(cuerpo);
+
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual({
+      id: expect.any(Number),
+      empleadoId: empleado.id,
+      nombreUsuario: cuerpo.nombreUsuario,
+      rol: 'REVISOR',
+      rolNombre: expect.any(String),
+      activo: true,
+      debeCambiarContrasena: true,
+    });
+    expect(JSON.stringify(res.body)).not.toContain(CONTRASENA);
+
+    const [[fila]] = await pool.query(
+      'SELECT hash_contrasena, creado_por, debe_cambiar_contrasena, rol_id FROM usuario WHERE id = ?',
+      [res.body.id],
+    );
+    expect(fila.hash_contrasena).toMatch(/^\$2[aby]\$12\$/);
+    expect(fila.creado_por).toBe(administrador.id);
+    expect(Boolean(fila.debe_cambiar_contrasena)).toBe(true);
+    expect(fila.rol_id).toBe(roles.REVISOR);
+
+    const [bitacora] = await pool.query(
+      `SELECT usuario_id, valores_nuevos FROM bitacora
+        WHERE modulo = 'USUARIOS' AND accion = 'CREAR' AND entidad = 'usuario' AND entidad_id = ?`,
+      [String(res.body.id)],
+    );
+    expect(bitacora).toHaveLength(1);
+    expect(bitacora[0].usuario_id).toBe(administrador.id);
+    const texto = JSON.stringify(bitacora[0].valores_nuevos);
+    expect(texto.includes(CONTRASENA)).toBe(false);
+    expect(texto).not.toMatch(/\$2[aby]\$/);
+  });
+
+  it('un segundo intento para el mismo empleado responde 409 EMPLEADO_CON_CUENTA', async () => {
+    const empleado = await nuevoEmpleado();
+    expect((await crearCuenta(cuenta(empleado))).status).toBe(201);
+
+    const res = await crearCuenta(cuenta(empleado));
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.codigo).toBe('EMPLEADO_CON_CUENTA');
+  });
+
+  it('un nombre de usuario repetido responde 409 NOMBRE_USUARIO_DUPLICADO', async () => {
+    const nombreUsuario = nombreUnico();
+    expect((await crearCuenta(cuenta(await nuevoEmpleado(), { nombreUsuario }))).status).toBe(201);
+
+    const res = await crearCuenta(cuenta(await nuevoEmpleado(), { nombreUsuario }));
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.codigo).toBe('NOMBRE_USUARIO_DUPLICADO');
+  });
+
+  it('un empleado inexistente, inactivo o de otra DDRISS responde 404 NO_ENCONTRADO', async () => {
+    const inactivo = await nuevoEmpleado();
+    await pool.query('UPDATE empleado SET activo = FALSE WHERE id = ?', [inactivo.id]);
+    const otraDdriss = firmar({ ddrissId: administrador.ddrissId + 100, permisos: ['USUARIO_CREAR'] });
+
+    for (const [cuerpo, credencial] of [
+      [cuenta({ id: 999999999 }), token],
+      [cuenta(inactivo), token],
+      [cuenta(await nuevoEmpleado()), otraDdriss],
+    ]) {
+      const res = await crearCuenta(cuerpo, credencial);
+      expect(res.status).toBe(404);
+      expect(res.body.error.codigo).toBe('NO_ENCONTRADO');
+    }
+  });
+
+  it('un rol inexistente responde 422 ROL_INVALIDO', async () => {
+    const res = await crearCuenta(cuenta(await nuevoEmpleado(), { rolId: 250 }));
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.codigo).toBe('ROL_INVALIDO');
+  });
+
+  it('el rol ESTABLECIMIENTO exige que el empleado tenga establecimiento', async () => {
+    const sinEstablecimiento = await crearCuenta(cuenta(await nuevoEmpleado(), { rolId: roles.ESTABLECIMIENTO }));
+    expect(sinEstablecimiento.status).toBe(422);
+    expect(sinEstablecimiento.body.error.codigo).toBe('EMPLEADO_SIN_ESTABLECIMIENTO');
+
+    const conEstablecimiento = await crearCuenta(
+      cuenta(await nuevoEmpleado({ establecimientoId: establecimientoActivo.id }), { rolId: roles.ESTABLECIMIENTO }),
+    );
+    expect(conEstablecimiento.status).toBe(201);
+    expect(conEstablecimiento.body.rol).toBe('ESTABLECIMIENTO');
+  });
+
+  it('un nombre de usuario con espacios o una contraseña de 7 caracteres responden 400 ENTRADA_INVALIDA', async () => {
+    const empleado = await nuevoEmpleado();
+    for (const extra of [
+      { nombreUsuario: `${PREFIJO}con espacio` },
+      { nombreUsuario: 'ab' },
+      { contrasenaTemporal: '1234567' },
+      { contrasenaTemporal: 'x'.repeat(73) },
+      { rolId: 'REVISOR' },
+    ]) {
+      const res = await crearCuenta(cuenta(empleado, extra));
+      expect(res.status).toBe(400);
+      expect(res.body.error.codigo).toBe('ENTRADA_INVALIDA');
+    }
+  });
+
+  it('sin USUARIO_CREAR responde 403 SIN_PERMISO', async () => {
+    const res = await crearCuenta(cuenta(await nuevoEmpleado()), firmar({ permisos: ['EMPLEADO_CREAR'] }));
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.codigo).toBe('SIN_PERMISO');
+  });
+});
