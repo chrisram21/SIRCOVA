@@ -880,12 +880,13 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 |---|---|---|---|
 | Administrador | 5 | S5 | Luis Suárez |
 
-**Cómo se hará:** Middleware en Express que escribe en la tabla `bitacora` (usuario, acción, módulo, elemento, valores anteriores y nuevos, fecha, IP); sin rutas de edición ni borrado.
+**Cómo se hará:** Función `registrarBitacora` del servicio de auditoría, que cada servicio llama dentro de la misma transacción del cambio, para que la fila se confirme o se revierta junto con él. Escribe en la tabla `bitacora` (usuario, acción, módulo, elemento, valores anteriores y nuevos, fecha, IP y agente). Módulos y acciones salen de constantes validadas. Los campos sensibles se quitan solos. Triggers de MySQL impiden modificar o borrar filas, y no hay rutas de edición ni de borrado.
 
 **Criterios de aceptación:**
-- [ ] Se registran inicios de sesión, cambios de usuarios, catálogos, producción, estados y configuración.
-- [ ] Ninguna función del sistema permite modificar o borrar la bitácora.
-- [ ] Cada registro guarda los valores anteriores y nuevos cuando aplica.
+- [ ] Se registran los inicios y cierres de sesión, toda escritura (usuarios, catálogos, producción, estados y configuración, incluida la de MongoDB), las exportaciones y los accesos denegados (403); cada historia registra sus propias escrituras.
+- [ ] Ninguna función del sistema ni ninguna sentencia SQL permite modificar o borrar la bitácora.
+- [ ] Cada registro guarda los valores anteriores y nuevos cuando aplica: el objeto creado al crear y solo los campos que cambiaron al actualizar.
+- [ ] Ningún registro contiene contraseñas, sus hashes ni tokens.
 
 #### HU-54. Consultar la auditoría
 
