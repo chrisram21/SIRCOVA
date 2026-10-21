@@ -13,6 +13,7 @@ import {
   Users,
 } from 'lucide-react'
 import PaginaInicio from '@/paginas/inicio/PaginaInicio.jsx'
+import PaginaRegistrarPersonal from '@/paginas/usuarios/PaginaRegistrarPersonal.jsx'
 import PaginaUsuarios from '@/paginas/usuarios/PaginaUsuarios.jsx'
 
 // Los permisos son provisionales: el spec que construye cada pantalla confirma su código al crearlo en
@@ -34,7 +35,9 @@ const opcionesMenu = [
     permiso: 'USUARIO_CONSULTAR',
     icono: Users,
     pagina: PaginaUsuarios,
-    subrutas: [{ titulo: 'Registrar personal', ruta: '/usuarios/nuevo', permiso: 'EMPLEADO_CREAR' }],
+    subrutas: [
+      { titulo: 'Registrar personal', ruta: '/usuarios/nuevo', permiso: 'EMPLEADO_CREAR', pagina: PaginaRegistrarPersonal },
+    ],
   },
   { titulo: 'Configuración', ruta: '/configuracion', permiso: 'CONFIGURACION_CONSULTAR', icono: Settings },
   { titulo: 'Roles y permisos', ruta: '/permisos', permiso: 'PERMISO_CONSULTAR', icono: ShieldCheck },

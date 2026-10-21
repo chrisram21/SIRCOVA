@@ -5,6 +5,13 @@ import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from './ProveedorSesion.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
+// /usuarios/nuevo pide sus catálogos al montar; aquí solo importa la ruta, no la API.
+vi.mock('@/api/usuarios.js', () => ({ listarRoles: vi.fn(() => new Promise(() => {})) }))
+vi.mock('@/api/catalogos.js', () => ({
+  listarDdriss: vi.fn(() => new Promise(() => {})),
+  listarMunicipios: vi.fn(() => new Promise(() => {})),
+  listarEstablecimientos: vi.fn(() => new Promise(() => {})),
+}))
 
 function crearSesion(permisos) {
   const codificar = (objeto) => btoa(JSON.stringify(objeto)).replace(/=+$/, '')
