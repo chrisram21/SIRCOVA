@@ -188,15 +188,50 @@ paths:
         "200": { description: Lista paginada de empleados }
     post:
       tags: [Usuarios]
-      summary: Registrar un empleado (puede existir sin cuenta)
+      summary: Registrar un empleado de la DDRISS del administrador (puede existir sin cuenta)
+      description: |
+        La DDRISS del empleado es siempre la del usuario que lo registra; no viene en el cuerpo.
+        Con establecimiento, el municipio se toma del establecimiento; `municipioId` solo se acepta
+        sin establecimiento y debe ser del departamento sede de la DDRISS. Los textos vacíos se guardan como `null`.
+      x-permiso: EMPLEADO_CREAR
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/EmpleadoEntrada" }
       responses:
-        "201": { description: Empleado creado }
+        "201":
+          description: Empleado creado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Empleado" }
         "400": { $ref: "#/components/responses/EntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "409":
+          description: Correo o código de empleado repetido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                correo:
+                  value:
+                    error: { codigo: CORREO_DUPLICADO, mensaje: Ya hay un empleado con ese correo. }
+                codigo:
+                  value:
+                    error: { codigo: CODIGO_EMPLEADO_DUPLICADO, mensaje: Ya hay un empleado con ese código. }
+        "422":
+          description: Establecimiento o municipio fuera del ámbito, inexistente o inactivo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                establecimiento:
+                  value:
+                    error: { codigo: ESTABLECIMIENTO_INVALIDO, mensaje: El establecimiento no existe, está inactivo o no es de su DDRISS. }
+                municipio:
+                  value:
+                    error: { codigo: MUNICIPIO_INVALIDO, mensaje: El municipio no existe, está inactivo o no es del departamento de su DDRISS. }
 
   /usuarios:
     get:
@@ -210,21 +245,71 @@ paths:
     post:
       tags: [Usuarios]
       summary: Crear la cuenta de acceso de un empleado (solo Administrador)
+      description: |
+        La contraseña se guarda con bcrypt y la cuenta queda con `debeCambiarContrasena: true`.
+        El empleado debe estar activo, ser de la DDRISS del administrador y no tener cuenta.
+        El rol `ESTABLECIMIENTO` exige que el empleado tenga establecimiento.
+      x-permiso: USUARIO_CREAR
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [empleadoId, nombreUsuario, contrasenaTemporal, rolId]
-              properties:
-                empleadoId: { type: integer }
-                nombreUsuario: { type: string }
-                contrasenaTemporal: { type: string, format: password }
-                rolId: { type: integer }
+            schema: { $ref: "#/components/schemas/UsuarioEntrada" }
       responses:
-        "201": { description: Cuenta creada; el usuario debe cambiar la contraseña al entrar }
-        "409": { $ref: "#/components/responses/Conflicto" }
+        "201":
+          description: Cuenta creada; nunca devuelve la contraseña ni su hash
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Usuario" }
+        "400": { $ref: "#/components/responses/EntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: El empleado ya tiene cuenta o el nombre de usuario ya existe
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                empleadoConCuenta:
+                  value:
+                    error: { codigo: EMPLEADO_CON_CUENTA, mensaje: El empleado ya tiene una cuenta. }
+                nombreUsuario:
+                  value:
+                    error: { codigo: NOMBRE_USUARIO_DUPLICADO, mensaje: Ya existe ese nombre de usuario. }
+        "422":
+          description: Rol inexistente o rol ESTABLECIMIENTO para un empleado sin establecimiento
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                rol:
+                  value:
+                    error: { codigo: ROL_INVALIDO, mensaje: El rol no existe. }
+                sinEstablecimiento:
+                  value:
+                    error: { codigo: EMPLEADO_SIN_ESTABLECIMIENTO, mensaje: Para el rol de personal del establecimiento, el empleado debe tener un establecimiento. }
+
+  /roles:
+    get:
+      tags: [Usuarios]
+      summary: Listar los roles
+      x-permiso: ROL_CONSULTAR
+      responses:
+        "200":
+          description: Los cinco roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: integer }
+                    codigo: { type: string, example: REVISOR }
+                    nombre: { type: string, example: Estadígrafa / revisor DDRISS }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
 
   /usuarios/{id}:
     patch:
@@ -245,15 +330,37 @@ paths:
         "404": { $ref: "#/components/responses/NoEncontrado" }
 
   # ---------------------------------------------------------------- Catálogos
+  /ddriss:
+    get:
+      tags: [Catálogos]
+      summary: Listar las DDRISS activas del ámbito del usuario
+      description: Devuelve la DDRISS del usuario; la autoridad nacional (sin DDRISS) recibe todas.
+      x-permiso: DDRISS_CONSULTAR
+      responses:
+        "200":
+          description: Lista de DDRISS
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: integer }
+                    codigo: { type: string, example: DDRISS_SM }
+                    nombre: { type: string }
+                    departamentoId: { type: integer }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+
   /municipios:
     get:
       tags: [Catálogos]
-      summary: Listar municipios (codigo_ine es la llave del GeoJSON)
-      parameters:
-        - name: jurisdiccion
-          in: query
-          description: true para solo los 30 municipios de San Marcos
-          schema: { type: boolean }
+      summary: Listar los municipios activos del ámbito del usuario (codigo_ine es la llave del GeoJSON)
+      description: |
+        Devuelve los municipios del departamento sede de la DDRISS del usuario, ordenados por nombre;
+        la autoridad nacional (sin DDRISS) recibe todos. Versión mínima de HU-04; HU-08 la amplía.
+      x-permiso: MUNICIPIO_CONSULTAR
       responses:
         "200":
           description: Lista de municipios
@@ -268,20 +375,19 @@ paths:
                     departamentoId: { type: integer }
                     codigoIne: { type: string }
                     nombre: { type: string }
-                    esJurisdiccion: { type: boolean }
                     activo: { type: boolean }
-        "400":
-          description: Parámetro jurisdiccion inválido
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
 
 
   /establecimientos:
     get:
       tags: [Catálogos]
-      summary: Listar establecimientos e instituciones
+      summary: Listar establecimientos e instituciones del ámbito del usuario
+      description: |
+        Ordenados por nombre. El personal de establecimiento solo recibe el suyo; los demás roles, los de su DDRISS;
+        la autoridad nacional, todos. Versión mínima de HU-04; HU-09 la amplía.
+      x-permiso: ESTABLECIMIENTO_CONSULTAR
       parameters:
         - { name: municipioId, in: query, schema: { type: integer } }
         - { name: activo, in: query, schema: { type: boolean } }
@@ -308,6 +414,8 @@ paths:
                     activo: { type: boolean }
         "400":
           $ref: "#/components/responses/EntradaInvalida"
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
         "500":
           description: Error interno al consultar establecimientos
     post:
@@ -906,13 +1014,53 @@ components:
       type: object
       required: [nombres, apellidos]
       properties:
+        nombres: { type: string, minLength: 1, maxLength: 100 }
+        apellidos: { type: string, minLength: 1, maxLength: 100 }
+        codigoEmpleado: { type: string, maxLength: 20, description: Único si se indica }
+        cargo: { type: string, maxLength: 100 }
+        correo: { type: string, format: email, maxLength: 150, description: Único si se indica }
+        telefono: { type: string, maxLength: 20 }
+        establecimientoId:
+          type: integer
+          description: Activo y de la DDRISS del administrador; el municipio se toma de él
+        municipioId:
+          type: integer
+          description: Solo sin establecimiento; activo y del departamento sede de la DDRISS
+
+    Empleado:
+      type: object
+      properties:
+        id: { type: integer }
+        codigoEmpleado: { type: string, nullable: true }
         nombres: { type: string }
         apellidos: { type: string }
-        cargo: { type: string }
-        correo: { type: string, format: email }
-        telefono: { type: string }
-        establecimientoId: { type: integer }
-        municipioId: { type: integer }
+        cargo: { type: string, nullable: true }
+        correo: { type: string, nullable: true }
+        telefono: { type: string, nullable: true }
+        establecimientoId: { type: integer, nullable: true }
+        municipioId: { type: integer, nullable: true }
+        ddrissId: { type: integer }
+        activo: { type: boolean }
+
+    UsuarioEntrada:
+      type: object
+      required: [empleadoId, nombreUsuario, contrasenaTemporal, rolId]
+      properties:
+        empleadoId: { type: integer }
+        nombreUsuario: { type: string, pattern: '^\S{3,50}$', description: 3 a 50 caracteres sin espacios }
+        contrasenaTemporal: { type: string, format: password, minLength: 8, maxLength: 72 }
+        rolId: { type: integer }
+
+    Usuario:
+      type: object
+      properties:
+        id: { type: integer }
+        empleadoId: { type: integer }
+        nombreUsuario: { type: string }
+        rol: { type: string, enum: [ESTABLECIMIENTO, REVISOR, EPIDEMIOLOGIA, ADMINISTRADOR, AUTORIDAD] }
+        rolNombre: { type: string }
+        activo: { type: boolean }
+        debeCambiarContrasena: { type: boolean }
 
     EstablecimientoEntrada:
       type: object
