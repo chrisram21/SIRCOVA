@@ -13,9 +13,12 @@ import {
   Users,
 } from 'lucide-react'
 import PaginaInicio from '@/paginas/inicio/PaginaInicio.jsx'
+import PaginaRegistrarPersonal from '@/paginas/usuarios/PaginaRegistrarPersonal.jsx'
+import PaginaUsuarios from '@/paginas/usuarios/PaginaUsuarios.jsx'
 
 // Los permisos son provisionales: el spec que construye cada pantalla confirma su código al crearlo en
 // backend/db/05_permisos_mysql.sql y pone su componente en `pagina` (sin `pagina`, se ve "En construcción").
+// `subrutas` son pantallas con permiso propio que no aparecen en el menú; su opción queda activa en ellas.
 const opcionesMenu = [
   { titulo: 'Inicio', ruta: '/inicio', permiso: null, icono: House, pagina: PaginaInicio },
   { titulo: 'Registro de producción', ruta: '/registro', permiso: 'REPORTE_REGISTRAR', icono: ClipboardPen },
@@ -26,7 +29,16 @@ const opcionesMenu = [
   { titulo: 'Informes', ruta: '/informes', permiso: 'INFORME_CONSULTAR', icono: FileSpreadsheet },
   { titulo: 'Alertas', ruta: '/alertas', permiso: 'ALERTA_CONSULTAR', icono: Bell },
   { titulo: 'Auditoría', ruta: '/auditoria', permiso: 'BITACORA_CONSULTAR', icono: ScrollText },
-  { titulo: 'Usuarios', ruta: '/usuarios', permiso: 'USUARIO_CONSULTAR', icono: Users },
+  {
+    titulo: 'Usuarios',
+    ruta: '/usuarios',
+    permiso: 'USUARIO_CONSULTAR',
+    icono: Users,
+    pagina: PaginaUsuarios,
+    subrutas: [
+      { titulo: 'Registrar personal', ruta: '/usuarios/nuevo', permiso: 'EMPLEADO_CREAR', pagina: PaginaRegistrarPersonal },
+    ],
+  },
   { titulo: 'Configuración', ruta: '/configuracion', permiso: 'CONFIGURACION_CONSULTAR', icono: Settings },
   { titulo: 'Roles y permisos', ruta: '/permisos', permiso: 'PERMISO_CONSULTAR', icono: ShieldCheck },
 ]

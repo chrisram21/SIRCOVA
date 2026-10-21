@@ -128,10 +128,12 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Cómo se hará:** Pantalla de usuarios en React; endpoints `POST /empleados` y `POST /usuarios`; tablas `empleado` y `usuario` (relación 1:1, el empleado puede existir sin cuenta).
 
 **Criterios de aceptación:**
-- [ ] Puedo registrar un empleado con su establecimiento y municipio.
-- [ ] Puedo crear una cuenta ligada a ese empleado con un rol de los 5 existentes.
-- [ ] No se permiten dos cuentas con el mismo nombre de usuario ni dos cuentas para el mismo empleado.
-- [ ] Solo el rol AUTORIDAD puede quedar sin DDRISS asignada.
+- [x] Puedo registrar un empleado con su establecimiento y municipio.
+- [x] Puedo crear una cuenta ligada a ese empleado con un rol de los 5 existentes.
+- [x] No se permiten dos cuentas con el mismo nombre de usuario ni dos cuentas para el mismo empleado.
+- [x] Solo el rol AUTORIDAD puede quedar sin DDRISS asignada.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 07 a `main`. Backend y frontend en `specs/07-hu-04-registrar-personal.md`: `POST /empleados` y `POST /usuarios` (con bitácora, sin devolver ni registrar la contraseña), solo para el Administrador (permisos `EMPLEADO_CREAR` y `USUARIO_CREAR` en `05_permisos_mysql.sql`); el empleado queda siempre en la DDRISS del administrador, con establecimiento el municipio se toma de él, y una cuenta `ESTABLECIMIENTO` exige establecimiento. Pantalla `/usuarios/nuevo` (botón "Registrar personal" en `/usuarios`), que crea al empleado y, si se pide, su cuenta; si falla solo la cuenta, se reintenta sin volver a crear al empleado. Para el formulario se agregaron las lecturas mínimas de `GET /roles`, `/ddriss`, `/municipios` y `/establecimientos` (ver HU-08 y HU-09). Verificado contra la API real el 2026-10-21. La autoridad nacional (sin DDRISS) se sigue creando con `npm run crear-usuario`, y obligar a cambiar la contraseña temporal es HU-03.
 
 #### HU-05. Editar, desactivar y restaurar usuarios
 
@@ -184,6 +186,8 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [ ] Puedo filtrar por rol, establecimiento y activo/inactivo.
 - [ ] El listado se página y nunca muestra contraseñas.
 
+**Nota (2026-10-21, spec 07):** la página `/usuarios` ya existe (`frontend/src/paginas/usuarios/PaginaUsuarios.jsx`, permiso `USUARIO_CONSULTAR`) y solo tiene el botón "Registrar personal", que lleva a `/usuarios/nuevo`. A esta historia le falta agregarle el listado y `GET /usuarios`, sin mover el formulario de registro.
+
 #### HU-08. Gestionar el catálogo territorial
 
 > **Como** administrador, **quiero** consultar los departamentos, municipios, DDRISS y distritos de salud, **para** que la producción y los indicadores se asignen al territorio correcto.
@@ -202,6 +206,8 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 
 **Avance:** los códigos INE de los 30 municipios de la semilla (`backend/db/01_modelo_relacional_mysql.sql`, 1201 a 1230) se verificaron el 2026-10-20 contra los P-codes del COD-AB de Guatemala de OCHA (GT1201 a GT1230), y coinciden en código y nombre; Coatepeque también coincide (GT0920). Queda resuelta la nota "verificar códigos contra el catálogo INE y el GeoJSON" para los municipios de San Marcos. Ese mismo archivo es la base del GeoJSON del mapa (HU-42).
 
+**Nota (2026-10-21, spec 07):** `GET /municipios` y `GET /ddriss` ya existen en versión mínima, de solo lectura y filtradas por ámbito (`backend/src/modulos/catalogos/`, permisos `MUNICIPIO_CONSULTAR` y `DDRISS_CONSULTAR`, hoy solo del Administrador), porque las necesita el formulario de HU-04. Esta historia los amplía en lugar de crearlos de nuevo. `GET /municipios` devuelve los municipios activos del departamento sede de la DDRISS del usuario (todos para la autoridad nacional) y ya no tiene el parámetro `jurisdiccion` ni el campo `esJurisdiccion`, que quedaron obsoletos con el modelo v0.5.
+
 #### HU-09. Gestionar establecimientos e instituciones
 
 > **Como** administrador, **quiero** registrar, editar y desactivar establecimientos de salud e instituciones, **para** que cada reporte quede ligado a quien lo produjo.
@@ -218,6 +224,8 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [ ] Puedo marcar un establecimiento cuya producción solo cuenta para cobertura (Hospital de San Marcos) y uno externo (por ejemplo, el de Coatepeque).
 - [ ] Un establecimiento desactivado no puede crear reportes nuevos.
 - [ ] Puedo filtrar el listado por municipio y tipo.
+
+**Nota (2026-10-21, spec 07):** `GET /establecimientos` ya existe en versión mínima, de solo lectura (`backend/src/modulos/catalogos/`, permiso `ESTABLECIMIENTO_CONSULTAR`, hoy solo del Administrador), porque lo necesita el formulario de HU-04. Devuelve los campos del contrato, filtrados por ámbito con `filtroAlcance`, y acepta `municipioId` y `activo`. Esta historia lo amplía (filtro por tipo, alta y edición) en lugar de crearlo de nuevo.
 
 #### HU-10. Gestionar vacunas y dosis
 

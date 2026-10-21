@@ -37,7 +37,7 @@ export default function MenuLateral() {
               <SidebarMenu>
                 {visibles.map(({ titulo, ruta, icono: Icono }) => (
                   <SidebarMenuItem key={ruta}>
-                    <SidebarMenuButton asChild isActive={pathname === ruta}>
+                    <SidebarMenuButton asChild isActive={pathname === ruta || pathname.startsWith(`${ruta}/`)}>
                       <NavLink to={ruta} onClick={() => isMobile && setOpenMobile(false)}>
                         <Icono />
                         <span>{titulo}</span>

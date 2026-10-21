@@ -5,6 +5,13 @@ import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from './ProveedorSesion.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
+// /usuarios/nuevo pide sus catálogos al montar; aquí solo importa la ruta, no la API.
+vi.mock('@/api/usuarios.js', () => ({ listarRoles: vi.fn(() => new Promise(() => {})) }))
+vi.mock('@/api/catalogos.js', () => ({
+  listarDdriss: vi.fn(() => new Promise(() => {})),
+  listarMunicipios: vi.fn(() => new Promise(() => {})),
+  listarEstablecimientos: vi.fn(() => new Promise(() => {})),
+}))
 
 function crearSesion(permisos) {
   const codificar = (objeto) => btoa(JSON.stringify(objeto)).replace(/=+$/, '')
@@ -50,6 +57,19 @@ test('sin el permiso, /indicadores lleva a /inicio', () => {
 
   expect(enConstruccion()).toBeNull()
   expect(screen.getByText('Usuarios activos')).toBeTruthy()
+})
+
+test('sin EMPLEADO_CREAR, la subruta /usuarios/nuevo lleva a /inicio', () => {
+  abrir('/usuarios/nuevo', ['USUARIO_CONSULTAR'])
+
+  expect(screen.queryByRole('heading', { name: 'Registrar personal' })).toBeNull()
+  expect(screen.getByText('Usuarios activos')).toBeTruthy()
+})
+
+test('con EMPLEADO_CREAR, la subruta /usuarios/nuevo muestra su página', () => {
+  abrir('/usuarios/nuevo', ['USUARIO_CONSULTAR', 'EMPLEADO_CREAR'])
+
+  expect(screen.getByRole('heading', { name: 'Registrar personal' })).toBeTruthy()
 })
 
 test('sin sesión, /indicadores lleva a /login', () => {

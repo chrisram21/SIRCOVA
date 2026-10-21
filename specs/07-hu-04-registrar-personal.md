@@ -1,6 +1,6 @@
 # SPEC 07 — Registrar personal y crear su cuenta
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-04 (backend y frontend, más las lecturas mínimas de catálogos que necesita el formulario)
 > **Depende de:** SPEC 01, SPEC 04, SPEC 05, SPEC 06
 > **Fecha:** 2026-10-20
@@ -223,25 +223,25 @@ CLAUDE.md                                      ← nota sobre subrutas y catálo
 
 ## Criterios de aceptación
 
-- [ ] `backend/openapi.yaml` documenta los seis endpoints con su `x-permiso` y sus errores, y `/api/docs` carga sin errores.
-- [ ] `05_permisos_mysql.sql` se corre dos veces seguidas sin error ni filas duplicadas, y el login del Administrador de prueba trae los siete permisos; ningún otro rol los tiene.
-- [ ] `npm test` pasa en `backend/` y en `frontend/` sin desactivar ninguna prueba, y las pruebas del backend no dejan empleados ni cuentas en la base.
-- [ ] `frontend/package.json` solo contiene dependencias de la lista de `AGENTS.md`.
-- [ ] Un token sin el permiso de cada endpoint recibe 403 `SIN_PERMISO`.
-- [ ] `POST /empleados` crea el empleado con la DDRISS del administrador; con establecimiento, el municipio es el del establecimiento.
-- [ ] `POST /empleados` rechaza con 422 un establecimiento de otra DDRISS o inactivo y un municipio fuera del departamento sede.
-- [ ] `POST /usuarios` crea la cuenta con uno de los cinco roles, contraseña en bcrypt, `debe_cambiar_contrasena = TRUE` y `creado_por` del administrador, y la respuesta no trae contraseña ni hash.
-- [ ] No se crean dos cuentas con el mismo nombre de usuario ni dos cuentas para el mismo empleado (409).
-- [ ] Una cuenta `ESTABLECIMIENTO` exige un empleado con establecimiento (422).
-- [ ] Ningún empleado creado por la API queda sin DDRISS.
-- [ ] Cada alta deja una fila `USUARIOS`/`CREAR` en `bitacora`, sin la contraseña.
-- [ ] `GET /roles`, `/ddriss`, `/municipios` y `/establecimientos` devuelven solo lo del ámbito del usuario.
-- [ ] Con sesión de Administrador, el menú muestra "Usuarios"; `/usuarios` tiene el botón "Registrar personal" y `/usuarios/nuevo` el formulario.
-- [ ] Sin `EMPLEADO_CREAR`, `/usuarios/nuevo` lleva a `/inicio`.
-- [ ] El formulario registra un empleado con o sin cuenta y muestra el mensaje de éxito con "Registrar otro" y "Volver a Usuarios".
-- [ ] Si la cuenta falla después de crear al empleado, se muestra el aviso parcial y se puede reintentar solo la cuenta.
-- [ ] Ningún componente propio tiene colores escritos a mano ni llama a `fetch` directamente.
-- [ ] HU-04 tiene su avance y sus criterios marcados, y HU-07, HU-08 y HU-09 tienen su nota.
+- [x] `backend/openapi.yaml` documenta los seis endpoints con su `x-permiso` y sus errores, y `/api/docs` carga sin errores.
+- [x] `05_permisos_mysql.sql` se corre dos veces seguidas sin error ni filas duplicadas, y el login del Administrador de prueba trae los siete permisos; ningún otro rol los tiene.
+- [x] `npm test` pasa en `backend/` y en `frontend/` sin desactivar ninguna prueba, y las pruebas del backend no dejan empleados ni cuentas en la base.
+- [x] `frontend/package.json` solo contiene dependencias de la lista de `AGENTS.md`.
+- [x] Un token sin el permiso de cada endpoint recibe 403 `SIN_PERMISO`.
+- [x] `POST /empleados` crea el empleado con la DDRISS del administrador; con establecimiento, el municipio es el del establecimiento.
+- [x] `POST /empleados` rechaza con 422 un establecimiento de otra DDRISS o inactivo y un municipio fuera del departamento sede.
+- [x] `POST /usuarios` crea la cuenta con uno de los cinco roles, contraseña en bcrypt, `debe_cambiar_contrasena = TRUE` y `creado_por` del administrador, y la respuesta no trae contraseña ni hash.
+- [x] No se crean dos cuentas con el mismo nombre de usuario ni dos cuentas para el mismo empleado (409).
+- [x] Una cuenta `ESTABLECIMIENTO` exige un empleado con establecimiento (422).
+- [x] Ningún empleado creado por la API queda sin DDRISS.
+- [x] Cada alta deja una fila `USUARIOS`/`CREAR` en `bitacora`, sin la contraseña.
+- [x] `GET /roles`, `/ddriss`, `/municipios` y `/establecimientos` devuelven solo lo del ámbito del usuario.
+- [x] Con sesión de Administrador, el menú muestra "Usuarios"; `/usuarios` tiene el botón "Registrar personal" y `/usuarios/nuevo` el formulario.
+- [x] Sin `EMPLEADO_CREAR`, `/usuarios/nuevo` lleva a `/inicio`.
+- [x] El formulario registra un empleado con o sin cuenta y muestra el mensaje de éxito con "Registrar otro" y "Volver a Usuarios".
+- [x] Si la cuenta falla después de crear al empleado, se muestra el aviso parcial y se puede reintentar solo la cuenta.
+- [x] Ningún componente propio tiene colores escritos a mano ni llama a `fetch` directamente.
+- [x] HU-04 tiene su avance y sus criterios marcados, y HU-07, HU-08 y HU-09 tienen su nota.
 
 ## Decisiones
 
@@ -266,6 +266,17 @@ CLAUDE.md                                      ← nota sobre subrutas y catálo
 - **Sí:** `subrutas` en `opcionesMenu.js`. Mantiene una sola lista de rutas y permisos, como decidió el SPEC 06.
 - **Sí:** las pruebas del backend borran los empleados y las cuentas que crean, y no inician sesión con ellas. La bitácora es inmutable y tiene llave foránea a `usuario`.
 - **Sí:** los avisos del formulario con Alert. Sonner necesita el paquete `sonner`, que no está en la lista de `AGENTS.md`.
+- **Sí:** `esAlcanceNacional(usuario)` exportada desde `alcance.service.js`, para que `GET /municipios` devuelva todos los municipios a la autoridad nacional sin repetir la lógica de ámbito. No cambia `filtroAlcance` ni `verificarAlcance`. Decidido durante la implementación.
+- **Sí:** el límite de la contraseña temporal se cuenta en bytes (72), no en caracteres: bcrypt ignora lo que pase de 72 bytes y una contraseña con acentos ocupa más bytes que caracteres. Decidido durante la implementación.
+- **Sí:** el hash de bcrypt se calcula antes de abrir la transacción, para no retener el bloqueo del empleado mientras trabaja. Decidido durante la implementación.
+- **Sí:** `POST /usuarios` revisa en este orden: empleado (404), cuenta existente (409), rol (422), establecimiento para el rol `ESTABLECIMIENTO` (422) y nombre de usuario repetido (409). Con varios problemas a la vez, se responde primero el del empleado. Decidido durante la implementación.
+- **Sí:** un empleado sin DDRISS válida en el token no se registra: el servicio lanza un error interno en lugar de guardar un empleado sin DDRISS. Es un caso que el login ya impide. Decidido durante la implementación.
+- **Sí:** para el caso del establecimiento inactivo, las pruebas crean uno temporal con el código `vitest-hu04-inact` y lo borran en `afterAll`, porque la base de prueba no tiene ninguno inactivo. Los casos de otra DDRISS usan un token con otra `ddrissId`, porque la base tiene una sola DDRISS. No se modifica ningún registro real. Decidido durante la implementación.
+- **Sí:** `ResizeObserver` falso en `src/preparar-pruebas.js`. jsdom no lo implementa y el Checkbox y el Select de Radix lo necesitan. Decidido durante la implementación.
+- **Sí:** en las pruebas, los Select se cambian con el `<select>` nativo oculto que Radix pone dentro del formulario, porque jsdom no puede abrir el menú desplegable. El clic real en el menú se comprobó en el navegador con Playwright. Decidido durante la implementación.
+- **Sí:** `RutaConPermiso.test.jsx` simula la API de usuarios y catálogos. Sin eso, abrir `/usuarios/nuevo` hace peticiones reales y, con el backend encendido, un 401 cerraría la sesión de la prueba. Decidido durante la implementación.
+- **Sí:** botón "Cancelar" junto a "Registrar", que vuelve a `/usuarios`, y un texto de ayuda con las reglas del usuario y la contraseña. Decidido durante la implementación.
+- **Sí:** con establecimiento, el formulario envía solo `establecimientoId`; con municipio y sin establecimiento, solo `municipioId`; los textos opcionales vacíos no se envían. Decidido durante la implementación.
 
 ## Riesgos
 
