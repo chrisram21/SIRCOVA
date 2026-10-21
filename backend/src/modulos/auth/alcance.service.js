@@ -16,6 +16,10 @@ function ambitoDe(usuario) {
   return null;
 }
 
+export function esAlcanceNacional(usuario) {
+  return ambitoDe(usuario)?.tipo === 'PAIS';
+}
+
 // Las columnas las escribe el programador, nunca vienen de la petición.
 export function filtroAlcance(usuario, columnas = {}) {
   const ambito = ambitoDe(usuario);
