@@ -24,6 +24,7 @@
 --    - modulo: uno de los ocho módulos, en mayúsculas y snake_case. El código
 --      de cada módulo lo fija el primer spec que crea un permiso en él:
 --        CONFIGURACION_CATALOGOS  (POBLACION_REGISTRAR, modelo v0.6)
+--        USUARIOS                 (SPEC 07, HU-04)
 --    - Un código no se borra ni se renombra (regla 6 de AGENTS.md).
 --    - Asignaciones y retiros siempre por códigos, nunca por ids.
 --
@@ -42,6 +43,16 @@ USE vacunacion_ddriss;
 INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('POBLACION_REGISTRAR', 'CONFIGURACION_CATALOGOS', 'Registrar y actualizar la población anual por municipio y grupo de edad');
 
+-- SPEC 07 (HU-04): registro de personal y cuentas, y lectura mínima de catálogos
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('USUARIO_CONSULTAR',         'USUARIOS',                'Ver la pantalla de usuarios'),
+ ('EMPLEADO_CREAR',            'USUARIOS',                'Registrar empleados de su DDRISS'),
+ ('USUARIO_CREAR',             'USUARIOS',                'Crear la cuenta de acceso de un empleado'),
+ ('ROL_CONSULTAR',             'USUARIOS',                'Consultar los roles'),
+ ('DDRISS_CONSULTAR',          'CONFIGURACION_CATALOGOS', 'Consultar las DDRISS de su ámbito'),
+ ('MUNICIPIO_CONSULTAR',       'CONFIGURACION_CATALOGOS', 'Consultar los municipios de su ámbito'),
+ ('ESTABLECIMIENTO_CONSULTAR', 'CONFIGURACION_CATALOGOS', 'Consultar los establecimientos de su ámbito');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -49,6 +60,13 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
 INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'ADMINISTRADOR' AND p.codigo = 'POBLACION_REGISTRAR';
+
+-- SPEC 07 (HU-04): solo el Administrador registra personal y crea cuentas
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'ADMINISTRADOR'
+   AND p.codigo IN ('USUARIO_CONSULTAR', 'EMPLEADO_CREAR', 'USUARIO_CREAR', 'ROL_CONSULTAR',
+                    'DDRISS_CONSULTAR', 'MUNICIPIO_CONSULTAR', 'ESTABLECIMIENTO_CONSULTAR');
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas
