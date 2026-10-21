@@ -52,6 +52,19 @@ test('sin el permiso, /indicadores lleva a /inicio', () => {
   expect(screen.getByText('Usuarios activos')).toBeTruthy()
 })
 
+test('sin EMPLEADO_CREAR, la subruta /usuarios/nuevo lleva a /inicio', () => {
+  abrir('/usuarios/nuevo', ['USUARIO_CONSULTAR'])
+
+  expect(screen.queryByRole('heading', { name: 'Registrar personal' })).toBeNull()
+  expect(screen.getByText('Usuarios activos')).toBeTruthy()
+})
+
+test('con EMPLEADO_CREAR, la subruta /usuarios/nuevo muestra su página', () => {
+  abrir('/usuarios/nuevo', ['USUARIO_CONSULTAR', 'EMPLEADO_CREAR'])
+
+  expect(screen.getByRole('heading', { name: 'Registrar personal' })).toBeTruthy()
+})
+
 test('sin sesión, /indicadores lleva a /login', () => {
   abrir('/indicadores')
 

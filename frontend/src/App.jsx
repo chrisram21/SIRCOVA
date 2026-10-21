@@ -26,9 +26,11 @@ export default function App() {
           </RutaProtegida>
         }
       >
-        {opcionesMenu.map((opcion) => (
-          <Route key={opcion.ruta} path={opcion.ruta} element={elementoDe(opcion)} />
-        ))}
+        {opcionesMenu
+          .flatMap((opcion) => [opcion, ...(opcion.subrutas ?? [])])
+          .map((ruta) => (
+            <Route key={ruta.ruta} path={ruta.ruta} element={elementoDe(ruta)} />
+          ))}
       </Route>
       <Route path="*" element={<Navigate to="/inicio" replace />} />
     </Routes>

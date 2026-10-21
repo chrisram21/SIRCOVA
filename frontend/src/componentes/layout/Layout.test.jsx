@@ -89,6 +89,25 @@ test('la opción de la ruta actual está marcada como activa', () => {
   expect(inicio.getAttribute('data-active')).toBe('false')
 })
 
+test('"Usuarios" sigue activa en su subruta /usuarios/nuevo, que no aparece en el menú', () => {
+  abrir('/usuarios/nuevo', { permisos: ['USUARIO_CONSULTAR', 'EMPLEADO_CREAR'] })
+
+  expect(menu().getByRole('link', { name: 'Usuarios' }).getAttribute('data-active')).toBe('true')
+  expect(opcionesVisibles()).toEqual(['Inicio', 'Usuarios'])
+})
+
+test('/usuarios muestra "Registrar personal" solo con EMPLEADO_CREAR', () => {
+  abrir('/usuarios', { permisos: ['USUARIO_CONSULTAR', 'EMPLEADO_CREAR'] })
+  expect(screen.getByRole('link', { name: 'Registrar personal' }).getAttribute('href')).toBe('/usuarios/nuevo')
+})
+
+test('/usuarios sin EMPLEADO_CREAR no muestra "Registrar personal"', () => {
+  abrir('/usuarios', { permisos: ['USUARIO_CONSULTAR'] })
+
+  expect(screen.getByRole('heading', { name: 'Usuarios' })).toBeTruthy()
+  expect(screen.queryByRole('link', { name: 'Registrar personal' })).toBeNull()
+})
+
 test('el encabezado muestra nombre, apellidos y rolNombre', () => {
   abrir('/inicio', { rolNombre: 'Administrador del sistema' })
 
