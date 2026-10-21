@@ -11,6 +11,9 @@ info:
     El sistema maneja solo datos agregados: ningún endpoint recibe ni devuelve datos de pacientes.
 
     Todas las rutas, salvo `/salud` y `/auth/login`, exigen el encabezado `Authorization: Bearer <token>`.
+    En cada petición se revisa además la cuenta del token: si la cuenta o su empleado están desactivados
+    responde 401 `CUENTA_DESACTIVADA`, y si el rol, el establecimiento o el municipio ya no son los del
+    token responde 401 `SESION_DESACTUALIZADA`. En los dos casos hay que iniciar sesión de nuevo.
 
     **Permisos.** Cada función exige su propio permiso, con la forma `ENTIDAD_ACCION` (por ejemplo,
     `USUARIO_CREAR`). Cada operación protegida declara el suyo con la extensión `x-permiso: CODIGO` y
@@ -233,15 +236,84 @@ paths:
                   value:
                     error: { codigo: MUNICIPIO_INVALIDO, mensaje: El municipio no existe, está inactivo o no es del departamento de su DDRISS. }
 
+  /empleados/{id}:
+    patch:
+      tags: [Usuarios]
+      summary: Editar los datos de un empleado de la DDRISS del administrador
+      description: |
+        Cambio parcial: solo se envían los campos que cambian, y al menos uno. `null` o un texto vacío borran
+        un campo opcional. Las reglas de establecimiento y municipio se aplican al resultado (lo guardado más
+        lo que llega): con establecimiento, el municipio se toma de él. Si la cuenta del empleado tiene rol
+        `ESTABLECIMIENTO`, no se le puede quitar el establecimiento. Si la cuenta del empleado está
+        desactivada, primero hay que restaurarla. Una petición que no cambia nada responde 200 sin
+        registrar nada en la bitácora.
+      x-permiso: EMPLEADO_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmpleadoCambios" }
+      responses:
+        "200":
+          description: Empleado actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Empleado" }
+        "400": { $ref: "#/components/responses/EntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: Correo o código de empleado repetido, o la cuenta del empleado está desactivada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                correo:
+                  value:
+                    error: { codigo: CORREO_DUPLICADO, mensaje: Ya hay un empleado con ese correo. }
+                codigo:
+                  value:
+                    error: { codigo: CODIGO_EMPLEADO_DUPLICADO, mensaje: Ya hay un empleado con ese código. }
+                cuentaDesactivada:
+                  value:
+                    error: { codigo: CUENTA_DESACTIVADA, mensaje: La cuenta está desactivada; restáurela para editarla. }
+        "422":
+          description: Establecimiento o municipio inválido, o se quita el establecimiento a una cuenta ESTABLECIMIENTO
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                establecimiento:
+                  value:
+                    error: { codigo: ESTABLECIMIENTO_INVALIDO, mensaje: El establecimiento no existe, está inactivo o no es de su DDRISS. }
+                municipio:
+                  value:
+                    error: { codigo: MUNICIPIO_INVALIDO, mensaje: El municipio no existe, está inactivo o no es del departamento de su DDRISS. }
+                sinEstablecimiento:
+                  value:
+                    error: { codigo: EMPLEADO_SIN_ESTABLECIMIENTO, mensaje: Para el rol de personal del establecimiento, el empleado debe tener un establecimiento. }
+
   /usuarios:
     get:
       tags: [Usuarios]
-      summary: Listar cuentas de usuario
-      parameters:
-        - { $ref: "#/components/parameters/Pagina" }
-        - { $ref: "#/components/parameters/PorPagina" }
+      summary: Listar las cuentas de la DDRISS del usuario, activas y desactivadas
+      description: |
+        Versión mínima, sin búsqueda, filtros ni paginación (HU-07 los agrega). Ordenadas por apellidos y
+        nombres del empleado. Nunca devuelve la contraseña, su hash, los intentos fallidos ni el bloqueo.
+      x-permiso: USUARIO_CONSULTAR
       responses:
-        "200": { description: Lista paginada de cuentas }
+        "200":
+          description: Cuentas del ámbito del usuario
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/UsuarioDetalle" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
     post:
       tags: [Usuarios]
       summary: Crear la cuenta de acceso de un empleado (solo Administrador)
@@ -312,22 +384,130 @@ paths:
         "403": { $ref: "#/components/responses/SinPermiso" }
 
   /usuarios/{id}:
+    get:
+      tags: [Usuarios]
+      summary: Consultar una cuenta de la DDRISS del usuario
+      x-permiso: USUARIO_CONSULTAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: La cuenta con los datos de su empleado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UsuarioDetalle" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
     patch:
       tags: [Usuarios]
-      summary: Cambiar rol, desactivar o reactivar una cuenta (desactivación lógica)
+      summary: Cambiar el rol de una cuenta
+      description: |
+        Solo cambia el rol; para desactivar o restaurar se usan `/desactivar` y `/restaurar`.
+        No se puede cambiar el rol propio ni el de una cuenta desactivada. El rol `ESTABLECIMIENTO` exige
+        que el empleado tenga establecimiento. Se revisa en este orden: cuenta (404), cuenta desactivada (409),
+        cuenta propia (422), rol (422) y establecimiento (422). El mismo rol responde 200 sin registrar nada
+        en la bitácora.
+      x-permiso: USUARIO_EDITAR
       parameters:
         - { $ref: "#/components/parameters/Id" }
       requestBody:
+        required: true
         content:
           application/json:
             schema:
               type: object
+              required: [rolId]
+              additionalProperties: false
               properties:
                 rolId: { type: integer }
-                activo: { type: boolean }
       responses:
-        "200": { description: Cuenta actualizada }
+        "200":
+          description: Cuenta actualizada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UsuarioDetalle" }
+        "400": { $ref: "#/components/responses/EntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
         "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: La cuenta está desactivada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: CUENTA_DESACTIVADA, mensaje: La cuenta está desactivada; restáurela para editarla. }
+        "422":
+          description: Cuenta propia, rol inexistente o rol ESTABLECIMIENTO para un empleado sin establecimiento
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                cuentaPropia:
+                  value:
+                    error: { codigo: CUENTA_PROPIA, mensaje: No puede cambiar su propio rol. }
+                rol:
+                  value:
+                    error: { codigo: ROL_INVALIDO, mensaje: El rol no existe. }
+                sinEstablecimiento:
+                  value:
+                    error: { codigo: EMPLEADO_SIN_ESTABLECIMIENTO, mensaje: Para el rol de personal del establecimiento, el empleado debe tener un establecimiento. }
+
+  /usuarios/{id}/desactivar:
+    post:
+      tags: [Usuarios]
+      summary: Desactivar una cuenta (desactivación lógica; el empleado y su historial no cambian)
+      description: |
+        Pone `activo: false` y la fecha de desactivación. La cuenta ya no puede iniciar sesión, y su sesión
+        abierta recibe 401 `CUENTA_DESACTIVADA` en la siguiente petición. No se puede desactivar la cuenta
+        propia. Una cuenta ya desactivada responde 200 sin registrar nada en la bitácora.
+      x-permiso: USUARIO_DESACTIVAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Cuenta desactivada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UsuarioDetalle" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "422":
+          description: Es la cuenta propia
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: CUENTA_PROPIA, mensaje: No puede desactivar su propia cuenta. }
+
+  /usuarios/{id}/restaurar:
+    post:
+      tags: [Usuarios]
+      summary: Restaurar una cuenta desactivada
+      description: |
+        Pone `activo: true` y limpia la fecha de desactivación, los intentos fallidos y el bloqueo.
+        Una cuenta ya activa responde 200 sin registrar nada en la bitácora.
+      x-permiso: USUARIO_DESACTIVAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Cuenta restaurada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UsuarioDetalle" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: El empleado de la cuenta está inactivo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: EMPLEADO_INACTIVO, mensaje: El empleado de esta cuenta está inactivo. }
 
   # ---------------------------------------------------------------- Catálogos
   /ddriss:
@@ -930,7 +1110,10 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
     NoAutenticado:
-      description: Falta el token o no es válido (NO_AUTENTICADO), o el token venció (SESION_VENCIDA)
+      description: |
+        Falta el token, no es válido o su cuenta no existe (NO_AUTENTICADO), el token venció (SESION_VENCIDA),
+        la cuenta o su empleado están desactivados (CUENTA_DESACTIVADA), o el rol, el establecimiento o el
+        municipio cambiaron desde que se emitió el token (SESION_DESACTUALIZADA)
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -941,6 +1124,12 @@ components:
             sesionVencida:
               value:
                 error: { codigo: SESION_VENCIDA, mensaje: Su sesión venció; inicie sesión de nuevo. }
+            cuentaDesactivada:
+              value:
+                error: { codigo: CUENTA_DESACTIVADA, mensaje: Su cuenta está desactivada; contacte al administrador. }
+            sesionDesactualizada:
+              value:
+                error: { codigo: SESION_DESACTUALIZADA, mensaje: Sus datos de acceso cambiaron; inicie sesión de nuevo. }
     SinPermiso:
       description: El usuario no tiene el permiso de la operación, o su rol es de solo consulta
       content:
@@ -1042,6 +1231,27 @@ components:
         ddrissId: { type: integer }
         activo: { type: boolean }
 
+    EmpleadoCambios:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      description: Cambio parcial; `ddrissId` y `activo` no se aceptan
+      properties:
+        nombres: { type: string, minLength: 1, maxLength: 100 }
+        apellidos: { type: string, minLength: 1, maxLength: 100 }
+        codigoEmpleado: { type: string, nullable: true, maxLength: 20, description: Único si se indica; null o vacío lo borra }
+        cargo: { type: string, nullable: true, maxLength: 100 }
+        correo: { type: string, nullable: true, format: email, maxLength: 150, description: Único si se indica; null o vacío lo borra }
+        telefono: { type: string, nullable: true, maxLength: 20 }
+        establecimientoId:
+          type: integer
+          nullable: true
+          description: Activo y de la DDRISS del administrador; el municipio se toma de él. null lo quita
+        municipioId:
+          type: integer
+          nullable: true
+          description: Solo sin establecimiento; activo y del departamento sede de la DDRISS. No puede venir con valor junto a establecimientoId
+
     UsuarioEntrada:
       type: object
       required: [empleadoId, nombreUsuario, contrasenaTemporal, rolId]
@@ -1061,6 +1271,22 @@ components:
         rolNombre: { type: string }
         activo: { type: boolean }
         debeCambiarContrasena: { type: boolean }
+
+    UsuarioDetalle:
+      description: Cuenta con los datos de su empleado; nunca trae la contraseña, su hash, los intentos fallidos ni el bloqueo
+      allOf:
+        - { $ref: "#/components/schemas/Usuario" }
+        - type: object
+          properties:
+            ultimoAcceso: { type: string, format: date-time, nullable: true }
+            desactivadoEn: { type: string, format: date-time, nullable: true }
+            empleado:
+              allOf:
+                - { $ref: "#/components/schemas/Empleado" }
+                - type: object
+                  properties:
+                    establecimientoNombre: { type: string, nullable: true }
+                    municipioNombre: { type: string, nullable: true }
 
     EstablecimientoEntrada:
       type: object

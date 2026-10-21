@@ -5,16 +5,17 @@ import jwt from 'jsonwebtoken';
 import app from '../src/app.js';
 import entorno from '../src/config/entorno.js';
 import pool from '../src/config/mysql.js';
-import { autenticar } from '../src/middlewares/autenticar.js';
+import { verificarToken } from '../src/middlewares/autenticar.js';
 import { requierePermiso } from '../src/middlewares/permisos.js';
 import { manejarErrores } from '../src/middlewares/errores.js';
 
-// App mínima solo para la prueba: todavía no hay endpoints de negocio con permiso.
+// App mínima solo para la prueba. Usa verificarToken y no autenticar: los tokens se firman con roles
+// y un usuario (7) que no están en la base, y aquí solo se prueba requierePermiso.
 const appPrueba = express();
-appPrueba.get('/consulta', autenticar, requierePermiso('PRUEBA_CONSULTAR'), (req, res) => res.json({ ok: true }));
-appPrueba.post('/consulta', autenticar, requierePermiso('PRUEBA_CONSULTAR'), (req, res) => res.json({ ok: true }));
-appPrueba.get('/poblacion', autenticar, requierePermiso('POBLACION_REGISTRAR'), (req, res) => res.json({ ok: true }));
-appPrueba.get('/creacion', autenticar, requierePermiso('PRUEBA_CREAR'), (req, res) => res.json({ ok: true }));
+appPrueba.get('/consulta', verificarToken, requierePermiso('PRUEBA_CONSULTAR'), (req, res) => res.json({ ok: true }));
+appPrueba.post('/consulta', verificarToken, requierePermiso('PRUEBA_CONSULTAR'), (req, res) => res.json({ ok: true }));
+appPrueba.get('/poblacion', verificarToken, requierePermiso('POBLACION_REGISTRAR'), (req, res) => res.json({ ok: true }));
+appPrueba.get('/creacion', verificarToken, requierePermiso('PRUEBA_CREAR'), (req, res) => res.json({ ok: true }));
 appPrueba.use(manejarErrores);
 
 const firmar = (rol, permisos) =>

@@ -146,10 +146,12 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Cómo se hará:** Acciones en el listado de usuarios; endpoint `PATCH /usuarios/{id}`; la desactivación es lógica (campo de estado), no se elimina el registro.
 
 **Criterios de aceptación:**
-- [ ] Puedo cambiar el rol o los datos de una cuenta.
-- [ ] Una cuenta desactivada no puede iniciar sesión, pero sus acciones pasadas siguen visibles en la bitácora.
-- [ ] Puedo restaurar una cuenta desactivada.
-- [ ] Cada cambio queda registrado en la bitácora con el usuario que lo hizo.
+- [x] Puedo cambiar el rol o los datos de una cuenta.
+- [x] Una cuenta desactivada no puede iniciar sesión, pero sus acciones pasadas siguen visibles en la bitácora.
+- [x] Puedo restaurar una cuenta desactivada.
+- [x] Cada cambio queda registrado en la bitácora con el usuario que lo hizo.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 08 a `main`. Backend y frontend en `specs/08-hu-05-editar-desactivar-restaurar-usuarios.md`. El contrato separó el `PATCH /usuarios/{id}` previsto en tres endpoints, uno por permiso: `PATCH /usuarios/{id}` (solo el rol, `USUARIO_EDITAR`), `POST /usuarios/{id}/desactivar` y `/restaurar` (`USUARIO_DESACTIVAR`), más `PATCH /empleados/{id}` para los datos del empleado (`EMPLEADO_EDITAR`), todos solo para el Administrador. La desactivación es lógica y solo de la cuenta (`usuario.activo`); restaurar también quita el bloqueo por intentos. El administrador no puede cambiar su propio rol ni desactivarse, y una cuenta desactivada no se edita hasta restaurarla. `autenticar` revisa la cuenta en cada petición, así que una sesión abierta se cierra si la cuenta se desactiva (401 `CUENTA_DESACTIVADA`) o si cambian su rol, establecimiento o municipio (401 `SESION_DESACTUALIZADA`). Pantallas: tabla de cuentas en `/usuarios` con Editar, Desactivar (con confirmación) y Restaurar, y `/usuarios/:id/editar`. Para la tabla se agregó un `GET /usuarios` mínimo (ver HU-07). Verificado contra la API real el 2026-10-21 con la cuenta "Prueba HU-05" (`prueba.hu05`, rol Revisor), que queda activa en la base de prueba.
 
 #### HU-06. Control de acceso por permiso y ámbito
 
@@ -187,6 +189,8 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [ ] El listado se página y nunca muestra contraseñas.
 
 **Nota (2026-10-21, spec 07):** la página `/usuarios` ya existe (`frontend/src/paginas/usuarios/PaginaUsuarios.jsx`, permiso `USUARIO_CONSULTAR`) y solo tiene el botón "Registrar personal", que lleva a `/usuarios/nuevo`. A esta historia le falta agregarle el listado y `GET /usuarios`, sin mover el formulario de registro.
+
+**Nota (2026-10-21, spec 08):** HU-05 agregó una versión mínima del listado: `GET /usuarios` (permiso `USUARIO_CONSULTAR`) devuelve todas las cuentas de la DDRISS del usuario, activas y desactivadas, como un arreglo de `UsuarioDetalle` sin parámetros, y `/usuarios` las muestra en una tabla con las acciones Editar, Desactivar y Restaurar. A esta historia le faltan la búsqueda por nombre o usuario, los filtros por rol, establecimiento y estado, y la paginación. Si la respuesta pasa a ser paginada, hay que ajustar `PaginaUsuarios.jsx`, que es la única que la consume.
 
 #### HU-08. Gestionar el catálogo territorial
 

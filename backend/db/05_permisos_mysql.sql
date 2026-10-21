@@ -53,6 +53,12 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('MUNICIPIO_CONSULTAR',       'CONFIGURACION_CATALOGOS', 'Consultar los municipios de su ámbito'),
  ('ESTABLECIMIENTO_CONSULTAR', 'CONFIGURACION_CATALOGOS', 'Consultar los establecimientos de su ámbito');
 
+-- SPEC 08 (HU-05): edición, desactivación y restauración de cuentas
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('USUARIO_EDITAR',            'USUARIOS',                'Cambiar el rol de una cuenta'),
+ ('USUARIO_DESACTIVAR',        'USUARIOS',                'Desactivar y restaurar cuentas'),
+ ('EMPLEADO_EDITAR',           'USUARIOS',                'Editar los datos de un empleado de su DDRISS');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -67,6 +73,12 @@ SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'ADMINISTRADOR'
    AND p.codigo IN ('USUARIO_CONSULTAR', 'EMPLEADO_CREAR', 'USUARIO_CREAR', 'ROL_CONSULTAR',
                     'DDRISS_CONSULTAR', 'MUNICIPIO_CONSULTAR', 'ESTABLECIMIENTO_CONSULTAR');
+
+-- SPEC 08 (HU-05): solo el Administrador edita, desactiva y restaura cuentas
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'ADMINISTRADOR'
+   AND p.codigo IN ('USUARIO_EDITAR', 'USUARIO_DESACTIVAR', 'EMPLEADO_EDITAR');
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

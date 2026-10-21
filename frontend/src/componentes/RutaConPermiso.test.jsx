@@ -5,8 +5,11 @@ import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from './ProveedorSesion.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
-// /usuarios/nuevo pide sus catálogos al montar; aquí solo importa la ruta, no la API.
-vi.mock('@/api/usuarios.js', () => ({ listarRoles: vi.fn(() => new Promise(() => {})) }))
+// /usuarios/nuevo y /usuarios/:id/editar piden sus datos al montar; aquí solo importa la ruta, no la API.
+vi.mock('@/api/usuarios.js', () => ({
+  listarRoles: vi.fn(() => new Promise(() => {})),
+  obtenerUsuario: vi.fn(() => new Promise(() => {})),
+}))
 vi.mock('@/api/catalogos.js', () => ({
   listarDdriss: vi.fn(() => new Promise(() => {})),
   listarMunicipios: vi.fn(() => new Promise(() => {})),
@@ -70,6 +73,19 @@ test('con EMPLEADO_CREAR, la subruta /usuarios/nuevo muestra su página', () => 
   abrir('/usuarios/nuevo', ['USUARIO_CONSULTAR', 'EMPLEADO_CREAR'])
 
   expect(screen.getByRole('heading', { name: 'Registrar personal' })).toBeTruthy()
+})
+
+test('sin USUARIO_EDITAR, la subruta /usuarios/5/editar lleva a /inicio', () => {
+  abrir('/usuarios/5/editar', ['USUARIO_CONSULTAR'])
+
+  expect(screen.queryByRole('heading', { name: 'Editar usuario' })).toBeNull()
+  expect(screen.getByText('Usuarios activos')).toBeTruthy()
+})
+
+test('con USUARIO_EDITAR, la subruta /usuarios/5/editar muestra su página', () => {
+  abrir('/usuarios/5/editar', ['USUARIO_CONSULTAR', 'USUARIO_EDITAR'])
+
+  expect(screen.getByRole('heading', { name: 'Editar usuario' })).toBeTruthy()
 })
 
 test('sin sesión, /indicadores lleva a /login', () => {

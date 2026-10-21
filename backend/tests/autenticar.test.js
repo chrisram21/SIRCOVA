@@ -1,16 +1,22 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../src/app.js';
 import entorno from '../src/config/entorno.js';
-import { autenticar } from '../src/middlewares/autenticar.js';
+import pool from '../src/config/mysql.js';
+import { autenticar, verificarToken } from '../src/middlewares/autenticar.js';
 import { manejarErrores } from '../src/middlewares/errores.js';
 
-// App mínima solo para la prueba: así se revisa req.usuario sin depender de una ruta real.
-const appPrueba = express();
-appPrueba.get('/protegida', autenticar, (req, res) => res.json(req.usuario));
-appPrueba.use(manejarErrores);
+// Apps mínimas solo para la prueba: así se revisa req.usuario sin depender de una ruta real.
+// La de verificarToken no consulta la base, por eso acepta el usuario 7 firmado a mano.
+const appToken = express();
+appToken.get('/protegida', verificarToken, (req, res) => res.json(req.usuario));
+appToken.use(manejarErrores);
+
+const appCompleta = express();
+appCompleta.get('/protegida', autenticar, (req, res) => res.json(req.usuario));
+appCompleta.use(manejarErrores);
 
 const datosSesion = {
   rol: 'ADMINISTRADOR',
@@ -24,11 +30,16 @@ const firmar = (opciones = {}, secreto = entorno.jwt.secreto) =>
   jwt.sign(datosSesion, secreto, { algorithm: 'HS256', subject: '7', expiresIn: '5m', ...opciones });
 
 const pedir = (encabezado) => {
-  const peticion = request(appPrueba).get('/protegida');
+  const peticion = request(appToken).get('/protegida');
   return encabezado === undefined ? peticion : peticion.set('Authorization', encabezado);
 };
 
-describe('middleware autenticar', () => {
+const iniciarSesion = () =>
+  request(app)
+    .post('/api/v1/auth/login')
+    .send({ nombreUsuario: process.env.PRUEBA_USUARIO, contrasena: process.env.PRUEBA_CONTRASENA });
+
+describe('verificarToken', () => {
   it.each([
     ['sin encabezado', undefined],
     ['encabezado vacío', ''],
@@ -60,13 +71,13 @@ describe('middleware autenticar', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ id: 7, ...datosSesion });
   });
+});
 
+describe('autenticar', () => {
   it('acepta el token que devuelve POST /auth/login', async () => {
-    const login = await request(app)
-      .post('/api/v1/auth/login')
-      .send({ nombreUsuario: process.env.PRUEBA_USUARIO, contrasena: process.env.PRUEBA_CONTRASENA });
+    const login = await iniciarSesion();
 
-    const res = await pedir(`Bearer ${login.body.token}`);
+    const res = await request(appCompleta).get('/protegida').set('Authorization', `Bearer ${login.body.token}`);
 
     expect(login.status).toBe(200);
     expect(res.status).toBe(200);
@@ -78,5 +89,99 @@ describe('middleware autenticar', () => {
       establecimientoId: login.body.usuario.empleado.establecimientoId,
       municipioId: login.body.usuario.empleado.municipioId,
     });
+  });
+});
+
+// Las cuentas se crean por SQL con este prefijo y se borran en afterAll. Nunca se inicia sesión con ellas y los
+// tokens llevan ROL_CONSULTAR: un login o un 403 dejarían en la bitácora una llave foránea a la cuenta.
+describe('autenticar revisa la cuenta en la base', () => {
+  const PREFIJO = 'vitest-hu05-aut-';
+  const ids = {};
+  let ddrissId;
+
+  async function crearCuenta(nombre, { cuentaActiva = true, empleadoActiva = true } = {}) {
+    const [empleado] = await pool.query(
+      `INSERT INTO empleado (nombres, apellidos, correo, ddriss_id, activo) VALUES ('Prueba', 'HU-05', ?, ?, ?)`,
+      [`${PREFIJO}${nombre}@prueba.local`, ddrissId, empleadoActiva],
+    );
+    const [usuario] = await pool.query(
+      `INSERT INTO usuario (empleado_id, nombre_usuario, hash_contrasena, rol_id, activo)
+       SELECT ?, ?, 'sin-contrasena', id, ? FROM rol WHERE codigo = 'REVISOR'`,
+      [empleado.insertId, `${PREFIJO}${nombre}`, cuentaActiva],
+    );
+    return usuario.insertId;
+  }
+
+  const tokenPara = (id, datos = {}) =>
+    jwt.sign(
+      { rol: 'REVISOR', permisos: ['ROL_CONSULTAR'], ddrissId, establecimientoId: null, municipioId: null, ...datos },
+      entorno.jwt.secreto,
+      { algorithm: 'HS256', subject: String(id), expiresIn: '5m' },
+    );
+
+  const consultarRoles = (credencial) =>
+    request(app).get('/api/v1/roles').set('Authorization', `Bearer ${credencial}`);
+
+  beforeAll(async () => {
+    const login = await iniciarSesion();
+    if (login.status !== 200) throw new Error(`No se pudo iniciar sesión con el usuario de prueba (${login.status})`);
+    ddrissId = login.body.usuario.empleado.ddrissId;
+
+    ids.activa = await crearCuenta('activa');
+    ids.desactivada = await crearCuenta('desactivada', { cuentaActiva: false });
+    ids.empleadoInactivo = await crearCuenta('empinactivo', { empleadoActiva: false });
+  });
+
+  afterAll(async () => {
+    await pool.query('DELETE FROM usuario WHERE nombre_usuario LIKE ?', [`${PREFIJO}%`]);
+    await pool.query('DELETE FROM empleado WHERE correo LIKE ?', [`${PREFIJO}%`]);
+  });
+
+  it('con la cuenta activa y los datos del token correctos: responde 200', async () => {
+    const res = await consultarRoles(tokenPara(ids.activa));
+
+    expect(res.status).toBe(200);
+  });
+
+  it.each([
+    ['la cuenta', 'desactivada'],
+    ['el empleado', 'empleadoInactivo'],
+  ])('con %s desactivado: responde 401 CUENTA_DESACTIVADA', async (_, cuenta) => {
+    const res = await consultarRoles(tokenPara(ids[cuenta]));
+
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({
+      error: { codigo: 'CUENTA_DESACTIVADA', mensaje: 'Su cuenta está desactivada; contacte al administrador.' },
+    });
+  });
+
+  it.each([
+    ['otro rol', { rol: 'ADMINISTRADOR' }],
+    ['otro establecimiento', { establecimientoId: 999999 }],
+    ['otro municipio', { municipioId: 9999 }],
+  ])('con %s en el token: responde 401 SESION_DESACTUALIZADA', async (_, datos) => {
+    const res = await consultarRoles(tokenPara(ids.activa, datos));
+
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({
+      error: { codigo: 'SESION_DESACTUALIZADA', mensaje: 'Sus datos de acceso cambiaron; inicie sesión de nuevo.' },
+    });
+  });
+
+  it('con un sub que no existe: responde 401 NO_AUTENTICADO', async () => {
+    const res = await consultarRoles(tokenPara(999999999));
+
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ error: { codigo: 'NO_AUTENTICADO', mensaje: 'Debe iniciar sesión.' } });
+  });
+
+  it('ninguno de esos 401 deja filas en la bitácora', async () => {
+    const cuentas = Object.values(ids).map(String);
+    const [[{ filas }]] = await pool.query(
+      `SELECT COUNT(*) AS filas FROM bitacora WHERE usuario_id IN (?) OR (entidad = 'usuario' AND entidad_id IN (?))`,
+      [Object.values(ids), cuentas],
+    );
+
+    expect(filas).toBe(0);
   });
 });
