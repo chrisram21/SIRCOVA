@@ -200,6 +200,8 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [ ] Puedo registrar y editar distritos de salud ligados a un municipio.
 - [ ] No puedo eliminar un municipio que ya tiene producción registrada.
 
+**Avance:** los códigos INE de los 30 municipios de la semilla (`backend/db/01_modelo_relacional_mysql.sql`, 1201 a 1230) se verificaron el 2026-10-20 contra los P-codes del COD-AB de Guatemala de OCHA (GT1201 a GT1230), y coinciden en código y nombre; Coatepeque también coincide (GT0920). Queda resuelta la nota "verificar códigos contra el catálogo INE y el GeoJSON" para los municipios de San Marcos. Ese mismo archivo es la base del GeoJSON del mapa (HU-42).
+
 #### HU-09. Gestionar establecimientos e instituciones
 
 > **Como** administrador, **quiero** registrar, editar y desactivar establecimientos de salud e instituciones, **para** que cada reporte quede ligado a quien lo produjo.
@@ -718,12 +720,16 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 |---|---|---|---|
 | Epidemiología / Autoridad | 8 | S4 | Andrea López |
 
-**Cómo se hará:** Mapa con Leaflet y GeoJSON de los 30 municipios; el color sale de los resultados de indicadores; umbrales tomados de `configuracion_indicadores` (provisional: coral < 80 %, durazno 80-90 %, verde pastel ≥ 90 %, en tonos suaves en lugar de rojo, amarillo y verde intensos).
+**Cómo se hará:** Mapa con Leaflet y GeoJSON de los 30 municipios; el color sale de los resultados de indicadores; umbrales tomados de `configuracion_indicadores` (provisional: coral < 80 %, durazno 80-90 %, verde pastel ≥ 90 %, en tonos suaves en lugar de rojo, amarillo y verde intensos). Los límites salen de `frontend/public/geo/san-marcos.geojson` (adaptado del COD-AB de CONRED/OCHA publicado en HDX, licencia CC BY 3.0 IGO; detalle en `frontend/public/geo/FUENTES.md`), y cada polígono se une con los resultados por `codigo_ine`.
 
 **Criterios de aceptación:**
 - [ ] Cada municipio se colorea según su avance para la vacuna y el mes elegidos.
 - [ ] Al pasar o hacer clic sobre un municipio veo dosis, meta, avance y brecha.
 - [ ] Los umbrales del semáforo se toman de la configuración del indicador (HU-35), no están fijos en el código.
+- [ ] El mapa muestra siempre, en su control de atribución, el crédito de los límites con el enlace a la fuente, el enlace a la licencia CC BY 3.0 IGO y la indicación "adaptado", además del crédito de Leaflet.
+- [ ] El sistema tiene una sección de créditos con la fuente completa de los límites, los cambios hechos y la nota de que son límites de referencia, no límites legales oficiales; no usa logos de CONRED, OCHA, HDX ni de las Naciones Unidas.
+
+**Avance:** el GeoJSON está en `frontend/public/geo/` desde el 2026-10-20, con su `FUENTES.md`. Se tomó `gtm_admin2.geojson` del conjunto COD-AB de Guatemala (v01, CONRED/OCHA, en HDX) y se dejaron solo los 30 municipios de San Marcos con los atributos `codigo_ine` y `nombre`. Los contornos se simplificaron al 20 % con mapshaper (1676 vértices, unos 40 KB). Los metadatos de fuente, licencia y cambios van en el propio archivo y en `FUENTES.md`. Los 30 códigos coinciden con `municipio.codigo_ine` (1201 a 1230) en código y nombre, y al unir los municipios queda un solo polígono sin huecos. Falta la pantalla del mapa, la unión con los resultados de indicadores (HU-36) y el crédito en pantalla.
 
 #### HU-43. Comparar cobertura entre periodos
 
@@ -997,6 +1003,7 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Criterios de aceptación:**
 - [ ] Existe una sección del manual para cada uno de los 5 roles.
 - [ ] Se realiza la capacitación y se registra la asistencia.
+- [ ] El manual cita las fuentes de datos de terceros con su licencia (por ahora, los límites municipales de CONRED/OCHA en HDX, CC BY 3.0 IGO, según `frontend/public/geo/FUENTES.md`).
 
 ### Historias agregadas después de la planificación
 
@@ -1028,3 +1035,4 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - El registro de la población (HU-13, HU-14) se asignó al rol Administrador de forma provisional, según lo acordado el 10/10/2026.
 - Los story points no cambiaron con las actualizaciones de la versión 4: los ajustes precisan datos y tecnologías, pero no agregan trabajo significativo.
 - 2026-10-20: HU-06 pasó a seguridad granular (un permiso por función) y se agregó HU-61 (gestión de permisos por rol, solo Administrador), todavía sin estimar ni asignar. Los totales de las secciones 3 y 4 siguen contando 60 historias y 280 story points.
+- 2026-10-20: los límites del mapa (HU-42) salen del COD-AB de Guatemala de CONRED/OCHA publicado en HDX (CC BY 3.0 IGO). La licencia obliga a dar crédito, enlazar la licencia, indicar los cambios y no sugerir respaldo de OCHA o de la ONU; por eso HU-42 y HU-60 tienen criterios de atribución. Si se cambia la fuente de los límites, hay que actualizar `frontend/public/geo/FUENTES.md` y el crédito del mapa.
