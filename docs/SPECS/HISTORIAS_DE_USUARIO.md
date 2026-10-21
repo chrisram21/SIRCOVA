@@ -202,7 +202,6 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 
 **Avance:** los códigos INE de los 30 municipios de la semilla (`backend/db/01_modelo_relacional_mysql.sql`, 1201 a 1230) se verificaron el 2026-10-20 contra los P-codes del COD-AB de Guatemala de OCHA (GT1201 a GT1230), y coinciden en código y nombre; Coatepeque también coincide (GT0920). Queda resuelta la nota "verificar códigos contra el catálogo INE y el GeoJSON" para los municipios de San Marcos. Ese mismo archivo es la base del GeoJSON del mapa (HU-42).
 
-
 #### HU-09. Gestionar establecimientos e instituciones
 
 > **Como** administrador, **quiero** registrar, editar y desactivar establecimientos de salud e instituciones, **para** que cada reporte quede ligado a quien lo produjo.
@@ -730,9 +729,7 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [ ] El mapa muestra siempre, en su control de atribución, el crédito de los límites con el enlace a la fuente, el enlace a la licencia CC BY 3.0 IGO y la indicación "adaptado", además del crédito de Leaflet.
 - [ ] El sistema tiene una sección de créditos con la fuente completa de los límites, los cambios hechos y la nota de que son límites de referencia, no límites legales oficiales; no usa logos de CONRED, OCHA, HDX ni de las Naciones Unidas.
 
-**Avance:** el GeoJSON está preparado y verificado el 2026-10-20, pero todavía no está en el repositorio. Se tomó `gtm_admin2.geojson` del conjunto COD-AB de Guatemala (v01, CONRED/OCHA, en HDX) y se dejaron solo los 30 municipios de San Marcos con los atributos `codigo_ine` y `nombre`. Los contornos se simplificaron al 20 % con mapshaper (1676 vértices, unos 40 KB). Los metadatos de fuente, licencia y cambios van en el propio archivo y en `FUENTES.md`. Los 30 códigos coinciden con `municipio.codigo_ine` (1201 a 1230) en código y nombre, y al unir los municipios queda un solo polígono sin huecos. Falta la pantalla del mapa, la unión con los resultados de indicadores (HU-36) y el crédito en pantalla.
-
-
+**Avance:** el GeoJSON está en `frontend/public/geo/` desde el 2026-10-20, con su `FUENTES.md`. Se tomó `gtm_admin2.geojson` del conjunto COD-AB de Guatemala (v01, CONRED/OCHA, en HDX) y se dejaron solo los 30 municipios de San Marcos con los atributos `codigo_ine` y `nombre`. Los contornos se simplificaron al 20 % con mapshaper (1676 vértices, unos 40 KB). Los metadatos de fuente, licencia y cambios van en el propio archivo y en `FUENTES.md`. Los 30 códigos coinciden con `municipio.codigo_ine` (1201 a 1230) en código y nombre, y al unir los municipios queda un solo polígono sin huecos. Falta la pantalla del mapa, la unión con los resultados de indicadores (HU-36) y el crédito en pantalla.
 
 #### HU-43. Comparar cobertura entre periodos
 
