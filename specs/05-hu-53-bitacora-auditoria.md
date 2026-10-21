@@ -1,6 +1,6 @@
 # SPEC 05 — Bitácora de auditoría
 
-> **Estado:** Borrador
+> **Estado:** Implementado
 > **Historia:** HU-53 (solo backend; la consulta de la bitácora es HU-54)
 > **Depende de:** SPEC 01, SPEC 03, SPEC 04
 > **Fecha:** 2026-10-20
@@ -52,16 +52,18 @@ Este spec **no cambia tablas ni columnas**. Usa `bitacora` del script `01_modelo
 ### Servicio de auditoría (`src/modulos/auditoria/auditoria.service.js`)
 
 ```js
-export const MODULOS = ['USUARIOS', 'CONFIGURACION', 'PRODUCCION', 'REVISION',
-  'RECTIFICACION', 'INDICADORES', 'REPORTES', 'SISTEMA'];          // el ENUM de bitacora.modulo
+// Objetos congelados { CLAVE: 'CLAVE' } construidos desde la lista de valores.
+export const MODULOS = aEnumeracion(['USUARIOS', 'CONFIGURACION', 'PRODUCCION', 'REVISION',
+  'RECTIFICACION', 'INDICADORES', 'REPORTES', 'SISTEMA']);          // el ENUM de bitacora.modulo
 
-export const ACCIONES = ['LOGIN_OK', 'LOGIN_FALLIDO', 'CUENTA_BLOQUEADA', 'LOGOUT',
+export const ACCIONES = aEnumeracion(['LOGIN_OK', 'LOGIN_FALLIDO', 'CUENTA_BLOQUEADA', 'LOGOUT',
   'CREAR', 'ACTUALIZAR', 'DESACTIVAR', 'REACTIVAR', 'CAMBIO_ESTADO',
-  'PUBLICAR_ESQUEMA', 'EXPORTAR', 'ACCESO_DENEGADO'];
+  'PUBLICAR_ESQUEMA', 'EXPORTAR', 'ACCESO_DENEGADO']);
 ```
 
+- Los servicios escriben `modulo: MODULOS.USUARIOS, accion: ACCIONES.LOGOUT`, nunca el texto literal. Un error de dedo da `undefined` y la validación lo rechaza.
 - Cada spec que necesite una acción nueva la agrega a `ACCIONES` (máximo 40 caracteres, `MAYUSCULAS_CON_GUION`).
-- `registrarBitacora` lanza un `Error` si `modulo` no está en `MODULOS` o `accion` no está en `ACCIONES`. Es un error de programación: dentro de una transacción la revierte y responde 500.
+- `registrarBitacora` lanza un `Error` si `modulo` no es un valor de `MODULOS` o `accion` no es un valor de `ACCIONES`. Es un error de programación: dentro de una transacción la revierte y responde 500.
 - **Campos sensibles:** antes de guardar, `registrarBitacora` quita de `valoresAnteriores` y `valoresNuevos`, en cualquier nivel del objeto y de sus listas, las claves `contrasena`, `contrasenaActual`, `contrasenaNueva`, `hashContrasena`, `hash_contrasena` y `token`. La comparación ignora mayúsculas y guiones bajos. Claves como `debeCambiarContrasena` no se quitan.
 - `diferencias(antes, despues)` compara campo por campo los dos objetos (sin bajar de nivel; las fechas, listas y objetos se comparan por su JSON) y devuelve `{ anteriores, nuevos }` solo con las claves que cambiaron, o `null` si no cambió nada.
 - `contextoAuditoria(req)` devuelve `{ usuarioId: req.usuario?.id ?? null, ipOrigen: req.ip, agenteUsuario: req.get('user-agent') ?? null }`. Los controladores se lo pasan al servicio, que lo mezcla con los datos de la fila.
@@ -169,6 +171,8 @@ CLAUDE.md                                       ← nota de contexto sobre la bi
 - **Sí:** solo los campos que cambiaron al actualizar, y el objeto completo al crear. Filas más chicas y fáciles de leer en HU-54.
 - **No:** la fila completa antes y después. Repite datos y esconde qué cambió.
 - **Sí:** constantes `MODULOS` y `ACCIONES` con validación. El ENUM de MySQL ya rechaza un módulo inválido, pero no una acción con un error de dedo.
+- **Sí:** las constantes son objetos congelados (`ACCIONES.LOGOUT`), no listas. Una lista solo se lee por posición, así que los servicios no podrían usarla. Se decidió en el paso 3 de la implementación.
+- **Sí:** en `diferencias`, una clave que existe solo de un lado se guarda como `null` del otro, para que no desaparezca del JSON. Se decidió en el paso 2 de la implementación.
 - **Sí:** la limpieza de campos sensibles vive en `registrarBitacora`. Protege aunque un servicio los pase por error. Usa una lista de claves exactas para no quitar `debeCambiarContrasena`.
 - **Sí:** `contextoAuditoria(req)` y migrar login y logout ahora. Un solo lugar para la IP y el agente.
 - **Sí:** `enTransaccion(fn)` para los endpoints nuevos, sin migrar `iniciarSesion`. El login usa `SELECT ... FOR UPDATE` y ya está probado.

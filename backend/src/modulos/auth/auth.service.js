@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import pool from '../../config/mysql.js';
 import entorno from '../../config/entorno.js';
 import { ErrorApi } from '../../middlewares/errores.js';
-import { registrarBitacora } from '../auditoria/auditoria.service.js';
+import { registrarBitacora, MODULOS, ACCIONES } from '../auditoria/auditoria.service.js';
 
 // Hash de una contraseña al azar: se compara cuando el usuario no existe para que la respuesta tarde lo mismo.
 const HASH_FICTICIO = '$2b$12$YoGDls95Ec5nVQ1mAJIxA.RNOKGr3YCDvCzFdvzP18Zj2yYCV4g86';
@@ -82,14 +82,13 @@ function armarSesion(usuario, permisos) {
 async function evaluarIntento(conexion, { nombreUsuario, contrasena }, contexto) {
   const bitacora = (datos) =>
     registrarBitacora(conexion, {
-      modulo: 'USUARIOS',
+      ...contexto,
+      modulo: MODULOS.USUARIOS,
       entidad: 'usuario',
-      ipOrigen: contexto.ip,
-      agenteUsuario: contexto.agente,
       ...datos,
     });
   const fallo = (usuario, motivo) =>
-    bitacora({ accion: 'LOGIN_FALLIDO', nombreUsuarioIntento: nombreUsuario, entidadId: usuario?.id, valoresNuevos: { motivo } });
+    bitacora({ accion: ACCIONES.LOGIN_FALLIDO, nombreUsuarioIntento: nombreUsuario, entidadId: usuario?.id, valoresNuevos: { motivo } });
 
   const usuario = await buscarUsuario(conexion, nombreUsuario);
 
@@ -126,7 +125,7 @@ async function evaluarIntento(conexion, { nombreUsuario, contrasena }, contexto)
       [usuario.id],
     );
     await bitacora({
-      accion: 'CUENTA_BLOQUEADA', nombreUsuarioIntento: nombreUsuario, entidadId: usuario.id, valoresNuevos: { bloqueadoHasta: hasta },
+      accion: ACCIONES.CUENTA_BLOQUEADA, nombreUsuarioIntento: nombreUsuario, entidadId: usuario.id, valoresNuevos: { bloqueadoHasta: hasta },
     });
     return { error: errores.bloqueada() };
   }
@@ -148,7 +147,7 @@ async function evaluarIntento(conexion, { nombreUsuario, contrasena }, contexto)
     'UPDATE usuario SET intentos_fallidos = 0, bloqueado_hasta = NULL, ultimo_acceso = NOW() WHERE id = ?',
     [usuario.id],
   );
-  await bitacora({ accion: 'LOGIN_OK', usuarioId: usuario.id, entidadId: usuario.id });
+  await bitacora({ accion: ACCIONES.LOGIN_OK, usuarioId: usuario.id, entidadId: usuario.id });
   return { sesion: armarSesion(usuario, await obtenerPermisos(conexion, usuario.rol_id)) };
 }
 
@@ -181,13 +180,12 @@ export async function cerrarSesion(usuario, datos, contexto) {
   if (!MOTIVOS_CIERRE.includes(motivo)) throw errores.motivoInvalido();
 
   await registrarBitacora(pool, {
+    ...contexto,
     usuarioId: usuario.id,
-    modulo: 'USUARIOS',
-    accion: 'LOGOUT',
+    modulo: MODULOS.USUARIOS,
+    accion: ACCIONES.LOGOUT,
     entidad: 'usuario',
     entidadId: usuario.id,
     valoresNuevos: { motivo },
-    ipOrigen: contexto.ip,
-    agenteUsuario: contexto.agente,
   });
 }

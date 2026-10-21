@@ -19,6 +19,8 @@ info:
     `/salud`, `POST /auth/login`, `POST /auth/logout` y `GET /auth/yo` no llevan permiso.
     Un recurso fuera del ámbito del usuario (su establecimiento o su DDRISS) responde 404, igual que
     uno que no existe.
+
+    **Bitácora.** Toda escritura, cada exportación y cada acceso denegado quedan en la bitácora, que no se puede modificar ni borrar.
 servers:
   - url: http://localhost:3000/api/v1
     description: Desarrollo local

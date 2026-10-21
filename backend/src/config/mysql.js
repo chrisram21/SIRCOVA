@@ -13,4 +13,20 @@ const pool = mysql.createPool({
   connectionLimit: 10,
 });
 
+// Para "cambio + bitácora (+ MongoDB)": se confirma solo si fn termina sin errores.
+export async function enTransaccion(fn) {
+  const conexion = await pool.getConnection();
+  try {
+    await conexion.beginTransaction();
+    const resultado = await fn(conexion);
+    await conexion.commit();
+    return resultado;
+  } catch (err) {
+    await conexion.rollback();
+    throw err;
+  } finally {
+    conexion.release();
+  }
+}
+
 export default pool;

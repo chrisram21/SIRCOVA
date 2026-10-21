@@ -2,7 +2,7 @@ import readline from 'node:readline';
 import { Writable } from 'node:stream';
 import bcrypt from 'bcrypt';
 import pool from '../src/config/mysql.js';
-import { registrarBitacora } from '../src/modulos/auditoria/auditoria.service.js';
+import { registrarBitacora, MODULOS, ACCIONES } from '../src/modulos/auditoria/auditoria.service.js';
 
 const COSTO_BCRYPT = 12;
 const LARGO_MINIMO_CONTRASENA = 8;
@@ -124,7 +124,7 @@ async function guardar(datos) {
       [usuario.empleadoId, usuario.nombreUsuario, hash, datos.rol.id],
     );
 
-    const comun = { modulo: 'USUARIOS', accion: 'CREAR', agenteUsuario: 'scripts/crear-usuario.js' };
+    const comun = { modulo: MODULOS.USUARIOS, accion: ACCIONES.CREAR, agenteUsuario: 'scripts/crear-usuario.js' };
     await registrarBitacora(conexion, { ...comun, entidad: 'empleado', entidadId: resEmpleado.insertId, valoresNuevos: empleado });
     await registrarBitacora(conexion, { ...comun, entidad: 'usuario', entidadId: resUsuario.insertId, valoresNuevos: usuario });
 
