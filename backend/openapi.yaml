@@ -879,6 +879,10 @@ components:
         id: { type: integer }
         nombreUsuario: { type: string }
         rol: { type: string, enum: [ESTABLECIMIENTO, REVISOR, EPIDEMIOLOGIA, ADMINISTRADOR, AUTORIDAD] }
+        rolNombre:
+          type: string
+          description: Nombre del rol (`rol.nombre`) para mostrarlo; no va en el JWT
+          example: Estadígrafa / revisor DDRISS
         permisos: { type: array, items: { type: string } }
         empleado:
           type: object

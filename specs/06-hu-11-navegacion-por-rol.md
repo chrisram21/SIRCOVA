@@ -1,6 +1,6 @@
 # SPEC 06 — Navegación y pantalla inicial según el rol
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-11 (parte frontend de HU-06, más `rolNombre` en el login)
 > **Depende de:** SPEC 01, SPEC 02, SPEC 03, SPEC 04
 > **Fecha:** 2026-10-20
@@ -178,24 +178,24 @@ Si `shadcn add sidebar` instala Card no hace falta agregarlo aparte; si no, se a
 
 ## Criterios de aceptación
 
-- [ ] `backend/openapi.yaml` tiene `rolNombre` en `UsuarioSesion` y `/api/docs` carga sin errores.
-- [ ] `POST /auth/login` devuelve `usuario.rolNombre` con el `rol.nombre` del usuario, y el JWT no lo contiene.
-- [ ] `npm test` pasa en `backend/` y en `frontend/` sin desactivar ninguna prueba.
-- [ ] `frontend/package.json` solo contiene dependencias de la lista de `AGENTS.md` (sección 3).
-- [ ] Una sesión ve en el menú solo las opciones cuyo permiso trae en `usuario.permisos`, más "Inicio", en el orden de la tabla.
-- [ ] Una sesión con todos los permisos de la tabla ve las 12 opciones; una sin permisos ve solo "Inicio".
-- [ ] Escribir la ruta de una opción sin tener su permiso lleva a `/inicio` sin mostrar la página.
-- [ ] Sin sesión, cualquier ruta lleva a `/login`; con sesión, `/login`, `/` y una ruta inexistente llevan a `/inicio`.
-- [ ] La opción de la ruta actual se ve resaltada con los colores `--sidebar-accent` y `--sidebar-accent-foreground`.
-- [ ] El encabezado muestra nombre, apellidos y `rolNombre` (o `rol` si la sesión no lo trae) y el botón "Cerrar sesión", que borra `sircova.sesion` y lleva a `/login`.
-- [ ] En escritorio el menú se oculta y se vuelve a mostrar con el botón del encabezado; por debajo de 768 px se abre como panel deslizante.
-- [ ] `/inicio` muestra el saludo según la hora y las tarjetas del rol del usuario con "Sin datos todavía"; un rol desconocido ve solo el saludo.
-- [ ] "Accesos rápidos" muestra solo las opciones que el usuario puede ver (sin Inicio) y no aparece si no hay ninguna.
-- [ ] La pantalla inicial no contiene gráficas.
-- [ ] Las opciones sin pantalla muestran "En construcción" con su título.
-- [ ] Ningún componente propio tiene colores escritos a mano ni llama a `fetch` directamente.
-- [ ] Con el backend contra Aiven, el usuario de prueba ve el layout, solo "Inicio" en el menú, su `rolNombre` y el inicio de su rol, y `/indicadores` lo regresa a `/inicio`.
-- [ ] HU-11 en `HISTORIAS_DE_USUARIO.md` tiene su avance actualizado.
+- [x] `backend/openapi.yaml` tiene `rolNombre` en `UsuarioSesion` y `/api/docs` carga sin errores.
+- [x] `POST /auth/login` devuelve `usuario.rolNombre` con el `rol.nombre` del usuario, y el JWT no lo contiene.
+- [x] `npm test` pasa en `backend/` y en `frontend/` sin desactivar ninguna prueba.
+- [x] `frontend/package.json` solo contiene dependencias de la lista de `AGENTS.md` (sección 3).
+- [x] Una sesión ve en el menú solo las opciones cuyo permiso trae en `usuario.permisos`, más "Inicio", en el orden de la tabla.
+- [x] Una sesión con todos los permisos de la tabla ve las 12 opciones; una sin permisos ve solo "Inicio".
+- [x] Escribir la ruta de una opción sin tener su permiso lleva a `/inicio` sin mostrar la página.
+- [x] Sin sesión, cualquier ruta lleva a `/login`; con sesión, `/login`, `/` y una ruta inexistente llevan a `/inicio`.
+- [x] La opción de la ruta actual se ve resaltada con los colores `--sidebar-accent` y `--sidebar-accent-foreground`.
+- [x] El encabezado muestra nombre, apellidos y `rolNombre` (o `rol` si la sesión no lo trae) y el botón "Cerrar sesión", que borra `sircova.sesion` y lleva a `/login`.
+- [x] En escritorio el menú se oculta y se vuelve a mostrar con el botón del encabezado; por debajo de 768 px se abre como panel deslizante.
+- [x] `/inicio` muestra el saludo según la hora y las tarjetas del rol del usuario con "Sin datos todavía"; un rol desconocido ve solo el saludo.
+- [x] "Accesos rápidos" muestra solo las opciones que el usuario puede ver (sin Inicio) y no aparece si no hay ninguna.
+- [x] La pantalla inicial no contiene gráficas.
+- [x] Las opciones sin pantalla muestran "En construcción" con su título.
+- [x] Ningún componente propio tiene colores escritos a mano ni llama a `fetch` directamente.
+- [x] Con el backend contra Aiven, el usuario de prueba ve el layout, solo "Inicio" en el menú, su `rolNombre` y el inicio de su rol, y `/indicadores` lo regresa a `/inicio`.
+- [x] HU-11 en `HISTORIAS_DE_USUARIO.md` tiene su avance actualizado.
 
 ## Decisiones
 
@@ -223,6 +223,14 @@ Si `shadcn add sidebar` instala Card no hace falta agregarlo aparte; si no, se a
 - **Sí:** el Sidebar de shadcn con su comportamiento estándar (oculto con un botón en escritorio, panel deslizante por debajo de 768 px). `AGENTS.md` pide usar primero shadcn, y la app se adapta al ancho de la ventana.
 - **No:** menú colapsable a iconos ni submenús. No están en el mockup.
 - **No:** insignias con conteos en el menú. Necesitan endpoints que todavía no existen.
+- **Sí:** `src/preparar-pruebas.js`, cargado desde `setupFiles` en `vite.config.js`, con un `matchMedia` falso. jsdom no lo implementa y el Sidebar lo usa (hook `use-mobile`); así no se repite en cada archivo de pruebas. Decidido durante la implementación.
+- **Sí:** el ancho de 240 px se fija con `--sidebar-width: 15rem` en `Layout.jsx`, sin editar `sidebar.jsx`, que trae 16rem. Los archivos de shadcn quedan como los genera su CLI. Decidido durante la implementación.
+- **No:** `TooltipProvider` en la app, aunque la CLI lo sugiere al instalar el Sidebar. Solo se usa con el menú reducido a iconos, que está fuera del alcance. Decidido durante la implementación.
+- **Sí:** el saludo es "Buenos días" de 5:00 a 11:59, "Buenas tardes" de 12:00 a 18:59 y "Buenas noches" el resto. El spec solo pedía "según la hora local". Decidido durante la implementación.
+- **Sí:** en pantallas angostas, el panel del menú se cierra al elegir una opción, para que no tape la página. Decidido durante la implementación.
+- **Sí:** las dos pruebas de cierre de sesión de `PaginaInicio.test.jsx` (aviso `MANUAL` al servidor y cierre aunque falle `POST /auth/logout`) pasaron a `Layout.test.jsx`, porque el botón se movió al encabezado. No se pierde ninguna prueba al reescribir el archivo. Decidido durante la implementación.
+- **Sí:** la verificación manual del paso 7 se hizo con Playwright (herramienta de la sesión, sin agregarlo al proyecto). La sesión se obtuvo con `POST /auth/login` real desde un script con las credenciales de `backend/.env` y se guardó en `sessionStorage`, para no escribir la contraseña en el formulario. El formulario de login ya lo verificó el SPEC 02. Decidido durante la implementación.
+- **Sí:** `.playwright-mcp/` en `.gitignore`, porque ahí guarda Playwright sus capturas y registros. Su integración como herramienta de pruebas del proyecto queda para el siguiente spec. Decidido durante la implementación.
 
 ## Riesgos
 

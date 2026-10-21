@@ -71,7 +71,7 @@ test('con una respuesta correcta se guarda la sesión y se muestra /inicio', asy
 
   llenarYEnviar()
 
-  expect(await screen.findByText('Hola, Juan Pérez')).toBeTruthy()
+  expect(await screen.findByText('Usuarios activos')).toBeTruthy()
   expect(iniciarSesion).toHaveBeenCalledWith('jperez', 'secreta123')
   expect(JSON.parse(sessionStorage.getItem('sircova.sesion'))).toEqual(respuesta)
   expect(sessionStorage.getItem('sircova.sesion')).not.toContain('secreta123')
@@ -94,7 +94,7 @@ test('con un 401 se muestra su mensaje y se puede volver a enviar', async () => 
   fireEvent.change(campoContrasena(), { target: { value: 'secreta123' } })
   fireEvent.click(botonIngresar())
 
-  expect(await screen.findByText('Hola, Juan Pérez')).toBeTruthy()
+  expect(await screen.findByText('Usuarios activos')).toBeTruthy()
   expect(iniciarSesion).toHaveBeenCalledTimes(2)
 })
 
@@ -131,7 +131,7 @@ test('mientras la petición está en curso el botón dice "Ingresando…" y est�
   expect(botonIngresar().disabled).toBe(true)
 
   resolver(crearRespuestaLogin())
-  expect(await screen.findByText('Hola, Juan Pérez')).toBeTruthy()
+  expect(await screen.findByText('Usuarios activos')).toBeTruthy()
 })
 
 describe('aviso de sesión cerrada', () => {

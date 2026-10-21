@@ -154,3 +154,6 @@ vite.config.ts.timestamp-*
 
 # Claude Code (configuración local y worktrees)
 .claude/
+
+# Playwright (capturas y registros de las verificaciones en el navegador)
+.playwright-mcp/
