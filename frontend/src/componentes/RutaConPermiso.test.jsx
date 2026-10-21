@@ -49,7 +49,7 @@ test('sin el permiso, /indicadores lleva a /inicio', () => {
   abrir('/indicadores', ['BITACORA_CONSULTAR'])
 
   expect(enConstruccion()).toBeNull()
-  expect(screen.getByText('Hola, Juan Pérez')).toBeTruthy()
+  expect(screen.getByText('Usuarios activos')).toBeTruthy()
 })
 
 test('sin sesión, /indicadores lleva a /login', () => {
@@ -61,5 +61,5 @@ test('sin sesión, /indicadores lleva a /login', () => {
 test('una ruta inexistente lleva a /inicio', () => {
   abrir('/no-existe', [])
 
-  expect(screen.getByText('Hola, Juan Pérez')).toBeTruthy()
+  expect(screen.getByText('Usuarios activos')).toBeTruthy()
 })

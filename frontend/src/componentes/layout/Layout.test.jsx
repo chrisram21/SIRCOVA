@@ -103,11 +103,26 @@ test('sin rolNombre, el encabezado muestra el código del rol', () => {
   expect(within(screen.getByRole('banner')).getByText('ADMINISTRADOR')).toBeTruthy()
 })
 
-test('"Cerrar sesión" borra sircova.sesion y lleva a /login', () => {
+test('"Cerrar sesión" avisa al servidor con MANUAL, borra sircova.sesion y lleva a /login sin aviso', () => {
+  abrir('/inicio')
+
+  fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }))
+
+  expect(cerrarSesion).toHaveBeenCalledTimes(1)
+  expect(cerrarSesion).toHaveBeenCalledWith('MANUAL')
+  expect(sessionStorage.getItem('sircova.sesion')).toBeNull()
+  expect(screen.getByRole('heading', { name: 'Iniciar sesión' })).toBeTruthy()
+  expect(screen.queryByRole('status')).toBeNull()
+  expect(screen.queryByRole('alert')).toBeNull()
+})
+
+test('si POST /auth/logout falla, la sesión se cierra igual', async () => {
+  cerrarSesion.mockRejectedValue(new Error('sin conexión'))
   abrir('/inicio')
 
   fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }))
 
   expect(sessionStorage.getItem('sircova.sesion')).toBeNull()
-  expect(screen.getByRole('heading', { name: 'Iniciar sesión' })).toBeTruthy()
+  expect(await screen.findByRole('heading', { name: 'Iniciar sesión' })).toBeTruthy()
+  expect(screen.queryByRole('alert')).toBeNull()
 })
