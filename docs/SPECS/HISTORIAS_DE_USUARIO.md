@@ -100,7 +100,7 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [x] Con un token vencido, cualquier petición responde 401 y el frontend pide iniciar sesión de nuevo.
 - [x] El inicio y el cierre de sesión quedan en la bitácora.
 
-**Avance:** criterios cumplidos; queda terminada al integrar el spec 03 a `main`. Backend y frontend van en un solo spec, `specs/03-hu-02-cerrar-sesion.md`: `POST /auth/logout` (protegido con `autenticar`, registra `LOGOUT` con el motivo `MANUAL` o `INACTIVIDAD`), cierre por 30 minutos de inactividad, cierre al vencer el JWT, manejo global del 401 y aviso informativo en `/login`. Verificado contra la API real el 2026-10-19. El token no se revoca al cerrar sesión: sigue siendo válido hasta su vencimiento (riesgo aceptado en los specs 01 y 03). El botón "Cerrar sesión" está por ahora en la página `/inicio` provisional; pasa a la barra de navegación con HU-11.
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 03 a `main`. Backend y frontend van en un solo spec, `specs/03-hu-02-cerrar-sesion.md`: `POST /auth/logout` (protegido con `autenticar`, registra `LOGOUT` con el motivo `MANUAL` o `INACTIVIDAD`), cierre por 30 minutos de inactividad, cierre al vencer el JWT, manejo global del 401 y aviso informativo en `/login`. Verificado contra la API real el 2026-10-19. El token no se revoca al cerrar sesión: sigue siendo válido hasta su vencimiento (riesgo aceptado en los specs 01 y 03). El botón "Cerrar sesión" está en el encabezado del layout desde HU-11 (spec 06).
 
 #### HU-03. Cambiar mi contraseña
 
@@ -244,9 +244,11 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Cómo se hará:** Layout en React con barra de navegación que se arma con los permisos del token; rutas protegidas; menú con el componente Sidebar de shadcn/ui y paleta en azules y celestes del MSPAS (azul marino #2c4660, celeste #5aa0d0) definida en las variables del tema.
 
 **Criterios de aceptación:**
-- [ ] Cada rol ve solo las opciones de menú que le corresponden.
-- [ ] Si escribo la dirección de una pantalla sin permiso, el sistema me redirige.
-- [ ] La pantalla inicial es ligera; las gráficas están en pantallas propias del menú.
+- [x] Cada rol ve solo las opciones de menú que le corresponden.
+- [x] Si escribo la dirección de una pantalla sin permiso, el sistema me redirige.
+- [x] La pantalla inicial es ligera; las gráficas están en pantallas propias del menú.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 06 a `main`. Un solo spec, `specs/06-hu-11-navegacion-por-rol.md`: layout con el Sidebar de shadcn y encabezado (usuario, nombre del rol y "Cerrar sesión"); las 12 opciones del menú están en `frontend/src/componentes/layout/opcionesMenu.js`, cada una con un permiso **provisional**, y se muestran o se bloquean con `tienePermiso` (sin el permiso, la ruta redirige a `/inicio`); las opciones sin pantalla muestran "En construcción". La pantalla inicial se elige por el rol, con tarjetas todavía sin datos y accesos rápidos filtrados por permiso, sin gráficas. El login devuelve también `rolNombre`. Como ningún permiso de pantalla existe aún en `05_permisos_mysql.sql`, con la sesión real todos los roles ven por ahora solo "Inicio"; el filtrado por permiso se comprobó con pruebas sobre sesiones simuladas, y el resto contra la API real el 2026-10-20. Cada spec de pantalla confirma su código, lo crea en el 05 y pone su página en `opcionesMenu.js`.
 
 ### Sprint 2 (04/10 – 13/10): Configuración dinámica y registro de producción
 
