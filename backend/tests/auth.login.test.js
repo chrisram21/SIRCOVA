@@ -13,6 +13,7 @@ let usuarioId;
 let empleadoId;
 let ddrissOriginal;
 let rolOriginal;
+let rolNombre;
 let establecimientoOriginal;
 
 const login = (cuerpo) =>
@@ -51,7 +52,7 @@ function sinValorDeContrasena(valor) {
 beforeAll(async () => {
   if (!USUARIO || !CONTRASENA) throw new Error('Defina PRUEBA_USUARIO y PRUEBA_CONTRASENA en backend/.env');
   const [[fila]] = await pool.query(
-    `SELECT u.id, u.empleado_id, u.rol_id, e.ddriss_id, e.establecimiento_id, r.codigo AS rol
+    `SELECT u.id, u.empleado_id, u.rol_id, e.ddriss_id, e.establecimiento_id, r.codigo AS rol, r.nombre AS rol_nombre
        FROM usuario u JOIN empleado e ON e.id = u.empleado_id JOIN rol r ON r.id = u.rol_id
       WHERE u.nombre_usuario = ?`,
     [USUARIO],
@@ -64,6 +65,7 @@ beforeAll(async () => {
   empleadoId = fila.empleado_id;
   ddrissOriginal = fila.ddriss_id;
   rolOriginal = fila.rol_id;
+  rolNombre = fila.rol_nombre;
   establecimientoOriginal = fila.establecimiento_id;
 });
 
@@ -87,7 +89,7 @@ describe('POST /api/v1/auth/login · login correcto', () => {
     const res = await login({ nombreUsuario: USUARIO, contrasena: CONTRASENA });
 
     expect(res.status).toBe(200);
-    expect(res.body.usuario).toMatchObject({ id: usuarioId, nombreUsuario: USUARIO, rol: 'ADMINISTRADOR' });
+    expect(res.body.usuario).toMatchObject({ id: usuarioId, nombreUsuario: USUARIO, rol: 'ADMINISTRADOR', rolNombre });
     expect(Array.isArray(res.body.usuario.permisos)).toBe(true);
     expect(Object.keys(res.body.usuario.empleado).sort()).toEqual(
       ['apellidos', 'ddrissId', 'establecimientoId', 'municipioId', 'nombres'],
@@ -109,6 +111,7 @@ describe('POST /api/v1/auth/login · login correcto', () => {
       municipioId: res.body.usuario.empleado.municipioId,
     });
     expect(datos.exp - datos.iat).toBe(referencia.exp - referencia.iat);
+    expect(datos).not.toHaveProperty('rolNombre');
   });
 
   it('reinicia el contador de intentos y actualiza ultimo_acceso', async () => {

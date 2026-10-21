@@ -29,7 +29,7 @@ async function buscarUsuario(conexion, nombreUsuario) {
   // FOR UPDATE OF u: bloquea solo la fila del usuario, para contar bien los intentos simultáneos.
   // El bloqueo se compara con NOW() de MySQL para no depender de la hora del servidor de Node.
   const [filas] = await conexion.query(
-    `SELECT u.id, u.nombre_usuario, u.hash_contrasena, u.rol_id, r.codigo AS rol,
+    `SELECT u.id, u.nombre_usuario, u.hash_contrasena, u.rol_id, r.codigo AS rol, r.nombre AS rol_nombre,
             u.activo, e.activo AS empleado_activo, u.intentos_fallidos,
             COALESCE(u.bloqueado_hasta > NOW(), FALSE) AS bloqueado,
             COALESCE(u.bloqueado_hasta <= NOW(), FALSE) AS bloqueo_vencido,
@@ -74,7 +74,14 @@ function armarSesion(usuario, permisos) {
   );
   return {
     token,
-    usuario: { id: usuario.id, nombreUsuario: usuario.nombre_usuario, rol: usuario.rol, permisos, empleado },
+    usuario: {
+      id: usuario.id,
+      nombreUsuario: usuario.nombre_usuario,
+      rol: usuario.rol,
+      rolNombre: usuario.rol_nombre,
+      permisos,
+      empleado,
+    },
   };
 }
 
