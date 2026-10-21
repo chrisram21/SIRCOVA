@@ -1,6 +1,6 @@
 # SPEC 04 — Control de acceso por permiso y ámbito
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-06 (backend, más `tienePermiso` en el frontend como base)
 > **Depende de:** SPEC 01, SPEC 02
 > **Fecha:** 2026-10-20
