@@ -2,7 +2,7 @@
 
 > **Para qué sirve este documento.** Da contexto preciso sobre la base de datos del proyecto a otros agentes de IA y a los integrantes del equipo. Resume qué se trabajó, cómo está organizada la persistencia (MySQL + MongoDB) y qué es y para qué sirve cada tabla y cada colección.
 >
-> **Estado:** modelo preliminar **v0.8** (18 de octubre de 2026): v0.5 (preparado para varias DDRISS), los bloques A a D de la v0.6 (población por grupo de edad, dosis que cuentan para cobertura, secciones del formulario y avance contra la meta del mes) la v0.7 (Excel del 5C y semillas del Registro Único de Vacunación) y la v0.8 (Hospital de San Marcos y vacuna Polio). El modelo se sigue refinando por sprint.
+> **Estado:** modelo preliminar **v0.9** (22 de octubre de 2026): v0.5 (preparado para varias DDRISS), los bloques A a D de la v0.6 (población por grupo de edad, dosis que cuentan para cobertura, secciones del formulario y avance contra la meta del mes) la v0.7 (Excel del 5C y semillas del Registro Único de Vacunación), la v0.8 (Hospital de San Marcos y vacuna Polio) y la v0.9 (CUI del empleado como huella HMAC). El modelo se sigue refinando por sprint.
 >
 > **Fuente de verdad:** si este resumen y los scripts difieren, mandan los scripts.
 > - `01_modelo_relacional_mysql.sql`: DDL de MySQL 8.0.
@@ -42,6 +42,7 @@
 | **v0.6** | 2026-10-10 | Información de campo (entrevistas a la estadígrafa y a Epidemiología). **Bloque A:** `poblacion_objetivo` sin `vacuna_id` (población por municipio, año y grupo de edad), semillas de `clasificacion_poblacion` según los encabezados del 5C y permiso `POBLACION_REGISTRAR` solo para el Administrador (provisional). **Bloque B:** `dosis.completa_esquema` y `dosis.es_trazadora`; 13 vacunas del 5C como semillas de ejemplo. **Bloque C** (MongoDB, script v0.4): `esquemas_captura.secciones[]` y valores de `grupo_edad` con los códigos de `clasificacion_poblacion`; esquema de ejemplo de OPV. **Bloque D** (MongoDB): tipo `AVANCE_META_MES` e indicador `AVANCE_PENTA3` para el mapa, semáforo 80/90 provisional. Bloque E en pausa. |
 | **v0.7** | 2026-10-17 | Excel del 5C y Registro Único de Vacunación. `establecimiento.reporta_5c` (el que envía el 5C de su municipio, uno por municipio); municipio `9999` = "Migrantes / fuera de San Marcos"; `v_produccion_atribuida` (Excel 3) solo cuenta procedencias del departamento de la DDRISS; grupo `1_A_4` → `1_A_5` ("De 1 a < 6 años"); 22 vacunas semilla (Hexavalente reemplaza a Pentavalente con el id 2, `INFLU` → `INFLU_PED`). MongoDB (script v0.5): `PENTA` → `HEXA` en ejemplos e indicadores; sexo solo en VPH (y Tdap de 10 años), nuevo esquema de ejemplo de VPH. |
 | **v0.8** | 2026-10-18 | Hospitales e IPV/OPV. 31 formularios 5C (30 municipios y el Hospital de San Marcos), así que `reporta_5c` deja de ser uno por municipio; nueva marca `establecimiento.solo_cobertura` (su producción solo cuenta en el Excel 3; caso Hospital de San Marcos); `v_produccion` expone `solo_cobertura` y `v_consolidado_establecimiento` la excluye. IPV y OPV se fusionan en `POLIO` (id 6): 21 vacunas, 60 dosis. MongoDB (script v0.6): dimensión `presentacion` (IPV u OPV) en el esquema de Polio. |
+| **v0.9** | 2026-10-22 | CUI del empleado (SPEC 11, asesoría del 2026-10-21). `empleado.codigo_empleado` pasa a `empleado.cui_hmac` `CHAR(64)` con el índice único `uq_empleado_cui`: la huella HMAC-SHA256 del CUI del DPI, para no registrar dos veces a la misma persona. El código de empleado no servía para eso: hay personas con dos códigos y el personal contratado usa otros. Se guarda la huella y no el CUI, con una clave secreta (`CUI_HMAC_CLAVE`), porque el CUI tiene pocas combinaciones y un SHA-256 simple se podría revertir. La columna es NULL en la base y la API la exige al crear. Las bases que ya existían se migran con `07_cui_empleado_mysql.sql`, que vacía los códigos anteriores. |
 
 Entregables generados en el hilo, todos en `/mnt/project-files/diseno-bd/`:
 
@@ -103,11 +104,11 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 - Columnas: `rol_id` → rol, `permiso_id` → permiso. Llave compuesta.
 
 **`empleado`** (nueva en v0.4): **datos del personal**, es decir quién es y dónde trabaja. Sirve para identificar y contactar a las personas, que no son pacientes. Un empleado puede existir **sin cuenta**, por ejemplo alguien que solo figura como contacto.
-- Columnas: `id`, `codigo_empleado` (único, opcional), `nombres`, `apellidos`, `cargo`, `correo` (único, opcional; se usa para notificaciones y recuperación de contraseña), `telefono`, `activo`, `creado_en`, `actualizado_en`.
+- Columnas: `id`, `cui_hmac` (v0.9, único; huella HMAC-SHA256 del CUI en hexadecimal; NULL en la base y obligatoria para la API al crear), `nombres`, `apellidos`, `cargo`, `correo` (único; NULL en la base y obligatorio para la API al crear; se usa para notificaciones y recuperación de contraseña), `telefono`, `activo`, `creado_en`, `actualizado_en`.
 - `establecimiento_id` → establecimiento: lugar de trabajo; obligatorio en la práctica para el personal de establecimiento.
 - `ddriss_id` → ddriss (v0.5, opcional): DDRISS donde trabaja; define el alcance de lo que ve. Solo el rol `AUTORIDAD` puede dejarlo NULL (autoridad nacional); lo valida el backend.
 - `municipio_id` → municipio: alcance territorial opcional, por ejemplo un coordinador municipal.
-- No guarda DPI ni otros datos personales innecesarios.
+- No guarda el DPI; solo una huella HMAC del CUI para evitar empleados repetidos. El sistema nunca muestra el CUI: solo indica si está registrado. La clave del HMAC (`CUI_HMAC_CLAVE`) es la misma para todo el equipo; si se pierde o se cambia, las huellas guardadas dejan de coincidir.
 
 **`usuario`** (reducida en v0.4): **cuentas de acceso**, solo los datos para iniciar sesión y controlar la cuenta. Sirve para autenticación y autorización.
 - Columnas: `id`, `nombre_usuario` (único), `hash_contrasena` (bcrypt/argon2), `activo`, `intentos_fallidos`, `bloqueado_hasta`, `debe_cambiar_contrasena`, `ultimo_acceso`, `creado_en`, `actualizado_en`, `desactivado_en`.

@@ -247,7 +247,11 @@ paths:
       description: |
         La DDRISS del empleado es siempre la del usuario que lo registra; no viene en el cuerpo.
         Con establecimiento, el municipio se toma del establecimiento; `municipioId` solo se acepta
-        sin establecimiento y debe ser del departamento sede de la DDRISS. Los textos vacíos se guardan como `null`.
+        sin establecimiento y debe ser del departamento sede de la DDRISS. `cui` y `correo` son obligatorios;
+        los textos opcionales vacíos se guardan como `null`. Cada texto se limpia (espacios de los extremos
+        fuera, espacios dobles reducidos a uno) antes de validarlo; un formato inválido responde 400
+        `ENTRADA_INVALIDA` con un mensaje que nombra el campo. El CUI nunca se guarda ni se devuelve: se
+        guarda solo su huella HMAC-SHA256 y la respuesta indica `cuiRegistrado`.
       x-permiso: EMPLEADO_CREAR
       requestBody:
         required: true
@@ -264,7 +268,7 @@ paths:
         "401": { $ref: "#/components/responses/NoAutenticado" }
         "403": { $ref: "#/components/responses/SinPermiso" }
         "409":
-          description: Correo o código de empleado repetido
+          description: Correo o CUI repetido
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -272,9 +276,9 @@ paths:
                 correo:
                   value:
                     error: { codigo: CORREO_DUPLICADO, mensaje: Ya hay un empleado con ese correo. }
-                codigo:
+                cui:
                   value:
-                    error: { codigo: CODIGO_EMPLEADO_DUPLICADO, mensaje: Ya hay un empleado con ese código. }
+                    error: { codigo: CUI_DUPLICADO, mensaje: Ya hay un empleado registrado con ese CUI. }
         "422":
           description: Establecimiento o municipio fuera del ámbito, inexistente o inactivo
           content:
@@ -293,8 +297,10 @@ paths:
       tags: [Usuarios]
       summary: Editar los datos de un empleado de la DDRISS del administrador
       description: |
-        Cambio parcial: solo se envían los campos que cambian, y al menos uno. `null` o un texto vacío borran
-        un campo opcional. Las reglas de establecimiento y municipio se aplican al resultado (lo guardado más
+        Cambio parcial: solo se envían los campos que cambian, y al menos uno. Solo se validan los campos que
+        llegan, así que un dato viejo que no cumple el formato no impide editar otro campo. `null` o un texto
+        vacío borran un campo opcional; `correo` y `cui` no se pueden borrar (400). `cui` registra el CUI o
+        reemplaza el que había. Las reglas de establecimiento y municipio se aplican al resultado (lo guardado más
         lo que llega): con establecimiento, el municipio se toma de él. Si la cuenta del empleado tiene rol
         `ESTABLECIMIENTO`, no se le puede quitar el establecimiento. Si la cuenta del empleado está
         desactivada, primero hay que restaurarla. Una petición que no cambia nada responde 200 sin
@@ -318,7 +324,7 @@ paths:
         "403": { $ref: "#/components/responses/SinPermiso" }
         "404": { $ref: "#/components/responses/NoEncontrado" }
         "409":
-          description: Correo o código de empleado repetido, o la cuenta del empleado está desactivada
+          description: Correo o CUI repetido, o la cuenta del empleado está desactivada
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -326,9 +332,9 @@ paths:
                 correo:
                   value:
                     error: { codigo: CORREO_DUPLICADO, mensaje: Ya hay un empleado con ese correo. }
-                codigo:
+                cui:
                   value:
-                    error: { codigo: CODIGO_EMPLEADO_DUPLICADO, mensaje: Ya hay un empleado con ese código. }
+                    error: { codigo: CUI_DUPLICADO, mensaje: Ya hay un empleado registrado con ese CUI. }
                 cuentaDesactivada:
                   value:
                     error: { codigo: CUENTA_DESACTIVADA, mensaje: La cuenta está desactivada; restáurela para editarla. }
@@ -1357,14 +1363,15 @@ components:
 
     EmpleadoEntrada:
       type: object
-      required: [nombres, apellidos]
+      description: Si llega `codigoEmpleado`, responde 400
+      required: [nombres, apellidos, cui, correo]
       properties:
-        nombres: { type: string, minLength: 1, maxLength: 100 }
-        apellidos: { type: string, minLength: 1, maxLength: 100 }
-        codigoEmpleado: { type: string, maxLength: 20, description: Único si se indica }
-        cargo: { type: string, maxLength: 100 }
-        correo: { type: string, format: email, maxLength: 150, description: Único si se indica }
-        telefono: { type: string, maxLength: 20 }
+        nombres: { $ref: "#/components/schemas/TextoNombres" }
+        apellidos: { $ref: "#/components/schemas/TextoNombres" }
+        cui: { $ref: "#/components/schemas/TextoCui" }
+        cargo: { $ref: "#/components/schemas/TextoCargo" }
+        correo: { $ref: "#/components/schemas/TextoCorreo" }
+        telefono: { $ref: "#/components/schemas/TextoTelefono" }
         establecimientoId:
           type: integer
           description: Activo y de la DDRISS del administrador; el municipio se toma de él
@@ -1376,7 +1383,7 @@ components:
       type: object
       properties:
         id: { type: integer }
-        codigoEmpleado: { type: string, nullable: true }
+        cuiRegistrado: { type: boolean, description: true si el empleado tiene un CUI registrado; el CUI y su huella nunca se devuelven }
         nombres: { type: string }
         apellidos: { type: string }
         cargo: { type: string, nullable: true }
@@ -1391,14 +1398,24 @@ components:
       type: object
       minProperties: 1
       additionalProperties: false
-      description: Cambio parcial; `ddrissId` y `activo` no se aceptan
+      description: Cambio parcial; `ddrissId`, `activo` y `codigoEmpleado` no se aceptan
       properties:
-        nombres: { type: string, minLength: 1, maxLength: 100 }
-        apellidos: { type: string, minLength: 1, maxLength: 100 }
-        codigoEmpleado: { type: string, nullable: true, maxLength: 20, description: Único si se indica; null o vacío lo borra }
-        cargo: { type: string, nullable: true, maxLength: 100 }
-        correo: { type: string, nullable: true, format: email, maxLength: 150, description: Único si se indica; null o vacío lo borra }
-        telefono: { type: string, nullable: true, maxLength: 20 }
+        nombres: { $ref: "#/components/schemas/TextoNombres" }
+        apellidos: { $ref: "#/components/schemas/TextoNombres" }
+        cui:
+          allOf: [{ $ref: "#/components/schemas/TextoCui" }]
+          description: Registra el CUI o reemplaza el que había; null o vacío responde 400
+        cargo:
+          allOf: [{ $ref: "#/components/schemas/TextoCargo" }]
+          nullable: true
+          description: null o vacío lo borra
+        correo:
+          allOf: [{ $ref: "#/components/schemas/TextoCorreo" }]
+          description: null o vacío responde 400
+        telefono:
+          allOf: [{ $ref: "#/components/schemas/TextoTelefono" }]
+          nullable: true
+          description: null o vacío lo borra
         establecimientoId:
           type: integer
           nullable: true
@@ -1414,8 +1431,49 @@ components:
       required: [empleadoId, nombreUsuario, rolId]
       properties:
         empleadoId: { type: integer }
-        nombreUsuario: { type: string, pattern: '^\S{3,50}$', description: 3 a 50 caracteres sin espacios }
+        nombreUsuario:
+          type: string
+          pattern: '^[a-z0-9._-]{4,50}$'
+          description: 4 a 50 caracteres; minúsculas, números, punto, guion o guion bajo. Se quitan los espacios de los extremos
         rolId: { type: integer }
+
+    TextoNombres:
+      type: string
+      maxLength: 100
+      description: |
+        Nombres o apellidos: letras (con tildes, ñ y ü), y varias palabras separadas por un espacio, un
+        apóstrofo o un guion (`^\p{L}+(?:[ '’-]\p{L}+)*$` después de limpiar). De 1 a 100 caracteres.
+      example: María de los Ángeles
+
+    TextoCui:
+      type: string
+      description: |
+        CUI del DPI. Acepta espacios y guiones; sin ellos deben quedar 13 dígitos: 8 de correlativo, 1
+        verificador, 2 de departamento y 2 de municipio. El verificador es el residuo de dividir entre 11 la
+        suma de los 8 primeros dígitos multiplicados por 2, 3… 9 (residuo 10 = inválido). El departamento va
+        de 01 a 22. Único: un CUI repetido responde 409 `CUI_DUPLICADO`.
+      example: 2345 67899 1201
+
+    TextoCargo:
+      type: string
+      maxLength: 100
+      description: Empieza con letra; letras, espacios y `. , ( ) / -`; al menos 2 letras
+      example: Enf. auxiliar (TSR)
+
+    TextoCorreo:
+      type: string
+      maxLength: 150
+      description: |
+        `^[^\s@]+@[^\s@]+\.[^\s@]{2,}$`, de cualquier dominio. Se guarda en minúsculas. Único: uno repetido
+        responde 409 `CORREO_DUPLICADO`.
+      example: ana.lopez@gmail.com
+
+    TextoTelefono:
+      type: string
+      description: |
+        Acepta `+502`, espacios y guiones; sin ellos deben quedar 8 dígitos que empiecen con 2 a 7. Se guarda
+        como `NNNN-NNNN`.
+      example: +502 5551 1001
 
     Usuario:
       type: object

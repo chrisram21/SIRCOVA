@@ -8,10 +8,10 @@ import { listarEstablecimientos, listarMunicipios } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
 import { cambiarRol, editarEmpleado, listarRoles, obtenerUsuario } from '@/api/usuarios.js'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
-import CamposEmpleado, { CampoSeleccion, NINGUNO } from './CamposEmpleado.jsx'
+import CamposEmpleado, { CampoSeleccion, erroresDeEmpleado, NINGUNO } from './CamposEmpleado.jsx'
 
 const MENSAJE_INESPERADO = 'Ocurrió un error inesperado. Intente de nuevo.'
-const TEXTOS_OPCIONALES = ['codigoEmpleado', 'cargo', 'correo', 'telefono']
+const TEXTOS_OPCIONALES = ['cargo', 'correo', 'telefono']
 
 const mensajeDe = (error) => (error instanceof ErrorApi ? error.mensaje : MENSAJE_INESPERADO)
 const aOpcion = (id) => (id == null ? NINGUNO : String(id))
@@ -23,6 +23,8 @@ function aFormulario(empleado) {
     nombres: empleado.nombres,
     apellidos: empleado.apellidos,
     ...Object.fromEntries(TEXTOS_OPCIONALES.map((campo) => [campo, empleado[campo] ?? ''])),
+    // El CUI guardado no se conoce: el campo siempre empieza vacío y solo se envía si se escribe.
+    cui: '',
     establecimientoId: aOpcion(empleado.establecimientoId),
     municipioId: aOpcion(empleado.municipioId),
   }
@@ -37,6 +39,7 @@ function cambiosDe(base, actual) {
   for (const campo of TEXTOS_OPCIONALES) {
     if (actual[campo].trim() !== base[campo].trim()) cambios[campo] = actual[campo].trim() || null
   }
+  if (actual.cui.trim()) cambios.cui = actual.cui.trim()
   if (actual.establecimientoId !== base.establecimientoId) {
     cambios.establecimientoId = actual.establecimientoId === NINGUNO ? null : Number(actual.establecimientoId)
   }
@@ -57,6 +60,7 @@ export default function PaginaEditarUsuario() {
   const [base, setBase] = useState(null)
   const [formulario, setFormulario] = useState(null)
   const [rolId, setRolId] = useState('')
+  const [reemplazandoCui, setReemplazandoCui] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [aviso, setAviso] = useState(null)
 
@@ -106,10 +110,12 @@ export default function PaginaEditarUsuario() {
 
   const cambios = base && formulario ? cambiosDe(base.empleado, formulario) : {}
   const hayCambiosEmpleado = Object.keys(cambios).length > 0
+  // Como el backend, solo se revisan los campos que cambiaron: un dato viejo mal escrito no impide guardar otro.
+  const erroresEmpleado = formulario ? erroresDeEmpleado(formulario, Object.keys(cambios)) : {}
   const cambioRol = base !== null && rolId !== base.rolId
   const rol = catalogos?.roles.find((r) => String(r.id) === rolId)
   const rolSinEstablecimiento = rol?.codigo === 'ESTABLECIMIENTO' && formulario?.establecimientoId === NINGUNO
-  const datosCompletos = formulario !== null && formulario.nombres.trim() !== '' && formulario.apellidos.trim() !== ''
+  const datosCompletos = formulario !== null && Object.keys(erroresEmpleado).length === 0
   const puedeGuardar =
     catalogos !== null && !guardando && datosCompletos && !rolSinEstablecimiento && (hayCambiosEmpleado || cambioRol)
 
@@ -132,6 +138,7 @@ export default function PaginaEditarUsuario() {
       nuevaBase = { ...base, empleado: aFormulario(empleado) }
       setBase(nuevaBase)
       setFormulario(nuevaBase.empleado)
+      setReemplazandoCui(false)
     }
 
     let actualizada = { ...cuenta, empleado: { ...cuenta.empleado, ...empleado } }
@@ -196,6 +203,14 @@ export default function PaginaEditarUsuario() {
             <CamposEmpleado
               empleado={formulario ?? aFormulario({ nombres: '', apellidos: '' })}
               alCambiar={cambiarCampo}
+              errores={erroresEmpleado}
+              correoObligatorio={Boolean(base?.empleado.correo)}
+              cuiRegistrado={Boolean(cuenta?.empleado.cuiRegistrado)}
+              reemplazandoCui={reemplazandoCui}
+              alReemplazarCui={(valor) => {
+                setReemplazandoCui(valor)
+                setAviso(null)
+              }}
               establecimientos={catalogos?.establecimientos ?? []}
               municipios={catalogos?.municipios ?? []}
               deshabilitado={deshabilitado}

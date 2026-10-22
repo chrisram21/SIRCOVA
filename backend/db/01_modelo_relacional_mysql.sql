@@ -1,7 +1,13 @@
 -- =============================================================================
 --  Plataforma web de producción de vacunación — DDRISS San Marcos (MSPAS)
 --  Modelo relacional preliminar (MySQL 8.0, InnoDB, utf8mb4)
---  Versión: 0.8   Fecha: 2026-10-18
+--  Versión: 0.9   Fecha: 2026-10-22
+--  Cambios v0.9 (CUI del empleado, SPEC 11, 22/10/2026):
+--    empleado.codigo_empleado pasa a empleado.cui_hmac CHAR(64): la huella
+--    HMAC-SHA256 del CUI del DPI, para no registrar dos veces a la misma
+--    persona sin guardar el número. Índice único uq_empleado_cui. NULL en la
+--    base; la API lo exige al crear un empleado. Las bases que ya existían se
+--    migran con 07_cui_empleado_mysql.sql.
 --  Cambios v0.8 (hospitales e IPV/OPV, 18/10/2026):
 --    La DDRISS recibe 31 formularios 5C: los 30 municipios y el Hospital de
 --    San Marcos. reporta_5c deja de ser "uno por municipio". Nueva marca
@@ -206,7 +212,7 @@ CREATE TABLE establecimiento (
 -- existir sin cuenta de acceso (p. ej. personal que solo figura como contacto).
 CREATE TABLE empleado (
   id                  INT UNSIGNED      NOT NULL AUTO_INCREMENT,
-  codigo_empleado     VARCHAR(20)       NULL COMMENT 'Código o número de personal del MSPAS, si se usa',
+  cui_hmac            CHAR(64)          NULL COMMENT 'HMAC-SHA256 en hexadecimal del CUI (13 dígitos); nunca el CUI',
   nombres             VARCHAR(100)      NOT NULL,
   apellidos           VARCHAR(100)      NOT NULL,
   cargo               VARCHAR(100)      NULL COMMENT 'Ej.: enfermera auxiliar, estadígrafa, epidemióloga',
@@ -219,7 +225,7 @@ CREATE TABLE empleado (
   creado_en           DATETIME          NOT NULL DEFAULT CURRENT_TIMESTAMP,
   actualizado_en      DATETIME          NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_empleado_codigo (codigo_empleado),
+  UNIQUE KEY uq_empleado_cui (cui_hmac),
   UNIQUE KEY uq_empleado_correo (correo),
   KEY ix_empleado_est (establecimiento_id),
   KEY ix_empleado_ddriss (ddriss_id),

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { listarEstablecimientos, listarMunicipios } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
@@ -26,7 +26,7 @@ const MUNICIPIOS = [{ id: 1, nombre: 'San Marcos' }]
 
 const EMPLEADO = {
   id: 108,
-  codigoEmpleado: null,
+  cuiRegistrado: false,
   nombres: 'Ana',
   apellidos: 'López',
   cargo: 'Enfermera',
@@ -39,6 +39,13 @@ const EMPLEADO = {
   establecimientoNombre: null,
   municipioNombre: null,
 }
+
+// Como PATCH /empleados/{id}: el CUI no vuelve en la respuesta, solo cuiRegistrado.
+const responderComoBackend = (empleado) => async (_, { cui, ...cambios }) => ({
+  ...empleado,
+  ...cambios,
+  cuiRegistrado: empleado.cuiRegistrado || cui !== undefined,
+})
 
 function cuenta(extra = {}) {
   return {
@@ -99,7 +106,7 @@ beforeEach(() => {
   listarRoles.mockResolvedValue(ROLES)
   listarMunicipios.mockResolvedValue(MUNICIPIOS)
   listarEstablecimientos.mockResolvedValue(ESTABLECIMIENTOS)
-  editarEmpleado.mockImplementation(async (_, cambios) => ({ ...EMPLEADO, ...cambios }))
+  editarEmpleado.mockImplementation(responderComoBackend(EMPLEADO))
   cambiarRol.mockImplementation(async (_, rolId) => cuenta({ rol: ROLES.find((r) => r.id === rolId).codigo }))
 })
 
@@ -125,6 +132,115 @@ test('"Guardar cambios" está deshabilitado sin cambios y con nombres vacíos', 
 
   escribir(/^Nombres/, '  ')
   expect(botonGuardar().disabled).toBe(true)
+})
+
+test('un campo cambiado mal escrito muestra su mensaje al salir de él y deshabilita "Guardar cambios"', async () => {
+  await abrir()
+  await esperarFormulario()
+
+  escribir(/^Nombres/, '123')
+  fireEvent.blur(screen.getByLabelText(/^Nombres/))
+
+  expect(screen.getByText('Los nombres solo pueden tener letras, espacios, apóstrofos y guiones.')).toBeTruthy()
+  expect(screen.getByLabelText(/^Nombres/).getAttribute('aria-invalid')).toBe('true')
+  expect(botonGuardar().disabled).toBe(true)
+
+  escribir(/^Nombres/, 'Ana María')
+  expect(screen.queryByText('Los nombres solo pueden tener letras, espacios, apóstrofos y guiones.')).toBeNull()
+  expect(botonGuardar().disabled).toBe(false)
+})
+
+test('un dato viejo mal escrito que no se tocó no impide guardar otro campo', async () => {
+  obtenerUsuario.mockResolvedValue(cuenta({ empleado: { ...EMPLEADO, telefono: '9999' } }))
+  await abrir()
+  await esperarFormulario()
+
+  fireEvent.blur(screen.getByLabelText(/^Teléfono/))
+  escribir(/^Cargo/, 'Estadígrafa')
+
+  expect(screen.queryByText('El teléfono debe tener 8 dígitos y empezar con 2 a 7.')).toBeNull()
+  expect(botonGuardar().disabled).toBe(false)
+  fireEvent.click(botonGuardar())
+  await waitFor(() => expect(editarEmpleado).toHaveBeenCalledWith(108, { cargo: 'Estadígrafa' }))
+})
+
+test('el correo es obligatorio solo si el empleado ya tenía uno', async () => {
+  await abrir()
+  await esperarFormulario()
+  expect(document.querySelector('label[for="correo"]').textContent).toBe('Correo')
+  cleanup()
+
+  obtenerUsuario.mockResolvedValue(cuenta({ empleado: { ...EMPLEADO, correo: 'ana@gmail.com' } }))
+  await abrir()
+  await esperarFormulario()
+  expect(document.querySelector('label[for="correo"]').textContent).toBe('Correo*')
+
+  escribir(/^Correo/, '')
+  fireEvent.blur(screen.getByLabelText(/^Correo/))
+  expect(screen.getByText('El correo es obligatorio.')).toBeTruthy()
+  expect(botonGuardar().disabled).toBe(true)
+})
+
+test('sin CUI registrado, el campo está vacío y es opcional; escrito, se envía como cui', async () => {
+  await abrir()
+  await esperarFormulario()
+
+  expect(document.querySelector('label[for="cui"]').textContent).toBe('CUI (DPI)')
+  expect(screen.getByLabelText(/^CUI/).value).toBe('')
+  expect(screen.queryByText('Registrado')).toBeNull()
+
+  escribir(/^CUI/, '1234567880101')
+  fireEvent.blur(screen.getByLabelText(/^CUI/))
+  expect(screen.getByText('El CUI no es válido; revise los dígitos.')).toBeTruthy()
+  expect(botonGuardar().disabled).toBe(true)
+
+  escribir(/^CUI/, '1234 56789 0101')
+  fireEvent.click(botonGuardar())
+  await waitFor(() => expect(editarEmpleado).toHaveBeenCalledWith(108, { cui: '1234 56789 0101' }))
+  // Tras guardar, el empleado tiene CUI: se muestra la insignia y no el campo.
+  expect(await screen.findByText('Registrado')).toBeTruthy()
+  expect(screen.queryByLabelText(/^CUI/)).toBeNull()
+})
+
+test('con CUI registrado se ve "Registrado"; "Reemplazar CUI" muestra el campo vacío y "Cancelar" lo oculta', async () => {
+  obtenerUsuario.mockResolvedValue(cuenta({ empleado: { ...EMPLEADO, cuiRegistrado: true } }))
+  await abrir()
+  await esperarFormulario()
+
+  expect(screen.getByText('Registrado')).toBeTruthy()
+  expect(screen.queryByLabelText(/^CUI/)).toBeNull()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Reemplazar CUI' }))
+  expect(screen.getByLabelText(/^CUI/).value).toBe('')
+  escribir(/^CUI/, '1234567890101')
+  expect(botonGuardar().disabled).toBe(false)
+
+  fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+  expect(screen.queryByLabelText(/^CUI/)).toBeNull()
+  expect(screen.getByText('Registrado')).toBeTruthy()
+  expect(botonGuardar().disabled).toBe(true)
+
+  fireEvent.click(screen.getByRole('button', { name: 'Reemplazar CUI' }))
+  expect(screen.getByLabelText(/^CUI/).value).toBe('')
+})
+
+test('sin escribir un CUI, editarEmpleado no recibe cui; un 409 CUI_DUPLICADO muestra su mensaje', async () => {
+  const conCui = { ...EMPLEADO, cuiRegistrado: true }
+  obtenerUsuario.mockResolvedValue(cuenta({ empleado: conCui }))
+  editarEmpleado.mockImplementation(responderComoBackend(conCui))
+  await abrir()
+  await esperarFormulario()
+
+  escribir(/^Cargo/, 'Estadígrafa')
+  fireEvent.click(botonGuardar())
+  await waitFor(() => expect(editarEmpleado).toHaveBeenCalledWith(108, { cargo: 'Estadígrafa' }))
+
+  editarEmpleado.mockRejectedValueOnce(new ErrorApi(409, 'CUI_DUPLICADO', 'Ya hay un empleado registrado con ese CUI.'))
+  fireEvent.click(screen.getByRole('button', { name: 'Reemplazar CUI' }))
+  escribir(/^CUI/, '1234567890101')
+  fireEvent.click(botonGuardar())
+  expect(await screen.findByText('Ya hay un empleado registrado con ese CUI.')).toBeTruthy()
+  expect(screen.getByLabelText(/^CUI/).value).toBe('1234567890101')
 })
 
 test('cambiar solo el cargo llama solo a editarEmpleado, con { cargo }, y muestra el éxito', async () => {

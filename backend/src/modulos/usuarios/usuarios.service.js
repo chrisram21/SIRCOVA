@@ -4,11 +4,21 @@ import { ErrorApi } from '../../middlewares/errores.js';
 import { registrarBitacora, diferencias, MODULOS, ACCIONES } from '../auditoria/auditoria.service.js';
 import { filtroAlcance, verificarAlcance } from '../auth/alcance.service.js';
 import { generarContrasenaTemporal } from '../auth/contrasenaTemporal.service.js';
+import {
+  validarNombres,
+  validarApellidos,
+  validarCargo,
+  validarTelefono,
+  validarCorreo,
+  validarCui,
+  validarNombreUsuario,
+} from '../../validaciones/campos.js';
+import { huellaCui } from './cui.service.js';
 
 const errores = {
   entradaInvalida: (mensaje) => new ErrorApi(400, 'ENTRADA_INVALIDA', mensaje),
   correoDuplicado: () => new ErrorApi(409, 'CORREO_DUPLICADO', 'Ya hay un empleado con ese correo.'),
-  codigoDuplicado: () => new ErrorApi(409, 'CODIGO_EMPLEADO_DUPLICADO', 'Ya hay un empleado con ese código.'),
+  cuiDuplicado: () => new ErrorApi(409, 'CUI_DUPLICADO', 'Ya hay un empleado registrado con ese CUI.'),
   establecimientoInvalido: () =>
     new ErrorApi(422, 'ESTABLECIMIENTO_INVALIDO', 'El establecimiento no existe, está inactivo o no es de su DDRISS.'),
   municipioInvalido: () =>
@@ -35,13 +45,12 @@ const errores = {
 // Nombre de la llave única de MySQL → error que se responde si dos peticiones chocan.
 const DUPLICADOS = {
   uq_empleado_correo: errores.correoDuplicado,
-  uq_empleado_codigo: errores.codigoDuplicado,
+  uq_empleado_cui: errores.cuiDuplicado,
   uq_usuario_empleado: errores.empleadoConCuenta,
   uq_usuario_usuario: errores.nombreUsuarioDuplicado,
 };
 
 const COSTO_BCRYPT = 12;
-const NOMBRE_USUARIO = /^\S{3,50}$/;
 
 function traducirDuplicado(err) {
   if (err.code !== 'ER_DUP_ENTRY') return err;
@@ -49,22 +58,28 @@ function traducirDuplicado(err) {
   return llave ? DUPLICADOS[llave]() : err;
 }
 
-const demasiadoLargo = (campo, largo) => errores.entradaInvalida(`${campo}: como máximo ${largo} caracteres.`);
-
-function textoObligatorio(valor, campo, largo) {
-  const texto = typeof valor === 'string' ? valor.trim() : '';
-  if (!texto) throw errores.entradaInvalida(`Debe indicar ${campo.toLowerCase()}.`);
-  if (texto.length > largo) throw demasiadoLargo(campo, largo);
-  return texto;
+// Aplica una regla de validaciones/campos.js: devuelve el valor limpio o responde 400 con su mensaje.
+function segun(regla) {
+  return (valor) => {
+    const resultado = regla(valor);
+    if (resultado.error) throw errores.entradaInvalida(resultado.error);
+    return resultado.valor;
+  };
 }
 
-// Ausente o vacío se guarda como NULL.
-function textoOpcional(valor, campo, largo) {
-  if (valor == null) return null;
-  if (typeof valor !== 'string') throw errores.entradaInvalida(`${campo} no es válido.`);
-  const texto = valor.trim();
-  if (texto.length > largo) throw demasiadoLargo(campo, largo);
-  return texto || null;
+const leerNombres = segun(validarNombres);
+const leerApellidos = segun(validarApellidos);
+const leerCargo = segun(validarCargo);
+const leerTelefono = segun(validarTelefono);
+const leerCorreo = segun(validarCorreo);
+// Del CUI solo se conserva la huella: el número no se guarda, no se devuelve y no llega a la bitácora.
+const leerHuellaCui = (valor) => huellaCui(segun(validarCui)(valor));
+
+// Lo reemplazó el CUI (SPEC 11): un cliente viejo que todavía lo envía debe fallar, no perder el dato sin aviso.
+function rechazarCodigoEmpleado(cuerpo) {
+  if (Object.hasOwn(cuerpo, 'codigoEmpleado')) {
+    throw errores.entradaInvalida('El código de empleado ya no se usa; envíe el CUI.');
+  }
 }
 
 function idOpcional(valor, campo) {
@@ -74,17 +89,17 @@ function idOpcional(valor, campo) {
 }
 
 function leerEmpleado(cuerpo) {
+  rechazarCodigoEmpleado(cuerpo);
   const empleado = {
-    codigoEmpleado: textoOpcional(cuerpo.codigoEmpleado, 'El código de empleado', 20),
-    nombres: textoObligatorio(cuerpo.nombres, 'Los nombres', 100),
-    apellidos: textoObligatorio(cuerpo.apellidos, 'Los apellidos', 100),
-    cargo: textoOpcional(cuerpo.cargo, 'El cargo', 100),
-    correo: textoOpcional(cuerpo.correo, 'El correo', 150),
-    telefono: textoOpcional(cuerpo.telefono, 'El teléfono', 20),
+    cuiHmac: leerHuellaCui(cuerpo.cui),
+    nombres: leerNombres(cuerpo.nombres),
+    apellidos: leerApellidos(cuerpo.apellidos),
+    cargo: leerCargo(cuerpo.cargo),
+    correo: leerCorreo(cuerpo.correo),
+    telefono: leerTelefono(cuerpo.telefono),
     establecimientoId: idOpcional(cuerpo.establecimientoId, 'El establecimiento'),
     municipioId: idOpcional(cuerpo.municipioId, 'El municipio'),
   };
-  if (empleado.correo && !empleado.correo.includes('@')) throw errores.entradaInvalida('El correo no es válido.');
   if (empleado.establecimientoId && empleado.municipioId) {
     throw errores.entradaInvalida('Indique el establecimiento o el municipio, no ambos: el municipio se toma del establecimiento.');
   }
@@ -110,17 +125,14 @@ async function verificarMunicipio(conexion, municipioId, ddrissId) {
 }
 
 // Al editar, excluirId deja fuera al propio empleado.
-async function verificarDuplicados(conexion, { correo, codigoEmpleado }, excluirId = 0) {
+async function verificarDuplicados(conexion, { correo, cuiHmac }, excluirId = 0) {
   if (correo) {
     const [filas] = await conexion.query('SELECT id FROM empleado WHERE correo = ? AND id <> ?', [correo, excluirId]);
     if (filas.length > 0) throw errores.correoDuplicado();
   }
-  if (codigoEmpleado) {
-    const [filas] = await conexion.query('SELECT id FROM empleado WHERE codigo_empleado = ? AND id <> ?', [
-      codigoEmpleado,
-      excluirId,
-    ]);
-    if (filas.length > 0) throw errores.codigoDuplicado();
+  if (cuiHmac) {
+    const [filas] = await conexion.query('SELECT id FROM empleado WHERE cui_hmac = ? AND id <> ?', [cuiHmac, excluirId]);
+    if (filas.length > 0) throw errores.cuiDuplicado();
   }
 }
 
@@ -140,12 +152,14 @@ export async function registrarEmpleado(cuerpo, administrador, contexto) {
 
       const [resultado] = await conexion.query(
         `INSERT INTO empleado
-           (codigo_empleado, nombres, apellidos, cargo, correo, telefono, establecimiento_id, ddriss_id, municipio_id)
+           (cui_hmac, nombres, apellidos, cargo, correo, telefono, establecimiento_id, ddriss_id, municipio_id)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [datos.codigoEmpleado, datos.nombres, datos.apellidos, datos.cargo, datos.correo, datos.telefono,
+        [datos.cuiHmac, datos.nombres, datos.apellidos, datos.cargo, datos.correo, datos.telefono,
           datos.establecimientoId, ddrissId, municipioId],
       );
-      const empleado = { id: resultado.insertId, ...datos, municipioId, ddrissId, activo: true };
+      // La huella no sale en la respuesta ni en la bitácora; solo que el CUI quedó registrado.
+      const { cuiHmac, ...resto } = datos;
+      const empleado = { id: resultado.insertId, cuiRegistrado: true, ...resto, municipioId, ddrissId, activo: true };
 
       await registrarBitacora(conexion, {
         ...contexto,
@@ -172,13 +186,9 @@ function leerCuenta(cuerpo) {
   if (Object.hasOwn(cuerpo, 'contrasenaTemporal')) {
     throw errores.entradaInvalida('La contraseña temporal la genera el sistema; no la envíe.');
   }
-  const { nombreUsuario } = cuerpo;
-  if (typeof nombreUsuario !== 'string' || !NOMBRE_USUARIO.test(nombreUsuario)) {
-    throw errores.entradaInvalida('El nombre de usuario debe tener de 3 a 50 caracteres, sin espacios.');
-  }
   return {
     empleadoId: idObligatorio(cuerpo.empleadoId, 'el empleado'),
-    nombreUsuario,
+    nombreUsuario: segun(validarNombreUsuario)(cuerpo.nombreUsuario),
     rolId: idObligatorio(cuerpo.rolId, 'el rol'),
   };
 }
@@ -261,7 +271,7 @@ const CONSULTA_DETALLE = `
   SELECT u.id, u.empleado_id, u.nombre_usuario, r.codigo AS rol, r.nombre AS rol_nombre, u.activo,
          u.debe_cambiar_contrasena, ${CUENTA_BLOQUEADA} AS bloqueada, UNIX_TIMESTAMP(u.ultimo_acceso) AS ultimo_acceso,
          UNIX_TIMESTAMP(u.desactivado_en) AS desactivado_en,
-         e.codigo_empleado, e.nombres, e.apellidos, e.cargo, e.correo, e.telefono, e.establecimiento_id,
+         e.cui_hmac IS NOT NULL AS cui_registrado, e.nombres, e.apellidos, e.cargo, e.correo, e.telefono, e.establecimiento_id,
          e.municipio_id, e.ddriss_id, e.activo AS empleado_activo,
          est.nombre AS establecimiento_nombre, m.nombre AS municipio_nombre
     FROM usuario u
@@ -286,7 +296,7 @@ function aUsuarioDetalle(fila) {
     desactivadoEn: aFechaIso(fila.desactivado_en),
     empleado: {
       id: fila.empleado_id,
-      codigoEmpleado: fila.codigo_empleado,
+      cuiRegistrado: Boolean(fila.cui_registrado),
       nombres: fila.nombres,
       apellidos: fila.apellidos,
       cargo: fila.cargo,
@@ -491,13 +501,15 @@ export async function restablecerContrasena(id, administrador, contexto) {
 }
 
 // Campo de la API → columna, y cómo se lee cada uno. ddrissId y activo no se cambian por aquí.
+// Solo se validan los campos que llegan: un dato viejo que no cumple la regla no impide editar otro.
 const CAMPOS_EMPLEADO = {
-  nombres: { columna: 'nombres', leer: (v) => textoObligatorio(v, 'Los nombres', 100) },
-  apellidos: { columna: 'apellidos', leer: (v) => textoObligatorio(v, 'Los apellidos', 100) },
-  codigoEmpleado: { columna: 'codigo_empleado', leer: (v) => textoOpcional(v, 'El código de empleado', 20) },
-  cargo: { columna: 'cargo', leer: (v) => textoOpcional(v, 'El cargo', 100) },
-  correo: { columna: 'correo', leer: (v) => textoOpcional(v, 'El correo', 150) },
-  telefono: { columna: 'telefono', leer: (v) => textoOpcional(v, 'El teléfono', 20) },
+  nombres: { columna: 'nombres', leer: leerNombres },
+  apellidos: { columna: 'apellidos', leer: leerApellidos },
+  // Llega el CUI y se guarda su huella; nunca se compara ni se devuelve el número.
+  cui: { columna: 'cui_hmac', leer: leerHuellaCui },
+  cargo: { columna: 'cargo', leer: leerCargo },
+  correo: { columna: 'correo', leer: leerCorreo },
+  telefono: { columna: 'telefono', leer: leerTelefono },
   establecimientoId: { columna: 'establecimiento_id', leer: (v) => idOpcional(v, 'El establecimiento') },
   municipioId: { columna: 'municipio_id', leer: (v) => idOpcional(v, 'El municipio') },
 };
@@ -506,12 +518,12 @@ function leerCambiosEmpleado(cuerpo) {
   if (cuerpo === null || typeof cuerpo !== 'object' || Array.isArray(cuerpo) || Object.keys(cuerpo).length === 0) {
     throw errores.entradaInvalida('Indique al menos un dato del empleado.');
   }
+  rechazarCodigoEmpleado(cuerpo);
   const cambios = {};
   for (const [clave, valor] of Object.entries(cuerpo)) {
     if (!Object.hasOwn(CAMPOS_EMPLEADO, clave)) throw errores.entradaInvalida(`No se puede cambiar ${clave}.`);
     cambios[clave] = CAMPOS_EMPLEADO[clave].leer(valor);
   }
-  if (cambios.correo && !cambios.correo.includes('@')) throw errores.entradaInvalida('El correo no es válido.');
   if (cambios.establecimientoId && cambios.municipioId) {
     throw errores.entradaInvalida('Indique el establecimiento o el municipio, no ambos: el municipio se toma del establecimiento.');
   }
@@ -521,7 +533,7 @@ function leerCambiosEmpleado(cuerpo) {
 function aEmpleado(fila) {
   return {
     id: fila.id,
-    codigoEmpleado: fila.codigo_empleado,
+    cuiRegistrado: fila.cui_hmac != null,
     nombres: fila.nombres,
     apellidos: fila.apellidos,
     cargo: fila.cargo,
@@ -536,7 +548,7 @@ function aEmpleado(fila) {
 
 export async function editarEmpleado(id, cuerpo, administrador, contexto) {
   const empleadoId = leerId(id);
-  const cambios = leerCambiosEmpleado(cuerpo ?? {});
+  const { cui: cuiHmac, ...cambios } = leerCambiosEmpleado(cuerpo ?? {});
 
   try {
     return await enTransaccion(async (conexion) => {
@@ -552,7 +564,7 @@ export async function editarEmpleado(id, cuerpo, administrador, contexto) {
 
       // Las reglas de establecimiento y municipio se aplican al resultado: lo guardado más lo que llega.
       const antes = aEmpleado(fila);
-      const despues = { ...antes, ...cambios };
+      const despues = { ...antes, ...cambios, cuiRegistrado: antes.cuiRegistrado || cuiHmac !== undefined };
       if (despues.establecimientoId) {
         if (cambios.municipioId) {
           throw errores.entradaInvalida('El empleado tiene establecimiento: el municipio se toma de él.');
@@ -568,26 +580,35 @@ export async function editarEmpleado(id, cuerpo, administrador, contexto) {
       if (cuenta?.rol === 'ESTABLECIMIENTO' && !despues.establecimientoId) throw errores.sinEstablecimiento();
 
       const diferencia = diferencias(antes, despues);
-      if (!diferencia) return antes;
+      // La misma huella que ya estaba no es un cambio.
+      const cambiaCui = cuiHmac !== undefined && cuiHmac !== fila.cui_hmac;
+      if (!diferencia && !cambiaCui) return antes;
 
       await verificarDuplicados(
         conexion,
-        { correo: diferencia.nuevos.correo, codigoEmpleado: diferencia.nuevos.codigoEmpleado },
+        { correo: diferencia?.nuevos.correo, cuiHmac: cambiaCui ? cuiHmac : undefined },
         empleadoId,
       );
-      const claves = Object.keys(diferencia.nuevos);
+      // cuiRegistrado no es una columna: se refleja al guardar la huella.
+      const columnas = Object.entries(diferencia?.nuevos ?? {})
+        .filter(([clave]) => clave !== 'cuiRegistrado')
+        .map(([clave, valor]) => [CAMPOS_EMPLEADO[clave].columna, valor]);
+      if (cambiaCui) columnas.push(['cui_hmac', cuiHmac]);
       await conexion.query(
-        `UPDATE empleado SET ${claves.map((clave) => `${CAMPOS_EMPLEADO[clave].columna} = ?`).join(', ')} WHERE id = ?`,
-        [...claves.map((clave) => diferencia.nuevos[clave]), empleadoId],
+        `UPDATE empleado SET ${columnas.map(([columna]) => `${columna} = ?`).join(', ')} WHERE id = ?`,
+        [...columnas.map(([, valor]) => valor), empleadoId],
       );
+
+      // Al reemplazar un CUI, cuiRegistrado sigue en true y diferencias no ve el cambio.
+      const reemplazaCui = cambiaCui && fila.cui_hmac != null;
       await registrarBitacora(conexion, {
         ...contexto,
         modulo: MODULOS.USUARIOS,
         accion: ACCIONES.ACTUALIZAR,
         entidad: 'empleado',
         entidadId: empleadoId,
-        valoresAnteriores: diferencia.anteriores,
-        valoresNuevos: diferencia.nuevos,
+        valoresAnteriores: diferencia?.anteriores ?? null,
+        valoresNuevos: { ...diferencia?.nuevos, ...(reemplazaCui && { cuiReemplazado: true }) },
       });
       return despues;
     });

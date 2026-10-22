@@ -9,16 +9,16 @@ import { Label } from '@/components/ui/label'
 import { listarDdriss, listarEstablecimientos, listarMunicipios } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
 import { crearCuenta, listarRoles, registrarEmpleado } from '@/api/usuarios.js'
-import CamposEmpleado, { CampoSeleccion, CampoTexto, NINGUNO } from './CamposEmpleado.jsx'
+import { validarNombreUsuario } from '@/validaciones/campos.js'
+import CamposEmpleado, { CampoSeleccion, CampoTexto, erroresDeEmpleado, NINGUNO } from './CamposEmpleado.jsx'
 import DialogoContrasenaTemporal from './DialogoContrasenaTemporal.jsx'
 
 const MENSAJE_INESPERADO = 'Ocurrió un error inesperado. Intente de nuevo.'
-const NOMBRE_USUARIO = /^\S{3,50}$/
 
 const EMPLEADO_VACIO = {
   nombres: '',
   apellidos: '',
-  codigoEmpleado: '',
+  cui: '',
   cargo: '',
   correo: '',
   telefono: '',
@@ -31,7 +31,7 @@ const mensajeDe = (error) => (error instanceof ErrorApi ? error.mensaje : MENSAJ
 
 function armarEmpleado(datos) {
   const cuerpo = { nombres: datos.nombres.trim(), apellidos: datos.apellidos.trim() }
-  for (const campo of ['codigoEmpleado', 'cargo', 'correo', 'telefono']) {
+  for (const campo of ['cui', 'cargo', 'correo', 'telefono']) {
     const valor = datos[campo].trim()
     if (valor) cuerpo[campo] = valor
   }
@@ -53,6 +53,7 @@ export default function PaginaRegistrarPersonal() {
   const [porMostrar, setPorMostrar] = useState(null)
   const [error, setError] = useState(null)
   const [enviando, setEnviando] = useState(false)
+  const [usuarioTocado, setUsuarioTocado] = useState(false)
 
   useEffect(() => {
     let vigente = true
@@ -77,11 +78,10 @@ export default function PaginaRegistrarPersonal() {
   const quiereCuenta = empleadoGuardado !== null || cuenta.crear
 
   const rolSinEstablecimiento = rol?.codigo === 'ESTABLECIMIENTO' && !tieneEstablecimiento
-  const empleadoCompleto = empleado.nombres.trim() !== '' && empleado.apellidos.trim() !== ''
-  const cuentaCompleta =
-    NOMBRE_USUARIO.test(cuenta.nombreUsuario) &&
-    rol !== undefined &&
-    !rolSinEstablecimiento
+  const erroresEmpleado = erroresDeEmpleado(empleado)
+  const empleadoCompleto = Object.keys(erroresEmpleado).length === 0
+  const errorUsuario = validarNombreUsuario(cuenta.nombreUsuario).error
+  const cuentaCompleta = !errorUsuario && rol !== undefined && !rolSinEstablecimiento
   const puedeEnviar =
     catalogos !== null && !enviando && (empleadoGuardado || empleadoCompleto) && (!quiereCuenta || cuentaCompleta)
 
@@ -138,6 +138,7 @@ export default function PaginaRegistrarPersonal() {
     setEmpleadoGuardado(null)
     setResultado(null)
     setError(null)
+    setUsuarioTocado(false)
   }
 
   if (resultado) {
@@ -203,6 +204,9 @@ export default function PaginaRegistrarPersonal() {
               <CamposEmpleado
                 empleado={empleado}
                 alCambiar={cambiarEmpleado}
+                errores={erroresEmpleado}
+                correoObligatorio
+                cuiObligatorio
                 establecimientos={catalogos?.establecimientos ?? []}
                 municipios={catalogos?.municipios ?? []}
                 ddrissNombre={ddriss?.nombre ?? null}
@@ -232,8 +236,9 @@ export default function PaginaRegistrarPersonal() {
             {quiereCuenta && (
               <div className="grid gap-4 md:grid-cols-2">
                 <CampoTexto id="nombre-usuario" etiqueta="Nombre de usuario" obligatorio valor={cuenta.nombreUsuario}
-                  alCambiar={cambiarCuenta('nombreUsuario')} deshabilitado={deshabilitado} maxLength={50}
-                  autoComplete="off" />
+                  alCambiar={(valor) => cambiarCuenta('nombreUsuario')(valor.toLowerCase())}
+                  onBlur={() => setUsuarioTocado(true)} error={usuarioTocado ? errorUsuario : undefined}
+                  deshabilitado={deshabilitado} maxLength={50} autoComplete="off" />
                 <CampoSeleccion
                   id="rol"
                   etiqueta="Rol"
@@ -246,7 +251,7 @@ export default function PaginaRegistrarPersonal() {
                 />
 
                 <p className="text-sm text-muted-foreground md:col-span-2">
-                  De 3 a 50 caracteres sin espacios para el usuario. El sistema genera la contraseña temporal y se la
+                  El usuario lleva de 4 a 50 caracteres: minúsculas, números, punto, guion o guion bajo. El sistema genera la contraseña temporal y se la
                   muestra una sola vez; la persona deberá cambiarla al entrar.
                 </p>
                 {rolSinEstablecimiento && (
