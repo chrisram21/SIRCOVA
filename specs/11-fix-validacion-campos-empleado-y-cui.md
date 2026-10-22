@@ -1,6 +1,6 @@
 # SPEC 11 — Validación de los campos del empleado y CUI
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** ninguna; ajustes a HU-04 (registrar personal) y HU-05 (editar empleado)
 > **Depende de:** SPEC 05, SPEC 07, SPEC 08, SPEC 10
 > **Fecha:** 2026-10-22
