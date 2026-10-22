@@ -1,0 +1,172 @@
+import { useEffect, useMemo, useState } from 'react'
+import { CircleAlert } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
+import { cambiarContrasena } from '@/api/auth.js'
+import { ErrorApi } from '@/api/cliente.js'
+import { useSesion } from '@/componentes/ProveedorSesion.jsx'
+import CampoContrasena from '@/componentes/contrasena/CampoContrasena.jsx'
+import MedidorContrasena from '@/componentes/contrasena/MedidorContrasena.jsx'
+import { cargarEvaluador } from '@/componentes/contrasena/politicaContrasena.js'
+
+const MENSAJE_INESPERADO = 'Ocurrió un error inesperado. Intente de nuevo.'
+const MOTIVO_IGUAL = 'Debe ser distinta de la actual.'
+
+const mensajeDe = (error) => (error instanceof ErrorApi ? error.mensaje : MENSAJE_INESPERADO)
+
+// obligatoria: la cuenta tiene la contraseña temporal pendiente; se muestra sola, sin menú.
+export default function PaginaCambiarContrasena({ obligatoria = false }) {
+  const { sesion, cerrar, terminarTrasCambioContrasena } = useSesion()
+  const navegar = useNavigate()
+  const [actual, setActual] = useState('')
+  const [nueva, setNueva] = useState('')
+  const [confirmacion, setConfirmacion] = useState('')
+  const [evaluador, setEvaluador] = useState(null)
+  const [errorCarga, setErrorCarga] = useState(false)
+  const [error, setError] = useState(null)
+  const [enviando, setEnviando] = useState(false)
+
+  const { nombreUsuario, empleado } = sesion.usuario
+  const necesitaEvaluador = nueva !== '' && evaluador === null
+
+  useEffect(() => {
+    if (!necesitaEvaluador) return undefined
+    let vigente = true
+    cargarEvaluador()
+      .then((funcion) => vigente && setEvaluador(() => funcion))
+      .catch(() => vigente && setErrorCarga(true))
+    return () => {
+      vigente = false
+    }
+  }, [necesitaEvaluador])
+
+  const resultado = useMemo(() => {
+    if (!evaluador || nueva === '') return null
+    const { puntaje, motivos } = evaluador(nueva, { nombreUsuario, nombres: empleado.nombres, apellidos: empleado.apellidos })
+    return { puntaje, motivos: nueva === actual ? [...motivos, MOTIVO_IGUAL] : motivos }
+  }, [evaluador, nueva, actual, nombreUsuario, empleado.nombres, empleado.apellidos])
+
+  const noCoincide = confirmacion !== '' && confirmacion !== nueva
+  const valido = actual !== '' && resultado !== null && resultado.motivos.length === 0 && confirmacion === nueva
+
+  const cambiar = (asignar) => (evento) => {
+    asignar(evento.target.value)
+    setError(null)
+  }
+
+  async function enviar(evento) {
+    evento.preventDefault()
+    if (!valido || enviando) return
+    setEnviando(true)
+    setError(null)
+    try {
+      await cambiarContrasena({ contrasenaActual: actual, contrasenaNueva: nueva })
+      terminarTrasCambioContrasena()
+      navegar('/login', { replace: true })
+    } catch (err) {
+      setError(mensajeDe(err))
+      setEnviando(false)
+    }
+  }
+
+  function salir() {
+    if (obligatoria) {
+      cerrar()
+      navegar('/login', { replace: true })
+    } else {
+      navegar('/inicio')
+    }
+  }
+
+  const formulario = (
+    <form onSubmit={enviar} noValidate className="flex flex-col gap-5">
+      {error && (
+        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
+          <CircleAlert />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      {errorCarga && (
+        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
+          <CircleAlert />
+          <AlertDescription>No se pudo cargar el medidor de contraseñas. Recargue la página.</AlertDescription>
+        </Alert>
+      )}
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="contrasena-actual">Contraseña actual</Label>
+        <CampoContrasena id="contrasena-actual" autoComplete="current-password" value={actual} onChange={cambiar(setActual)} />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="contrasena-nueva">Contraseña nueva</Label>
+        <CampoContrasena
+          id="contrasena-nueva"
+          autoComplete="new-password"
+          value={nueva}
+          onChange={cambiar(setNueva)}
+          aria-describedby="medidor-contrasena"
+          aria-invalid={resultado && resultado.motivos.length > 0 ? true : undefined}
+        />
+        <MedidorContrasena id="medidor-contrasena" contrasena={nueva} resultado={errorCarga ? null : resultado} />
+        <p className="text-xs text-muted-foreground">
+          Al menos 12 caracteres. Una frase de varias palabras es más fácil de recordar y difícil de adivinar.
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="contrasena-confirmacion">Confirmar contraseña nueva</Label>
+        <CampoContrasena
+          id="contrasena-confirmacion"
+          autoComplete="new-password"
+          value={confirmacion}
+          onChange={cambiar(setConfirmacion)}
+          aria-describedby={noCoincide ? 'confirmacion-error' : undefined}
+          aria-invalid={noCoincide ? true : undefined}
+        />
+        {noCoincide && (
+          <p id="confirmacion-error" className="text-xs text-destructive">
+            Las contraseñas no coinciden.
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" disabled={!valido || enviando}>
+          {enviando ? 'Cambiando…' : 'Cambiar contraseña'}
+        </Button>
+        <Button type="button" variant="outline" onClick={salir}>
+          {obligatoria ? 'Cerrar sesión' : 'Cancelar'}
+        </Button>
+      </div>
+    </form>
+  )
+
+  if (obligatoria) {
+    return (
+      <main className="flex min-h-screen items-center justify-center p-6">
+        <Card className="w-full max-w-[440px]">
+          <CardHeader>
+            <CardTitle>
+              <h1 className="text-xl font-semibold">Cambiar contraseña</h1>
+            </CardTitle>
+            <CardDescription>Debe cambiar la contraseña temporal que le dieron antes de continuar.</CardDescription>
+          </CardHeader>
+          <CardContent>{formulario}</CardContent>
+        </Card>
+      </main>
+    )
+  }
+
+  return (
+    <section className="flex max-w-xl flex-col gap-6 p-6">
+      <h1 className="text-2xl font-semibold">Cambiar contraseña</h1>
+      <Card>
+        <CardContent>{formulario}</CardContent>
+      </Card>
+    </section>
+  )
+}

@@ -41,8 +41,8 @@ Los Excel y PDF se generan en el backend (un endpoint devuelve el archivo) para 
 
 **Dependencias permitidas:**
 
-- **Backend:** `express`, `mysql2`, `mongodb`, `jsonwebtoken`, `bcrypt`, `cors`, `swagger-ui-express`, `yaml`, `exceljs`, `pdfmake`. Pruebas: `vitest` y `supertest`.
-- **Frontend:** `react`, `react-dom`, `react-router-dom`, `tailwindcss`, `@tailwindcss/vite`, las que instala la CLI de shadcn al agregar un componente (`radix-ui`, `class-variance-authority`, `cn`, `shadcn`, `lucide-react`, `tw-animate-css`, y `recharts` con el componente Chart; con el preset `radix-nova`, `cn` reemplaza a `clsx` + `tailwind-merge` y `shadcn` aporta `shadcn/tailwind.css`), `leaflet` y `react-leaflet`. Desarrollo y pruebas: `vite`, `@vitejs/plugin-react`, `vitest`, `@testing-library/react` y `jsdom`.
+- **Backend:** `express`, `mysql2`, `mongodb`, `jsonwebtoken`, `bcrypt`, `cors`, `swagger-ui-express`, `yaml`, `exceljs`, `pdfmake`, `@zxcvbn-ts/core`, `@zxcvbn-ts/language-common`, `@zxcvbn-ts/language-es-es` (fortaleza de contraseñas, SPEC 09). Pruebas: `vitest` y `supertest`.
+- **Frontend:** `react`, `react-dom`, `react-router-dom`, `tailwindcss`, `@tailwindcss/vite`, las que instala la CLI de shadcn al agregar un componente (`radix-ui`, `class-variance-authority`, `cn`, `shadcn`, `lucide-react`, `tw-animate-css`, y `recharts` con el componente Chart; con el preset `radix-nova`, `cn` reemplaza a `clsx` + `tailwind-merge` y `shadcn` aporta `shadcn/tailwind.css`), `leaflet`, `react-leaflet`, y `@zxcvbn-ts/core`, `@zxcvbn-ts/language-common` y `@zxcvbn-ts/language-es-es` (medidor de contraseñas, SPEC 09). Desarrollo y pruebas: `vite`, `@vitejs/plugin-react`, `vitest`, `@testing-library/react` y `jsdom`.
 
 ## 4. Estructura y capas
 

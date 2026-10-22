@@ -122,6 +122,15 @@ test('sin rolNombre, el encabezado muestra el código del rol', () => {
   expect(within(screen.getByRole('banner')).getByText('ADMINISTRADOR')).toBeTruthy()
 })
 
+test('"Cambiar contraseña" del encabezado abre la pantalla de cambio dentro del Layout', () => {
+  abrir('/inicio')
+
+  fireEvent.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Cambiar contraseña' }))
+
+  expect(screen.getByLabelText('Contraseña actual')).toBeTruthy()
+  expect(screen.getByRole('navigation', { name: 'Menú principal' })).toBeTruthy()
+})
+
 test('"Cerrar sesión" avisa al servidor con MANUAL, borra sircova.sesion y lleva a /login sin aviso', () => {
   abrir('/inicio')
 

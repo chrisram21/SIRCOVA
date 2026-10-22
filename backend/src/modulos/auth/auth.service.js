@@ -1,9 +1,10 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import pool from '../../config/mysql.js';
+import pool, { enTransaccion } from '../../config/mysql.js';
 import entorno from '../../config/entorno.js';
 import { ErrorApi } from '../../middlewares/errores.js';
 import { registrarBitacora, MODULOS, ACCIONES } from '../auditoria/auditoria.service.js';
+import { evaluarContrasena } from './politicaContrasena.service.js';
 
 // Hash de una contraseña al azar: se compara cuando el usuario no existe para que la respuesta tarde lo mismo.
 const HASH_FICTICIO = '$2b$12$YoGDls95Ec5nVQ1mAJIxA.RNOKGr3YCDvCzFdvzP18Zj2yYCV4g86';
@@ -11,6 +12,8 @@ const HASH_FICTICIO = '$2b$12$YoGDls95Ec5nVQ1mAJIxA.RNOKGr3YCDvCzFdvzP18Zj2yYCV4
 const MAXIMO_INTENTOS = 5;
 const MINUTOS_BLOQUEO = 15;
 const MOTIVOS_CIERRE = ['MANUAL', 'INACTIVIDAD'];
+const COSTO_BCRYPT = 12;
+const CAMPOS_CAMBIO_CONTRASENA = ['contrasenaActual', 'contrasenaNueva'];
 
 const errores = {
   entradaInvalida: () => new ErrorApi(400, 'ENTRADA_INVALIDA', 'Debe indicar el nombre de usuario y la contraseña.'),
@@ -21,6 +24,10 @@ const errores = {
   bloqueada: () =>
     new ErrorApi(423, 'CUENTA_BLOQUEADA', `Su cuenta está bloqueada por ${MINUTOS_BLOQUEO} minutos por intentos fallidos.`),
   motivoInvalido: () => new ErrorApi(400, 'ENTRADA_INVALIDA', 'El motivo del cierre de sesión no es válido.'),
+  cambioInvalido: () => new ErrorApi(400, 'ENTRADA_INVALIDA', 'Debe indicar la contraseña actual y la nueva.'),
+  actualIncorrecta: () => new ErrorApi(422, 'CONTRASENA_ACTUAL_INCORRECTA', 'La contraseña actual no es correcta.'),
+  repetida: () => new ErrorApi(422, 'CONTRASENA_REPETIDA', 'La contraseña nueva debe ser distinta de la actual.'),
+  debil: (motivo) => new ErrorApi(422, 'CONTRASENA_DEBIL', motivo),
 };
 
 const esTextoConContenido = (valor) => typeof valor === 'string' && valor.trim() !== '';
@@ -30,7 +37,7 @@ async function buscarUsuario(conexion, nombreUsuario) {
   // El bloqueo se compara con NOW() de MySQL para no depender de la hora del servidor de Node.
   const [filas] = await conexion.query(
     `SELECT u.id, u.nombre_usuario, u.hash_contrasena, u.rol_id, r.codigo AS rol, r.nombre AS rol_nombre,
-            u.activo, e.activo AS empleado_activo, u.intentos_fallidos,
+            u.activo, e.activo AS empleado_activo, u.intentos_fallidos, u.debe_cambiar_contrasena,
             COALESCE(u.bloqueado_hasta > NOW(), FALSE) AS bloqueado,
             COALESCE(u.bloqueado_hasta <= NOW(), FALSE) AS bloqueo_vencido,
             e.nombres, e.apellidos, e.ddriss_id, e.establecimiento_id, e.municipio_id
@@ -80,6 +87,7 @@ function armarSesion(usuario, permisos) {
       rol: usuario.rol,
       rolNombre: usuario.rol_nombre,
       permisos,
+      debeCambiarContrasena: Boolean(usuario.debe_cambiar_contrasena),
       empleado,
     },
   };
@@ -194,5 +202,53 @@ export async function cerrarSesion(usuario, datos, contexto) {
     entidad: 'usuario',
     entidadId: usuario.id,
     valoresNuevos: { motivo },
+  });
+}
+
+const esCambioValido = (datos) =>
+  datos !== null &&
+  typeof datos === 'object' &&
+  Object.keys(datos).every((campo) => CAMPOS_CAMBIO_CONTRASENA.includes(campo)) &&
+  CAMPOS_CAMBIO_CONTRASENA.every((campo) => typeof datos[campo] === 'string' && datos[campo] !== '');
+
+// Una contraseña actual incorrecta no suma intentos ni va a la bitácora: la persona ya tiene una sesión válida.
+export async function cambiarContrasena(usuario, datos, contexto) {
+  if (!esCambioValido(datos)) throw errores.cambioInvalido();
+  const { contrasenaActual, contrasenaNueva } = datos;
+
+  await enTransaccion(async (conexion) => {
+    const [[cuenta]] = await conexion.query(
+      `SELECT u.nombre_usuario, u.hash_contrasena, u.debe_cambiar_contrasena, e.nombres, e.apellidos
+         FROM usuario u
+         JOIN empleado e ON e.id = u.empleado_id
+        WHERE u.id = ?
+          FOR UPDATE OF u`,
+      [usuario.id],
+    );
+
+    if (!(await bcrypt.compare(contrasenaActual, cuenta.hash_contrasena))) throw errores.actualIncorrecta();
+    if (await bcrypt.compare(contrasenaNueva, cuenta.hash_contrasena)) throw errores.repetida();
+
+    const { motivos } = evaluarContrasena(contrasenaNueva, {
+      nombreUsuario: cuenta.nombre_usuario,
+      nombres: cuenta.nombres,
+      apellidos: cuenta.apellidos,
+    });
+    if (motivos.length > 0) throw errores.debil(motivos[0]);
+
+    await conexion.query(
+      'UPDATE usuario SET hash_contrasena = ?, debe_cambiar_contrasena = FALSE WHERE id = ?',
+      [await bcrypt.hash(contrasenaNueva, COSTO_BCRYPT), usuario.id],
+    );
+    await registrarBitacora(conexion, {
+      ...contexto,
+      usuarioId: usuario.id,
+      modulo: MODULOS.USUARIOS,
+      accion: ACCIONES.CAMBIO_CONTRASENA,
+      entidad: 'usuario',
+      entidadId: usuario.id,
+      valoresAnteriores: { debeCambiarContrasena: Boolean(cuenta.debe_cambiar_contrasena) },
+      valoresNuevos: { debeCambiarContrasena: false },
+    });
   });
 }

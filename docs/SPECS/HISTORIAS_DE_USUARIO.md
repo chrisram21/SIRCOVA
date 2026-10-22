@@ -113,16 +113,18 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Cómo se hará:** Pantalla de cambio de contraseña en React, a la que se llega desde el encabezado y, de forma obligatoria, después del login cuando la cuenta tiene `debe_cambiar_contrasena = TRUE`. Endpoint del módulo `auth` (nombre por definir en su spec; por ejemplo, `POST /auth/contrasena`) que valida la contraseña actual, aplica la política de fortaleza y guarda el nuevo hash en `usuario` con `debe_cambiar_contrasena = FALSE`. El login devuelve `debeCambiarContrasena`, y `revisarCuenta` (dentro de `autenticar`) rechaza el resto de la API mientras la cuenta deba cambiar la contraseña. La fortaleza se mide con `@zxcvbn-ts/core`, `@zxcvbn-ts/language-common` y `@zxcvbn-ts/language-es-es` en el backend (validación obligatoria) y en el frontend (medidor); son dependencias nuevas y requieren autorización en el spec. Componente propio `CampoContrasena`, con un botón para ver la contraseña mientras se mantiene presionado, que después reutilizan el login y las demás pantallas con contraseñas.
 
 **Criterios de aceptación:**
-- [ ] Si la contraseña actual no coincide, el cambio se rechaza.
-- [ ] La nueva contraseña tiene al menos 12 caracteres y como máximo 72 bytes (límite de bcrypt), obtiene al menos 3 de 4 en zxcvbn y no contiene mi nombre de usuario, mis nombres ni mis apellidos. No se exigen mayúsculas, números ni símbolos. El backend valida la regla aunque el frontend también la revise.
-- [ ] La nueva contraseña no puede ser igual a la actual.
-- [ ] Mientras escribo la nueva contraseña, veo un medidor de fortaleza y el motivo por el que todavía no se acepta.
-- [ ] En los campos de contraseña puedo ver lo que escribo mientras mantengo presionado un botón (con el ratón, con el dedo o con la tecla Espacio), y se oculta al soltarlo.
-- [ ] Después del cambio, puedo iniciar sesión solo con la nueva contraseña, y la cuenta queda con `debe_cambiar_contrasena = FALSE`.
-- [ ] Si mi cuenta debe cambiar la contraseña, al iniciar sesión el sistema me lleva a la pantalla de cambio y no puedo abrir otras pantallas. El backend responde 403 `CAMBIO_CONTRASENA_REQUERIDO` a cualquier endpoint protegido, salvo el cambio de contraseña, `POST /auth/logout` y `GET /auth/yo`.
-- [ ] El cambio queda en la bitácora sin la contraseña actual ni la nueva.
+- [x] Si la contraseña actual no coincide, el cambio se rechaza.
+- [x] La nueva contraseña tiene al menos 12 caracteres y como máximo 72 bytes (límite de bcrypt), obtiene al menos 3 de 4 en zxcvbn y no contiene mi nombre de usuario, mis nombres ni mis apellidos. No se exigen mayúsculas, números ni símbolos. El backend valida la regla aunque el frontend también la revise.
+- [x] La nueva contraseña no puede ser igual a la actual.
+- [x] Mientras escribo la nueva contraseña, veo un medidor de fortaleza y el motivo por el que todavía no se acepta.
+- [x] En los campos de contraseña puedo ver lo que escribo mientras mantengo presionado un botón (con el ratón, con el dedo o con la tecla Espacio), y se oculta al soltarlo.
+- [x] Después del cambio, puedo iniciar sesión solo con la nueva contraseña, y la cuenta queda con `debe_cambiar_contrasena = FALSE`.
+- [x] Si mi cuenta debe cambiar la contraseña, al iniciar sesión el sistema me lleva a la pantalla de cambio y no puedo abrir otras pantallas. El backend responde 403 `CAMBIO_CONTRASENA_REQUERIDO` a cualquier endpoint protegido, salvo el cambio de contraseña, `POST /auth/logout` y `GET /auth/yo`.
+- [x] El cambio queda en la bitácora sin la contraseña actual ni la nueva.
 
 **Ajustes de la asesoría (2026-10-21):** la historia pasó de "cambiar mi contraseña" a incluir también el cambio obligatorio de la contraseña temporal (controlado en el backend), la política de fortaleza con zxcvbn (antes eran 8 caracteres) y el campo para ver la contraseña. Se trabaja antes que los specs A y B de `docs/SPECS/PROPUESTA_SPEC_A_SEGURIDAD_DE_CUENTAS.md` y `docs/SPECS/PROPUESTA_SPEC_B_DATOS_DEL_EMPLEADO.md`, que dependen de ella. Los story points se pueden reestimar al escribir su spec.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 09 a `main`. Backend y frontend en `specs/09-hu-03-cambiar-contrasena.md`. El endpoint es `POST /auth/contrasena`, sin permiso (como el logout): una contraseña actual incorrecta responde 422 y no cuenta para el bloqueo; el cambio queda en la bitácora con la acción nueva `CAMBIO_CONTRASENA`. El login devuelve `debeCambiarContrasena` (no va en el JWT) y `autenticar` lo lee de la base en cada petición; `GET /auth/yo` sigue sin programar, así que hoy solo el cambio y el logout quedan exentos del 403. Tras el cambio, la sesión se cierra y el login pide entrar con la nueva. Pantalla `/cuenta/contrasena`: sola y sin menú si el cambio es obligatorio, o dentro del Layout desde el botón "Cambiar contraseña" del encabezado. `CampoContrasena` solo se usa en esa pantalla; el login y el registro lo adoptan en el spec A. Se agregaron `@zxcvbn-ts/core`, `@zxcvbn-ts/language-common` y `@zxcvbn-ts/language-es-es` al backend y al frontend. Verificado contra la API real el 2026-10-21 con la cuenta "Prueba HU-03" (`prueba.hu03`, rol Revisor), que queda activa en la base de prueba.
 
 #### HU-04. Registrar personal y crear su cuenta
 

@@ -553,6 +553,8 @@ describe('HU-05: cuentas existentes', () => {
 
     it('una cuenta desactivada no puede iniciar sesión y su token ya emitido recibe 401 CUENTA_DESACTIVADA', async () => {
       const { usuario } = await crearPersonal();
+      // POST /usuarios la deja con la contraseña temporal pendiente; sin esto, GET /roles respondería 403.
+      await pool.query('UPDATE usuario SET debe_cambiar_contrasena = FALSE WHERE id = ?', [usuario.id]);
       // Token con los mismos datos que daría el login de esa cuenta; nunca se inicia sesión con ella mientras está activa.
       const tokenDeLaCuenta = jwt.sign(
         { rol: 'REVISOR', permisos: ['ROL_CONSULTAR'], ddrissId: administrador.ddrissId, establecimientoId: null, municipioId: null },
