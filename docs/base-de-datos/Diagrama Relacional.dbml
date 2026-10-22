@@ -1,5 +1,5 @@
 // Plataforma web de producción de vacunación — DDRISS San Marcos (MSPAS)
-// Modelo relacional preliminar v0.8 (MySQL 8.0) en formato DBML para dbdiagram.io
+// Modelo relacional preliminar v0.9 (MySQL 8.0) en formato DBML para dbdiagram.io
 // Generado a partir de 01_modelo_relacional_mysql.sql. Las vistas y los datos
 // semilla no se representan en DBML; están en el script SQL.
 // Los grupos de tablas siguen los cuatro grupos de MySQL de la propuesta v2.
@@ -207,7 +207,7 @@ Table "establecimiento" {
 
 Table "empleado" {
   "id" INT [pk, not null, increment]
-  "codigo_empleado" VARCHAR(20) [note: 'Código o número de personal del MSPAS, si se usa']
+  "cui_hmac" CHAR(64) [note: 'HMAC-SHA256 en hexadecimal del CUI (13 dígitos); nunca el CUI']
   "nombres" VARCHAR(100) [not null]
   "apellidos" VARCHAR(100) [not null]
   "cargo" VARCHAR(100) [note: 'Ej.: enfermera auxiliar, estadígrafa, epidemióloga']
@@ -221,7 +221,7 @@ Table "empleado" {
   "actualizado_en" DATETIME [not null, default: `CURRENT_TIMESTAMP`]
 
   Indexes {
-    codigo_empleado [unique, name: "uq_empleado_codigo"]
+    cui_hmac [unique, name: "uq_empleado_cui"]
     correo [unique, name: "uq_empleado_correo"]
     establecimiento_id [name: "ix_empleado_est"]
     ddriss_id [name: "ix_empleado_ddriss"]

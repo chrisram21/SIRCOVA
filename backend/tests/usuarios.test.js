@@ -5,7 +5,9 @@ import app from '../src/app.js';
 import entorno from '../src/config/entorno.js';
 import pool from '../src/config/mysql.js';
 import bcrypt from 'bcrypt';
+import { randomInt } from 'node:crypto';
 import { ALFABETO, LARGO } from '../src/modulos/auth/contrasenaTemporal.service.js';
+import { huellaCui } from '../src/modulos/usuarios/cui.service.js';
 
 // Todo lo que crean estas pruebas lleva este prefijo y se borra en afterAll. Nunca se inicia sesión con las cuentas
 // creadas: la bitácora tiene llave foránea a usuario y entonces ya no se podrían borrar.
@@ -27,10 +29,23 @@ let consecutivo = 0;
 const unico = () => `${Date.now().toString(36)}${(consecutivo += 1)}`;
 const correoUnico = () => `${PREFIJO}${unico()}@prueba.local`;
 
+// CUI ficticio al azar que cumple el dígito verificador, para que las corridas no choquen por uq_empleado_cui.
+function cuiFicticio() {
+  for (;;) {
+    const correlativo = String(randomInt(0, 1e8)).padStart(8, '0');
+    const residuo = [...correlativo].reduce((suma, digito, i) => suma + Number(digito) * (i + 2), 0) % 11;
+    if (residuo === 10) continue;
+    return `${correlativo}${residuo}${String(randomInt(1, 23)).padStart(2, '0')}01`;
+  }
+}
+const conEspacios = (cui) => `${cui.slice(0, 4)} ${cui.slice(4, 9)} ${cui.slice(9)}`;
+
 const registrar = (cuerpo, credencial = token) =>
   request(app).post('/api/v1/empleados').set('Authorization', `Bearer ${credencial}`).send(cuerpo);
 
-const minimo = (extra = {}) => ({ nombres: 'Prueba', apellidos: 'HU-04', correo: correoUnico(), ...extra });
+const minimo = (extra = {}) => ({
+  nombres: 'Prueba', apellidos: 'Prueba Cuatro', correo: correoUnico(), cui: cuiFicticio(), ...extra,
+});
 
 beforeAll(async () => {
   const res = await request(app)
@@ -56,7 +71,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await pool.query('DELETE FROM usuario WHERE nombre_usuario LIKE ?', [`${PREFIJO}%`]);
-  await pool.query('DELETE FROM empleado WHERE correo LIKE ? OR codigo_empleado LIKE ?', [`${PREFIJO}%`, `${PREFIJO}%`]);
+  await pool.query('DELETE FROM empleado WHERE correo LIKE ?', [`${PREFIJO}%`]);
   await pool.query('DELETE FROM establecimiento WHERE codigo = ?', [`${PREFIJO}inact`]);
 });
 
@@ -66,8 +81,9 @@ describe('POST /empleados', () => {
 
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({
+      cuiRegistrado: true,
       nombres: 'Prueba',
-      apellidos: 'HU-04',
+      apellidos: 'Prueba Cuatro',
       cargo: null,
       telefono: null,
       establecimientoId: null,
@@ -125,6 +141,38 @@ describe('POST /empleados', () => {
     }
   });
 
+  it('con nombres mal escritos o sin correo responde 400 con el mensaje de la regla y no crea nada', async () => {
+    const correo = correoUnico();
+    for (const [cuerpo, mensaje] of [
+      [minimo({ nombres: '123', correo }), 'Los nombres solo pueden tener letras, espacios, apóstrofos y guiones.'],
+      [minimo({ correo: undefined }), 'El correo es obligatorio.'],
+      [minimo({ correo: '   ' }), 'El correo es obligatorio.'],
+      [minimo({ telefono: '9551-1001', correo }), 'El teléfono debe tener 8 dígitos y empezar con 2 a 7.'],
+      [minimo({ cargo: '123', correo }), 'El cargo solo puede tener letras, espacios y los signos . , ( ) / -.'],
+    ]) {
+      const res = await registrar(cuerpo);
+      expect(res.status).toBe(400);
+      expect(res.body.error).toEqual({ codigo: 'ENTRADA_INVALIDA', mensaje });
+    }
+    const [filas] = await pool.query('SELECT id FROM empleado WHERE correo = ?', [correo]);
+    expect(filas).toHaveLength(0);
+  });
+
+  it('acepta nombres de varias palabras con apóstrofo, guarda el teléfono como NNNN-NNNN y el correo en minúsculas', async () => {
+    const correo = correoUnico();
+    const res = await registrar(
+      minimo({ nombres: "  María   de los Ángeles ", apellidos: "B'alam Pérez-Gómez", telefono: '+502 5551 1001',
+        correo: correo.toUpperCase() }),
+    );
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      nombres: 'María de los Ángeles', apellidos: "B'alam Pérez-Gómez", telefono: '5551-1001', correo,
+    });
+    const [[fila]] = await pool.query('SELECT nombres, telefono, correo FROM empleado WHERE id = ?', [res.body.id]);
+    expect(fila).toEqual({ nombres: 'María de los Ángeles', telefono: '5551-1001', correo });
+  });
+
   it('un establecimiento inexistente, inactivo o de otra DDRISS responde 422 ESTABLECIMIENTO_INVALIDO', async () => {
     const otraDdriss = firmar({ ddrissId: administrador.ddrissId + 100, permisos: ['EMPLEADO_CREAR'] });
     for (const [cuerpo, credencial] of [
@@ -152,18 +200,18 @@ describe('POST /empleados', () => {
     expect(res.body.error.codigo).toBe('MUNICIPIO_INVALIDO');
   });
 
-  it('un correo o un código repetidos responden 409', async () => {
+  it('un correo o un CUI repetidos responden 409, aunque el CUI se escriba con espacios', async () => {
     const correo = correoUnico();
-    const codigoEmpleado = `${PREFIJO}${unico()}`.slice(0, 20);
-    expect((await registrar(minimo({ correo, codigoEmpleado }))).status).toBe(201);
+    const cui = cuiFicticio();
+    expect((await registrar(minimo({ correo, cui }))).status).toBe(201);
 
     const porCorreo = await registrar(minimo({ correo }));
     expect(porCorreo.status).toBe(409);
     expect(porCorreo.body.error.codigo).toBe('CORREO_DUPLICADO');
 
-    const porCodigo = await registrar(minimo({ codigoEmpleado }));
-    expect(porCodigo.status).toBe(409);
-    expect(porCodigo.body.error.codigo).toBe('CODIGO_EMPLEADO_DUPLICADO');
+    const porCui = await registrar(minimo({ cui: conEspacios(cui) }));
+    expect(porCui.status).toBe(409);
+    expect(porCui.body.error).toEqual({ codigo: 'CUI_DUPLICADO', mensaje: 'Ya hay un empleado registrado con ese CUI.' });
   });
 
   it('sin EMPLEADO_CREAR responde 403 SIN_PERMISO', async () => {
@@ -297,6 +345,8 @@ describe('POST /usuarios', () => {
     for (const extra of [
       { nombreUsuario: `${PREFIJO}con espacio` },
       { nombreUsuario: 'ab' },
+      { nombreUsuario: 'Ana López' },
+      { nombreUsuario: `${PREFIJO}Mayuscula` },
       { contrasenaTemporal: 'Temporal-hu04-larga' },
       { contrasenaTemporal: null },
       { rolId: 'REVISOR' },
@@ -328,8 +378,9 @@ describe('HU-05: cuentas existentes', () => {
   async function crearPersonal({ empleado = {}, rol = 'REVISOR', prefijo = PREFIJO_HU05 } = {}) {
     const alta = await registrar({
       nombres: 'Prueba',
-      apellidos: 'HU-05',
+      apellidos: 'Prueba Cinco',
       correo: `${prefijo}${unico()}@prueba.local`,
+      cui: cuiFicticio(),
       ...empleado,
     });
     expect(alta.status).toBe(201);
@@ -925,6 +976,35 @@ describe('HU-05: cuentas existentes', () => {
       }
     });
 
+    it('solo valida los campos que llegan: con un teléfono viejo mal escrito se puede cambiar el cargo', async () => {
+      const { empleado } = await crearPersonal();
+      await pool.query("UPDATE empleado SET telefono = '9999' WHERE id = ?", [empleado.id]);
+
+      const res = await editar(empleado.id, { cargo: 'Estadígrafa' });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ cargo: 'Estadígrafa', telefono: '9999' });
+
+      const telefono = await editar(empleado.id, { telefono: '9999' });
+      expect(telefono.status).toBe(400);
+      expect(telefono.body.error.mensaje).toBe('El teléfono debe tener 8 dígitos y empezar con 2 a 7.');
+    });
+
+    it('el correo no se puede borrar, y al cambiarlo se guarda en minúsculas', async () => {
+      const { empleado } = await crearPersonal();
+
+      for (const correo of [null, '', '  ']) {
+        const res = await editar(empleado.id, { correo });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toEqual({ codigo: 'ENTRADA_INVALIDA', mensaje: 'El correo es obligatorio.' });
+      }
+
+      const nuevo = `vitest-hu05-${unico()}@prueba.local`;
+      const res = await editar(empleado.id, { correo: nuevo.toUpperCase() });
+      expect(res.status).toBe(200);
+      expect(res.body.correo).toBe(nuevo);
+    });
+
     it('un correo de otro empleado responde 409 CORREO_DUPLICADO', async () => {
       const uno = await crearPersonal();
       const otro = await crearPersonal();
@@ -956,6 +1036,125 @@ describe('HU-05: cuentas existentes', () => {
 
       expect(res.status).toBe(403);
       expect(res.body.error.codigo).toBe('SIN_PERMISO');
+    });
+  });
+
+  // SPEC 11: el CUI se guarda solo como huella HMAC y nunca sale de la API ni llega a la bitácora.
+  describe('CUI del empleado', () => {
+    const PREFIJO_CUI = 'vitest-hucui-';
+    const editar = (id, cuerpo) => pedir('patch', `/empleados/${id}`).send(cuerpo);
+    const huellaEnBase = async (id) => (await pool.query('SELECT cui_hmac FROM empleado WHERE id = ?', [id]))[0][0].cui_hmac;
+    const sinCui = (texto, cui) => {
+      expect(texto.includes(cui)).toBe(false);
+      expect(texto).not.toMatch(/[0-9a-f]{64}/);
+    };
+
+    afterAll(async () => {
+      await pool.query('DELETE FROM usuario WHERE nombre_usuario LIKE ?', [`${PREFIJO_CUI}%`]);
+      await pool.query('DELETE FROM empleado WHERE correo LIKE ?', [`${PREFIJO_CUI}%`]);
+    });
+
+    it('POST /empleados sin CUI, con uno inválido o con codigoEmpleado responde 400', async () => {
+      for (const [extra, mensaje] of [
+        [{ cui: undefined }, 'El CUI es obligatorio.'],
+        [{ cui: '' }, 'El CUI es obligatorio.'],
+        [{ cui: '1234567880101' }, 'El CUI no es válido; revise los dígitos.'],
+        [{ cui: '1234567892301' }, 'El CUI no es válido; el departamento debe estar entre 01 y 22.'],
+        [{ cui: '123456789010' }, 'El CUI debe tener 13 dígitos.'],
+        [{ codigoEmpleado: 'EMP-0001' }, 'El código de empleado ya no se usa; envíe el CUI.'],
+      ]) {
+        const res = await registrar(minimo({ correo: `${PREFIJO_CUI}${unico()}@prueba.local`, ...extra }));
+        expect(res.status).toBe(400);
+        expect(res.body.error).toEqual({ codigo: 'ENTRADA_INVALIDA', mensaje });
+      }
+    });
+
+    it('con un CUI válido responde 201 con cuiRegistrado y guarda solo la huella, sin el CUI en la bitácora', async () => {
+      const cui = cuiFicticio();
+      const { empleado, usuario } = await crearPersonal({ prefijo: PREFIJO_CUI, empleado: { cui: conEspacios(cui) } });
+
+      expect(empleado.cuiRegistrado).toBe(true);
+      expect(empleado).not.toHaveProperty('cui');
+      expect(empleado).not.toHaveProperty('cuiHmac');
+      sinCui(JSON.stringify(empleado), cui);
+
+      const huella = await huellaEnBase(empleado.id);
+      expect(huella).toMatch(/^[0-9a-f]{64}$/);
+      expect(huella).toBe(huellaCui(cui));
+      expect(huella.includes(cui)).toBe(false);
+
+      const [crear] = await bitacoraDe('empleado', empleado.id, 'CREAR');
+      expect(crear.valores_nuevos.cuiRegistrado).toBe(true);
+      sinCui(JSON.stringify(crear), cui);
+
+      const detalle = await pedir('get', `/usuarios/${usuario.id}`);
+      expect(detalle.body.empleado.cuiRegistrado).toBe(true);
+      sinCui(JSON.stringify(detalle.body), cui);
+    });
+
+    it('PATCH registra el CUI de un empleado que no tenía: cuiRegistrado pasa de false a true', async () => {
+      const { empleado } = await crearPersonal({ prefijo: PREFIJO_CUI });
+      await pool.query('UPDATE empleado SET cui_hmac = NULL WHERE id = ?', [empleado.id]);
+      const cui = cuiFicticio();
+
+      const res = await editar(empleado.id, { cui });
+
+      expect(res.status).toBe(200);
+      expect(res.body.cuiRegistrado).toBe(true);
+      expect(await huellaEnBase(empleado.id)).toBe(huellaCui(cui));
+      const filas = await bitacoraDe('empleado', empleado.id, 'ACTUALIZAR');
+      expect(filas).toHaveLength(1);
+      expect(filas[0].valores_anteriores).toEqual({ cuiRegistrado: false });
+      expect(filas[0].valores_nuevos).toEqual({ cuiRegistrado: true });
+    });
+
+    it('PATCH reemplaza el CUI con cuiReemplazado en la bitácora; el mismo CUI responde 200 sin fila nueva', async () => {
+      const { empleado } = await crearPersonal({ prefijo: PREFIJO_CUI });
+      const cui = cuiFicticio();
+
+      const res = await editar(empleado.id, { cui, cargo: 'Estadígrafa' });
+      expect(res.status).toBe(200);
+      expect(await huellaEnBase(empleado.id)).toBe(huellaCui(cui));
+      const filas = await bitacoraDe('empleado', empleado.id, 'ACTUALIZAR');
+      expect(filas).toHaveLength(1);
+      expect(filas[0].valores_nuevos).toEqual({ cargo: 'Estadígrafa', cuiReemplazado: true });
+      sinCui(JSON.stringify(filas[0]), cui);
+
+      const igual = await editar(empleado.id, { cui: conEspacios(cui) });
+      expect(igual.status).toBe(200);
+      expect(await bitacoraDe('empleado', empleado.id, 'ACTUALIZAR')).toHaveLength(1);
+
+      const soloCui = await editar(empleado.id, { cui: cuiFicticio() });
+      expect(soloCui.status).toBe(200);
+      const [, reemplazo] = await bitacoraDe('empleado', empleado.id, 'ACTUALIZAR');
+      expect(reemplazo.valores_anteriores).toBeNull();
+      expect(reemplazo.valores_nuevos).toEqual({ cuiReemplazado: true });
+    });
+
+    it('PATCH con el CUI de otro empleado responde 409 CUI_DUPLICADO', async () => {
+      const cui = cuiFicticio();
+      await crearPersonal({ prefijo: PREFIJO_CUI, empleado: { cui } });
+      const { empleado } = await crearPersonal({ prefijo: PREFIJO_CUI });
+
+      const res = await editar(empleado.id, { cui: conEspacios(cui) });
+
+      expect(res.status).toBe(409);
+      expect(res.body.error.codigo).toBe('CUI_DUPLICADO');
+    });
+
+    it('PATCH con cui null o vacío, o con codigoEmpleado, responde 400', async () => {
+      const { empleado } = await crearPersonal({ prefijo: PREFIJO_CUI });
+
+      for (const [cuerpo, mensaje] of [
+        [{ cui: null }, 'El CUI es obligatorio.'],
+        [{ cui: '' }, 'El CUI es obligatorio.'],
+        [{ codigoEmpleado: 'EMP-0001' }, 'El código de empleado ya no se usa; envíe el CUI.'],
+      ]) {
+        const res = await editar(empleado.id, cuerpo);
+        expect(res.status).toBe(400);
+        expect(res.body.error).toEqual({ codigo: 'ENTRADA_INVALIDA', mensaje });
+      }
+      expect(await huellaEnBase(empleado.id)).toMatch(/^[0-9a-f]{64}$/);
     });
   });
 });

@@ -79,6 +79,20 @@ describe('registrarBitacora', () => {
     const [fila] = await filasDe(entidadId);
     expect(fila.valores_nuevos).toEqual({ nombreUsuario: 'ana', usuario: {} });
   });
+
+  it('quita el CUI y su huella, y deja cuiRegistrado y cuiReemplazado (SPEC 11)', async () => {
+    const entidadId = randomUUID();
+
+    await registrarBitacora(pool, {
+      ...datosBase(entidadId),
+      valoresAnteriores: { cui: '1234567890101', cui_hmac: 'a'.repeat(64) },
+      valoresNuevos: { cuiRegistrado: true, cuiReemplazado: true, cuiHmac: 'b'.repeat(64), empleado: { CUI: '1' } },
+    });
+
+    const [fila] = await filasDe(entidadId);
+    expect(fila.valores_anteriores).toEqual({});
+    expect(fila.valores_nuevos).toEqual({ cuiRegistrado: true, cuiReemplazado: true, empleado: {} });
+  });
 });
 
 describe('diferencias', () => {

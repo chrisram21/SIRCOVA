@@ -37,6 +37,8 @@ const botonRegistrar = () => screen.getByRole('button', { name: /^(Registrar|Cre
 function llenarEmpleado() {
   escribir(/^Nombres/, 'Ana')
   escribir(/^Apellidos/, 'López')
+  escribir(/^Correo/, 'ana.lopez@gmail.com')
+  escribir(/^CUI/, CUI)
 }
 
 function llenarCuenta({ rolId = 2 } = {}) {
@@ -46,6 +48,8 @@ function llenarCuenta({ rolId = 2 } = {}) {
 }
 
 const CONTRASENA_GENERADA = 'Hk7pQ2xYz9Ab'
+// Ficticio: cumple el dígito verificador (ver validaciones/campos.test.js).
+const CUI = '1234 56789 0101'
 
 // El diálogo de la contraseña temporal se cierra con "Ya la anoté"; después sigue el éxito de siempre.
 async function cerrarDialogoContrasena() {
@@ -94,6 +98,109 @@ test('"Registrar" está deshabilitado sin nombres, o con cuenta sin nombre de us
   expect(botonRegistrar().disabled).toBe(false)
 })
 
+test('sin correo "Registrar" está deshabilitado, y el correo se marca como obligatorio', async () => {
+  await abrir()
+  escribir(/^Nombres/, 'Ana')
+  escribir(/^Apellidos/, 'López')
+
+  expect(botonRegistrar().disabled).toBe(true)
+  expect(document.querySelector('label[for="correo"]').textContent).toBe('Correo*')
+  fireEvent.blur(screen.getByLabelText(/^Correo/))
+  expect(screen.getByText('El correo es obligatorio.')).toBeTruthy()
+})
+
+test('un campo mal escrito muestra su mensaje al salir de él y deshabilita "Registrar" hasta corregirlo', async () => {
+  await abrir()
+  llenarEmpleado()
+  escribir(/^Nombres/, '123')
+
+  // El mensaje no aparece mientras se escribe por primera vez, solo al salir del campo.
+  expect(screen.queryByText('Los nombres solo pueden tener letras, espacios, apóstrofos y guiones.')).toBeNull()
+  expect(botonRegistrar().disabled).toBe(true)
+
+  fireEvent.blur(screen.getByLabelText(/^Nombres/))
+  const mensaje = screen.getByText('Los nombres solo pueden tener letras, espacios, apóstrofos y guiones.')
+  const campo = screen.getByLabelText(/^Nombres/)
+  expect(campo.getAttribute('aria-invalid')).toBe('true')
+  expect(campo.getAttribute('aria-describedby')).toBe(mensaje.id)
+
+  escribir(/^Nombres/, "María de los Ángeles B'alam")
+  expect(screen.queryByText('Los nombres solo pueden tener letras, espacios, apóstrofos y guiones.')).toBeNull()
+  expect(campo.getAttribute('aria-invalid')).toBeNull()
+  expect(botonRegistrar().disabled).toBe(false)
+
+  escribir(/^Teléfono/, '9551-1001')
+  fireEvent.blur(screen.getByLabelText(/^Teléfono/))
+  expect(screen.getByText('El teléfono debe tener 8 dígitos y empezar con 2 a 7.')).toBeTruthy()
+  expect(botonRegistrar().disabled).toBe(true)
+
+  escribir(/^Teléfono/, '+502 5551 1001')
+  expect(botonRegistrar().disabled).toBe(false)
+})
+
+test('el nombre de usuario se pasa a minúsculas y uno inválido muestra su mensaje y deshabilita "Registrar"', async () => {
+  await abrir()
+  llenarEmpleado()
+  llenarCuenta()
+
+  escribir(/^Nombre de usuario/, 'ALopez')
+  expect(screen.getByLabelText(/^Nombre de usuario/).value).toBe('alopez')
+  expect(botonRegistrar().disabled).toBe(false)
+
+  escribir(/^Nombre de usuario/, 'ana lópez')
+  fireEvent.blur(screen.getByLabelText(/^Nombre de usuario/))
+  expect(
+    screen.getByText(
+      'El nombre de usuario debe tener de 4 a 50 caracteres: minúsculas, números, punto, guion o guion bajo.',
+    ),
+  ).toBeTruthy()
+  expect(botonRegistrar().disabled).toBe(true)
+})
+
+test('el CUI es obligatorio, explica para qué se usa y reemplaza al código de empleado', async () => {
+  await abrir()
+
+  expect(screen.queryByLabelText(/Código de empleado/)).toBeNull()
+  const campo = screen.getByLabelText(/^CUI \(DPI\)/)
+  expect(document.querySelector('label[for="cui"]').textContent).toBe('CUI (DPI)*')
+  expect(campo.getAttribute('inputmode')).toBe('numeric')
+  expect(document.getElementById(campo.getAttribute('aria-describedby')).textContent).toBe(
+    'Se usa solo para evitar registros repetidos; el sistema no lo muestra después.',
+  )
+
+  llenarEmpleado()
+  escribir(/^CUI/, '')
+  expect(botonRegistrar().disabled).toBe(true)
+  fireEvent.blur(campo)
+  expect(screen.getByText('El CUI es obligatorio.')).toBeTruthy()
+})
+
+test('un CUI con el dígito verificador mal muestra su mensaje y deshabilita "Registrar"', async () => {
+  await abrir()
+  llenarEmpleado()
+
+  escribir(/^CUI/, '1234 56788 0101')
+  fireEvent.blur(screen.getByLabelText(/^CUI/))
+
+  expect(screen.getByText('El CUI no es válido; revise los dígitos.')).toBeTruthy()
+  expect(botonRegistrar().disabled).toBe(true)
+
+  escribir(/^CUI/, '1234-56789-0101')
+  expect(screen.queryByText('El CUI no es válido; revise los dígitos.')).toBeNull()
+  expect(botonRegistrar().disabled).toBe(false)
+})
+
+test('un 409 CUI_DUPLICADO muestra el mensaje del backend', async () => {
+  registrarEmpleado.mockRejectedValueOnce(new ErrorApi(409, 'CUI_DUPLICADO', 'Ya hay un empleado registrado con ese CUI.'))
+  await abrir()
+  llenarEmpleado()
+
+  fireEvent.click(botonRegistrar())
+
+  expect(await screen.findByText('Ya hay un empleado registrado con ese CUI.')).toBeTruthy()
+  expect(registrarEmpleado.mock.calls[0][0]).not.toHaveProperty('codigoEmpleado')
+})
+
 test('la cuenta ya no tiene campos de contraseña: la genera el sistema', async () => {
   await abrir()
   fireEvent.click(screen.getByRole('checkbox', { name: 'Crear cuenta de acceso' }))
@@ -132,7 +239,9 @@ test('sin cuenta, solo registra al empleado y muestra el éxito', async () => {
   fireEvent.click(botonRegistrar())
 
   expect(await screen.findByText('Se registró a Ana López.')).toBeTruthy()
-  expect(registrarEmpleado).toHaveBeenCalledWith({ nombres: 'Ana', apellidos: 'López', cargo: 'Enfermera', municipioId: 1 })
+  expect(registrarEmpleado).toHaveBeenCalledWith({
+    nombres: 'Ana', apellidos: 'López', cui: CUI, cargo: 'Enfermera', correo: 'ana.lopez@gmail.com', municipioId: 1,
+  })
   expect(crearCuenta).not.toHaveBeenCalled()
   expect(screen.queryByText(/Se creó la cuenta/)).toBeNull()
 })
@@ -149,7 +258,9 @@ test('con cuenta, registra al empleado, crea la cuenta con su id y muestra los d
   expect(within(dialogo).getByTestId('contrasena-temporal').textContent).toBe(CONTRASENA_GENERADA)
   expect(dialogo.textContent).toContain('alopez')
   expect(screen.queryByText('Se creó la cuenta alopez.')).toBeNull()
-  expect(registrarEmpleado).toHaveBeenCalledWith({ nombres: 'Ana', apellidos: 'López', establecimientoId: 7 })
+  expect(registrarEmpleado).toHaveBeenCalledWith({
+    nombres: 'Ana', apellidos: 'López', cui: CUI, correo: 'ana.lopez@gmail.com', establecimientoId: 7,
+  })
   expect(crearCuenta).toHaveBeenCalledWith({ empleadoId: 40, nombreUsuario: 'alopez', rolId: 2 })
 
   await cerrarDialogoContrasena()
