@@ -1,20 +1,10 @@
 # SPEC 09 — Cambiar mi contraseña
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-03 (backend y frontend, con el cambio obligatorio de la contraseña temporal)
 > **Depende de:** SPEC 01, SPEC 02, SPEC 03, SPEC 05, SPEC 06, SPEC 08
 > **Fecha:** 2026-10-21
 > **Objetivo:** Que cualquier usuario cambie su contraseña indicando la actual, con una política de fortaleza medida con zxcvbn, y que una cuenta con `debe_cambiar_contrasena = TRUE` no pueda usar el resto del sistema hasta cambiarla.
-
-## Avance (2026-10-21)
-
-Rama `spec-09-hu-03-cambiar-contrasena`. Hechos los pasos **1, 2 y 3**; se retoma en el **paso 4** (acción `CAMBIO_CONTRASENA` y `POST /auth/contrasena`). Antes de seguir, verificar:
-
-1. **Contrato:** `/api/docs` carga y muestra `POST /auth/contrasena`, `CambioContrasenaEntrada`, `debeCambiarContrasena` en `UsuarioSesion` y la respuesta `CambioContrasenaRequerido`.
-2. **Dependencias:** `npm ls @zxcvbn-ts/core @zxcvbn-ts/language-common @zxcvbn-ts/language-es-es` en `backend/` y `frontend/` muestra 4.2.0, 4.1.3 y 4.1.2, y `AGENTS.md` las lista. `npm test` pasó en los dos (frontend 102; backend 146, con 2 fallas por `ETIMEDOUT` de Aiven que pasaron al repetirlas).
-3. **Política:** `npx vitest run tests/politicaContrasena.test.js` en `backend/` pasa 6 de 6. `evaluarContrasena` mide con zxcvbn solo los primeros 72 caracteres si la contraseña pasa de 72 bytes (igual se rechaza por largo); las advertencias de zxcvbn en español vienen sin punto final.
-
-Esta sección se borra al pasar el spec a Implementado.
 
 ## Por qué existe este spec
 
@@ -269,6 +259,9 @@ CLAUDE.md                                          ← nota sobre exigirContrase
 - **No:** cerrar las sesiones abiertas en otros equipos. Necesita una columna nueva en `usuario` (zona protegida); queda como riesgo.
 - **Sí:** las pruebas del cambio correcto usan una cuenta permanente, `vitest-hu03-permanente`, que se crea si no existe y cuya contraseña y `debe_cambiar_contrasena` se reinician por SQL en `beforeAll`; no se borra. La fila `CAMBIO_CONTRASENA` y el `LOGIN_OK` llevan su `usuario_id`, y la llave foránea de la bitácora impide borrarla. Las demás pruebas (actual incorrecta, débil, repetida, el 403) no escriben con su id y usan cuentas de prefijo `vitest-hu03-` que se borran en `afterAll`.
 - **Sí:** las cuentas que crean las pruebas de `autenticar.test.js` y `catalogos.test.js` pasan a insertarse con `debe_cambiar_contrasena = FALSE`. Con el valor por defecto (`TRUE`) recibirían el 403 nuevo; lo que comprueba cada prueba no cambia.
+- **Sí:** `usuarios.test.js` también se ajusta: la prueba que usa el token de una cuenta creada con `POST /usuarios` le pone `debe_cambiar_contrasena = FALSE` por SQL antes de pedir `GET /roles`. El spec no la listaba. Decidido durante la implementación.
+- **Sí:** el usuario de prueba (`PRUEBA_USUARIO`) tenía `debe_cambiar_contrasena = TRUE` en Aiven; se puso en `FALSE` por SQL, con autorización, sin cambiar su contraseña. Decidido durante la implementación.
+- **Sí:** que `POST /auth/logout` y `POST /auth/contrasena` no exigen el cambio se prueba con un cuerpo inválido (400 `ENTRADA_INVALIDA` en lugar del 403), no con un 204. Un 204 dejaría filas en la bitácora con el id de la cuenta y no se podría borrar. Decidido durante la implementación.
 
 ## Riesgos
 

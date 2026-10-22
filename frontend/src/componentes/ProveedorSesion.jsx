@@ -11,6 +11,7 @@ const OPCIONES_EVENTO = { capture: true, passive: true }
 
 const AVISO_INACTIVIDAD = 'Su sesión se cerró por inactividad. Inicie sesión de nuevo.'
 const AVISO_VENCIDA = 'Su sesión venció; inicie sesión de nuevo.'
+const AVISO_CAMBIO_CONTRASENA = 'Su contraseña se cambió. Inicie sesión con la nueva.'
 
 const ContextoSesion = createContext(null)
 
@@ -38,6 +39,11 @@ export function ProveedorSesion({ children }) {
   function cerrar() {
     avisarCierre('MANUAL')
     terminar(null)
+  }
+
+  // Sin POST /auth/logout: el cambio ya quedó en la bitácora como CAMBIO_CONTRASENA.
+  function terminarTrasCambioContrasena() {
+    terminar(AVISO_CAMBIO_CONTRASENA)
   }
 
   // Solo sirve para mostrar u ocultar elementos; quien decide el acceso es el backend.
@@ -76,7 +82,7 @@ export function ProveedorSesion({ children }) {
     }
   }, [token])
 
-  return <ContextoSesion.Provider value={{ sesion, aviso, iniciar, cerrar, tienePermiso }}>{children}</ContextoSesion.Provider>
+  return <ContextoSesion.Provider value={{ sesion, aviso, iniciar, cerrar, terminarTrasCambioContrasena, tienePermiso }}>{children}</ContextoSesion.Provider>
 }
 
 export function useSesion() {

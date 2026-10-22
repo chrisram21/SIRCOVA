@@ -9,6 +9,8 @@ const cuentaDesactivada = () =>
   new ErrorApi(401, 'CUENTA_DESACTIVADA', 'Su cuenta está desactivada; contacte al administrador.');
 const sesionDesactualizada = () =>
   new ErrorApi(401, 'SESION_DESACTUALIZADA', 'Sus datos de acceso cambiaron; inicie sesión de nuevo.');
+const cambioContrasenaRequerido = () =>
+  new ErrorApi(403, 'CAMBIO_CONTRASENA_REQUERIDO', 'Debe cambiar su contraseña temporal antes de continuar.');
 
 export function verificarToken(req, res, next) {
   const coincidencia = /^Bearer\s+(\S+)$/i.exec(req.get('authorization') ?? '');
@@ -42,7 +44,8 @@ export function verificarToken(req, res, next) {
 export async function revisarCuenta(req, res, next) {
   try {
     const [filas] = await pool.query(
-      `SELECT u.activo, e.activo AS empleado_activo, r.codigo AS rol, e.establecimiento_id, e.municipio_id
+      `SELECT u.activo, e.activo AS empleado_activo, r.codigo AS rol, e.establecimiento_id, e.municipio_id,
+              u.debe_cambiar_contrasena
          FROM usuario u
          JOIN empleado e ON e.id = u.empleado_id
          JOIN rol r ON r.id = u.rol_id
@@ -61,10 +64,20 @@ export async function revisarCuenta(req, res, next) {
     ) {
       return next(sesionDesactualizada());
     }
+    req.usuario.debeCambiarContrasena = Boolean(cuenta.debe_cambiar_contrasena);
     next();
   } catch (err) {
     next(err);
   }
 }
 
-export const autenticar = [verificarToken, revisarCuenta];
+// Es un 403 y no un 401 para que el frontend no cierre la sesión; no va a la bitácora, como los 401 de arriba.
+export function exigirContrasenaCambiada(req, res, next) {
+  if (req.usuario.debeCambiarContrasena) return next(cambioContrasenaRequerido());
+  next();
+}
+
+export const autenticar = [verificarToken, revisarCuenta, exigirContrasenaCambiada];
+
+// Solo para las rutas que una cuenta con la contraseña temporal debe poder usar: cambiarla y cerrar sesión.
+export const autenticarSinExigirCambio = [verificarToken, revisarCuenta];

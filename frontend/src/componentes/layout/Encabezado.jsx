@@ -1,8 +1,9 @@
-import { LogOut } from 'lucide-react'
+import { KeyRound, LogOut } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
+import { RUTA_CAMBIO_CONTRASENA } from '@/componentes/RutaProtegida.jsx'
 
 export default function Encabezado() {
   const { sesion, cerrar } = useSesion()
@@ -23,6 +24,10 @@ export default function Encabezado() {
         </p>
         <p className="text-xs text-muted-foreground">{rolNombre ?? rol}</p>
       </div>
+      <Button variant="outline" size="sm" onClick={() => navegar(RUTA_CAMBIO_CONTRASENA)}>
+        <KeyRound />
+        Cambiar contraseña
+      </Button>
       <Button variant="outline" size="sm" onClick={cerrarSesion}>
         <LogOut />
         Cerrar sesión

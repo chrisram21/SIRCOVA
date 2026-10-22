@@ -88,6 +88,7 @@ describe('autenticar', () => {
       ddrissId: login.body.usuario.empleado.ddrissId,
       establecimientoId: login.body.usuario.empleado.establecimientoId,
       municipioId: login.body.usuario.empleado.municipioId,
+      debeCambiarContrasena: false,
     });
   });
 });
@@ -99,15 +100,15 @@ describe('autenticar revisa la cuenta en la base', () => {
   const ids = {};
   let ddrissId;
 
-  async function crearCuenta(nombre, { cuentaActiva = true, empleadoActiva = true } = {}) {
+  async function crearCuenta(nombre, { cuentaActiva = true, empleadoActiva = true, debeCambiar = false } = {}) {
     const [empleado] = await pool.query(
       `INSERT INTO empleado (nombres, apellidos, correo, ddriss_id, activo) VALUES ('Prueba', 'HU-05', ?, ?, ?)`,
       [`${PREFIJO}${nombre}@prueba.local`, ddrissId, empleadoActiva],
     );
     const [usuario] = await pool.query(
-      `INSERT INTO usuario (empleado_id, nombre_usuario, hash_contrasena, rol_id, activo)
-       SELECT ?, ?, 'sin-contrasena', id, ? FROM rol WHERE codigo = 'REVISOR'`,
-      [empleado.insertId, `${PREFIJO}${nombre}`, cuentaActiva],
+      `INSERT INTO usuario (empleado_id, nombre_usuario, hash_contrasena, rol_id, activo, debe_cambiar_contrasena)
+       SELECT ?, ?, 'sin-contrasena', id, ?, ? FROM rol WHERE codigo = 'REVISOR'`,
+      [empleado.insertId, `${PREFIJO}${nombre}`, cuentaActiva, debeCambiar],
     );
     return usuario.insertId;
   }
@@ -130,6 +131,7 @@ describe('autenticar revisa la cuenta en la base', () => {
     ids.activa = await crearCuenta('activa');
     ids.desactivada = await crearCuenta('desactivada', { cuentaActiva: false });
     ids.empleadoInactivo = await crearCuenta('empinactivo', { empleadoActiva: false });
+    ids.debeCambiar = await crearCuenta('debecambiar', { debeCambiar: true });
   });
 
   afterAll(async () => {
@@ -175,7 +177,27 @@ describe('autenticar revisa la cuenta en la base', () => {
     expect(res.body).toEqual({ error: { codigo: 'NO_AUTENTICADO', mensaje: 'Debe iniciar sesión.' } });
   });
 
-  it('ninguno de esos 401 deja filas en la bitácora', async () => {
+  it('con la contraseña temporal pendiente: responde 403 CAMBIO_CONTRASENA_REQUERIDO', async () => {
+    const res = await consultarRoles(tokenPara(ids.debeCambiar));
+
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({
+      error: { codigo: 'CAMBIO_CONTRASENA_REQUERIDO', mensaje: 'Debe cambiar su contraseña temporal antes de continuar.' },
+    });
+  });
+
+  // Un 204 dejaría filas con el id de la cuenta; un 400 de validación demuestra igual que la ruta no exige el cambio.
+  it.each([
+    ['POST /auth/logout', '/api/v1/auth/logout', { motivo: 'OTRO' }],
+    ['POST /auth/contrasena', '/api/v1/auth/contrasena', {}],
+  ])('con la contraseña temporal pendiente, %s no responde ese 403', async (_, ruta, cuerpo) => {
+    const res = await request(app).post(ruta).set('Authorization', `Bearer ${tokenPara(ids.debeCambiar)}`).send(cuerpo);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.codigo).toBe('ENTRADA_INVALIDA');
+  });
+
+  it('ninguno de esos 401 ni el 403 deja filas en la bitácora', async () => {
     const cuentas = Object.values(ids).map(String);
     const [[{ filas }]] = await pool.query(
       `SELECT COUNT(*) AS filas FROM bitacora WHERE usuario_id IN (?) OR (entidad = 'usuario' AND entidad_id IN (?))`,

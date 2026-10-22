@@ -91,6 +91,7 @@ describe('POST /api/v1/auth/login · login correcto', () => {
     expect(res.status).toBe(200);
     expect(res.body.usuario).toMatchObject({ id: usuarioId, nombreUsuario: USUARIO, rol: 'ADMINISTRADOR', rolNombre });
     expect(Array.isArray(res.body.usuario.permisos)).toBe(true);
+    expect(typeof res.body.usuario.debeCambiarContrasena).toBe('boolean');
     expect(Object.keys(res.body.usuario.empleado).sort()).toEqual(
       ['apellidos', 'ddrissId', 'establecimientoId', 'municipioId', 'nombres'],
     );
@@ -112,6 +113,7 @@ describe('POST /api/v1/auth/login · login correcto', () => {
     });
     expect(datos.exp - datos.iat).toBe(referencia.exp - referencia.iat);
     expect(datos).not.toHaveProperty('rolNombre');
+    expect(datos).not.toHaveProperty('debeCambiarContrasena');
   });
 
   it('reinicia el contador de intentos y actualiza ultimo_acceso', async () => {

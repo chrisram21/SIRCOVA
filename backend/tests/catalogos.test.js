@@ -29,8 +29,8 @@ async function crearCuentaPrueba(nombre, rol, { ddrissId, establecimientoId = nu
     [`${PREFIJO}${nombre}@prueba.local`, establecimientoId, ddrissId],
   );
   const [usuario] = await pool.query(
-    `INSERT INTO usuario (empleado_id, nombre_usuario, hash_contrasena, rol_id)
-     SELECT ?, ?, 'sin-contrasena', id FROM rol WHERE codigo = ?`,
+    `INSERT INTO usuario (empleado_id, nombre_usuario, hash_contrasena, rol_id, debe_cambiar_contrasena)
+     SELECT ?, ?, 'sin-contrasena', id, FALSE FROM rol WHERE codigo = ?`,
     [empleado.insertId, `${PREFIJO}${nombre}`, rol],
   );
   return usuario.insertId;
