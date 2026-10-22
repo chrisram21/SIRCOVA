@@ -4,6 +4,8 @@ import jwt from 'jsonwebtoken';
 import app from '../src/app.js';
 import entorno from '../src/config/entorno.js';
 import pool from '../src/config/mysql.js';
+import bcrypt from 'bcrypt';
+import { ALFABETO, LARGO } from '../src/modulos/auth/contrasenaTemporal.service.js';
 
 // Todo lo que crean estas pruebas lleva este prefijo y se borra en afterAll. Nunca se inicia sesión con las cuentas
 // creadas: la bitácora tiene llave foránea a usuario y entonces ya no se podrían borrar.
@@ -173,7 +175,6 @@ describe('POST /empleados', () => {
 });
 
 describe('POST /usuarios', () => {
-  const CONTRASENA = 'Temporal-hu04';
   let roles;
 
   const crearCuenta = (cuerpo, credencial = token) =>
@@ -184,7 +185,6 @@ describe('POST /usuarios', () => {
   const cuenta = (empleado, extra = {}) => ({
     empleadoId: empleado.id,
     nombreUsuario: nombreUnico(),
-    contrasenaTemporal: CONTRASENA,
     rolId: roles.REVISOR,
     ...extra,
   });
@@ -194,7 +194,7 @@ describe('POST /usuarios', () => {
     roles = Object.fromEntries(filas.map((r) => [r.codigo, r.id]));
   });
 
-  it('responde 201 sin contraseña ni hash, guarda bcrypt y el administrador que la creó, y registra la bitácora', async () => {
+  it('responde 201 con la contraseña generada y sin hash, guarda bcrypt y el administrador que la creó, y registra la bitácora', async () => {
     const empleado = await nuevoEmpleado();
     const cuerpo = cuenta(empleado);
 
@@ -209,14 +209,18 @@ describe('POST /usuarios', () => {
       rolNombre: expect.any(String),
       activo: true,
       debeCambiarContrasena: true,
+      contrasenaTemporal: expect.stringMatching(new RegExp(`^[${ALFABETO}]{${LARGO}}$`)),
     });
-    expect(JSON.stringify(res.body)).not.toContain(CONTRASENA);
+    const CONTRASENA = res.body.contrasenaTemporal;
+    expect(JSON.stringify(res.body)).not.toMatch(/\$2[aby]\$/);
 
     const [[fila]] = await pool.query(
       'SELECT hash_contrasena, creado_por, debe_cambiar_contrasena, rol_id FROM usuario WHERE id = ?',
       [res.body.id],
     );
     expect(fila.hash_contrasena).toMatch(/^\$2[aby]\$12\$/);
+    // Se comprueba contra el hash, sin iniciar sesión: un LOGIN_OK impediría borrar la cuenta.
+    expect(await bcrypt.compare(CONTRASENA, fila.hash_contrasena)).toBe(true);
     expect(fila.creado_por).toBe(administrador.id);
     expect(Boolean(fila.debe_cambiar_contrasena)).toBe(true);
     expect(fila.rol_id).toBe(roles.REVISOR);
@@ -288,19 +292,21 @@ describe('POST /usuarios', () => {
     expect(conEstablecimiento.body.rol).toBe('ESTABLECIMIENTO');
   });
 
-  it('un nombre de usuario con espacios o una contraseña de 7 caracteres responden 400 ENTRADA_INVALIDA', async () => {
+  it('un nombre de usuario con espacios, un rol no numérico o una contraseña enviada responden 400 ENTRADA_INVALIDA', async () => {
     const empleado = await nuevoEmpleado();
     for (const extra of [
       { nombreUsuario: `${PREFIJO}con espacio` },
       { nombreUsuario: 'ab' },
-      { contrasenaTemporal: '1234567' },
-      { contrasenaTemporal: 'x'.repeat(73) },
+      { contrasenaTemporal: 'Temporal-hu04-larga' },
+      { contrasenaTemporal: null },
       { rolId: 'REVISOR' },
     ]) {
       const res = await crearCuenta(cuenta(empleado, extra));
       expect(res.status).toBe(400);
       expect(res.body.error.codigo).toBe('ENTRADA_INVALIDA');
     }
+    const [conCuenta] = await pool.query('SELECT id FROM usuario WHERE empleado_id = ?', [empleado.id]);
+    expect(conCuenta).toHaveLength(0);
   });
 
   it('sin USUARIO_CREAR responde 403 SIN_PERMISO', async () => {
@@ -319,20 +325,21 @@ describe('HU-05: cuentas existentes', () => {
   const pedir = (metodo, ruta, credencial = token) =>
     request(app)[metodo](`/api/v1${ruta}`).set('Authorization', `Bearer ${credencial}`);
 
-  async function crearPersonal({ empleado = {}, rol = 'REVISOR' } = {}) {
+  async function crearPersonal({ empleado = {}, rol = 'REVISOR', prefijo = PREFIJO_HU05 } = {}) {
     const alta = await registrar({
       nombres: 'Prueba',
       apellidos: 'HU-05',
-      correo: `${PREFIJO_HU05}${unico()}@prueba.local`,
+      correo: `${prefijo}${unico()}@prueba.local`,
       ...empleado,
     });
     expect(alta.status).toBe(201);
     const cuenta = await request(app)
       .post('/api/v1/usuarios')
       .set('Authorization', `Bearer ${token}`)
-      .send({ empleadoId: alta.body.id, nombreUsuario: `${PREFIJO_HU05}${unico()}`, contrasenaTemporal: 'Temporal-2026', rolId: roles[rol] });
+      .send({ empleadoId: alta.body.id, nombreUsuario: `${prefijo}${unico()}`, rolId: roles[rol] });
     expect(cuenta.status).toBe(201);
-    return { empleado: alta.body, usuario: cuenta.body };
+    const { contrasenaTemporal, ...usuario } = cuenta.body;
+    return { empleado: alta.body, usuario, contrasenaTemporal };
   }
 
   const desactivarPorSql = (id) =>
@@ -381,6 +388,7 @@ describe('HU-05: cuentas existentes', () => {
       const filaActiva = res.body.find((u) => u.id === activa.usuario.id);
       expect(filaActiva).toEqual({
         ...activa.usuario,
+        bloqueada: false,
         ultimoAcceso: null,
         desactivadoEn: null,
         empleado: {
@@ -552,7 +560,7 @@ describe('HU-05: cuentas existentes', () => {
     });
 
     it('una cuenta desactivada no puede iniciar sesión y su token ya emitido recibe 401 CUENTA_DESACTIVADA', async () => {
-      const { usuario } = await crearPersonal();
+      const { usuario, contrasenaTemporal } = await crearPersonal();
       // POST /usuarios la deja con la contraseña temporal pendiente; sin esto, GET /roles respondería 403.
       await pool.query('UPDATE usuario SET debe_cambiar_contrasena = FALSE WHERE id = ?', [usuario.id]);
       // Token con los mismos datos que daría el login de esa cuenta; nunca se inicia sesión con ella mientras está activa.
@@ -572,7 +580,7 @@ describe('HU-05: cuentas existentes', () => {
       // El LOGIN_FALLIDO guarda el id solo en entidad_id, sin llave foránea, así que la cuenta se puede borrar después.
       const login = await request(app)
         .post('/api/v1/auth/login')
-        .send({ nombreUsuario: usuario.nombreUsuario, contrasena: 'Temporal-2026' });
+        .send({ nombreUsuario: usuario.nombreUsuario, contrasena: contrasenaTemporal });
       expect(login.status).toBe(403);
       expect(login.body.error.codigo).toBe('CUENTA_DESACTIVADA');
     });
@@ -644,6 +652,202 @@ describe('HU-05: cuentas existentes', () => {
         expect(prohibida.status).toBe(403);
         expect(prohibida.body.error.codigo).toBe('SIN_PERMISO');
       }
+    });
+  });
+
+  describe('HU-62: POST /usuarios/{id}/desbloquear', () => {
+    const PREFIJO_HU62 = 'vitest-hu62-';
+    const desbloquear = (id, credencial) => pedir('post', `/usuarios/${id}/desbloquear`, credencial);
+    const crearCuenta = () => crearPersonal({ prefijo: PREFIJO_HU62 });
+    const bloquearPorSql = (id, intervalo = '+ INTERVAL 15 MINUTE') =>
+      pool.query(`UPDATE usuario SET intentos_fallidos = 5, bloqueado_hasta = NOW() ${intervalo} WHERE id = ?`, [id]);
+
+    afterAll(async () => {
+      await pool.query('DELETE FROM usuario WHERE nombre_usuario LIKE ?', [`${PREFIJO_HU62}%`]);
+      await pool.query('DELETE FROM empleado WHERE correo LIKE ?', [`${PREFIJO_HU62}%`]);
+    });
+
+    it('GET /usuarios trae bloqueada, sin la fecha del bloqueo ni los intentos', async () => {
+      const bloqueada = await crearCuenta();
+      const libre = await crearCuenta();
+      await bloquearPorSql(bloqueada.usuario.id);
+
+      const res = await pedir('get', '/usuarios');
+
+      expect(res.status).toBe(200);
+      expect(res.body.find((u) => u.id === bloqueada.usuario.id).bloqueada).toBe(true);
+      expect(res.body.find((u) => u.id === libre.usuario.id).bloqueada).toBe(false);
+      for (const cuenta of res.body) {
+        expect(cuenta).not.toHaveProperty('bloqueadoHasta');
+        expect(cuenta).not.toHaveProperty('intentosFallidos');
+      }
+      expect((await pedir('get', `/usuarios/${bloqueada.usuario.id}`)).body.bloqueada).toBe(true);
+    });
+
+    it('desbloquea, limpia los intentos y registra DESBLOQUEAR; después la contraseña incorrecta da 401 y no 423', async () => {
+      const { usuario } = await crearCuenta();
+      await bloquearPorSql(usuario.id);
+
+      const res = await desbloquear(usuario.id);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ id: usuario.id, bloqueada: false, activo: true });
+      const [[enBase]] = await pool.query('SELECT intentos_fallidos, bloqueado_hasta FROM usuario WHERE id = ?', [usuario.id]);
+      expect(enBase).toEqual({ intentos_fallidos: 0, bloqueado_hasta: null });
+      expect(await bitacoraDe('usuario', usuario.id, 'DESBLOQUEAR')).toEqual([
+        { usuario_id: administrador.id, valores_anteriores: { bloqueada: true }, valores_nuevos: { bloqueada: false } },
+      ]);
+
+      // Con contraseña incorrecta no se crea un LOGIN_OK, así que la cuenta se puede borrar después.
+      const login = await request(app)
+        .post('/api/v1/auth/login')
+        .send({ nombreUsuario: usuario.nombreUsuario, contrasena: 'no-es-la-contrasena' });
+      expect(login.status).toBe(401);
+      expect(login.body.error.codigo).toBe('CREDENCIALES_INVALIDAS');
+    });
+
+    it('una cuenta no bloqueada o con el bloqueo vencido responde 409 CUENTA_NO_BLOQUEADA, sin fila nueva', async () => {
+      const libre = await crearCuenta();
+      const vencida = await crearCuenta();
+      await bloquearPorSql(vencida.usuario.id, '- INTERVAL 1 MINUTE');
+
+      for (const { usuario } of [libre, vencida]) {
+        const res = await desbloquear(usuario.id);
+        expect(res.status).toBe(409);
+        expect(res.body.error.codigo).toBe('CUENTA_NO_BLOQUEADA');
+        expect(await bitacoraDe('usuario', usuario.id, 'DESBLOQUEAR')).toHaveLength(0);
+      }
+    });
+
+    it('una cuenta desactivada responde 409 CUENTA_DESACTIVADA aunque esté bloqueada', async () => {
+      const { usuario } = await crearCuenta();
+      await bloquearPorSql(usuario.id);
+      await desactivarPorSql(usuario.id);
+
+      const res = await desbloquear(usuario.id);
+
+      expect(res.status).toBe(409);
+      expect(res.body.error.codigo).toBe('CUENTA_DESACTIVADA');
+    });
+
+    it('otra DDRISS o un id inexistente responden 404 y sin USUARIO_DESBLOQUEAR 403', async () => {
+      const { usuario } = await crearCuenta();
+      await bloquearPorSql(usuario.id);
+      const otraDdriss = firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['USUARIO_DESBLOQUEAR'] });
+
+      for (const [id, credencial] of [[usuario.id, otraDdriss], [999999999, token], ['abc', token]]) {
+        const res = await desbloquear(id, credencial);
+        expect(res.status).toBe(404);
+        expect(res.body.error.codigo).toBe('NO_ENCONTRADO');
+      }
+
+      const prohibida = await desbloquear(usuario.id, firmar({ permisos: ['USUARIO_DESACTIVAR'] }));
+      expect(prohibida.status).toBe(403);
+      expect(prohibida.body.error.codigo).toBe('SIN_PERMISO');
+      expect((await pedir('get', `/usuarios/${usuario.id}`)).body.bloqueada).toBe(true);
+    });
+  });
+
+  describe('HU-63: POST /usuarios/{id}/restablecer-contrasena', () => {
+    const PREFIJO_HU63 = 'vitest-hu63-';
+    const restablecer = (id, credencial) => pedir('post', `/usuarios/${id}/restablecer-contrasena`, credencial);
+    const crearCuenta = () => crearPersonal({ prefijo: PREFIJO_HU63 });
+    const enBase = async (id) => {
+      const [[fila]] = await pool.query(
+        'SELECT hash_contrasena, debe_cambiar_contrasena, intentos_fallidos, bloqueado_hasta FROM usuario WHERE id = ?',
+        [id],
+      );
+      return fila;
+    };
+
+    afterAll(async () => {
+      await pool.query('DELETE FROM usuario WHERE nombre_usuario LIKE ?', [`${PREFIJO_HU63}%`]);
+      await pool.query('DELETE FROM empleado WHERE correo LIKE ?', [`${PREFIJO_HU63}%`]);
+    });
+
+    it('genera una temporal nueva, la anterior deja de servir, quita el bloqueo y registra RESTABLECER_CONTRASENA', async () => {
+      const { usuario, contrasenaTemporal: anterior } = await crearCuenta();
+      await pool.query(
+        `UPDATE usuario SET debe_cambiar_contrasena = FALSE, intentos_fallidos = 5,
+                bloqueado_hasta = NOW() + INTERVAL 15 MINUTE WHERE id = ?`,
+        [usuario.id],
+      );
+      const hashAnterior = (await enBase(usuario.id)).hash_contrasena;
+
+      const res = await restablecer(usuario.id);
+
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body).sort()).toEqual(['contrasenaTemporal', 'usuario']);
+      expect(res.body.contrasenaTemporal).toMatch(new RegExp(`^[${ALFABETO}]{${LARGO}}$`));
+      expect(res.body.usuario).toMatchObject({ id: usuario.id, debeCambiarContrasena: true, bloqueada: false, activo: true });
+
+      const despues = await enBase(usuario.id);
+      expect(despues.hash_contrasena).not.toBe(hashAnterior);
+      expect(await bcrypt.compare(res.body.contrasenaTemporal, despues.hash_contrasena)).toBe(true);
+      expect(await bcrypt.compare(anterior, despues.hash_contrasena)).toBe(false);
+      expect(despues).toMatchObject({ debe_cambiar_contrasena: 1, intentos_fallidos: 0, bloqueado_hasta: null });
+
+      const filas = await bitacoraDe('usuario', usuario.id, 'RESTABLECER_CONTRASENA');
+      expect(filas).toEqual([
+        {
+          usuario_id: administrador.id,
+          valores_anteriores: { debeCambiarContrasena: false, bloqueada: true },
+          valores_nuevos: { debeCambiarContrasena: true, bloqueada: false },
+        },
+      ]);
+      const texto = JSON.stringify(filas);
+      expect(texto).not.toContain(res.body.contrasenaTemporal);
+      expect(texto).not.toMatch(/\$2[aby]\$/);
+    });
+
+    it('se registra aunque la cuenta ya debiera cambiar la contraseña y no estuviera bloqueada', async () => {
+      // POST /usuarios la deja con debe_cambiar_contrasena = TRUE y sin bloqueo: ningún otro dato cambia.
+      const { usuario } = await crearCuenta();
+
+      const res = await restablecer(usuario.id);
+
+      expect(res.status).toBe(200);
+      expect(await bitacoraDe('usuario', usuario.id, 'RESTABLECER_CONTRASENA')).toEqual([
+        {
+          usuario_id: administrador.id,
+          valores_anteriores: { debeCambiarContrasena: true, bloqueada: false },
+          valores_nuevos: { debeCambiarContrasena: true, bloqueada: false },
+        },
+      ]);
+    });
+
+    it('la cuenta propia responde 422 CUENTA_PROPIA y una desactivada 409 CUENTA_DESACTIVADA, sin cambiar la contraseña', async () => {
+      const hashPropio = (await enBase(administrador.id)).hash_contrasena;
+      const propia = await restablecer(administrador.id);
+      expect(propia.status).toBe(422);
+      expect(propia.body.error.codigo).toBe('CUENTA_PROPIA');
+      expect((await enBase(administrador.id)).hash_contrasena).toBe(hashPropio);
+
+      const { usuario } = await crearCuenta();
+      await desactivarPorSql(usuario.id);
+      const hashDesactivada = (await enBase(usuario.id)).hash_contrasena;
+      const desactivada = await restablecer(usuario.id);
+      expect(desactivada.status).toBe(409);
+      expect(desactivada.body.error.codigo).toBe('CUENTA_DESACTIVADA');
+      expect((await enBase(usuario.id)).hash_contrasena).toBe(hashDesactivada);
+      expect(await bitacoraDe('usuario', usuario.id, 'RESTABLECER_CONTRASENA')).toHaveLength(0);
+    });
+
+    it('otra DDRISS o un id inexistente responden 404 y sin USUARIO_RESTABLECER_CONTRASENA 403', async () => {
+      const { usuario } = await crearCuenta();
+      const hash = (await enBase(usuario.id)).hash_contrasena;
+      const otraDdriss = firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['USUARIO_RESTABLECER_CONTRASENA'] });
+
+      for (const [id, credencial] of [[usuario.id, otraDdriss], [999999999, token], ['abc', token]]) {
+        const res = await restablecer(id, credencial);
+        expect(res.status).toBe(404);
+        expect(res.body.error.codigo).toBe('NO_ENCONTRADO');
+      }
+
+      const prohibida = await restablecer(usuario.id, firmar({ permisos: ['USUARIO_DESBLOQUEAR'] }));
+      expect(prohibida.status).toBe(403);
+      expect(prohibida.body.error.codigo).toBe('SIN_PERMISO');
+      expect((await enBase(usuario.id)).hash_contrasena).toBe(hash);
     });
   });
 

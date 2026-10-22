@@ -10,7 +10,7 @@ import { evaluarContrasena } from './politicaContrasena.service.js';
 const HASH_FICTICIO = '$2b$12$YoGDls95Ec5nVQ1mAJIxA.RNOKGr3YCDvCzFdvzP18Zj2yYCV4g86';
 
 const MAXIMO_INTENTOS = 5;
-const MINUTOS_BLOQUEO = 15;
+export const MINUTOS_BLOQUEO = 15;
 const MOTIVOS_CIERRE = ['MANUAL', 'INACTIVIDAD'];
 const COSTO_BCRYPT = 12;
 const CAMPOS_CAMBIO_CONTRASENA = ['contrasenaActual', 'contrasenaNueva'];
@@ -22,7 +22,11 @@ const errores = {
   sinAlcance: () =>
     new ErrorApi(403, 'CUENTA_SIN_ALCANCE', 'Su cuenta no tiene una DDRISS o un establecimiento asignado; contacte al administrador.'),
   bloqueada: () =>
-    new ErrorApi(423, 'CUENTA_BLOQUEADA', `Su cuenta está bloqueada por ${MINUTOS_BLOQUEO} minutos por intentos fallidos.`),
+    new ErrorApi(
+      423,
+      'CUENTA_BLOQUEADA',
+      `Su usuario ha sido bloqueado. Contáctese con su administrador de DDRISS o intente de nuevo en ${MINUTOS_BLOQUEO} minutos.`,
+    ),
   motivoInvalido: () => new ErrorApi(400, 'ENTRADA_INVALIDA', 'El motivo del cierre de sesión no es válido.'),
   cambioInvalido: () => new ErrorApi(400, 'ENTRADA_INVALIDA', 'Debe indicar la contraseña actual y la nueva.'),
   actualIncorrecta: () => new ErrorApi(422, 'CONTRASENA_ACTUAL_INCORRECTA', 'La contraseña actual no es correcta.'),

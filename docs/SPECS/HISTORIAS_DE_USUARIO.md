@@ -85,6 +85,8 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 
 **Avance:** criterios cumplidos; queda terminada al integrar el spec 02 a `main`. La parte backend está en `specs/01-hu-01-login.md` (`POST /auth/login`, bloqueo por intentos, bitácora y middleware `autenticar`) y la parte frontend en `specs/02-hu-01-login-frontend.md` (proyecto de React, pantalla de inicio de sesión, sesión en `sessionStorage` y página `/inicio` provisional), verificada contra la API real el 2026-10-19. La "pantalla inicial de mi rol" es por ahora la página `/inicio` provisional; la pantalla propia de cada rol llega con HU-11.
 
+**Nota (2026-10-22, spec 10):** el aviso de cuenta bloqueada pasó del Alert rojo a un modal "Usuario bloqueado" con el mensaje "Su usuario ha sido bloqueado. Contáctese con su administrador de DDRISS o intente de nuevo en 15 minutos.", que arma el backend con `MINUTOS_BLOQUEO`. El campo de contraseña del login usa `CampoContrasena` (HU-03). Si el administrador restablece la contraseña de una sesión abierta (HU-63), esa sesión vuelve al login con un aviso. Detalle en `specs/10-hu-62-63-seguridad-de-cuentas.md`.
+
 #### HU-02. Cerrar sesión y expiración de la sesión
 
 > **Como** usuario del sistema, **quiero** cerrar mi sesión y que el sistema la cierre solo tras un tiempo de inactividad, **para** evitar que otra persona use mi cuenta en un equipo compartido.
@@ -122,7 +124,7 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [x] Si mi cuenta debe cambiar la contraseña, al iniciar sesión el sistema me lleva a la pantalla de cambio y no puedo abrir otras pantallas. El backend responde 403 `CAMBIO_CONTRASENA_REQUERIDO` a cualquier endpoint protegido, salvo el cambio de contraseña, `POST /auth/logout` y `GET /auth/yo`.
 - [x] El cambio queda en la bitácora sin la contraseña actual ni la nueva.
 
-**Ajustes de la asesoría (2026-10-21):** la historia pasó de "cambiar mi contraseña" a incluir también el cambio obligatorio de la contraseña temporal (controlado en el backend), la política de fortaleza con zxcvbn (antes eran 8 caracteres) y el campo para ver la contraseña. Se trabaja antes que los specs A y B de `docs/SPECS/PROPUESTA_SPEC_A_SEGURIDAD_DE_CUENTAS.md` y `docs/SPECS/PROPUESTA_SPEC_B_DATOS_DEL_EMPLEADO.md`, que dependen de ella. Los story points se pueden reestimar al escribir su spec.
+**Ajustes de la asesoría (2026-10-21):** la historia pasó de "cambiar mi contraseña" a incluir también el cambio obligatorio de la contraseña temporal (controlado en el backend), la política de fortaleza con zxcvbn (antes eran 8 caracteres) y el campo para ver la contraseña. Se trabaja antes que el spec A (seguridad de cuentas, hoy `specs/10-hu-62-63-seguridad-de-cuentas.md`; su origen está resumido en HU-62) y el spec B de `docs/SPECS/PROPUESTA_SPEC_B_DATOS_DEL_EMPLEADO.md`, que dependen de ella. Los story points se pueden reestimar al escribir su spec.
 
 **Avance:** criterios cumplidos; queda terminada al integrar el spec 09 a `main`. Backend y frontend en `specs/09-hu-03-cambiar-contrasena.md`. El endpoint es `POST /auth/contrasena`, sin permiso (como el logout): una contraseña actual incorrecta responde 422 y no cuenta para el bloqueo; el cambio queda en la bitácora con la acción nueva `CAMBIO_CONTRASENA`. El login devuelve `debeCambiarContrasena` (no va en el JWT) y `autenticar` lo lee de la base en cada petición; `GET /auth/yo` sigue sin programar, así que hoy solo el cambio y el logout quedan exentos del 403. Tras el cambio, la sesión se cierra y el login pide entrar con la nueva. Pantalla `/cuenta/contrasena`: sola y sin menú si el cambio es obligatorio, o dentro del Layout desde el botón "Cambiar contraseña" del encabezado. `CampoContrasena` solo se usa en esa pantalla; el login y el registro lo adoptan en el spec A. Se agregaron `@zxcvbn-ts/core`, `@zxcvbn-ts/language-common` y `@zxcvbn-ts/language-es-es` al backend y al frontend. Verificado contra la API real el 2026-10-21 con la cuenta "Prueba HU-03" (`prueba.hu03`, rol Revisor), que queda activa en la base de prueba.
 
@@ -143,6 +145,8 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [x] Solo el rol AUTORIDAD puede quedar sin DDRISS asignada.
 
 **Avance:** criterios cumplidos; queda terminada al integrar el spec 07 a `main`. Backend y frontend en `specs/07-hu-04-registrar-personal.md`: `POST /empleados` y `POST /usuarios` (con bitácora, sin devolver ni registrar la contraseña), solo para el Administrador (permisos `EMPLEADO_CREAR` y `USUARIO_CREAR` en `05_permisos_mysql.sql`); el empleado queda siempre en la DDRISS del administrador, con establecimiento el municipio se toma de él, y una cuenta `ESTABLECIMIENTO` exige establecimiento. Pantalla `/usuarios/nuevo` (botón "Registrar personal" en `/usuarios`), que crea al empleado y, si se pide, su cuenta; si falla solo la cuenta, se reintenta sin volver a crear al empleado. Para el formulario se agregaron las lecturas mínimas de `GET /roles`, `/ddriss`, `/municipios` y `/establecimientos` (ver HU-08 y HU-09). Verificado contra la API real el 2026-10-21. La autoridad nacional (sin DDRISS) se sigue creando con `npm run crear-usuario`, y obligar a cambiar la contraseña temporal es HU-03.
+
+**Nota (2026-10-22, spec 10):** la contraseña temporal ya no la escribe el administrador. `POST /usuarios` la genera (12 caracteres de un alfabeto sin caracteres que se confunden, que cumplen la política de HU-03), la devuelve una sola vez en `contrasenaTemporal` y responde 400 si el cuerpo la trae. "Registrar personal" ya no tiene campos de contraseña: al crear la cuenta muestra un diálogo con la contraseña y un botón para copiarla. La bitácora `CREAR` no la guarda. Detalle en `specs/10-hu-62-63-seguridad-de-cuentas.md`.
 
 #### HU-05. Editar, desactivar y restaurar usuarios
 
@@ -1056,15 +1060,19 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 |---|---|---|---|
 | Administrador | Por estimar | Sin asignar | Sin asignar |
 
-**Cómo se hará:** Acción "Desbloquear" en la tabla de `/usuarios` (la pantalla de HU-05); endpoint `POST /usuarios/{id}/desbloquear` con su propio permiso, que pone `intentos_fallidos = 0` y `bloqueado_hasta = NULL` en `usuario`. El listado de cuentas indica si cada una está bloqueada, sin devolver la fecha del bloqueo. El bloqueo de 15 minutos por intentos fallidos (HU-01) se mantiene; esta acción solo evita esperar. Cuando la cuenta se bloquea, el login muestra un aviso en un modal que indica que debe contactar al administrador de su DDRISS o esperar los minutos del bloqueo, sin mostrar datos del administrador. Detalle en `docs/SPECS/PROPUESTA_SPEC_A_SEGURIDAD_DE_CUENTAS.md`.
+**Cómo se hará:** Acción "Desbloquear" en la tabla de `/usuarios` (la pantalla de HU-05); endpoint `POST /usuarios/{id}/desbloquear` con su propio permiso, que pone `intentos_fallidos = 0` y `bloqueado_hasta = NULL` en `usuario`. El listado de cuentas indica si cada una está bloqueada, sin devolver la fecha del bloqueo. El bloqueo de 15 minutos por intentos fallidos (HU-01) se mantiene; esta acción solo evita esperar. Cuando la cuenta se bloquea, el login muestra un aviso en un modal que indica que debe contactar al administrador de su DDRISS o esperar los minutos del bloqueo, sin mostrar datos del administrador. Detalle en `specs/10-hu-62-63-seguridad-de-cuentas.md`.
+
+**Origen (propuesta A, asesoría del 2026-10-21):** HU-62 y HU-63 salieron de la "Propuesta para el spec A · Seguridad de cuentas", un documento de trabajo que el equipo escribió después de la asesoría y que ya no se conserva; lo vigente es el SPEC 10. La asesoría pidió tres cosas: que el usuario bloqueado sepa qué hacer, que el administrador resuelva una cuenta bloqueada o una contraseña olvidada sin esperar, y que la contraseña temporal no la invente el administrador. El equipo acordó mantener el bloqueo de 15 minutos con un modal en el login, separar "Desbloquear" y "Restablecer contraseña" en dos acciones con su propio permiso (solo Administrador), y que el sistema genere toda contraseña temporal, también al crear una cuenta (HU-04), y la muestre una sola vez. No cambia la estructura de la base: solo agrega dos permisos en el 05, dos acciones a la bitácora y `contrasenaTemporal` a los campos que la bitácora nunca guarda. La propuesta pedía 16 caracteres; al implementar se bajó a 12, el mínimo de la política de HU-03, para que sea fácil de dictar.
 
 **Criterios de aceptación:**
-- [ ] Al quedar bloqueada mi cuenta, el login muestra un modal informativo: "Su usuario ha sido bloqueado. Contáctese con su administrador de DDRISS o intente de nuevo en N minutos", donde N sale de la misma constante del backend que define la duración del bloqueo, no de un texto fijo en el frontend. El modal no muestra datos del administrador.
-- [ ] En la tabla de usuarios veo cuáles cuentas están bloqueadas.
-- [ ] Puedo desbloquear una cuenta bloqueada de mi DDRISS; después, la persona puede iniciar sesión de inmediato con su contraseña.
-- [ ] Desbloquear una cuenta que no está bloqueada se rechaza (409).
-- [ ] Solo el Administrador puede desbloquear, con un permiso propio; una cuenta de otra DDRISS responde 404.
-- [ ] Cada desbloqueo queda en la bitácora con el usuario que lo hizo.
+- [x] Al quedar bloqueada mi cuenta, el login muestra un modal informativo: "Su usuario ha sido bloqueado. Contáctese con su administrador de DDRISS o intente de nuevo en N minutos", donde N sale de la misma constante del backend que define la duración del bloqueo, no de un texto fijo en el frontend. El modal no muestra datos del administrador.
+- [x] En la tabla de usuarios veo cuáles cuentas están bloqueadas.
+- [x] Puedo desbloquear una cuenta bloqueada de mi DDRISS; después, la persona puede iniciar sesión de inmediato con su contraseña.
+- [x] Desbloquear una cuenta que no está bloqueada se rechaza (409).
+- [x] Solo el Administrador puede desbloquear, con un permiso propio; una cuenta de otra DDRISS responde 404.
+- [x] Cada desbloqueo queda en la bitácora con el usuario que lo hizo.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 10 a `main`. Backend y frontend en `specs/10-hu-62-63-seguridad-de-cuentas.md`, junto con HU-63. `POST /usuarios/{id}/desbloquear` con el permiso `USUARIO_DESBLOQUEAR` (solo Administrador, en `05_permisos_mysql.sql`) y la acción de bitácora `DESBLOQUEAR`. Se permite desbloquear la cuenta propia; una desactivada responde 409 `CUENTA_DESACTIVADA`, porque "Restaurar" ya quita el bloqueo. El listado devuelve `bloqueada` (sin la fecha ni los intentos). En `/usuarios`, Badge "Bloqueada" y la opción "Desbloquear" en el menú "Más acciones" (un `DropdownMenu` de shadcn que ahora también tiene Desactivar y Restaurar; "Editar" sigue a la vista), solo en cuentas activas bloqueadas. El modal del login se describe en la nota de HU-01. Verificado contra la API real el 2026-10-22 con la cuenta "Prueba HU-62 Seguridad" (`prueba-hu62`, rol Revisor), que queda activa en la base de prueba.
 
 #### HU-63. Restablecer la contraseña de una cuenta
 
@@ -1074,16 +1082,18 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 |---|---|---|---|
 | Administrador | Por estimar | Sin asignar | Sin asignar |
 
-**Cómo se hará:** Acción "Restablecer contraseña" en la tabla de `/usuarios` (la pantalla de HU-05), separada de "Desbloquear"; endpoint `POST /usuarios/{id}/restablecer-contrasena` con su propio permiso. El backend genera una contraseña temporal aleatoria (con `crypto` de Node), guarda su hash con `debe_cambiar_contrasena = TRUE`, quita el bloqueo si lo hay y devuelve la contraseña una sola vez para que el administrador se la entregue a la persona. El cambio obligatorio al entrar lo resuelve HU-03. En el mismo trabajo, `POST /usuarios` (HU-04) deja de recibir la contraseña temporal escrita por el administrador y usa el mismo generador. Detalle en `docs/SPECS/PROPUESTA_SPEC_A_SEGURIDAD_DE_CUENTAS.md`.
+**Cómo se hará:** Acción "Restablecer contraseña" en la tabla de `/usuarios` (la pantalla de HU-05), separada de "Desbloquear"; endpoint `POST /usuarios/{id}/restablecer-contrasena` con su propio permiso. El backend genera una contraseña temporal aleatoria (con `crypto` de Node), guarda su hash con `debe_cambiar_contrasena = TRUE`, quita el bloqueo si lo hay y devuelve la contraseña una sola vez para que el administrador se la entregue a la persona. El cambio obligatorio al entrar lo resuelve HU-03. En el mismo trabajo, `POST /usuarios` (HU-04) deja de recibir la contraseña temporal escrita por el administrador y usa el mismo generador. Detalle en `specs/10-hu-62-63-seguridad-de-cuentas.md`; el origen está resumido en HU-62.
 
 **Criterios de aceptación:**
-- [ ] Puedo restablecer la contraseña de una cuenta activa de mi DDRISS; el sistema genera una contraseña temporal que cumple la política de fortaleza de HU-03 y me la muestra una sola vez, con un botón para copiarla.
-- [ ] La contraseña anterior deja de servir, y al entrar con la temporal el sistema obliga a cambiarla (HU-03).
-- [ ] Si la cuenta estaba bloqueada, también queda desbloqueada.
-- [ ] No puedo restablecer mi propia contraseña desde aquí (uso HU-03), ni la de una cuenta desactivada.
-- [ ] Solo el Administrador puede restablecer, con un permiso propio; una cuenta de otra DDRISS responde 404.
-- [ ] La contraseña temporal nunca se guarda en claro ni queda en la bitácora; el restablecimiento sí queda registrado con el usuario que lo hizo.
-- [ ] Al crear una cuenta (HU-04), la contraseña temporal también la genera el sistema y se muestra una sola vez.
+- [x] Puedo restablecer la contraseña de una cuenta activa de mi DDRISS; el sistema genera una contraseña temporal que cumple la política de fortaleza de HU-03 y me la muestra una sola vez, con un botón para copiarla.
+- [x] La contraseña anterior deja de servir, y al entrar con la temporal el sistema obliga a cambiarla (HU-03).
+- [x] Si la cuenta estaba bloqueada, también queda desbloqueada.
+- [x] No puedo restablecer mi propia contraseña desde aquí (uso HU-03), ni la de una cuenta desactivada.
+- [x] Solo el Administrador puede restablecer, con un permiso propio; una cuenta de otra DDRISS responde 404.
+- [x] La contraseña temporal nunca se guarda en claro ni queda en la bitácora; el restablecimiento sí queda registrado con el usuario que lo hizo.
+- [x] Al crear una cuenta (HU-04), la contraseña temporal también la genera el sistema y se muestra una sola vez.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 10 a `main`. Backend y frontend en `specs/10-hu-62-63-seguridad-de-cuentas.md`, junto con HU-62. `POST /usuarios/{id}/restablecer-contrasena` con el permiso `USUARIO_RESTABLECER_CONTRASENA` (solo Administrador) responde `{ usuario, contrasenaTemporal }`. La contraseña la genera `generarContrasenaTemporal` (`backend/src/modulos/auth/contrasenaTemporal.service.js`): 12 caracteres con `crypto.randomInt`, de un alfabeto sin `0 O o 1 l I`, revisados con la política de HU-03; el largo es la constante `LARGO`. El mismo generador lo usa `POST /usuarios` (nota en HU-04). La acción de bitácora `RESTABLECER_CONTRASENA` se registra siempre, aunque ningún otro dato cambie, y `contrasenaTemporal` está en `CLAVES_SENSIBLES`. La sesión abierta de la cuenta recibe 403 `CAMBIO_CONTRASENA_REQUERIDO` y el frontend la lleva al login con el aviso "Su contraseña fue restablecida…". En `/usuarios`, opción "Restablecer contraseña" en el menú "Más acciones", con confirmación, y el diálogo `DialogoContrasenaTemporal` con el botón "Copiar". Verificado contra la API real el 2026-10-22 con la cuenta `prueba-hu62`.
 
 ## 6. Notas y pendientes
 

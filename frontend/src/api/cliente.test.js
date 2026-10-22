@@ -103,6 +103,47 @@ test.each([
   expect(manejador).not.toHaveBeenCalled()
 })
 
+describe('403 CAMBIO_CONTRASENA_REQUERIDO (contraseña restablecida por el administrador)', () => {
+  const ERROR_CAMBIO = {
+    error: { codigo: 'CAMBIO_CONTRASENA_REQUERIDO', mensaje: 'Debe cambiar su contraseña temporal antes de continuar.' },
+  }
+
+  test('con sesión guardada llama al manejador con el ErrorApi y lo lanza', async () => {
+    guardarSesion(crearSesion())
+    const manejador = vi.fn()
+    quitarManejador = alPerderSesion(manejador)
+    fetch.mockResolvedValue(respuestaJson(403, ERROR_CAMBIO))
+
+    const error = await solicitar('/usuarios').catch((e) => e)
+
+    expect(error).toMatchObject({ status: 403, codigo: 'CAMBIO_CONTRASENA_REQUERIDO' })
+    expect(manejador).toHaveBeenCalledTimes(1)
+    expect(manejador).toHaveBeenCalledWith(error)
+  })
+
+  test('sin sesión guardada no llama al manejador', async () => {
+    const manejador = vi.fn()
+    quitarManejador = alPerderSesion(manejador)
+    fetch.mockResolvedValue(respuestaJson(403, ERROR_CAMBIO))
+
+    await expect(solicitar('/usuarios')).rejects.toMatchObject({ status: 403 })
+    expect(manejador).not.toHaveBeenCalled()
+  })
+
+  test('cuando el token guardado ya no es el que se envió no llama al manejador', async () => {
+    guardarSesion(crearSesion('7'))
+    const manejador = vi.fn()
+    quitarManejador = alPerderSesion(manejador)
+    fetch.mockImplementation(async () => {
+      guardarSesion(crearSesion('8'))
+      return respuestaJson(403, ERROR_CAMBIO)
+    })
+
+    await expect(solicitar('/usuarios')).rejects.toBeInstanceOf(ErrorApi)
+    expect(manejador).not.toHaveBeenCalled()
+  })
+})
+
 test('la función que devuelve alPerderSesion quita el registro', async () => {
   guardarSesion(crearSesion())
   const manejador = vi.fn()

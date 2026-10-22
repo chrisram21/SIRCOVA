@@ -12,6 +12,8 @@ const OPCIONES_EVENTO = { capture: true, passive: true }
 const AVISO_INACTIVIDAD = 'Su sesión se cerró por inactividad. Inicie sesión de nuevo.'
 const AVISO_VENCIDA = 'Su sesión venció; inicie sesión de nuevo.'
 const AVISO_CAMBIO_CONTRASENA = 'Su contraseña se cambió. Inicie sesión con la nueva.'
+const AVISO_CONTRASENA_RESTABLECIDA =
+  'Su contraseña fue restablecida. Inicie sesión con la contraseña temporal que le dé su administrador.'
 
 const ContextoSesion = createContext(null)
 
@@ -51,7 +53,14 @@ export function ProveedorSesion({ children }) {
     return sesion?.usuario?.permisos?.includes(codigo) ?? false
   }
 
-  useEffect(() => alPerderSesion((error) => terminar(error.mensaje)), [])
+  // Sin POST /auth/logout, como en cualquier sesión perdida.
+  useEffect(
+    () =>
+      alPerderSesion((error) =>
+        terminar(error.codigo === 'CAMBIO_CONTRASENA_REQUERIDO' ? AVISO_CONTRASENA_RESTABLECIDA : error.mensaje),
+      ),
+    [],
+  )
 
   const token = sesion?.token
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import App from '@/App.jsx'
 import { iniciarSesion } from '@/api/auth.js'
@@ -98,16 +98,56 @@ test('con un 401 se muestra su mensaje y se puede volver a enviar', async () => 
   expect(iniciarSesion).toHaveBeenCalledTimes(2)
 })
 
-test.each([
-  [423, 'CUENTA_BLOQUEADA', 'Su cuenta está bloqueada por 15 minutos por intentos fallidos.'],
-  [403, 'CUENTA_DESACTIVADA', 'Su cuenta está desactivada; contacte al administrador.'],
-])('con un %i se muestra su mensaje', async (status, codigo, mensaje) => {
-  iniciarSesion.mockRejectedValueOnce(new ErrorApi(status, codigo, mensaje))
+test('con un 403 se muestra su mensaje', async () => {
+  const mensaje = 'Su cuenta está desactivada; contacte al administrador.'
+  iniciarSesion.mockRejectedValueOnce(new ErrorApi(403, 'CUENTA_DESACTIVADA', mensaje))
   abrirLogin()
 
   llenarYEnviar()
 
   expect((await screen.findByRole('alert')).textContent).toContain(mensaje)
+})
+
+describe('cuenta bloqueada', () => {
+  const MENSAJE_BLOQUEO =
+    'Su usuario ha sido bloqueado. Contáctese con su administrador de DDRISS o intente de nuevo en 15 minutos.'
+
+  test('un 423 abre el diálogo con el mensaje del backend y no muestra la alerta de error', async () => {
+    iniciarSesion.mockRejectedValueOnce(new ErrorApi(423, 'CUENTA_BLOQUEADA', MENSAJE_BLOQUEO))
+    abrirLogin()
+
+    llenarYEnviar()
+
+    const dialogo = await screen.findByRole('alertdialog')
+    expect(within(dialogo).getByText('Usuario bloqueado')).toBeTruthy()
+    expect(dialogo.textContent).toContain(MENSAJE_BLOQUEO)
+    expect(within(dialogo).getAllByRole('button')).toHaveLength(1)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  test('"Entendido" cierra el diálogo y deja el usuario con la contraseña vacía', async () => {
+    iniciarSesion.mockRejectedValueOnce(new ErrorApi(423, 'CUENTA_BLOQUEADA', MENSAJE_BLOQUEO))
+    abrirLogin()
+
+    llenarYEnviar('jperez', 'secreta123')
+    fireEvent.click(await screen.findByRole('button', { name: 'Entendido' }))
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(campoUsuario().value).toBe('jperez')
+    expect(campoContrasena().value).toBe('')
+  })
+})
+
+test('el campo de contraseña tiene el botón para ver lo escrito', () => {
+  abrirLogin()
+  const boton = screen.getByRole('button', { name: 'Mantener presionado para ver la contraseña' })
+
+  fireEvent.change(campoContrasena(), { target: { value: 'secreta123' } })
+  expect(campoContrasena().getAttribute('type')).toBe('password')
+  fireEvent.pointerDown(boton)
+  expect(campoContrasena().getAttribute('type')).toBe('text')
+  fireEvent.pointerUp(boton)
+  expect(campoContrasena().getAttribute('type')).toBe('password')
 })
 
 test('sin conexión se muestra el texto de falta de conexión', async () => {
@@ -137,15 +177,18 @@ test('mientras la petición está en curso el botón dice "Ingresando…" y est�
 describe('aviso de sesión cerrada', () => {
   const MENSAJE_VENCIDA = 'Su sesión venció; inicie sesión de nuevo.'
 
-  // Abre /inicio con sesión y hace que una petición responda 401, como pasaría con un token vencido.
-  async function perderSesionPor401() {
+  // Abre /inicio con sesión y hace que una petición responda el error indicado (por defecto, 401 de token vencido).
+  async function responderEnInicio(
+    status = 401,
+    error = { codigo: 'SESION_VENCIDA', mensaje: MENSAJE_VENCIDA },
+  ) {
     guardarSesion(crearRespuestaLogin())
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({
-        status: 401,
+        status,
         ok: false,
-        json: async () => ({ error: { codigo: 'SESION_VENCIDA', mensaje: MENSAJE_VENCIDA } }),
+        json: async () => ({ error }),
       })),
     )
     render(
@@ -168,7 +211,7 @@ describe('aviso de sesión cerrada', () => {
   })
 
   test('tras un 401 lleva a /login y muestra el aviso informativo, no la alerta de error', async () => {
-    await perderSesionPor401()
+    await responderEnInicio()
 
     expect(screen.getByRole('heading', { name: 'Iniciar sesión' })).toBeTruthy()
     const avisoMostrado = screen.getByRole('status')
@@ -177,8 +220,28 @@ describe('aviso de sesión cerrada', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
+  test('tras un 403 CAMBIO_CONTRASENA_REQUERIDO lleva a /login con el aviso de contraseña restablecida', async () => {
+    await responderEnInicio(403, {
+      codigo: 'CAMBIO_CONTRASENA_REQUERIDO',
+      mensaje: 'Debe cambiar su contraseña temporal antes de continuar.',
+    })
+
+    expect(screen.getByRole('heading', { name: 'Iniciar sesión' })).toBeTruthy()
+    expect(screen.getByRole('status').textContent).toContain(
+      'Su contraseña fue restablecida. Inicie sesión con la contraseña temporal que le dé su administrador.',
+    )
+    expect(sessionStorage.getItem('sircova.sesion')).toBeNull()
+  })
+
+  test('un 403 SIN_PERMISO no cierra la sesión', async () => {
+    await responderEnInicio(403, { codigo: 'SIN_PERMISO', mensaje: 'No tiene permiso para realizar esta acción.' })
+
+    expect(screen.queryByRole('heading', { name: 'Iniciar sesión' })).toBeNull()
+    expect(sessionStorage.getItem('sircova.sesion')).not.toBeNull()
+  })
+
   test('el aviso desaparece al enviar el formulario', async () => {
-    await perderSesionPor401()
+    await responderEnInicio()
     iniciarSesion.mockRejectedValueOnce(new ErrorApi(401, 'CREDENCIALES_INVALIDAS', MENSAJE_CREDENCIALES))
 
     llenarYEnviar('jperez', 'incorrecta')

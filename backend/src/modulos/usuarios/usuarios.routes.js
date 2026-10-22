@@ -13,6 +13,13 @@ router.get('/usuarios/:id', autenticar, requierePermiso('USUARIO_CONSULTAR'), us
 router.patch('/usuarios/:id', autenticar, requierePermiso('USUARIO_EDITAR'), usuariosController.cambiarRol);
 router.post('/usuarios/:id/desactivar', autenticar, requierePermiso('USUARIO_DESACTIVAR'), usuariosController.desactivarCuenta);
 router.post('/usuarios/:id/restaurar', autenticar, requierePermiso('USUARIO_DESACTIVAR'), usuariosController.restaurarCuenta);
+router.post('/usuarios/:id/desbloquear', autenticar, requierePermiso('USUARIO_DESBLOQUEAR'), usuariosController.desbloquearCuenta);
+router.post(
+  '/usuarios/:id/restablecer-contrasena',
+  autenticar,
+  requierePermiso('USUARIO_RESTABLECER_CONTRASENA'),
+  usuariosController.restablecerContrasena,
+);
 router.get('/roles', autenticar, requierePermiso('ROL_CONSULTAR'), usuariosController.listarRoles);
 
 export default router;

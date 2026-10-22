@@ -59,6 +59,11 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('USUARIO_DESACTIVAR',        'USUARIOS',                'Desactivar y restaurar cuentas'),
  ('EMPLEADO_EDITAR',           'USUARIOS',                'Editar los datos de un empleado de su DDRISS');
 
+-- SPEC 10 (HU-62, HU-63): desbloqueo de cuentas y restablecimiento de contraseñas
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('USUARIO_DESBLOQUEAR',            'USUARIOS',           'Quitar el bloqueo por intentos fallidos de una cuenta'),
+ ('USUARIO_RESTABLECER_CONTRASENA', 'USUARIOS',           'Restablecer la contraseña de una cuenta con una temporal generada');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -79,6 +84,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'ADMINISTRADOR'
    AND p.codigo IN ('USUARIO_EDITAR', 'USUARIO_DESACTIVAR', 'EMPLEADO_EDITAR');
+
+-- SPEC 10 (HU-62, HU-63): solo el Administrador desbloquea cuentas y restablece contraseñas
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'ADMINISTRADOR'
+   AND p.codigo IN ('USUARIO_DESBLOQUEAR', 'USUARIO_RESTABLECER_CONTRASENA');
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

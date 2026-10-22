@@ -67,6 +67,18 @@ describe('registrarBitacora', () => {
       cuentas: [{ usuario: 'ana' }, { usuario: 'ana2' }],
     });
   });
+
+  it('quita la contraseña temporal generada (SPEC 10)', async () => {
+    const entidadId = randomUUID();
+
+    await registrarBitacora(pool, {
+      ...datosBase(entidadId),
+      valoresNuevos: { nombreUsuario: 'ana', contrasenaTemporal: 'Hk7pQ2xYz9AbCdEf', usuario: { contrasena_temporal: 'x' } },
+    });
+
+    const [fila] = await filasDe(entidadId);
+    expect(fila.valores_nuevos).toEqual({ nombreUsuario: 'ana', usuario: {} });
+  });
 });
 
 describe('diferencias', () => {

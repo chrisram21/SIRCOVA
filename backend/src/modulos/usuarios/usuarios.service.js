@@ -3,6 +3,7 @@ import pool, { enTransaccion } from '../../config/mysql.js';
 import { ErrorApi } from '../../middlewares/errores.js';
 import { registrarBitacora, diferencias, MODULOS, ACCIONES } from '../auditoria/auditoria.service.js';
 import { filtroAlcance, verificarAlcance } from '../auth/alcance.service.js';
+import { generarContrasenaTemporal } from '../auth/contrasenaTemporal.service.js';
 
 const errores = {
   entradaInvalida: (mensaje) => new ErrorApi(400, 'ENTRADA_INVALIDA', mensaje),
@@ -24,8 +25,9 @@ const errores = {
     ),
   // Mismo mensaje que verificarAlcance: una cuenta de otra DDRISS no se distingue de una que no existe.
   noEncontrado: () => new ErrorApi(404, 'NO_ENCONTRADO', 'El recurso solicitado no existe.'),
-  cuentaDesactivada: () =>
-    new ErrorApi(409, 'CUENTA_DESACTIVADA', 'La cuenta está desactivada; restáurela para editarla.'),
+  cuentaDesactivada: (mensaje = 'La cuenta está desactivada; restáurela para editarla.') =>
+    new ErrorApi(409, 'CUENTA_DESACTIVADA', mensaje),
+  cuentaNoBloqueada: () => new ErrorApi(409, 'CUENTA_NO_BLOQUEADA', 'La cuenta no está bloqueada.'),
   cuentaPropia: (mensaje) => new ErrorApi(422, 'CUENTA_PROPIA', mensaje),
   empleadoInactivo: () => new ErrorApi(409, 'EMPLEADO_INACTIVO', 'El empleado de esta cuenta está inactivo.'),
 };
@@ -40,9 +42,6 @@ const DUPLICADOS = {
 
 const COSTO_BCRYPT = 12;
 const NOMBRE_USUARIO = /^\S{3,50}$/;
-const LARGO_MINIMO_CONTRASENA = 8;
-// bcrypt solo usa los primeros 72 bytes; una contraseña más larga se aceptaría truncada.
-const BYTES_MAXIMOS_CONTRASENA = 72;
 
 function traducirDuplicado(err) {
   if (err.code !== 'ER_DUP_ENTRY') return err;
@@ -169,31 +168,32 @@ function idObligatorio(valor, campo) {
 }
 
 function leerCuenta(cuerpo) {
-  const { nombreUsuario, contrasenaTemporal } = cuerpo;
+  // Un cliente viejo que todavía la envía debe fallar, no creer que eligió la contraseña.
+  if (Object.hasOwn(cuerpo, 'contrasenaTemporal')) {
+    throw errores.entradaInvalida('La contraseña temporal la genera el sistema; no la envíe.');
+  }
+  const { nombreUsuario } = cuerpo;
   if (typeof nombreUsuario !== 'string' || !NOMBRE_USUARIO.test(nombreUsuario)) {
     throw errores.entradaInvalida('El nombre de usuario debe tener de 3 a 50 caracteres, sin espacios.');
-  }
-  if (
-    typeof contrasenaTemporal !== 'string' ||
-    contrasenaTemporal.length < LARGO_MINIMO_CONTRASENA ||
-    Buffer.byteLength(contrasenaTemporal) > BYTES_MAXIMOS_CONTRASENA
-  ) {
-    throw errores.entradaInvalida(
-      `La contraseña temporal debe tener de ${LARGO_MINIMO_CONTRASENA} a ${BYTES_MAXIMOS_CONTRASENA} caracteres.`,
-    );
   }
   return {
     empleadoId: idObligatorio(cuerpo.empleadoId, 'el empleado'),
     nombreUsuario,
-    contrasenaTemporal,
     rolId: idObligatorio(cuerpo.rolId, 'el rol'),
   };
 }
 
+// Se calcula antes de abrir la transacción para no retener los bloqueos mientras bcrypt trabaja.
+async function contrasenaConHash(datosPersonales) {
+  const contrasena = generarContrasenaTemporal(datosPersonales);
+  return { contrasena, hash: await bcrypt.hash(contrasena, COSTO_BCRYPT) };
+}
+
 export async function crearCuenta(cuerpo, administrador, contexto) {
   const datos = leerCuenta(cuerpo ?? {});
-  // Se calcula antes de abrir la transacción para no retener los bloqueos mientras bcrypt trabaja.
-  const hash = await bcrypt.hash(datos.contrasenaTemporal, COSTO_BCRYPT);
+  // Solo para que la contraseña no contenga el nombre; el empleado se revisa dentro de la transacción.
+  const [[nombre]] = await pool.query('SELECT nombres, apellidos FROM empleado WHERE id = ?', [datos.empleadoId]);
+  const { contrasena, hash } = await contrasenaConHash({ nombreUsuario: datos.nombreUsuario, ...nombre });
 
   try {
     return await enTransaccion(async (conexion) => {
@@ -232,7 +232,7 @@ export async function crearCuenta(cuerpo, administrador, contexto) {
         debeCambiarContrasena: true,
       };
 
-      // Se guarda el objeto de la respuesta y no el cuerpo: contrasenaTemporal no está entre los campos sensibles.
+      // La contraseña no se pasa a la bitácora; CLAVES_SENSIBLES la quitaría de todos modos.
       await registrarBitacora(conexion, {
         ...contexto,
         modulo: MODULOS.USUARIOS,
@@ -241,7 +241,7 @@ export async function crearCuenta(cuerpo, administrador, contexto) {
         entidadId: usuario.id,
         valoresNuevos: usuario,
       });
-      return usuario;
+      return { ...usuario, contrasenaTemporal: contrasena };
     });
   } catch (err) {
     throw traducirDuplicado(err);
@@ -255,10 +255,11 @@ export async function listarRoles() {
 
 // Las fechas salen como UNIX_TIMESTAMP: mysql2 lee un DATETIME como hora local de Node, y la base guarda
 // la hora en su propia zona (UTC en Aiven), así que la fecha ISO saldría corrida.
-// Nunca se leen hash_contrasena, intentos_fallidos ni bloqueado_hasta.
+// Nunca se leen hash_contrasena ni intentos_fallidos; de bloqueado_hasta solo sale si el bloqueo sigue vigente.
+const CUENTA_BLOQUEADA = 'COALESCE(u.bloqueado_hasta > NOW(), FALSE)';
 const CONSULTA_DETALLE = `
   SELECT u.id, u.empleado_id, u.nombre_usuario, r.codigo AS rol, r.nombre AS rol_nombre, u.activo,
-         u.debe_cambiar_contrasena, UNIX_TIMESTAMP(u.ultimo_acceso) AS ultimo_acceso,
+         u.debe_cambiar_contrasena, ${CUENTA_BLOQUEADA} AS bloqueada, UNIX_TIMESTAMP(u.ultimo_acceso) AS ultimo_acceso,
          UNIX_TIMESTAMP(u.desactivado_en) AS desactivado_en,
          e.codigo_empleado, e.nombres, e.apellidos, e.cargo, e.correo, e.telefono, e.establecimiento_id,
          e.municipio_id, e.ddriss_id, e.activo AS empleado_activo,
@@ -280,6 +281,7 @@ function aUsuarioDetalle(fila) {
     rolNombre: fila.rol_nombre,
     activo: Boolean(fila.activo),
     debeCambiarContrasena: Boolean(fila.debe_cambiar_contrasena),
+    bloqueada: Boolean(fila.bloqueada),
     ultimoAcceso: aFechaIso(fila.ultimo_acceso),
     desactivadoEn: aFechaIso(fila.desactivado_en),
     empleado: {
@@ -330,7 +332,8 @@ export async function obtenerUsuario(id, usuario) {
 // Bloquea la fila de la cuenta hasta el final de la transacción y revisa que sea del ámbito del administrador.
 async function bloquearCuenta(conexion, id, administrador) {
   const [[cuenta]] = await conexion.query(
-    `SELECT u.id, u.activo, r.codigo AS rol, e.ddriss_id, e.establecimiento_id, e.activo AS empleado_activo
+    `SELECT u.id, u.activo, ${CUENTA_BLOQUEADA} AS bloqueada, u.debe_cambiar_contrasena, r.codigo AS rol, e.ddriss_id,
+            e.establecimiento_id, e.activo AS empleado_activo
        FROM usuario u
        JOIN rol r ON r.id = u.rol_id
        JOIN empleado e ON e.id = u.empleado_id
@@ -419,6 +422,73 @@ async function cambiarEstadoCuenta(id, activo, administrador, contexto) {
 export const desactivarCuenta = (id, administrador, contexto) => cambiarEstadoCuenta(id, false, administrador, contexto);
 
 export const restaurarCuenta = (id, administrador, contexto) => cambiarEstadoCuenta(id, true, administrador, contexto);
+
+// Se permite desbloquear la cuenta propia: pudieron bloquearla con intentos mientras su sesión seguía abierta.
+export async function desbloquearCuenta(id, administrador, contexto) {
+  const usuarioId = leerId(id);
+
+  return enTransaccion(async (conexion) => {
+    const cuenta = await bloquearCuenta(conexion, usuarioId, administrador);
+    if (!cuenta.activo) throw errores.cuentaDesactivada('La cuenta está desactivada; al restaurarla se quita el bloqueo.');
+    if (!cuenta.bloqueada) throw errores.cuentaNoBloqueada();
+
+    await conexion.query('UPDATE usuario SET intentos_fallidos = 0, bloqueado_hasta = NULL WHERE id = ?', [cuenta.id]);
+    await registrarBitacora(conexion, {
+      ...contexto,
+      modulo: MODULOS.USUARIOS,
+      accion: ACCIONES.DESBLOQUEAR,
+      entidad: 'usuario',
+      entidadId: cuenta.id,
+      valoresAnteriores: { bloqueada: true },
+      valoresNuevos: { bloqueada: false },
+    });
+    return aUsuarioDetalle(await buscarDetalle(conexion, cuenta.id));
+  });
+}
+
+export async function restablecerContrasena(id, administrador, contexto) {
+  const usuarioId = leerId(id);
+  // Antes de gastar bcrypt: una cuenta inexistente o ajena responde 404 enseguida, como dentro de la transacción.
+  const [[datos]] = await pool.query(
+    `SELECT u.nombre_usuario, e.nombres, e.apellidos, e.ddriss_id
+       FROM usuario u JOIN empleado e ON e.id = u.empleado_id WHERE u.id = ?`,
+    [usuarioId],
+  );
+  if (!datos) throw errores.noEncontrado();
+  verificarAlcance(administrador, { ddrissId: datos.ddriss_id });
+  const { contrasena, hash } = await contrasenaConHash({
+    nombreUsuario: datos.nombre_usuario,
+    nombres: datos.nombres,
+    apellidos: datos.apellidos,
+  });
+
+  return enTransaccion(async (conexion) => {
+    const cuenta = await bloquearCuenta(conexion, usuarioId, administrador);
+    if (!cuenta.activo) {
+      throw errores.cuentaDesactivada('La cuenta está desactivada; restáurela antes de restablecer su contraseña.');
+    }
+    if (cuenta.id === administrador.id) {
+      throw errores.cuentaPropia('Para cambiar su propia contraseña use «Cambiar contraseña».');
+    }
+
+    await conexion.query(
+      `UPDATE usuario SET hash_contrasena = ?, debe_cambiar_contrasena = TRUE, intentos_fallidos = 0, bloqueado_hasta = NULL
+        WHERE id = ?`,
+      [hash, cuenta.id],
+    );
+    // Se registra siempre, aunque estos datos no cambien: la contraseña sí cambió (excepción escrita en el SPEC 10).
+    await registrarBitacora(conexion, {
+      ...contexto,
+      modulo: MODULOS.USUARIOS,
+      accion: ACCIONES.RESTABLECER_CONTRASENA,
+      entidad: 'usuario',
+      entidadId: cuenta.id,
+      valoresAnteriores: { debeCambiarContrasena: Boolean(cuenta.debe_cambiar_contrasena), bloqueada: Boolean(cuenta.bloqueada) },
+      valoresNuevos: { debeCambiarContrasena: true, bloqueada: false },
+    });
+    return { usuario: aUsuarioDetalle(await buscarDetalle(conexion, cuenta.id)), contrasenaTemporal: contrasena };
+  });
+}
 
 // Campo de la API → columna, y cómo se lee cada uno. ddrissId y activo no se cambian por aquí.
 const CAMPOS_EMPLEADO = {
