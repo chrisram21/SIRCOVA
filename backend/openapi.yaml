@@ -15,11 +15,16 @@ info:
     responde 401 `CUENTA_DESACTIVADA`, y si el rol, el establecimiento o el municipio ya no son los del
     token responde 401 `SESION_DESACTUALIZADA`. En los dos casos hay que iniciar sesión de nuevo.
 
+    **Cambio obligatorio de contraseña.** Mientras la cuenta tenga `debeCambiarContrasena` (por ejemplo,
+    con la contraseña temporal que le dio el administrador), todo endpoint protegido responde
+    403 `CAMBIO_CONTRASENA_REQUERIDO` (respuesta `CambioContrasenaRequerido`), salvo `POST /auth/contrasena`,
+    `POST /auth/logout` y `GET /auth/yo`. Ese 403 no se registra en la bitácora.
+
     **Permisos.** Cada función exige su propio permiso, con la forma `ENTIDAD_ACCION` (por ejemplo,
     `USUARIO_CREAR`). Cada operación protegida declara el suyo con la extensión `x-permiso: CODIGO` y
     documenta la respuesta `"403": { $ref: "#/components/responses/SinPermiso" }`. El rol `AUTORIDAD`
     es de solo consulta: recibe 403 en cualquier método distinto de `GET` aunque tenga el permiso.
-    `/salud`, `POST /auth/login`, `POST /auth/logout` y `GET /auth/yo` no llevan permiso.
+    `/salud`, `POST /auth/login`, `POST /auth/logout`, `POST /auth/contrasena` y `GET /auth/yo` no llevan permiso.
     Un recurso fuera del ámbito del usuario (su establecimiento o su DDRISS) responde 404, igual que
     uno que no existe.
 
@@ -166,6 +171,53 @@ paths:
               example:
                 error: { codigo: ENTRADA_INVALIDA, mensaje: El motivo del cierre de sesión no es válido. }
         "401": { $ref: "#/components/responses/NoAutenticado" }
+
+  /auth/contrasena:
+    post:
+      tags: [Autenticación]
+      summary: Cambiar la contraseña propia
+      description: |
+        Exige la contraseña actual. La nueva debe tener al menos 12 caracteres y como máximo 72 bytes
+        en UTF-8 (límite de bcrypt), obtener 3 o más (de 0 a 4) en zxcvbn y no contener ninguna palabra
+        de 3 letras o más del nombre de usuario, los nombres o los apellidos (sin importar mayúsculas
+        ni tildes). No se exigen mayúsculas, números ni símbolos.
+
+        Se revisa en este orden: formato, contraseña actual, nueva igual a la actual y política.
+        Una contraseña actual incorrecta no suma a los intentos fallidos ni se registra en la bitácora.
+
+        El cambio deja `debeCambiarContrasena` en `false` y queda en la bitácora (acción `CAMBIO_CONTRASENA`)
+        sin las contraseñas. El token sigue siendo válido hasta su `exp`; el frontend cierra la sesión.
+        Es una de las rutas que se pueden usar mientras la cuenta deba cambiar la contraseña.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CambioContrasenaEntrada" }
+      responses:
+        "204": { description: Contraseña cambiada }
+        "400":
+          description: Falta un campo, no es texto o viene un campo que no se acepta
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: Debe indicar la contraseña actual y la nueva. }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "422":
+          description: La contraseña actual no coincide, la nueva es igual a la actual o no cumple la política
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                actualIncorrecta:
+                  value:
+                    error: { codigo: CONTRASENA_ACTUAL_INCORRECTA, mensaje: La contraseña actual no es correcta. }
+                repetida:
+                  value:
+                    error: { codigo: CONTRASENA_REPETIDA, mensaje: La contraseña nueva debe ser distinta de la actual. }
+                debil:
+                  value:
+                    error: { codigo: CONTRASENA_DEBIL, mensaje: Debe tener al menos 12 caracteres. }
 
   /auth/yo:
     get:
@@ -1137,6 +1189,15 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
           example:
             error: { codigo: SIN_PERMISO, mensaje: No tiene permiso para realizar esta acción. }
+    CambioContrasenaRequerido:
+      description: |
+        La cuenta debe cambiar su contraseña (por ejemplo, la temporal) antes de usar este endpoint.
+        Lo responde cualquier endpoint protegido salvo `POST /auth/contrasena`, `POST /auth/logout` y `GET /auth/yo`.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: CAMBIO_CONTRASENA_REQUERIDO, mensaje: Debe cambiar su contraseña temporal antes de continuar. }
     NoEncontrado:
       description: No existe o está fuera del alcance del usuario
       content:
@@ -1181,6 +1242,9 @@ components:
           description: Nombre del rol (`rol.nombre`) para mostrarlo; no va en el JWT
           example: Estadígrafa / revisor DDRISS
         permisos: { type: array, items: { type: string } }
+        debeCambiarContrasena:
+          type: boolean
+          description: Si es `true`, la cuenta solo puede cambiar su contraseña o cerrar sesión; no va en el JWT
         empleado:
           type: object
           properties:
@@ -1189,6 +1253,18 @@ components:
             ddrissId: { type: integer, nullable: true, description: NULL solo para AUTORIDAD de nivel nacional }
             establecimientoId: { type: integer, nullable: true }
             municipioId: { type: integer, nullable: true }
+
+    CambioContrasenaEntrada:
+      type: object
+      additionalProperties: false
+      required: [contrasenaActual, contrasenaNueva]
+      properties:
+        contrasenaActual: { type: string, format: password }
+        contrasenaNueva:
+          type: string
+          format: password
+          minLength: 12
+          description: Al menos 12 caracteres, como máximo 72 bytes en UTF-8 y puntaje de zxcvbn de 3 o más
 
     CierreSesionEntrada:
       type: object
