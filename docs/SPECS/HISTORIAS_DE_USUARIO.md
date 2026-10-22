@@ -104,18 +104,25 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 
 #### HU-03. Cambiar mi contraseña
 
-> **Como** usuario del sistema, **quiero** cambiar mi contraseña indicando la actual, **para** mantener mi cuenta segura.
+> **Como** usuario del sistema, **quiero** cambiar mi contraseña indicando la actual, y que el sistema me obligue a cambiar la contraseña temporal que me dieron, **para** mantener mi cuenta segura.
 
 | Para quién | Story points | Sprint | Responsable |
 |---|---|---|---|
 | Todos los roles | 2 | S1 | Kenneth García |
 
-**Cómo se hará:** Formulario en el perfil del usuario; endpoint que valida la contraseña actual y guarda el nuevo hash en `usuario`.
+**Cómo se hará:** Pantalla de cambio de contraseña en React, a la que se llega desde el encabezado y, de forma obligatoria, después del login cuando la cuenta tiene `debe_cambiar_contrasena = TRUE`. Endpoint del módulo `auth` (nombre por definir en su spec; por ejemplo, `POST /auth/contrasena`) que valida la contraseña actual, aplica la política de fortaleza y guarda el nuevo hash en `usuario` con `debe_cambiar_contrasena = FALSE`. El login devuelve `debeCambiarContrasena`, y `revisarCuenta` (dentro de `autenticar`) rechaza el resto de la API mientras la cuenta deba cambiar la contraseña. La fortaleza se mide con `@zxcvbn-ts/core`, `@zxcvbn-ts/language-common` y `@zxcvbn-ts/language-es-es` en el backend (validación obligatoria) y en el frontend (medidor); son dependencias nuevas y requieren autorización en el spec. Componente propio `CampoContrasena`, con un botón para ver la contraseña mientras se mantiene presionado, que después reutilizan el login y las demás pantallas con contraseñas.
 
 **Criterios de aceptación:**
 - [ ] Si la contraseña actual no coincide, el cambio se rechaza.
-- [ ] La nueva contraseña debe cumplir una longitud mínima de 8 caracteres.
-- [ ] Después del cambio, puedo iniciar sesión solo con la nueva contraseña.
+- [ ] La nueva contraseña tiene al menos 12 caracteres y como máximo 72 bytes (límite de bcrypt), obtiene al menos 3 de 4 en zxcvbn y no contiene mi nombre de usuario, mis nombres ni mis apellidos. No se exigen mayúsculas, números ni símbolos. El backend valida la regla aunque el frontend también la revise.
+- [ ] La nueva contraseña no puede ser igual a la actual.
+- [ ] Mientras escribo la nueva contraseña, veo un medidor de fortaleza y el motivo por el que todavía no se acepta.
+- [ ] En los campos de contraseña puedo ver lo que escribo mientras mantengo presionado un botón (con el ratón, con el dedo o con la tecla Espacio), y se oculta al soltarlo.
+- [ ] Después del cambio, puedo iniciar sesión solo con la nueva contraseña, y la cuenta queda con `debe_cambiar_contrasena = FALSE`.
+- [ ] Si mi cuenta debe cambiar la contraseña, al iniciar sesión el sistema me lleva a la pantalla de cambio y no puedo abrir otras pantallas. El backend responde 403 `CAMBIO_CONTRASENA_REQUERIDO` a cualquier endpoint protegido, salvo el cambio de contraseña, `POST /auth/logout` y `GET /auth/yo`.
+- [ ] El cambio queda en la bitácora sin la contraseña actual ni la nueva.
+
+**Ajustes de la asesoría (2026-10-21):** la historia pasó de "cambiar mi contraseña" a incluir también el cambio obligatorio de la contraseña temporal (controlado en el backend), la política de fortaleza con zxcvbn (antes eran 8 caracteres) y el campo para ver la contraseña. Se trabaja antes que los specs A y B de `docs/SPECS/PROPUESTA_SPEC_A_SEGURIDAD_DE_CUENTAS.md` y `docs/SPECS/PROPUESTA_SPEC_B_DATOS_DEL_EMPLEADO.md`, que dependen de ella. Los story points se pueden reestimar al escribir su spec.
 
 #### HU-04. Registrar personal y crear su cuenta
 
@@ -1039,6 +1046,43 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [ ] No se puede quitar al Administrador el permiso para gestionar permisos.
 - [ ] Cada asignación o retiro queda registrado en la bitácora con el usuario que lo hizo.
 
+#### HU-62. Desbloquear una cuenta
+
+> **Como** administrador, **quiero** desbloquear una cuenta que quedó bloqueada por intentos fallidos, **para** que la persona pueda volver a entrar en una emergencia sin esperar a que el bloqueo venza.
+
+| Para quién | Story points | Sprint | Responsable |
+|---|---|---|---|
+| Administrador | Por estimar | Sin asignar | Sin asignar |
+
+**Cómo se hará:** Acción "Desbloquear" en la tabla de `/usuarios` (la pantalla de HU-05); endpoint `POST /usuarios/{id}/desbloquear` con su propio permiso, que pone `intentos_fallidos = 0` y `bloqueado_hasta = NULL` en `usuario`. El listado de cuentas indica si cada una está bloqueada, sin devolver la fecha del bloqueo. El bloqueo de 15 minutos por intentos fallidos (HU-01) se mantiene; esta acción solo evita esperar. Cuando la cuenta se bloquea, el login muestra un aviso en un modal que indica que debe contactar al administrador de su DDRISS o esperar los minutos del bloqueo, sin mostrar datos del administrador. Detalle en `docs/SPECS/PROPUESTA_SPEC_A_SEGURIDAD_DE_CUENTAS.md`.
+
+**Criterios de aceptación:**
+- [ ] Al quedar bloqueada mi cuenta, el login muestra un modal informativo: "Su usuario ha sido bloqueado. Contáctese con su administrador de DDRISS o intente de nuevo en N minutos", donde N sale de la misma constante del backend que define la duración del bloqueo, no de un texto fijo en el frontend. El modal no muestra datos del administrador.
+- [ ] En la tabla de usuarios veo cuáles cuentas están bloqueadas.
+- [ ] Puedo desbloquear una cuenta bloqueada de mi DDRISS; después, la persona puede iniciar sesión de inmediato con su contraseña.
+- [ ] Desbloquear una cuenta que no está bloqueada se rechaza (409).
+- [ ] Solo el Administrador puede desbloquear, con un permiso propio; una cuenta de otra DDRISS responde 404.
+- [ ] Cada desbloqueo queda en la bitácora con el usuario que lo hizo.
+
+#### HU-63. Restablecer la contraseña de una cuenta
+
+> **Como** administrador, **quiero** restablecer la contraseña de una cuenta cuando la persona la olvidó, **para** que vuelva a entrar con una contraseña temporal y la cambie por una propia.
+
+| Para quién | Story points | Sprint | Responsable |
+|---|---|---|---|
+| Administrador | Por estimar | Sin asignar | Sin asignar |
+
+**Cómo se hará:** Acción "Restablecer contraseña" en la tabla de `/usuarios` (la pantalla de HU-05), separada de "Desbloquear"; endpoint `POST /usuarios/{id}/restablecer-contrasena` con su propio permiso. El backend genera una contraseña temporal aleatoria (con `crypto` de Node), guarda su hash con `debe_cambiar_contrasena = TRUE`, quita el bloqueo si lo hay y devuelve la contraseña una sola vez para que el administrador se la entregue a la persona. El cambio obligatorio al entrar lo resuelve HU-03. En el mismo trabajo, `POST /usuarios` (HU-04) deja de recibir la contraseña temporal escrita por el administrador y usa el mismo generador. Detalle en `docs/SPECS/PROPUESTA_SPEC_A_SEGURIDAD_DE_CUENTAS.md`.
+
+**Criterios de aceptación:**
+- [ ] Puedo restablecer la contraseña de una cuenta activa de mi DDRISS; el sistema genera una contraseña temporal que cumple la política de fortaleza de HU-03 y me la muestra una sola vez, con un botón para copiarla.
+- [ ] La contraseña anterior deja de servir, y al entrar con la temporal el sistema obliga a cambiarla (HU-03).
+- [ ] Si la cuenta estaba bloqueada, también queda desbloqueada.
+- [ ] No puedo restablecer mi propia contraseña desde aquí (uso HU-03), ni la de una cuenta desactivada.
+- [ ] Solo el Administrador puede restablecer, con un permiso propio; una cuenta de otra DDRISS responde 404.
+- [ ] La contraseña temporal nunca se guarda en claro ni queda en la bitácora; el restablecimiento sí queda registrado con el usuario que lo hizo.
+- [ ] Al crear una cuenta (HU-04), la contraseña temporal también la genera el sistema y se muestra una sola vez.
+
 ## 6. Notas y pendientes
 
 - Los umbrales del semáforo (HU-42) y las alertas de cobertura (HU-51) usan la propuesta 80/90 %, pendiente de confirmar con Epidemiología; por eso se definen en la configuración de indicadores (HU-35).
@@ -1047,4 +1091,5 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - El registro de la población (HU-13, HU-14) se asignó al rol Administrador de forma provisional, según lo acordado el 10/10/2026.
 - Los story points no cambiaron con las actualizaciones de la versión 4: los ajustes precisan datos y tecnologías, pero no agregan trabajo significativo.
 - 2026-10-20: HU-06 pasó a seguridad granular (un permiso por función) y se agregó HU-61 (gestión de permisos por rol, solo Administrador), todavía sin estimar ni asignar. Los totales de las secciones 3 y 4 siguen contando 60 historias y 280 story points.
+- 2026-10-21: ajustes de la asesoría. HU-03 incluye ahora el cambio obligatorio de la contraseña temporal, la política de fortaleza con zxcvbn y el campo para ver la contraseña, y se trabaja primero. Se agregaron HU-62 (desbloquear cuenta) y HU-63 (restablecer contraseña), todavía sin estimar ni asignar. También se acordó guardar en `empleado` solo una huella HMAC del CUI, en lugar de `codigo_empleado`, para impedir empleados repetidos, y validar el formato de los campos del personal; estos ajustes a HU-04 y HU-05 se describen en `docs/SPECS/PROPUESTA_SPEC_B_DATOS_DEL_EMPLEADO.md`. Los totales de las secciones 3 y 4 siguen contando 60 historias y 280 story points.
 - 2026-10-20: los límites del mapa (HU-42) salen del COD-AB de Guatemala de CONRED/OCHA publicado en HDX (CC BY 3.0 IGO). La licencia obliga a dar crédito, enlazar la licencia, indicar los cambios y no sugerir respaldo de OCHA o de la ONU; por eso HU-42 y HU-60 tienen criterios de atribución. Si se cambia la fuente de los límites, hay que actualizar `frontend/public/geo/FUENTES.md` y el crédito del mapa.
