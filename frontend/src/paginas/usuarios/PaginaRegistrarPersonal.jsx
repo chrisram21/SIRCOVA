@@ -10,10 +10,10 @@ import { listarDdriss, listarEstablecimientos, listarMunicipios } from '@/api/ca
 import { ErrorApi } from '@/api/cliente.js'
 import { crearCuenta, listarRoles, registrarEmpleado } from '@/api/usuarios.js'
 import CamposEmpleado, { CampoSeleccion, CampoTexto, NINGUNO } from './CamposEmpleado.jsx'
+import DialogoContrasenaTemporal from './DialogoContrasenaTemporal.jsx'
 
 const MENSAJE_INESPERADO = 'Ocurrió un error inesperado. Intente de nuevo.'
 const NOMBRE_USUARIO = /^\S{3,50}$/
-const LARGO_MINIMO_CONTRASENA = 8
 
 const EMPLEADO_VACIO = {
   nombres: '',
@@ -25,7 +25,7 @@ const EMPLEADO_VACIO = {
   establecimientoId: NINGUNO,
   municipioId: NINGUNO,
 }
-const CUENTA_VACIA = { crear: false, nombreUsuario: '', contrasena: '', confirmacion: '', rolId: '' }
+const CUENTA_VACIA = { crear: false, nombreUsuario: '', rolId: '' }
 
 const mensajeDe = (error) => (error instanceof ErrorApi ? error.mensaje : MENSAJE_INESPERADO)
 
@@ -49,6 +49,8 @@ export default function PaginaRegistrarPersonal() {
   // Empleado ya guardado cuando falló su cuenta: el formulario pasa a "solo cuenta".
   const [empleadoGuardado, setEmpleadoGuardado] = useState(null)
   const [resultado, setResultado] = useState(null)
+  // Resultado con la contraseña generada, solo mientras el diálogo está abierto.
+  const [porMostrar, setPorMostrar] = useState(null)
   const [error, setError] = useState(null)
   const [enviando, setEnviando] = useState(false)
 
@@ -74,21 +76,14 @@ export default function PaginaRegistrarPersonal() {
   const tieneEstablecimiento = empleadoGuardado ? empleadoGuardado.establecimientoId != null : Boolean(establecimiento)
   const quiereCuenta = empleadoGuardado !== null || cuenta.crear
 
-  const contrasenasDistintas = cuenta.confirmacion !== '' && cuenta.confirmacion !== cuenta.contrasena
   const rolSinEstablecimiento = rol?.codigo === 'ESTABLECIMIENTO' && !tieneEstablecimiento
   const empleadoCompleto = empleado.nombres.trim() !== '' && empleado.apellidos.trim() !== ''
   const cuentaCompleta =
     NOMBRE_USUARIO.test(cuenta.nombreUsuario) &&
-    cuenta.contrasena.length >= LARGO_MINIMO_CONTRASENA &&
-    cuenta.contrasena === cuenta.confirmacion &&
     rol !== undefined &&
     !rolSinEstablecimiento
   const puedeEnviar =
     catalogos !== null && !enviando && (empleadoGuardado || empleadoCompleto) && (!quiereCuenta || cuentaCompleta)
-
-  function vaciarContrasenas() {
-    setCuenta((actual) => ({ ...actual, contrasena: '', confirmacion: '' }))
-  }
 
   async function enviar(evento) {
     evento.preventDefault()
@@ -102,7 +97,6 @@ export default function PaginaRegistrarPersonal() {
         guardado = await registrarEmpleado(armarEmpleado(empleado))
       } catch (err) {
         setError(mensajeDe(err))
-        vaciarContrasenas()
         setEnviando(false)
         return
       }
@@ -114,20 +108,28 @@ export default function PaginaRegistrarPersonal() {
         cuentaCreada = await crearCuenta({
           empleadoId: guardado.id,
           nombreUsuario: cuenta.nombreUsuario,
-          contrasenaTemporal: cuenta.contrasena,
           rolId: Number(cuenta.rolId),
         })
       } catch (err) {
         setEmpleadoGuardado(guardado)
         setError(`Se registró a ${guardado.nombres} ${guardado.apellidos}, pero no se pudo crear la cuenta: ${mensajeDe(err)}`)
-        vaciarContrasenas()
         setEnviando(false)
         return
       }
     }
 
-    setResultado({ empleado: guardado, cuenta: cuentaCreada })
     setEnviando(false)
+    if (cuentaCreada) {
+      const { contrasenaTemporal, ...cuentaSinContrasena } = cuentaCreada
+      setPorMostrar({ empleado: guardado, cuenta: cuentaSinContrasena, contrasenaTemporal })
+    } else {
+      setResultado({ empleado: guardado, cuenta: null })
+    }
+  }
+
+  function cerrarDialogo() {
+    setResultado({ empleado: porMostrar.empleado, cuenta: porMostrar.cuenta })
+    setPorMostrar(null)
   }
 
   function registrarOtro() {
@@ -242,22 +244,11 @@ export default function PaginaRegistrarPersonal() {
                   marcador="Elija un rol"
                   opciones={(catalogos?.roles ?? []).map((r) => ({ valor: String(r.id), texto: r.nombre }))}
                 />
-                <CampoTexto id="contrasena" etiqueta="Contraseña temporal" obligatorio type="password"
-                  valor={cuenta.contrasena} alCambiar={cambiarCuenta('contrasena')} deshabilitado={deshabilitado}
-                  autoComplete="new-password" />
-                <CampoTexto id="confirmacion" etiqueta="Confirmar contraseña" obligatorio type="password"
-                  valor={cuenta.confirmacion} alCambiar={cambiarCuenta('confirmacion')} deshabilitado={deshabilitado}
-                  autoComplete="new-password" aria-invalid={contrasenasDistintas || undefined} />
 
                 <p className="text-sm text-muted-foreground md:col-span-2">
-                  De 3 a 50 caracteres sin espacios para el usuario y al menos {LARGO_MINIMO_CONTRASENA} para la
-                  contraseña. La persona deberá cambiarla al entrar.
+                  De 3 a 50 caracteres sin espacios para el usuario. El sistema genera la contraseña temporal y se la
+                  muestra una sola vez; la persona deberá cambiarla al entrar.
                 </p>
-                {contrasenasDistintas && (
-                  <p role="alert" className="text-sm text-destructive md:col-span-2">
-                    Las contraseñas no coinciden.
-                  </p>
-                )}
                 {rolSinEstablecimiento && (
                   <p role="alert" className="text-sm text-destructive md:col-span-2">
                     Para el rol {rol.nombre}, el empleado debe tener un establecimiento.
@@ -277,6 +268,14 @@ export default function PaginaRegistrarPersonal() {
           </Button>
         </div>
       </form>
+
+      {porMostrar && (
+        <DialogoContrasenaTemporal
+          nombreUsuario={porMostrar.cuenta.nombreUsuario}
+          contrasena={porMostrar.contrasenaTemporal}
+          alCerrar={cerrarDialogo}
+        />
+      )}
     </section>
   )
 }

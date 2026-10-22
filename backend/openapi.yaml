@@ -145,7 +145,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
               example:
-                error: { codigo: CUENTA_BLOQUEADA, mensaje: Su cuenta está bloqueada por 15 minutos por intentos fallidos. }
+                error: { codigo: CUENTA_BLOQUEADA, mensaje: Su usuario ha sido bloqueado. Contáctese con su administrador de DDRISS o intente de nuevo en 15 minutos. }
 
   /auth/logout:
     post:
@@ -354,7 +354,8 @@ paths:
       summary: Listar las cuentas de la DDRISS del usuario, activas y desactivadas
       description: |
         Versión mínima, sin búsqueda, filtros ni paginación (HU-07 los agrega). Ordenadas por apellidos y
-        nombres del empleado. Nunca devuelve la contraseña, su hash, los intentos fallidos ni el bloqueo.
+        nombres del empleado. Nunca devuelve la contraseña, su hash, los intentos fallidos ni la fecha del
+        bloqueo; solo `bloqueada`.
       x-permiso: USUARIO_CONSULTAR
       responses:
         "200":
@@ -370,7 +371,9 @@ paths:
       tags: [Usuarios]
       summary: Crear la cuenta de acceso de un empleado (solo Administrador)
       description: |
-        La contraseña se guarda con bcrypt y la cuenta queda con `debeCambiarContrasena: true`.
+        El sistema genera la contraseña temporal (12 caracteres que cumplen la política de contraseñas),
+        la guarda con bcrypt y la devuelve una sola vez en la respuesta. La cuenta queda con
+        `debeCambiarContrasena: true`. La bitácora no guarda la contraseña.
         El empleado debe estar activo, ser de la DDRISS del administrador y no tener cuenta.
         El rol `ESTABLECIMIENTO` exige que el empleado tenga establecimiento.
       x-permiso: USUARIO_CREAR
@@ -381,11 +384,17 @@ paths:
             schema: { $ref: "#/components/schemas/UsuarioEntrada" }
       responses:
         "201":
-          description: Cuenta creada; nunca devuelve la contraseña ni su hash
+          description: Cuenta creada, con la contraseña temporal generada; nunca devuelve su hash
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Usuario" }
-        "400": { $ref: "#/components/responses/EntradaInvalida" }
+              schema: { $ref: "#/components/schemas/UsuarioCreado" }
+        "400":
+          description: La solicitud no cumple el formato esperado, o trae `contrasenaTemporal`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: La contraseña temporal la genera el sistema; no la envíe. }
         "401": { $ref: "#/components/responses/NoAutenticado" }
         "403": { $ref: "#/components/responses/SinPermiso" }
         "404": { $ref: "#/components/responses/NoEncontrado" }
@@ -560,6 +569,77 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
               example:
                 error: { codigo: EMPLEADO_INACTIVO, mensaje: El empleado de esta cuenta está inactivo. }
+
+  /usuarios/{id}/desbloquear:
+    post:
+      tags: [Usuarios]
+      summary: Quitar el bloqueo por intentos fallidos de una cuenta (HU-62)
+      description: |
+        Pone los intentos fallidos en 0 y quita el bloqueo, para que la persona entre sin esperar a que venza.
+        Se permite desbloquear la cuenta propia. Se revisa en este orden: cuenta (404), cuenta desactivada (409)
+        y cuenta no bloqueada (409). Cada desbloqueo queda en la bitácora (`DESBLOQUEAR`).
+      x-permiso: USUARIO_DESBLOQUEAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Cuenta desbloqueada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UsuarioDetalle" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: La cuenta está desactivada o no está bloqueada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                desactivada:
+                  value:
+                    error: { codigo: CUENTA_DESACTIVADA, mensaje: La cuenta está desactivada; al restaurarla se quita el bloqueo. }
+                noBloqueada:
+                  value:
+                    error: { codigo: CUENTA_NO_BLOQUEADA, mensaje: La cuenta no está bloqueada. }
+
+  /usuarios/{id}/restablecer-contrasena:
+    post:
+      tags: [Usuarios]
+      summary: Restablecer la contraseña de una cuenta con una temporal generada por el sistema (HU-63)
+      description: |
+        Genera una contraseña temporal (12 caracteres que cumplen la política de contraseñas), guarda su hash,
+        deja la cuenta con `debeCambiarContrasena: true` y quita el bloqueo si lo hay. La contraseña se
+        devuelve una sola vez y la anterior deja de servir. La sesión abierta de esa cuenta recibe 403
+        `CAMBIO_CONTRASENA_REQUERIDO` en la siguiente petición. Se revisa en este orden: cuenta (404), cuenta
+        desactivada (409) y cuenta propia (422). Cada restablecimiento queda en la bitácora
+        (`RESTABLECER_CONTRASENA`), sin la contraseña, aunque no cambie ningún otro dato.
+      x-permiso: USUARIO_RESTABLECER_CONTRASENA
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Contraseña restablecida
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RestablecimientoContrasena" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: La cuenta está desactivada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: CUENTA_DESACTIVADA, mensaje: La cuenta está desactivada; restáurela antes de restablecer su contraseña. }
+        "422":
+          description: Es la cuenta propia
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: CUENTA_PROPIA, mensaje: Para cambiar su propia contraseña use «Cambiar contraseña». }
 
   # ---------------------------------------------------------------- Catálogos
   /ddriss:
@@ -1330,11 +1410,11 @@ components:
 
     UsuarioEntrada:
       type: object
-      required: [empleadoId, nombreUsuario, contrasenaTemporal, rolId]
+      description: No lleva contraseña; la genera el sistema. Si llega `contrasenaTemporal`, responde 400
+      required: [empleadoId, nombreUsuario, rolId]
       properties:
         empleadoId: { type: integer }
         nombreUsuario: { type: string, pattern: '^\S{3,50}$', description: 3 a 50 caracteres sin espacios }
-        contrasenaTemporal: { type: string, format: password, minLength: 8, maxLength: 72 }
         rolId: { type: integer }
 
     Usuario:
@@ -1348,12 +1428,30 @@ components:
         activo: { type: boolean }
         debeCambiarContrasena: { type: boolean }
 
-    UsuarioDetalle:
-      description: Cuenta con los datos de su empleado; nunca trae la contraseña, su hash, los intentos fallidos ni el bloqueo
+    UsuarioCreado:
+      description: Cuenta recién creada, con la contraseña temporal que generó el sistema; se devuelve una sola vez
       allOf:
         - { $ref: "#/components/schemas/Usuario" }
         - type: object
           properties:
+            contrasenaTemporal: { type: string, format: password, minLength: 12, maxLength: 12 }
+
+    RestablecimientoContrasena:
+      type: object
+      description: La contraseña temporal se devuelve una sola vez
+      properties:
+        usuario: { $ref: "#/components/schemas/UsuarioDetalle" }
+        contrasenaTemporal: { type: string, format: password, minLength: 12, maxLength: 12 }
+
+    UsuarioDetalle:
+      description: Cuenta con los datos de su empleado; nunca trae la contraseña, su hash, los intentos fallidos ni la fecha del bloqueo
+      allOf:
+        - { $ref: "#/components/schemas/Usuario" }
+        - type: object
+          properties:
+            bloqueada:
+              type: boolean
+              description: Si la cuenta está bloqueada ahora por intentos fallidos
             ultimoAcceso: { type: string, format: date-time, nullable: true }
             desactivadoEn: { type: string, format: date-time, nullable: true }
             empleado:

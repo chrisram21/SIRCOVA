@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { listarDdriss, listarEstablecimientos, listarMunicipios } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
@@ -39,12 +39,19 @@ function llenarEmpleado() {
   escribir(/^Apellidos/, 'López')
 }
 
-function llenarCuenta({ rolId = 2, confirmacion = 'Temporal-123' } = {}) {
+function llenarCuenta({ rolId = 2 } = {}) {
   fireEvent.click(screen.getByRole('checkbox', { name: 'Crear cuenta de acceso' }))
   escribir(/^Nombre de usuario/, 'alopez')
-  escribir(/^Contraseña temporal/, 'Temporal-123')
-  escribir(/^Confirmar contraseña/, confirmacion)
   elegir('rol', rolId)
+}
+
+const CONTRASENA_GENERADA = 'Hk7pQ2xYz9Ab'
+
+// El diálogo de la contraseña temporal se cierra con "Ya la anoté"; después sigue el éxito de siempre.
+async function cerrarDialogoContrasena() {
+  const dialogo = await screen.findByRole('alertdialog')
+  fireEvent.click(within(dialogo).getByRole('button', { name: 'Ya la anoté' }))
+  await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
 }
 
 beforeEach(() => {
@@ -54,7 +61,7 @@ beforeEach(() => {
   listarMunicipios.mockResolvedValue(MUNICIPIOS)
   listarEstablecimientos.mockResolvedValue(ESTABLECIMIENTOS)
   registrarEmpleado.mockResolvedValue({ id: 40, nombres: 'Ana', apellidos: 'López', establecimientoId: null })
-  crearCuenta.mockResolvedValue({ id: 90, nombreUsuario: 'alopez' })
+  crearCuenta.mockResolvedValue({ id: 90, nombreUsuario: 'alopez', contrasenaTemporal: CONTRASENA_GENERADA })
 })
 
 test('muestra la DDRISS y las opciones de los Select, y pide solo establecimientos activos', async () => {
@@ -72,16 +79,28 @@ test('muestra la DDRISS y las opciones de los Select, y pide solo establecimient
   expect(roles).toEqual(expect.arrayContaining(['Personal del establecimiento', 'Estadígrafa / revisor DDRISS']))
 })
 
-test('"Registrar" está deshabilitado sin nombres o con contraseñas distintas', async () => {
+test('"Registrar" está deshabilitado sin nombres, o con cuenta sin nombre de usuario o sin rol', async () => {
   await abrir()
   expect(botonRegistrar().disabled).toBe(true)
 
   llenarEmpleado()
   expect(botonRegistrar().disabled).toBe(false)
 
-  llenarCuenta({ confirmacion: 'Otra-123' })
-  expect(screen.getByText('Las contraseñas no coinciden.')).toBeTruthy()
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Crear cuenta de acceso' }))
   expect(botonRegistrar().disabled).toBe(true)
+  escribir(/^Nombre de usuario/, 'alopez')
+  expect(botonRegistrar().disabled).toBe(true)
+  elegir('rol', 2)
+  expect(botonRegistrar().disabled).toBe(false)
+})
+
+test('la cuenta ya no tiene campos de contraseña: la genera el sistema', async () => {
+  await abrir()
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Crear cuenta de acceso' }))
+
+  expect(screen.queryByLabelText(/Contraseña/)).toBeNull()
+  expect(document.querySelector('input[type="password"]')).toBeNull()
+  expect(screen.getByText(/El sistema genera la contraseña temporal/)).toBeTruthy()
 })
 
 test('el rol de personal del establecimiento sin establecimiento muestra el aviso y no deja enviar', async () => {
@@ -126,15 +145,19 @@ test('con cuenta, registra al empleado, crea la cuenta con su id y muestra los d
 
   fireEvent.click(botonRegistrar())
 
-  expect(await screen.findByText('Se creó la cuenta alopez.')).toBeTruthy()
-  expect(screen.getByText('Se registró a Ana López.')).toBeTruthy()
+  const dialogo = await screen.findByRole('alertdialog')
+  expect(within(dialogo).getByTestId('contrasena-temporal').textContent).toBe(CONTRASENA_GENERADA)
+  expect(dialogo.textContent).toContain('alopez')
+  expect(screen.queryByText('Se creó la cuenta alopez.')).toBeNull()
   expect(registrarEmpleado).toHaveBeenCalledWith({ nombres: 'Ana', apellidos: 'López', establecimientoId: 7 })
-  expect(crearCuenta).toHaveBeenCalledWith({
-    empleadoId: 40,
-    nombreUsuario: 'alopez',
-    contrasenaTemporal: 'Temporal-123',
-    rolId: 2,
-  })
+  expect(crearCuenta).toHaveBeenCalledWith({ empleadoId: 40, nombreUsuario: 'alopez', rolId: 2 })
+
+  await cerrarDialogoContrasena()
+
+  expect(screen.getByText('Se creó la cuenta alopez.')).toBeTruthy()
+  expect(screen.getByText('Se registró a Ana López.')).toBeTruthy()
+  expect(document.body.textContent).not.toContain(CONTRASENA_GENERADA)
+  expect(JSON.stringify({ ...sessionStorage })).not.toContain(CONTRASENA_GENERADA)
   expect(screen.getByRole('link', { name: 'Volver a Usuarios' }).getAttribute('href')).toBe('/usuarios')
 })
 
@@ -150,14 +173,13 @@ test('si falla la cuenta, muestra el aviso parcial y "Crear cuenta" reintenta so
     await screen.findByText('Se registró a Ana López, pero no se pudo crear la cuenta: Ya existe ese nombre de usuario.'),
   ).toBeTruthy()
   expect(screen.queryByLabelText(/^Nombres/)).toBeNull()
-  expect(screen.getByLabelText(/^Contraseña temporal/).value).toBe('')
+  expect(screen.queryByRole('alertdialog')).toBeNull()
 
   escribir(/^Nombre de usuario/, 'alopez2')
-  escribir(/^Contraseña temporal/, 'Temporal-123')
-  escribir(/^Confirmar contraseña/, 'Temporal-123')
   fireEvent.click(screen.getByRole('button', { name: 'Crear cuenta' }))
 
-  expect(await screen.findByText('Se creó la cuenta alopez.')).toBeTruthy()
+  await cerrarDialogoContrasena()
+  expect(screen.getByText('Se creó la cuenta alopez.')).toBeTruthy()
   expect(registrarEmpleado).toHaveBeenCalledTimes(1)
   expect(crearCuenta).toHaveBeenCalledTimes(2)
   expect(crearCuenta).toHaveBeenLastCalledWith(expect.objectContaining({ empleadoId: 40, nombreUsuario: 'alopez2' }))

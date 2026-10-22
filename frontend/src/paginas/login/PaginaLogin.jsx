@@ -2,12 +2,22 @@ import { useRef, useState } from 'react'
 import { CircleAlert, Info } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { iniciarSesion } from '@/api/auth.js'
 import { ErrorApi } from '@/api/cliente.js'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
+import CampoContrasena from '@/componentes/contrasena/CampoContrasena.jsx'
 
 const MENSAJE_INESPERADO = 'Ocurrió un error inesperado. Intente de nuevo.'
 
@@ -30,6 +40,7 @@ export default function PaginaLogin() {
   const [nombreUsuario, setNombreUsuario] = useState('')
   const [contrasena, setContrasena] = useState('')
   const [error, setError] = useState(null)
+  const [bloqueo, setBloqueo] = useState(null)
   const [enviando, setEnviando] = useState(false)
   const [avisoVisible, setAvisoVisible] = useState(true)
 
@@ -46,8 +57,12 @@ export default function PaginaLogin() {
       iniciar(respuesta)
       navegar('/inicio', { replace: true })
     } catch (err) {
-      setError(err instanceof ErrorApi ? err.mensaje : MENSAJE_INESPERADO)
       setContrasena('')
+      if (err instanceof ErrorApi && err.status === 423) {
+        setBloqueo(err.mensaje)
+        return
+      }
+      setError(err instanceof ErrorApi ? err.mensaje : MENSAJE_INESPERADO)
       refContrasena.current?.focus()
     } finally {
       setEnviando(false)
@@ -119,10 +134,9 @@ export default function PaginaLogin() {
             <Label htmlFor="contrasena" className="font-semibold">
               Contraseña
             </Label>
-            <Input
+            <CampoContrasena
               id="contrasena"
               name="contrasena"
-              type="password"
               autoComplete="current-password"
               ref={refContrasena}
               value={contrasena}
@@ -148,6 +162,23 @@ export default function PaginaLogin() {
           </p>
         </form>
       </main>
+
+      <AlertDialog open={bloqueo !== null} onOpenChange={(abierto) => !abierto && setBloqueo(null)}>
+        <AlertDialogContent
+          onCloseAutoFocus={(evento) => {
+            evento.preventDefault()
+            refContrasena.current?.focus()
+          }}
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle>Usuario bloqueado</AlertDialogTitle>
+            <AlertDialogDescription>{bloqueo}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction>Entendido</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

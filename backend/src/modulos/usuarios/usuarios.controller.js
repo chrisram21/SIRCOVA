@@ -38,3 +38,11 @@ export async function desactivarCuenta(req, res) {
 export async function restaurarCuenta(req, res) {
   res.json(await usuariosService.restaurarCuenta(req.params.id, req.usuario, contextoAuditoria(req)));
 }
+
+export async function restablecerContrasena(req, res) {
+  res.json(await usuariosService.restablecerContrasena(req.params.id, req.usuario, contextoAuditoria(req)));
+}
+
+export async function desbloquearCuenta(req, res) {
+  res.json(await usuariosService.desbloquearCuenta(req.params.id, req.usuario, contextoAuditoria(req)));
+}

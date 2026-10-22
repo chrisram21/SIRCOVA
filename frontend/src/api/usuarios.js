@@ -32,6 +32,15 @@ export function restaurarCuenta(id) {
   return solicitar(`/usuarios/${id}/restaurar`, { metodo: 'POST' })
 }
 
+export function desbloquearCuenta(id) {
+  return solicitar(`/usuarios/${id}/desbloquear`, { metodo: 'POST' })
+}
+
+// Devuelve { usuario, contrasenaTemporal }; la contraseña solo llega en esta respuesta.
+export function restablecerContrasena(id) {
+  return solicitar(`/usuarios/${id}/restablecer-contrasena`, { metodo: 'POST' })
+}
+
 export function editarEmpleado(id, cambios) {
   return solicitar(`/empleados/${id}`, { metodo: 'PATCH', cuerpo: cambios })
 }

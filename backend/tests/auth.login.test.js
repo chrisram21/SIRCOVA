@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import app from '../src/app.js';
 import pool from '../src/config/mysql.js';
 import entorno from '../src/config/entorno.js';
+import { MINUTOS_BLOQUEO } from '../src/modulos/auth/auth.service.js';
 
 const USUARIO = process.env.PRUEBA_USUARIO;
 const CONTRASENA = process.env.PRUEBA_CONTRASENA;
@@ -196,6 +197,9 @@ describe('POST /api/v1/auth/login · bloqueo por intentos fallidos', () => {
 
     expect(quinto.status).toBe(423);
     expect(quinto.body.error.codigo).toBe('CUENTA_BLOQUEADA');
+    expect(quinto.body.error.mensaje).toBe(
+      `Su usuario ha sido bloqueado. Contáctese con su administrador de DDRISS o intente de nuevo en ${MINUTOS_BLOQUEO} minutos.`,
+    );
     expect(bloqueo.intentos_fallidos).toBe(5);
     expect(bloqueo.segundos).toBeGreaterThan(14 * 60);
     expect(bloqueo.segundos).toBeLessThanOrEqual(15 * 60);
@@ -217,6 +221,7 @@ describe('POST /api/v1/auth/login · bloqueo por intentos fallidos', () => {
     const filas = await bitacoraDesde(desde);
 
     expect(res.status).toBe(423);
+    expect(res.body.error.mensaje).toContain(`intente de nuevo en ${MINUTOS_BLOQUEO} minutos`);
     expect((await estadoUsuario()).intentos_fallidos).toBe(5);
     expect(filas[0]).toMatchObject({ accion: 'LOGIN_FALLIDO', valores_nuevos: { motivo: 'BLOQUEADA' } });
   });

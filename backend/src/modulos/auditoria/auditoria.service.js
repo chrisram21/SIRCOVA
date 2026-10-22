@@ -6,11 +6,11 @@ export const MODULOS = aEnumeracion(['USUARIOS', 'CONFIGURACION', 'PRODUCCION', 
 
 export const ACCIONES = aEnumeracion(['LOGIN_OK', 'LOGIN_FALLIDO', 'CUENTA_BLOQUEADA', 'LOGOUT',
   'CREAR', 'ACTUALIZAR', 'DESACTIVAR', 'REACTIVAR', 'CAMBIO_ESTADO',
-  'PUBLICAR_ESQUEMA', 'EXPORTAR', 'ACCESO_DENEGADO', 'CAMBIO_CONTRASENA']);
+  'PUBLICAR_ESQUEMA', 'EXPORTAR', 'ACCESO_DENEGADO', 'CAMBIO_CONTRASENA', 'DESBLOQUEAR', 'RESTABLECER_CONTRASENA']);
 
 // Se comparan sin mayúsculas ni guiones bajos; la lista es exacta para no quitar claves como debeCambiarContrasena.
 const CLAVES_SENSIBLES = new Set(
-  ['contrasena', 'contrasenaActual', 'contrasenaNueva', 'hashContrasena', 'hash_contrasena', 'token']
+  ['contrasena', 'contrasenaActual', 'contrasenaNueva', 'contrasenaTemporal', 'hashContrasena', 'hash_contrasena', 'token']
     .map(normalizarClave),
 );
 

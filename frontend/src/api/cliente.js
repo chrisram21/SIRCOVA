@@ -14,7 +14,8 @@ export class ErrorApi extends Error {
   }
 }
 
-// Registra la función que se llama cuando una petición con token responde 401. Devuelve cómo quitarla.
+// Registra la función que se llama cuando una petición con token pierde la sesión: un 401, o un 403
+// CAMBIO_CONTRASENA_REQUERIDO porque el administrador restableció la contraseña. Devuelve cómo quitarla.
 export function alPerderSesion(manejador) {
   manejadorSesionPerdida = manejador
   return () => {
@@ -60,8 +61,11 @@ export async function solicitar(ruta, { metodo = 'GET', cuerpo } = {}) {
   if (respuesta.ok) return datos
 
   const error = crearError(respuesta.status, datos)
-  // Si la sesión ya se cerró o cambió mientras tanto, este 401 no debe cerrar la sesión actual.
-  if (respuesta.status === 401 && token && leerTokenGuardado() === token) {
+  // Con la sesión abierta no se puede cambiar la contraseña restablecida, porque la persona no conoce la temporal.
+  const pierdeSesion =
+    respuesta.status === 401 || (respuesta.status === 403 && error.codigo === 'CAMBIO_CONTRASENA_REQUERIDO')
+  // Si la sesión ya se cerró o cambió mientras tanto, esta respuesta no debe cerrar la sesión actual.
+  if (pierdeSesion && token && leerTokenGuardado() === token) {
     manejadorSesionPerdida?.(error)
   }
   throw error
