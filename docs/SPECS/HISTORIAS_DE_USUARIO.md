@@ -265,10 +265,12 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Cómo se hará:** Tablas `vacuna` y `dosis` (campos `completa_esquema` y `es_trazadora`); endpoints `GET/POST /vacunas`; carga inicial según el Registro Único de Vacunación (21 vacunas; Polio agrupa IPV y OPV y Hexavalente reemplaza a Pentavalente).
 
 **Criterios de aceptación:**
-- [ ] Puedo agregar una vacuna nueva sin cambiar el código del sistema.
-- [ ] Cada dosis tiene un orden y un tipo (primera, segunda, refuerzo, etc.).
-- [ ] Puedo marcar qué dosis completa el esquema (la última dosis sin contar refuerzos).
-- [ ] Una vacuna desactivada ya no aparece en reportes nuevos, pero sí en los históricos.
+- [x] Puedo agregar una vacuna nueva sin cambiar el código del sistema.
+- [x] Cada dosis tiene un orden y un tipo (primera, segunda, refuerzo, etc.).
+- [x] Puedo marcar qué dosis completa el esquema (la última dosis sin contar refuerzos). (La calcula el sistema; ver el avance.)
+- [ ] Una vacuna desactivada ya no aparece en reportes nuevos, pero sí en los históricos. (Pasa a HU-19 y HU-20; ver el avance.)
+
+**Avance:** criterios cumplidos, salvo el de los reportes nuevos, que pasa a HU-19 y HU-20; queda terminada al integrar el spec 15 a `main`. Backend y frontend en `specs/15-hu-10-vacunas-y-dosis.md`. Hay cinco diferencias con la historia, porque mandan `AGENTS.md` y el modelo. Primera: `dosis` no tiene columna `tipo` y el modelo no cambia; el tipo sale del código, que genera el backend: `UNICA`, `D{n}` (dosis) o `R{n}` (refuerzo), y el `orden` es el siguiente de la vacuna; un código no se reutiliza. Segunda: `completa_esquema` no se marca a mano: lo calcula el backend en cada cambio de las dosis activas (la activa `UNICA` o `DOSIS` de mayor orden o, si no hay, el último refuerzo activo, como en DPT), y la regla reproduce las marcas de las 21 vacunas de la semilla. Tercera: "una vacuna desactivada ya no aparece en reportes nuevos" depende de `POST /reportes` y del formulario, que todavía no existen; el criterio pasa a HU-19 y HU-20, y este spec garantiza que la vacuna quede inactiva sin borrar nada y no aparezca en `GET /vacunas?activa=true`. Cuarta: además de `GET/POST /vacunas` hay `GET`/`PATCH /vacunas/{id}`, `/desactivar`, `/reactivar` y rutas propias para agregar, editar, desactivar y reactivar dosis. Quinta: el Revisor (estadígrafa) tiene los mismos permisos que el Administrador (`VACUNA_CONSULTAR`, `VACUNA_CREAR`, `VACUNA_EDITAR`, y `CONFIGURACION_CONSULTAR` para ver el menú). El catálogo es nacional: no se filtra por DDRISS. Una secuencia inválida (dos `UNICA`, `UNICA` con `DOSIS` o un refuerzo antes de una dosis) responde 422; un código o nombre de vacuna repetido, o un nombre de dosis repetido en la vacuna, 409; desactivar la última dosis activa, 409. La pantalla es la pestaña «Vacunas» de `/configuracion`, con subrutas para registrar y editar. Verificado contra la API real el 2026-10-23: la pestaña mostró las 21 vacunas de la semilla con su marca; como Administrador se registró `PRUEBA_HU10` con D1, D2 y R1 (marca en D2), se le agregó D3 (la marca pasó a D3), se desactivó D3 (volvió a D2), se editó el nombre y se desactivó y reactivó la vacuna, con los filtros puestos al volver; como Revisor, Configuración mostró solo «Vacunas» y se editó la descripción. La bitácora tiene una fila por operación, más las `ACTUALIZAR` de D2 por la marca. La vacuna de prueba quedó desactivada.
 
 #### HU-11. Navegación y pantalla inicial según el rol
 
@@ -366,6 +368,8 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [ ] El esquema se guarda como borrador hasta publicarlo.
 - [ ] El sistema rechaza un esquema que use dimensiones o dosis inexistentes.
 
+**Nota (2026-10-23, spec 15):** Una vacuna registrada en HU-10 no tiene esquema de captura: el editor debe ofrecer las vacunas activas sin esquema vigente y solo sus dosis activas.
+
 #### HU-17. Versionar y publicar esquemas
 
 > **Como** administrador, **quiero** publicar una nueva versión de un esquema con fecha de vigencia, **para** adaptarme a cambios del esquema nacional sin alterar los reportes ya capturados.
@@ -410,6 +414,7 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [ ] Solo los establecimientos que envían el 5C (uno por municipio y el Hospital de San Marcos) pueden crear reportes.
 - [ ] No puedo crear dos reportes del mismo establecimiento para el mismo periodo.
 - [ ] Un establecimiento desactivado no puede crear reportes nuevos (viene de HU-09).
+- [ ] Una vacuna inactiva, o una dosis inactiva, no aparece en reportes nuevos; los reportes anteriores la conservan (viene de HU-10).
 - [ ] El reporte nace en estado Borrador.
 
 #### HU-20. Capturar la producción con el formulario dinámico
@@ -427,6 +432,7 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [ ] Solo acepta cantidades enteras no negativas.
 - [ ] Los totales por fila y columna se calculan en pantalla.
 - [ ] No se guarda ningún dato personal de pacientes.
+- [ ] Una vacuna inactiva, o una dosis inactiva, no aparece en reportes nuevos; los reportes anteriores la conservan (viene de HU-10).
 
 #### HU-21. Registrar el municipio de procedencia
 

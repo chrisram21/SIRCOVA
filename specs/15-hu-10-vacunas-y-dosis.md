@@ -1,6 +1,6 @@
 # SPEC 15 — Gestión de vacunas y dosis
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-10
 > **Depende de:** SPEC 04, SPEC 05, SPEC 06, SPEC 11, SPEC 12, SPEC 13, SPEC 14
 > **Fecha:** 2026-10-23
