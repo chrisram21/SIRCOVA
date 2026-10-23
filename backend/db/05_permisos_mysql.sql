@@ -77,6 +77,12 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('ESTABLECIMIENTO_EDITAR',         'CONFIGURACION_CATALOGOS', 'Editar, desactivar y reactivar establecimientos de su DDRISS'),
  ('TIPO_ESTABLECIMIENTO_CONSULTAR', 'CONFIGURACION_CATALOGOS', 'Consultar los tipos de establecimiento');
 
+-- SPEC 15 (HU-10): catálogo nacional de vacunas y dosis
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('VACUNA_CONSULTAR',          'CONFIGURACION_CATALOGOS', 'Consultar el catálogo de vacunas y dosis'),
+ ('VACUNA_CREAR',              'CONFIGURACION_CATALOGOS', 'Registrar vacunas con sus dosis'),
+ ('VACUNA_EDITAR',             'CONFIGURACION_CATALOGOS', 'Editar, desactivar y reactivar vacunas, y agregar, editar, desactivar y reactivar sus dosis');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -115,6 +121,17 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'ADMINISTRADOR'
    AND p.codigo IN ('ESTABLECIMIENTO_CREAR', 'ESTABLECIMIENTO_EDITAR', 'TIPO_ESTABLECIMIENTO_CONSULTAR');
+
+-- SPEC 15 (HU-10): el Administrador y el Revisor gestionan las vacunas; el Revisor ve la configuración
+-- solo con la pestaña de vacunas, porque no tiene los permisos de territorio ni de establecimientos
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo IN ('ADMINISTRADOR', 'REVISOR')
+   AND p.codigo IN ('VACUNA_CONSULTAR', 'VACUNA_CREAR', 'VACUNA_EDITAR');
+
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'REVISOR' AND p.codigo = 'CONFIGURACION_CONSULTAR';
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas
