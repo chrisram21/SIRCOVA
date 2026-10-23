@@ -312,13 +312,112 @@ function aUsuarioDetalle(fila) {
   };
 }
 
-export async function listarUsuarios(usuario) {
+const PARAMETROS_LISTADO = ['busqueda', 'rolId', 'establecimientoId', 'estado', 'pagina', 'porPagina'];
+const ESTADOS_CUENTA = {
+  ACTIVA: 'u.activo = TRUE',
+  DESACTIVADA: 'u.activo = FALSE',
+  BLOQUEADA: `u.activo = TRUE AND ${CUENTA_BLOQUEADA}`,
+};
+const LARGO_BUSQUEDA = 100;
+
+function leerEntero(valor, { minimo, maximo = Number.MAX_SAFE_INTEGER }) {
+  if (!/^\d+$/.test(valor)) return null;
+  const numero = Number(valor);
+  return numero >= minimo && numero <= maximo ? numero : null;
+}
+
+function leerFiltros(query) {
+  for (const nombre of Object.keys(query)) {
+    if (!PARAMETROS_LISTADO.includes(nombre)) throw errores.entradaInvalida(`Parámetro no permitido: ${nombre}.`);
+    if (typeof query[nombre] !== 'string') throw errores.entradaInvalida(`${nombre} no se puede repetir.`);
+  }
+
+  const filtros = { pagina: 1, porPagina: 20 };
+
+  if (query.busqueda !== undefined) {
+    const busqueda = query.busqueda.trim().replace(/\s+/g, ' ');
+    if (busqueda.length > LARGO_BUSQUEDA) {
+      throw errores.entradaInvalida(`busqueda: como máximo ${LARGO_BUSQUEDA} caracteres.`);
+    }
+    if (busqueda) filtros.busqueda = busqueda;
+  }
+  if (query.rolId !== undefined) {
+    filtros.rolId = leerEntero(query.rolId, { minimo: 1 });
+    if (filtros.rolId === null) throw errores.entradaInvalida('rolId debe ser un número entero positivo.');
+  }
+  if (query.establecimientoId !== undefined) {
+    filtros.establecimientoId =
+      query.establecimientoId === 'ninguno' ? 'ninguno' : leerEntero(query.establecimientoId, { minimo: 1 });
+    if (filtros.establecimientoId === null) {
+      throw errores.entradaInvalida("establecimientoId debe ser un número entero positivo o 'ninguno'.");
+    }
+  }
+  if (query.estado !== undefined) {
+    if (!Object.hasOwn(ESTADOS_CUENTA, query.estado)) {
+      throw errores.entradaInvalida('estado debe ser ACTIVA, DESACTIVADA o BLOQUEADA.');
+    }
+    filtros.estado = query.estado;
+  }
+  if (query.pagina !== undefined) {
+    filtros.pagina = leerEntero(query.pagina, { minimo: 1 });
+    if (filtros.pagina === null) throw errores.entradaInvalida('pagina debe ser un número entero mayor o igual a 1.');
+  }
+  if (query.porPagina !== undefined) {
+    filtros.porPagina = leerEntero(query.porPagina, { minimo: 1, maximo: 100 });
+    if (filtros.porPagina === null) throw errores.entradaInvalida('porPagina debe ser un número entero entre 1 y 100.');
+  }
+  return filtros;
+}
+
+// El mismo WHERE sirve para el COUNT y para la página, así total y elementos no se separan.
+function condicionesListado(usuario, filtros) {
   const alcance = filtroAlcance(usuario, { ddriss: 'e.ddriss_id' });
-  const [filas] = await pool.query(
-    `${CONSULTA_DETALLE} WHERE ${alcance.condicion} ORDER BY e.apellidos, e.nombres, u.id`,
-    alcance.parametros,
+  const condiciones = [alcance.condicion];
+  const parametros = [...alcance.parametros];
+
+  if (filtros.busqueda) {
+    // \ es el escape por defecto de LIKE: así %, _ y \ se buscan como texto.
+    const patron = `%${filtros.busqueda.replace(/[\\%_]/g, '\\$&')}%`;
+    condiciones.push("(CONCAT(e.nombres, ' ', e.apellidos) LIKE ? OR u.nombre_usuario LIKE ?)");
+    parametros.push(patron, patron);
+  }
+  if (filtros.rolId) {
+    condiciones.push('u.rol_id = ?');
+    parametros.push(filtros.rolId);
+  }
+  if (filtros.establecimientoId === 'ninguno') {
+    condiciones.push('e.establecimiento_id IS NULL');
+  } else if (filtros.establecimientoId) {
+    condiciones.push('e.establecimiento_id = ?');
+    parametros.push(filtros.establecimientoId);
+  }
+  if (filtros.estado) condiciones.push(`(${ESTADOS_CUENTA[filtros.estado]})`);
+
+  return { condicion: condiciones.join(' AND '), parametros };
+}
+
+export async function listarUsuarios(usuario, query = {}) {
+  const filtros = leerFiltros(query);
+  const { condicion, parametros } = condicionesListado(usuario, filtros);
+
+  const [[{ total }]] = await pool.query(
+    `SELECT COUNT(*) AS total
+       FROM usuario u
+       JOIN empleado e ON e.id = u.empleado_id
+      WHERE ${condicion}`,
+    parametros,
   );
-  return filas.map(aUsuarioDetalle);
+  const [filas] = await pool.query(
+    `${CONSULTA_DETALLE} WHERE ${condicion} ORDER BY e.apellidos, e.nombres, u.id LIMIT ? OFFSET ?`,
+    [...parametros, filtros.porPagina, (filtros.pagina - 1) * filtros.porPagina],
+  );
+
+  return {
+    elementos: filas.map(aUsuarioDetalle),
+    total: Number(total),
+    pagina: filtros.pagina,
+    porPagina: filtros.porPagina,
+  };
 }
 
 function leerId(valor) {

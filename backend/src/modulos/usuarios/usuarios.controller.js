@@ -20,7 +20,7 @@ export async function listarRoles(req, res) {
 }
 
 export async function listarUsuarios(req, res) {
-  res.json(await usuariosService.listarUsuarios(req.usuario));
+  res.json(await usuariosService.listarUsuarios(req.usuario, req.query));
 }
 
 export async function obtenerUsuario(req, res) {

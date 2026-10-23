@@ -374,6 +374,12 @@ describe('HU-05: cuentas existentes', () => {
 
   const pedir = (metodo, ruta, credencial = token) =>
     request(app)[metodo](`/api/v1${ruta}`).set('Authorization', `Bearer ${credencial}`);
+  // Con la paginación, una cuenta recién creada puede no estar en la primera página: se busca por su nombre de usuario.
+  const buscarCuenta = async (nombreUsuario) => {
+    const res = await pedir('get', '/usuarios').query({ busqueda: nombreUsuario });
+    expect(res.status).toBe(200);
+    return res.body.elementos.find((u) => u.nombreUsuario === nombreUsuario);
+  };
 
   async function crearPersonal({ empleado = {}, rol = 'REVISOR', prefijo = PREFIJO_HU05 } = {}) {
     const alta = await registrar({
@@ -429,14 +435,15 @@ describe('HU-05: cuentas existentes', () => {
       const res = await pedir('get', '/usuarios');
 
       expect(res.status).toBe(200);
-      expect(res.body).toHaveLength(total);
-      expect(res.body.every((u) => u.empleado.ddrissId === administrador.ddrissId)).toBe(true);
-      expect(JSON.stringify(res.body)).not.toContain(hash);
+      expect(res.body).toMatchObject({ total, pagina: 1, porPagina: 20 });
+      expect(res.body.elementos).toHaveLength(Math.min(total, 20));
+      expect(res.body.elementos.every((u) => u.empleado.ddrissId === administrador.ddrissId)).toBe(true);
       for (const clave of ['hashContrasena', 'intentosFallidos', 'bloqueadoHasta']) {
-        expect(res.body[0]).not.toHaveProperty(clave);
+        expect(res.body.elementos[0]).not.toHaveProperty(clave);
       }
 
-      const filaActiva = res.body.find((u) => u.id === activa.usuario.id);
+      const filaActiva = await buscarCuenta(activa.usuario.nombreUsuario);
+      expect(JSON.stringify(filaActiva)).not.toContain(hash);
       expect(filaActiva).toEqual({
         ...activa.usuario,
         bloqueada: false,
@@ -449,7 +456,7 @@ describe('HU-05: cuentas existentes', () => {
         },
       });
 
-      const filaDesactivada = res.body.find((u) => u.id === desactivada.usuario.id);
+      const filaDesactivada = await buscarCuenta(desactivada.usuario.nombreUsuario);
       expect(filaDesactivada.activo).toBe(false);
       // La fecha debe ser la de ahora en UTC: si saliera corrida por la zona horaria, quedaría a horas de distancia.
       expect(Math.abs(Date.parse(filaDesactivada.desactivadoEn) - Date.now())).toBeLessThan(5 * 60_000);
@@ -459,10 +466,10 @@ describe('HU-05: cuentas existentes', () => {
       const { usuario } = await crearPersonal();
 
       const detalle = await pedir('get', `/usuarios/${usuario.id}`);
-      const listado = await pedir('get', '/usuarios');
+      const enListado = await buscarCuenta(usuario.nombreUsuario);
 
       expect(detalle.status).toBe(200);
-      expect(detalle.body).toEqual(listado.body.find((u) => u.id === usuario.id));
+      expect(detalle.body).toEqual(enListado);
     });
 
     it('GET /usuarios/{id} de otra DDRISS o inexistente responde 404 NO_ENCONTRADO', async () => {
@@ -481,7 +488,7 @@ describe('HU-05: cuentas existentes', () => {
 
       const listadoAjeno = await pedir('get', '/usuarios', otraDdriss);
       expect(listadoAjeno.status).toBe(200);
-      expect(listadoAjeno.body).toEqual([]);
+      expect(listadoAjeno.body).toEqual({ elementos: [], total: 0, pagina: 1, porPagina: 20 });
     });
 
     it('sin USUARIO_CONSULTAR responde 403 SIN_PERMISO', async () => {
@@ -723,12 +730,12 @@ describe('HU-05: cuentas existentes', () => {
       const libre = await crearCuenta();
       await bloquearPorSql(bloqueada.usuario.id);
 
-      const res = await pedir('get', '/usuarios');
+      const res = await pedir('get', '/usuarios').query({ busqueda: PREFIJO_HU62, porPagina: 100 });
 
       expect(res.status).toBe(200);
-      expect(res.body.find((u) => u.id === bloqueada.usuario.id).bloqueada).toBe(true);
-      expect(res.body.find((u) => u.id === libre.usuario.id).bloqueada).toBe(false);
-      for (const cuenta of res.body) {
+      expect(res.body.elementos.find((u) => u.id === bloqueada.usuario.id).bloqueada).toBe(true);
+      expect(res.body.elementos.find((u) => u.id === libre.usuario.id).bloqueada).toBe(false);
+      for (const cuenta of res.body.elementos) {
         expect(cuenta).not.toHaveProperty('bloqueadoHasta');
         expect(cuenta).not.toHaveProperty('intentosFallidos');
       }
