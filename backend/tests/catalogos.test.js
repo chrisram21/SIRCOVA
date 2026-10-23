@@ -72,7 +72,18 @@ describe('GET /ddriss', () => {
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(1);
     expect(res.body[0].id).toBe(administrador.ddrissId);
-    expect(Object.keys(res.body[0]).sort()).toEqual(['codigo', 'departamentoId', 'id', 'nombre']);
+    expect(Object.keys(res.body[0]).sort()).toEqual(['codigo', 'departamentoId', 'departamentoNombre', 'id', 'nombre']);
+  });
+
+  it('trae el nombre del departamento sede', async () => {
+    const [[{ nombre }]] = await pool.query(
+      'SELECT dep.nombre FROM ddriss d JOIN departamento dep ON dep.id = d.departamento_id WHERE d.id = ?',
+      [administrador.ddrissId],
+    );
+
+    const res = await consultar('/ddriss');
+
+    expect(res.body[0].departamentoNombre).toBe(nombre);
   });
 });
 
@@ -109,6 +120,85 @@ describe('GET /municipios', () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(total);
+  });
+});
+
+describe('GET /municipios (HU-08)', () => {
+  const SAN_MARCOS = Array.from({ length: 30 }, (_, i) => String(1201 + i));
+
+  it('sin parámetros devuelve los 30 municipios de San Marcos con el nombre del departamento, sin el 9999', async () => {
+    const res = await consultar('/municipios');
+
+    expect(res.status).toBe(200);
+    expect(res.body.map((m) => m.codigoIne).sort()).toEqual(SAN_MARCOS);
+    expect(res.body.every((m) => m.departamentoNombre === 'San Marcos')).toBe(true);
+    expect(Object.keys(res.body[0]).sort()).toEqual(
+      ['activo', 'codigoIne', 'departamentoId', 'departamentoNombre', 'id', 'nombre'],
+    );
+  });
+
+  it('con alcance=procedencia suma el 9999 (al final) y los municipios de sus establecimientos externos', async () => {
+    const [externos] = await pool.query(
+      `SELECT DISTINCT m.codigo_ine
+         FROM establecimiento e
+         JOIN municipio m ON m.id = e.municipio_id
+         JOIN ddriss d ON d.id = e.ddriss_id
+        WHERE e.ddriss_id = ? AND m.departamento_id <> d.departamento_id AND m.activo = TRUE`,
+      [administrador.ddrissId],
+    );
+
+    const res = await consultar('/municipios?alcance=procedencia');
+
+    expect(res.status).toBe(200);
+    const codigos = res.body.map((m) => m.codigoIne);
+    expect(codigos.at(-1)).toBe('9999');
+    expect(res.body.at(-1).nombre).toBe('Migrantes / fuera de San Marcos');
+    expect(codigos).toEqual(expect.arrayContaining([...SAN_MARCOS, '0920', ...externos.map((m) => m.codigo_ine)]));
+    expect(codigos).toHaveLength(SAN_MARCOS.length + 1 + new Set(['0920', ...externos.map((m) => m.codigo_ine)]).size);
+  });
+
+  it.each(['alcance=otro', 'incluirInactivos=si', 'orden=nombre', 'alcance=departamento&alcance=procedencia'])(
+    '%s responde 400 ENTRADA_INVALIDA',
+    async (consulta) => {
+      const res = await consultar(`/municipios?${consulta}`);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.codigo).toBe('ENTRADA_INVALIDA');
+    },
+  );
+
+  it('la autoridad nacional recibe todos los municipios activos con los dos alcances', async () => {
+    const [[{ total }]] = await pool.query('SELECT COUNT(*) AS total FROM municipio WHERE activo = TRUE');
+    const autoridad = await crearCuentaPrueba('autoridad-hu08', 'AUTORIDAD', { ddrissId: null });
+    const credencial = firmarPara(autoridad, { rol: 'AUTORIDAD', ddrissId: null, permisos: ['MUNICIPIO_CONSULTAR'] });
+
+    for (const alcance of ['departamento', 'procedencia']) {
+      const res = await consultar(`/municipios?alcance=${alcance}`, credencial);
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveLength(total);
+    }
+  });
+
+  describe('con un municipio desactivado', () => {
+    // Coatepeque: fuera del departamento sede y sin distritos, así que desactivarlo un momento no afecta a otras pruebas.
+    let coatepeque;
+
+    beforeAll(async () => {
+      [[coatepeque]] = await pool.query("SELECT id FROM municipio WHERE codigo_ine = '0920'");
+      await pool.query('UPDATE municipio SET activo = FALSE WHERE id = ?', [coatepeque.id]);
+    });
+
+    afterAll(async () => {
+      await pool.query('UPDATE municipio SET activo = TRUE WHERE id = ?', [coatepeque.id]);
+    });
+
+    it('solo aparece con incluirInactivos=true, marcado como inactivo', async () => {
+      const sinInactivos = await consultar('/municipios?alcance=procedencia');
+      const conInactivos = await consultar('/municipios?alcance=procedencia&incluirInactivos=true');
+
+      expect(sinInactivos.body.find((m) => m.id === coatepeque.id)).toBeUndefined();
+      expect(conInactivos.body.find((m) => m.id === coatepeque.id)).toMatchObject({ codigoIne: '0920', activo: false });
+    });
   });
 });
 

@@ -5,7 +5,7 @@ export async function listarDdriss(req, res) {
 }
 
 export async function listarMunicipios(req, res) {
-  res.json(await catalogosService.listarMunicipios(req.usuario));
+  res.json(await catalogosService.listarMunicipios(req.usuario, req.query));
 }
 
 export async function listarEstablecimientos(req, res) {
