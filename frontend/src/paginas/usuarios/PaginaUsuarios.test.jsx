@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { ErrorApi } from '@/api/cliente.js'
 import { guardarSesion } from '@/api/sesion.js'
 import {
@@ -11,6 +11,7 @@ import {
 } from '@/api/usuarios.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 import PaginaUsuarios from './PaginaUsuarios.jsx'
+import { paginasVisibles } from './PaginacionUsuarios.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
 vi.mock('@/api/usuarios.js', () => ({
@@ -63,6 +64,8 @@ const CUENTAS = [
   cuenta(11, 'tcruz', { activo: false, bloqueada: true, desactivadoEn: '2026-10-21T07:00:00.000Z' }),
 ]
 
+const respuesta = (elementos, extra = {}) => ({ elementos, total: elementos.length, pagina: 1, porPagina: 20, ...extra })
+
 function crearSesion(permisos) {
   const codificar = (objeto) => btoa(JSON.stringify(objeto)).replace(/=+$/, '')
   const exp = Math.floor(Date.now() / 1000) + 3600
@@ -78,12 +81,19 @@ function crearSesion(permisos) {
   }
 }
 
-async function abrir(permisos = TODOS_LOS_PERMISOS) {
+// Muestra la cadena de consulta actual, para revisar lo que la página escribe en la URL.
+function Ubicacion() {
+  return <output data-testid="ubicacion">{useLocation().search}</output>
+}
+const ubicacion = () => screen.getByTestId('ubicacion').textContent
+
+async function abrir(permisos = TODOS_LOS_PERMISOS, ruta = '/usuarios') {
   guardarSesion(crearSesion(permisos))
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[ruta]}>
       <ProveedorSesion>
         <PaginaUsuarios />
+        <Ubicacion />
       </ProveedorSesion>
     </MemoryRouter>,
   )
@@ -117,7 +127,7 @@ async function elegir(nombreUsuario, opcion) {
 beforeEach(() => {
   vi.clearAllMocks()
   sessionStorage.clear()
-  listarUsuarios.mockResolvedValue(CUENTAS)
+  listarUsuarios.mockResolvedValue(respuesta(CUENTAS))
 })
 
 test('muestra una fila por cuenta con su estado, el cargo y el establecimiento o "DDRISS"', async () => {
@@ -337,8 +347,119 @@ test('si falla la carga, se muestra el error', async () => {
 })
 
 test('sin cuentas, muestra el aviso', async () => {
-  listarUsuarios.mockResolvedValue([])
+  listarUsuarios.mockResolvedValue(respuesta([]))
   await abrir()
 
   expect(screen.getByText('No hay cuentas registradas en su DDRISS.')).toBeTruthy()
+})
+
+describe('HU-07: paginación', () => {
+  // Responde la página pedida de un listado de 57 cuentas (3 páginas de 20).
+  const conTotal = (total) =>
+    listarUsuarios.mockImplementation(async ({ pagina, porPagina }) => respuesta(CUENTAS, { total, pagina, porPagina }))
+  const enlace = (nombre) => screen.getByRole('link', { name: nombre })
+
+  test('paginasVisibles muestra la primera, la última, la actual y una a cada lado, con saltos', () => {
+    expect(paginasVisibles(1, 1)).toEqual([1])
+    expect(paginasVisibles(1, 3)).toEqual([1, 2, 3])
+    expect(paginasVisibles(5, 12)).toEqual([1, null, 4, 5, 6, null, 12])
+    expect(paginasVisibles(12, 12)).toEqual([1, null, 11, 12])
+  })
+
+  test('al cargar /usuarios pide la página 1 de 20 filas', async () => {
+    await abrir()
+    expect(listarUsuarios).toHaveBeenCalledTimes(1)
+    expect(listarUsuarios).toHaveBeenCalledWith({ pagina: 1, porPagina: 20 })
+  })
+
+  test('con 57 cuentas muestra "Mostrando 1 a 20 de 57" y "Siguiente" pide la página 2', async () => {
+    conTotal(57)
+    await abrir()
+
+    expect(screen.getByText('Mostrando 1 a 20 de 57')).toBeTruthy()
+    const paginacion = screen.getByRole('navigation', { name: 'Paginación' })
+    expect(within(paginacion).getAllByRole('link').map((a) => a.textContent)).toEqual(['Anterior', '1', '2', '3', 'Siguiente'])
+    expect(enlace('Página 1').getAttribute('aria-current')).toBe('page')
+    expect(enlace('Siguiente').getAttribute('href')).toBe('/usuarios?pagina=2')
+
+    fireEvent.click(enlace('Siguiente'))
+
+    expect(await screen.findByText('Mostrando 21 a 40 de 57')).toBeTruthy()
+    expect(ubicacion()).toBe('?pagina=2')
+    expect(listarUsuarios).toHaveBeenLastCalledWith({ pagina: 2, porPagina: 20 })
+    expect(enlace('Página 2').getAttribute('aria-current')).toBe('page')
+  })
+
+  test('"Anterior" está deshabilitado en la página 1 y "Siguiente" en la última', async () => {
+    conTotal(57)
+    await abrir(TODOS_LOS_PERMISOS, '/usuarios?pagina=3')
+
+    expect(screen.getByText('Mostrando 41 a 57 de 57')).toBeTruthy()
+    expect(enlace('Siguiente').getAttribute('aria-disabled')).toBe('true')
+    expect(enlace('Anterior').getAttribute('aria-disabled')).toBeNull()
+
+    fireEvent.click(enlace('Página 1'))
+    await screen.findByText('Mostrando 1 a 20 de 57')
+    expect(enlace('Anterior').getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(enlace('Anterior'))
+    expect(listarUsuarios).toHaveBeenCalledTimes(2)
+    expect(ubicacion()).toBe('')
+  })
+
+  test('con una sola página no hay paginación, pero sí "Mostrando…" y "Filas por página"', async () => {
+    await abrir()
+
+    expect(screen.getByText(`Mostrando 1 a ${CUENTAS.length} de ${CUENTAS.length}`)).toBeTruthy()
+    expect(screen.getByLabelText('Filas por página')).toBeTruthy()
+    expect(screen.queryByRole('navigation', { name: 'Paginación' })).toBeNull()
+  })
+
+  test('cambiar "Filas por página" a 50 pide porPagina 50 y vuelve a la página 1', async () => {
+    conTotal(57)
+    await abrir(TODOS_LOS_PERMISOS, '/usuarios?pagina=2')
+
+    // Radix Select deja un <select> nativo oculto dentro del formulario; cambiarlo actualiza el valor del Select.
+    fireEvent.change(document.querySelector('select[name="porPagina"]'), { target: { value: '50' } })
+
+    await screen.findByText('Mostrando 1 a 50 de 57')
+    expect(listarUsuarios).toHaveBeenLastCalledWith({ pagina: 1, porPagina: 50 })
+    expect(ubicacion()).toBe('?porPagina=50')
+  })
+
+  test('un valor inválido en la URL no llega a la API: se usa el valor por defecto', async () => {
+    await abrir(TODOS_LOS_PERMISOS, '/usuarios?pagina=abc&porPagina=30&estado=OTRO&rolId=-1&establecimientoId=x')
+    expect(listarUsuarios).toHaveBeenCalledWith({ pagina: 1, porPagina: 20 })
+  })
+
+  test('si la página pedida viene vacía con total mayor que 0, pide la última', async () => {
+    listarUsuarios.mockImplementation(async ({ pagina, porPagina }) =>
+      pagina > 3 ? respuesta([], { total: 57, pagina, porPagina }) : respuesta(CUENTAS, { total: 57, pagina, porPagina }),
+    )
+    await abrir(TODOS_LOS_PERMISOS, '/usuarios?pagina=9')
+
+    expect(await screen.findByText('Mostrando 41 a 57 de 57')).toBeTruthy()
+    expect(listarUsuarios).toHaveBeenLastCalledWith({ pagina: 3, porPagina: 20 })
+    expect(ubicacion()).toBe('?pagina=3')
+    expect(screen.queryByText('No hay cuentas registradas en su DDRISS.')).toBeNull()
+  })
+
+  test('si la respuesta de una petición vieja llega después de la nueva, se descarta', async () => {
+    let resolverVieja
+    conTotal(57)
+    await abrir()
+    listarUsuarios
+      .mockImplementationOnce(() => new Promise((resolve) => (resolverVieja = resolve)))
+      .mockImplementationOnce(async () => respuesta([cuenta(30, 'nueva')], { total: 57, pagina: 3 }))
+
+    fireEvent.click(enlace('Siguiente'))
+    expect(screen.getByRole('table').closest('[aria-busy]').getAttribute('aria-busy')).toBe('true')
+    fireEvent.click(enlace('Página 3'))
+    expect(await screen.findByRole('cell', { name: 'nueva' })).toBeTruthy()
+
+    resolverVieja(respuesta([cuenta(20, 'vieja')], { total: 57, pagina: 2 }))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(screen.queryByRole('cell', { name: 'vieja' })).toBeNull()
+    expect(screen.getByRole('cell', { name: 'nueva' })).toBeTruthy()
+    expect(ubicacion()).toBe('?pagina=3')
+  })
 })

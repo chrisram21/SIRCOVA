@@ -12,8 +12,15 @@ export function listarRoles() {
   return solicitar('/roles')
 }
 
-export function listarUsuarios() {
-  return solicitar('/usuarios')
+// filtros: { busqueda, rolId, establecimientoId, estado, pagina, porPagina }; solo se envían los que tienen valor.
+// Devuelve { elementos, total, pagina, porPagina }.
+export function listarUsuarios(filtros = {}) {
+  const consulta = new URLSearchParams()
+  for (const [nombre, valor] of Object.entries(filtros)) {
+    if (valor !== undefined && valor !== null && valor !== '') consulta.set(nombre, String(valor))
+  }
+  const texto = consulta.toString()
+  return solicitar(texto ? `/usuarios?${texto}` : '/usuarios')
 }
 
 export function obtenerUsuario(id) {
