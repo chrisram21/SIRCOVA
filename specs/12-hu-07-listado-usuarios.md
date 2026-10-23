@@ -266,6 +266,14 @@ CLAUDE.md                                      ← nota sobre la respuesta pagin
 - **Sí:** los Select de rol y de establecimiento dependen de `ROL_CONSULTAR` y `ESTABLECIMIENTO_CONSULTAR`, los permisos de los endpoints que los llenan. Si un catálogo falla, el listado sigue funcionando.
 - **Sí:** el Select de establecimiento incluye los inactivos, marcados "(inactivo)". Una cuenta puede seguir ligada a un establecimiento desactivado.
 - **Sí:** las pruebas del SPEC 08 y del SPEC 10 que leían el arreglo se ajustan para leer `elementos` y buscar su cuenta con `busqueda`. Con la paginación, la cuenta creada puede no estar en la primera página.
+- **Sí:** se ajustaron cuatro pruebas del backend, no tres: también "GET /usuarios/{id} de otra DDRISS o inexistente…", que esperaba `[]` del listado ajeno. Decidido durante la implementación.
+- **Sí:** el parámetro común `PorPagina` del contrato recibe `minimum: 1`, para que coincida con el rango de 1 a 100. Ningún otro endpoint implementado lo usa todavía. Decidido durante la implementación.
+- **Sí:** las pruebas de HU-07 usan cuatro cuentas con el mismo apellido, `López` más una marca de 10 letras al azar (la regla de apellidos no acepta números), para que la búsqueda no encuentre cuentas de otras corridas en la base compartida. Las de los comodines exigen `total: 0`, porque ningún nombre válido contiene `%`, `\` ni `L_pez`. Decidido durante la implementación.
+- **Sí:** en la URL, `porPagina` solo vale si es 10, 20 o 50; otro valor se ignora y se usa 20. La API acepta de 1 a 100, pero el selector no puede mostrar otros valores. Decidido durante la implementación.
+- **Sí:** los enlaces de la paginación llevan su URL real en `href` (se pueden abrir en otra pestaña) y navegan con React Router. Uno deshabilitado ("Anterior" en la página 1, "Siguiente" en la última) apunta a la página actual, porque su destino no existe; se encontró en la verificación manual. Decidido durante la implementación.
+- **Sí:** `FiltrosUsuarios.jsx` pide sus propios catálogos al montarse, en paralelo con el listado, y solo los que su permiso permite. La barra y el selector de filas van dentro de un `<form>` para que Radix agregue el `<select>` nativo con el que las pruebas cambian el valor, como en las otras pantallas. Decidido durante la implementación.
+- **Sí:** el efecto que pide la página depende solo de la consulta canónica de la URL, porque React Router 7 crea un `setSearchParams` nuevo en cada cambio de URL. Decidido durante la implementación.
+- **Sí:** la verificación manual se hizo con Playwright contra Aiven; la persona inició sesión a mano en la pestaña, para que la contraseña de prueba no pasara por la conversación. `/api/docs` y los 400 se comprobaron con `fetch` desde la misma pestaña. Decidido durante la implementación.
 
 ## Riesgos
 

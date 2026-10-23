@@ -417,6 +417,7 @@ describe('HU-07: paginación', () => {
 
     expect(screen.getByText('Mostrando 41 a 57 de 57')).toBeTruthy()
     expect(enlace('Siguiente').getAttribute('aria-disabled')).toBe('true')
+    expect(enlace('Siguiente').getAttribute('href')).toBe('/usuarios?pagina=3')
     expect(enlace('Anterior').getAttribute('aria-disabled')).toBeNull()
 
     fireEvent.click(enlace('Página 1'))

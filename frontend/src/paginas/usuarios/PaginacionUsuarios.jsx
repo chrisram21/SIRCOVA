@@ -25,9 +25,10 @@ export default function PaginacionUsuarios({ total, pagina, porPagina, hrefDe, a
   const hasta = Math.min(pagina * porPagina, total)
 
   // Los enlaces llevan su URL real (para abrirla en otra pestaña), pero navegan con React Router.
+  // Uno deshabilitado apunta a la página actual: su destino (0 o la última + 1) no existe.
   function enlace(destino, deshabilitado) {
     return {
-      href: hrefDe(destino),
+      href: hrefDe(deshabilitado ? pagina : destino),
       'aria-disabled': deshabilitado || undefined,
       tabIndex: deshabilitado ? -1 : undefined,
       className: deshabilitado ? 'pointer-events-none opacity-50' : undefined,

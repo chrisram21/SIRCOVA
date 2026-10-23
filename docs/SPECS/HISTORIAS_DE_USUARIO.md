@@ -201,9 +201,11 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Cómo se hará:** Tabla paginada en React; endpoint `GET /usuarios` con parámetros de filtro y paginación.
 
 **Criterios de aceptación:**
-- [ ] Puedo buscar por nombre o usuario.
-- [ ] Puedo filtrar por rol, establecimiento y activo/inactivo.
-- [ ] El listado se página y nunca muestra contraseñas.
+- [x] Puedo buscar por nombre o usuario.
+- [x] Puedo filtrar por rol, establecimiento y activo/inactivo.
+- [x] El listado se página y nunca muestra contraseñas.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 12 a `main`. Backend y frontend en `specs/12-hu-07-listado-usuarios.md`. `GET /usuarios` (permiso `USUARIO_CONSULTAR`, sin permisos nuevos) filtra y pagina en el servidor con `busqueda` (nombre completo o nombre de usuario, sin distinguir mayúsculas ni tildes; `%`, `_` y `\` se buscan como texto), `rolId`, `establecimientoId` (un id o `ninguno` para la sede de la DDRISS), `estado` (`ACTIVA`, `DESACTIVADA` o `BLOQUEADA`; las bloqueadas también salen en `ACTIVA` con su Badge "Bloqueada"), `pagina` y `porPagina` (1 a 100, por defecto 20). Responde `{ elementos, total, pagina, porPagina }`, la forma que deben repetir los demás listados paginados; un parámetro inválido, desconocido o repetido responde 400 y una página fuera de rango responde 200 vacía con el total. La pantalla `/usuarios` tiene la barra de filtros (la búsqueda espera 300 ms), el pie con "Mostrando X a Y de Z", 10, 20 o 50 filas por página y la paginación, y guarda todo en la URL. Verificado contra la API real el 2026-10-22: búsqueda, filtros combinados, 10 filas por página, vuelta desde "Editar" con Atrás conservando los filtros, página fuera de rango y los 400.
 
 **Nota (2026-10-21, spec 07):** la página `/usuarios` ya existe (`frontend/src/paginas/usuarios/PaginaUsuarios.jsx`, permiso `USUARIO_CONSULTAR`) y solo tiene el botón "Registrar personal", que lleva a `/usuarios/nuevo`. A esta historia le falta agregarle el listado y `GET /usuarios`, sin mover el formulario de registro.
 
