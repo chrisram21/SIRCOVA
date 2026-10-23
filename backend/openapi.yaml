@@ -357,20 +357,76 @@ paths:
   /usuarios:
     get:
       tags: [Usuarios]
-      summary: Listar las cuentas de la DDRISS del usuario, activas y desactivadas
+      summary: Buscar y filtrar las cuentas de la DDRISS del usuario, paginadas
       description: |
-        Versión mínima, sin búsqueda, filtros ni paginación (HU-07 los agrega). Ordenadas por apellidos y
-        nombres del empleado. Nunca devuelve la contraseña, su hash, los intentos fallidos ni la fecha del
-        bloqueo; solo `bloqueada`.
+        Siempre dentro de la DDRISS del usuario (la autoridad nacional ve todas); los filtros se combinan entre sí.
+        Ordenadas por apellidos, nombres e id del empleado. Nunca devuelve la contraseña, su hash, los intentos
+        fallidos ni la fecha del bloqueo; solo `bloqueada`.
+
+        - `busqueda` busca por coincidencia parcial en el nombre completo (`nombres apellidos`) y en el nombre de
+          usuario, sin distinguir mayúsculas ni tildes. `%`, `_` y `\` se buscan como texto, no como comodines.
+        - `estado=BLOQUEADA` son las cuentas activas con el bloqueo por intentos vigente; también aparecen con
+          `estado=ACTIVA`, porque una cuenta bloqueada sigue activa.
+        - Un `rolId` o `establecimientoId` que no existe o es de otra DDRISS devuelve una lista vacía, no un error.
+        - Una `pagina` mayor que la última responde 200 con `elementos` vacío y el `total` real.
+        - Un parámetro inválido, desconocido o repetido responde 400 `ENTRADA_INVALIDA`.
       x-permiso: USUARIO_CONSULTAR
+      parameters:
+        - name: busqueda
+          in: query
+          description: Parte del nombre completo o del nombre de usuario; se limpian los espacios y vacío equivale a no enviarlo
+          schema: { type: string, maxLength: 100, example: ana lopez }
+        - name: rolId
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: establecimientoId
+          in: query
+          description: Id del establecimiento, o `ninguno` para las cuentas sin establecimiento (sede de la DDRISS)
+          schema:
+            oneOf:
+              - { type: integer, minimum: 1 }
+              - { type: string, enum: [ninguno] }
+        - name: estado
+          in: query
+          schema: { type: string, enum: [ACTIVA, DESACTIVADA, BLOQUEADA] }
+        - { $ref: "#/components/parameters/Pagina" }
+        - { $ref: "#/components/parameters/PorPagina" }
       responses:
         "200":
-          description: Cuentas del ámbito del usuario
+          description: Página de cuentas del ámbito del usuario que cumplen los filtros
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/UsuarioDetalle" }
+              schema: { $ref: "#/components/schemas/PaginaUsuarios" }
+        "400":
+          description: Un parámetro inválido, desconocido o repetido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                pagina:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: pagina debe ser un número entero mayor o igual a 1. }
+                porPagina:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: porPagina debe ser un número entero entre 1 y 100. }
+                rolId:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: rolId debe ser un número entero positivo. }
+                establecimientoId:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "establecimientoId debe ser un número entero positivo o 'ninguno'." }
+                estado:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: estado debe ser ACTIVA, DESACTIVADA o BLOQUEADA. }
+                busqueda:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "busqueda: como máximo 100 caracteres." }
+                desconocido:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: orden." }
+                repetido:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: estado no se puede repetir. }
         "401": { $ref: "#/components/responses/NoAutenticado" }
         "403": { $ref: "#/components/responses/SinPermiso" }
     post:
@@ -1239,7 +1295,7 @@ components:
     PorPagina:
       name: porPagina
       in: query
-      schema: { type: integer, default: 20, maximum: 100 }
+      schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
 
   responses:
     EntradaInvalida:
@@ -1519,6 +1575,21 @@ components:
                   properties:
                     establecimientoNombre: { type: string, nullable: true }
                     municipioNombre: { type: string, nullable: true }
+
+    PaginaUsuarios:
+      description: |
+        Página de cuentas. Es la forma de toda respuesta paginada de la API: `elementos` (los de esta página),
+        `total` (todos los que cumplen los filtros, sin paginar), `pagina` y `porPagina`. Los demás listados
+        paginados repiten esta forma con su propio tipo de elemento.
+      type: object
+      required: [elementos, total, pagina, porPagina]
+      properties:
+        elementos:
+          type: array
+          items: { $ref: "#/components/schemas/UsuarioDetalle" }
+        total: { type: integer, minimum: 0, example: 57 }
+        pagina: { type: integer, minimum: 1, example: 2 }
+        porPagina: { type: integer, minimum: 1, maximum: 100, example: 20 }
 
     EstablecimientoEntrada:
       type: object
