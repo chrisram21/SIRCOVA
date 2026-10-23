@@ -868,7 +868,7 @@ paths:
               examples:
                 nombre:
                   value:
-                    error: { codigo: ENTRADA_INVALIDA, mensaje: "nombre: debe tener entre 3 y 120 caracteres." }
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El nombre del distrito debe tener entre 3 y 120 caracteres. }
                 campo:
                   value:
                     error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: codigo." }
@@ -924,10 +924,10 @@ paths:
               examples:
                 nombre:
                   value:
-                    error: { codigo: ENTRADA_INVALIDA, mensaje: "nombre: debe tener entre 3 y 120 caracteres." }
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El nombre del distrito debe tener entre 3 y 120 caracteres. }
                 sinNombre:
                   value:
-                    error: { codigo: ENTRADA_INVALIDA, mensaje: nombre es obligatorio. }
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El nombre del distrito es obligatorio. }
                 municipio:
                   value:
                     error: { codigo: ENTRADA_INVALIDA, mensaje: municipioId no se puede cambiar. }

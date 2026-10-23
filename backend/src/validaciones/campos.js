@@ -1,7 +1,7 @@
 // Reglas de formato de los campos de texto. Cada una devuelve { valor } con el valor limpio o { error }.
 // Hay una copia con las mismas reglas en frontend/src/validaciones/campos.js: un cambio va en las dos.
 
-export const LARGOS = { nombres: 100, apellidos: 100, cargo: 100, correo: 150, nombreUsuario: 50 };
+export const LARGOS = { nombres: 100, apellidos: 100, cargo: 100, correo: 150, nombreUsuario: 50, nombreDistrito: 120 };
 
 export const MENSAJES = {
   nombresObligatorio: 'Los nombres son obligatorios.',
@@ -18,6 +18,9 @@ export const MENSAJES = {
   cuiDepartamento: 'El CUI no es válido; el departamento debe estar entre 01 y 22.',
   nombreUsuario:
     'El nombre de usuario debe tener de 4 a 50 caracteres: minúsculas, números, punto, guion o guion bajo.',
+  nombreDistritoObligatorio: 'El nombre del distrito es obligatorio.',
+  nombreDistrito: 'El nombre del distrito solo puede tener letras, números, espacios y los signos . - ( ).',
+  nombreDistritoLargo: 'El nombre del distrito debe tener entre 3 y 120 caracteres.',
 };
 
 const demasiadoLargo = (campo, largo) => `${campo}: como máximo ${largo} caracteres.`;
@@ -27,6 +30,7 @@ const CARGO = /^\p{L}[\p{L} .,()/-]*$/u;
 const CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const NOMBRE_USUARIO = /^[a-z0-9._-]{4,50}$/;
 const TELEFONO = /^[2-7]\d{7}$/;
+const NOMBRE_DISTRITO = /^[\p{L}\d .()-]+$/u;
 const DEPARTAMENTOS = 22;
 
 // Sin texto (null, undefined o solo espacios) devuelve ''. Un valor que no es texto devuelve null.
@@ -111,5 +115,13 @@ export function validarCui(valor) {
 export function validarNombreUsuario(valor) {
   const texto = typeof valor === 'string' ? valor.trim() : null;
   if (!texto || !NOMBRE_USUARIO.test(texto)) return { error: MENSAJES.nombreUsuario };
+  return { valor: texto };
+}
+
+export function validarNombreDistrito(valor) {
+  const texto = limpiar(valor);
+  if (texto === '') return { error: MENSAJES.nombreDistritoObligatorio };
+  if (texto === null || !NOMBRE_DISTRITO.test(texto)) return { error: MENSAJES.nombreDistrito };
+  if (texto.length < 3 || texto.length > LARGOS.nombreDistrito) return { error: MENSAJES.nombreDistritoLargo };
   return { valor: texto };
 }
