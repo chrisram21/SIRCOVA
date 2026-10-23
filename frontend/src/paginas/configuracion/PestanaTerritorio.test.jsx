@@ -1,6 +1,14 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { crearDistrito, listarDdriss, listarDistritos, listarMunicipios, renombrarDistrito } from '@/api/catalogos.js'
+import {
+  crearDistrito,
+  desactivarDistrito,
+  listarDdriss,
+  listarDistritos,
+  listarMunicipios,
+  reactivarDistrito,
+  renombrarDistrito,
+} from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
@@ -95,6 +103,17 @@ const filaDe = (nombreTabla, texto) => within(tabla(nombreTabla)).getByRole('cel
 const filasDe = (nombreTabla) => within(tabla(nombreTabla)).getAllByRole('row').slice(1)
 const elegirFiltro = (nombre, valor) =>
   fireEvent.change(document.querySelector(`select[name="${nombre}"]`), { target: { value: String(valor) } })
+
+// Radix abre el menú con Enter sobre el botón; su contenido va en un portal, fuera de la fila.
+async function abrirMenu(codigo) {
+  fireEvent.keyDown(screen.getByRole('button', { name: `Acciones de ${codigo}` }), { key: 'Enter' })
+  return screen.findByRole('menu')
+}
+
+async function elegirAccion(codigo, accion) {
+  const menu = await abrirMenu(codigo)
+  fireEvent.click(within(menu).getByRole('menuitem', { name: accion }))
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -214,13 +233,6 @@ describe('registrar y renombrar', () => {
     return screen.findByRole('dialog')
   }
 
-  // Radix abre el menú con Enter sobre el botón; su contenido va en un portal, fuera de la fila.
-  async function elegirAccion(codigo, accion) {
-    fireEvent.keyDown(screen.getByRole('button', { name: `Acciones de ${codigo}` }), { key: 'Enter' })
-    const menu = await screen.findByRole('menu')
-    fireEvent.click(within(menu).getByRole('menuitem', { name: accion }))
-  }
-
   test('registrar envía el municipio y el nombre, agrega la fila con el código de la respuesta y avisa', async () => {
     const nuevo = distrito(40, 'DS-1207-04', 'Distrito de Salud Tacaná Este', 7, 'Tacaná')
     crearDistrito.mockResolvedValue(nuevo)
@@ -302,5 +314,72 @@ describe('registrar y renombrar', () => {
     expect(screen.queryByRole('button', { name: 'Registrar distrito' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Acciones de DS-1201' })).toBeNull()
     expect(within(tabla('Distritos de salud')).queryByRole('columnheader', { name: 'Acciones' })).toBeNull()
+  })
+})
+
+describe('desactivar y reactivar', () => {
+  const confirmar = async (boton) => {
+    const alerta = await screen.findByRole('alertdialog')
+    fireEvent.click(within(alerta).getByRole('button', { name: boton }))
+  }
+
+  test('confirmar "Desactivar" llama a la API y la fila queda "Inactivo", con la acción "Reactivar"', async () => {
+    desactivarDistrito.mockResolvedValue({ ...DISTRITOS[2], activo: false })
+    await abrir()
+
+    await elegirAccion('DS-1207-02', 'Desactivar')
+    const alerta = await screen.findByRole('alertdialog')
+    expect(within(alerta).getByText('¿Desactivar el distrito DS-1207-02 · Distrito de Salud Tacaná Norte?')).toBeTruthy()
+    await confirmar('Desactivar')
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(desactivarDistrito).toHaveBeenCalledWith(31)
+    expect(within(filaDe('Distritos de salud', 'DS-1207-02')).getByText('Inactivo')).toBeTruthy()
+    expect(screen.getByRole('status').textContent).toBe('Distrito DS-1207-02 desactivado.')
+    const menu = await abrirMenu('DS-1207-02')
+    expect(within(menu).getAllByRole('menuitem').map((o) => o.textContent)).toEqual(['Renombrar', 'Reactivar'])
+  })
+
+  test('confirmar "Reactivar" llama a la API y la fila vuelve a "Activo"', async () => {
+    reactivarDistrito.mockResolvedValue({ ...DISTRITOS[3], activo: true })
+    await abrir()
+
+    await elegirAccion('DS-1207-03', 'Reactivar')
+    await confirmar('Reactivar')
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(reactivarDistrito).toHaveBeenCalledWith(32)
+    expect(within(filaDe('Distritos de salud', 'DS-1207-03')).getByText('Activo')).toBeTruthy()
+  })
+
+  test('con establecimientos activos, "Desactivar" está deshabilitado y lo explica', async () => {
+    await abrir()
+
+    const menu = await abrirMenu('DS-1201')
+    const desactivar = within(menu).getByRole('menuitem', { name: /^Desactivar/ })
+    expect(desactivar.getAttribute('aria-disabled')).toBe('true')
+    expect(within(desactivar).getByText('Tiene establecimientos activos')).toBeTruthy()
+    fireEvent.click(desactivar)
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+  })
+
+  test('un 409 de la API se muestra en un Alert y la fila no cambia', async () => {
+    desactivarDistrito.mockRejectedValue(
+      new ErrorApi(
+        409,
+        'DISTRITO_CON_ESTABLECIMIENTOS',
+        'El distrito tiene 1 establecimiento activo; muévalos o desactívelos primero.',
+      ),
+    )
+    await abrir()
+
+    await elegirAccion('DS-1207-02', 'Desactivar')
+    await confirmar('Desactivar')
+
+    expect(
+      await screen.findByText('El distrito tiene 1 establecimiento activo; muévalos o desactívelos primero.'),
+    ).toBeTruthy()
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(within(filaDe('Distritos de salud', 'DS-1207-02')).getByText('Activo')).toBeTruthy()
   })
 })

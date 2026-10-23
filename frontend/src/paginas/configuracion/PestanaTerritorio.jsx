@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { CircleAlert, CircleCheck, MoreHorizontal, Plus } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,7 +23,13 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { listarDdriss, listarDistritos, listarMunicipios } from '@/api/catalogos.js'
+import {
+  desactivarDistrito,
+  listarDdriss,
+  listarDistritos,
+  listarMunicipios,
+  reactivarDistrito,
+} from '@/api/catalogos.js'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import DialogoDistrito from './DialogoDistrito.jsx'
 
@@ -73,6 +89,9 @@ export default function PestanaTerritorio() {
   // null, { distrito: null } para registrar o { distrito } para renombrar.
   const [dialogo, setDialogo] = useState(null)
   const [aviso, setAviso] = useState(null)
+  // null o { distrito, activar } mientras el AlertDialog de confirmación está abierto.
+  const [porCambiar, setPorCambiar] = useState(null)
+  const [cambiando, setCambiando] = useState(false)
   // Cada carga tiene su número; una respuesta que llega después de otra carga se descarta.
   const cargaActual = useRef(0)
 
@@ -90,16 +109,38 @@ export default function PestanaTerritorio() {
   }
 
   // La fila se agrega o se reemplaza con la respuesta, sin volver a pedir la lista.
-  function alGuardar(guardado) {
-    const nuevo = dialogo.distrito === null
+  function ponerDistrito(distrito, nuevo) {
     setDatos((actual) => ({
       ...actual,
       distritos: nuevo
-        ? [...actual.distritos, guardado]
-        : actual.distritos.map((d) => (d.id === guardado.id ? guardado : d)),
+        ? [...actual.distritos, distrito]
+        : actual.distritos.map((d) => (d.id === distrito.id ? distrito : d)),
     }))
-    setAviso(`Distrito ${guardado.codigo} ${nuevo ? 'registrado' : 'actualizado'}.`)
+  }
+
+  function alGuardar(guardado) {
+    const nuevo = dialogo.distrito === null
+    ponerDistrito(guardado, nuevo)
+    setAviso({ tipo: 'exito', mensaje: `Distrito ${guardado.codigo} ${nuevo ? 'registrado' : 'actualizado'}.` })
     setDialogo(null)
+  }
+
+  async function confirmarCambio(evento) {
+    // Radix cierra el diálogo al pulsar; se cierra a mano al terminar, para mostrar el progreso mientras tanto.
+    evento.preventDefault()
+    const { distrito, activar } = porCambiar
+    setCambiando(true)
+    setAviso(null)
+    try {
+      const actualizado = activar ? await reactivarDistrito(distrito.id) : await desactivarDistrito(distrito.id)
+      ponerDistrito(actualizado, false)
+      setAviso({ tipo: 'exito', mensaje: `Distrito ${actualizado.codigo} ${activar ? 'reactivado' : 'desactivado'}.` })
+    } catch (err) {
+      setAviso({ tipo: 'error', mensaje: err.mensaje })
+    } finally {
+      setCambiando(false)
+      setPorCambiar(null)
+    }
   }
 
   useEffect(() => {
@@ -146,10 +187,16 @@ export default function PestanaTerritorio() {
 
   return (
     <div className="flex flex-col gap-6">
-      {aviso && (
+      {aviso?.tipo === 'exito' && (
         <Alert role="status" className="border-ring/40 bg-accent text-accent-foreground">
           <CircleCheck />
-          <AlertDescription className="text-accent-foreground">{aviso}</AlertDescription>
+          <AlertDescription className="text-accent-foreground">{aviso.mensaje}</AlertDescription>
+        </Alert>
+      )}
+      {aviso?.tipo === 'error' && (
+        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
+          <CircleAlert />
+          <AlertDescription>{aviso.mensaje}</AlertDescription>
         </Alert>
       )}
 
@@ -280,6 +327,24 @@ export default function PestanaTerritorio() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem onSelect={() => setDialogo({ distrito: d })}>Renombrar</DropdownMenuItem>
+                              {d.activo ? (
+                                // El backend respondería 409: primero se mueven o desactivan sus establecimientos.
+                                <DropdownMenuItem
+                                  disabled={d.establecimientosActivos > 0}
+                                  onSelect={() => setPorCambiar({ distrito: d, activar: false })}
+                                >
+                                  <div className="flex flex-col items-start">
+                                    <span>Desactivar</span>
+                                    {d.establecimientosActivos > 0 && (
+                                      <span className="text-xs text-muted-foreground">Tiene establecimientos activos</span>
+                                    )}
+                                  </div>
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem onSelect={() => setPorCambiar({ distrito: d, activar: true })}>
+                                  Reactivar
+                                </DropdownMenuItem>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
@@ -292,6 +357,32 @@ export default function PestanaTerritorio() {
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={porCambiar !== null} onOpenChange={(abierto) => !abierto && !cambiando && setPorCambiar(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              ¿{porCambiar?.activar ? 'Reactivar' : 'Desactivar'} el distrito {porCambiar?.distrito.codigo} ·{' '}
+              {porCambiar?.distrito.nombre}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {porCambiar?.activar
+                ? 'Se le podrán volver a asignar establecimientos.'
+                : 'No se podrán asignarle establecimientos.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cambiando}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              variant={porCambiar?.activar ? 'default' : 'destructive'}
+              disabled={cambiando}
+              onClick={confirmarCambio}
+            >
+              {porCambiar?.activar ? (cambiando ? 'Reactivando…' : 'Reactivar') : cambiando ? 'Desactivando…' : 'Desactivar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {dialogo && (
         <DialogoDistrito
