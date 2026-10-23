@@ -9,6 +9,9 @@ import {
   validarCui,
   validarNombreUsuario,
   validarNombreDistrito,
+  validarNombreEstablecimiento,
+  validarDireccion,
+  validarNombreContacto,
 } from './campos.js'
 
 // La misma lista está en backend/tests/campos.test.js: si cambia una, se cambia la otra.
@@ -153,11 +156,65 @@ const CASOS = {
       ['Distrito/Norte', MENSAJES.nombreDistrito],
     ],
   },
+  validarNombreEstablecimiento: {
+    validos: [
+      ['Puesto de Salud Aldea Tochab, Tajumulco', 'Puesto de Salud Aldea Tochab, Tajumulco'],
+      ['  Centro de Salud   San Marcos ', 'Centro de Salud San Marcos'],
+      ['Hospital de Coatepeque (externo)', 'Hospital de Coatepeque (externo)'],
+      ['CAP Tajumulco / Sede 2', 'CAP Tajumulco / Sede 2'],
+      ["Puesto de Salud B'alam", "Puesto de Salud B'alam"],
+      ['Güinil Ñuñoa', 'Güinil Ñuñoa'],
+      ['PS1', 'PS1'],
+      ['a'.repeat(150), 'a'.repeat(150)],
+    ],
+    invalidos: [
+      ['', MENSAJES.nombreEstablecimientoObligatorio],
+      ['   ', MENSAJES.nombreEstablecimientoObligatorio],
+      [null, MENSAJES.nombreEstablecimientoObligatorio],
+      ['PS', MENSAJES.nombreEstablecimientoLargo],
+      ['a'.repeat(151), MENSAJES.nombreEstablecimientoLargo],
+      ['Centro @ Salud', MENSAJES.nombreEstablecimiento],
+      ['Centro_Salud', MENSAJES.nombreEstablecimiento],
+      ['Centro <b>', MENSAJES.nombreEstablecimiento],
+    ],
+  },
+  validarDireccion: {
+    validos: [
+      ['Aldea Las Lagunas, San Marcos', 'Aldea Las Lagunas, San Marcos'],
+      ['  4a. calle   3-25, zona 1 ', '4a. calle 3-25, zona 1'],
+      ["Lote #12 (frente al parque) / Cantón B'alam", "Lote #12 (frente al parque) / Cantón B'alam"],
+      ['a'.repeat(255), 'a'.repeat(255)],
+      ['', null],
+      ['   ', null],
+      [null, null],
+    ],
+    invalidos: [
+      ['Calle @ 5', MENSAJES.direccion],
+      ['Calle_5', MENSAJES.direccion],
+      ['<script>', MENSAJES.direccion],
+      ['a'.repeat(256), 'La dirección: como máximo 255 caracteres.'],
+    ],
+  },
+  validarNombreContacto: {
+    validos: [
+      ['Ana Lucía Pérez', 'Ana Lucía Pérez'],
+      ['  María   José  ', 'María José'],
+      ["B'alam Chávez", "B'alam Chávez"],
+      ['', null],
+      [null, null],
+    ],
+    invalidos: [
+      ['Ana 2', MENSAJES.nombreContacto],
+      ['Dr. Pérez', MENSAJES.nombreContacto],
+      ['ana@correo.com', MENSAJES.nombreContacto],
+      ['a'.repeat(151), 'El nombre del contacto: como máximo 150 caracteres.'],
+    ],
+  },
 }
 
 const REGLAS = {
   validarNombres, validarApellidos, validarCargo, validarTelefono, validarCorreo, validarCui, validarNombreUsuario,
-  validarNombreDistrito,
+  validarNombreDistrito, validarNombreEstablecimiento, validarDireccion, validarNombreContacto,
 }
 
 describe.each(Object.entries(CASOS))('%s', (nombre, { validos, invalidos }) => {
@@ -181,5 +238,8 @@ describe('valores que no son texto', () => {
     expect(validarCargo(['Enfermera'])).toEqual({ error: MENSAJES.cargo })
     expect(validarNombreUsuario(42)).toEqual({ error: MENSAJES.nombreUsuario })
     expect(validarNombreDistrito(123)).toEqual({ error: MENSAJES.nombreDistrito })
+    expect(validarNombreEstablecimiento(123)).toEqual({ error: MENSAJES.nombreEstablecimiento })
+    expect(validarDireccion(5)).toEqual({ error: MENSAJES.direccion })
+    expect(validarNombreContacto({})).toEqual({ error: MENSAJES.nombreContacto })
   })
 })

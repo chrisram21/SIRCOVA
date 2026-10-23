@@ -14,7 +14,8 @@ function conConsulta(ruta, filtros) {
   return texto ? `${ruta}?${texto}` : ruta
 }
 
-// alcance: 'departamento' (por defecto) o 'procedencia', que suma el 9999 y los municipios de establecimientos externos.
+// alcance: 'departamento' (por defecto); 'procedencia', que suma el 9999 y los municipios de establecimientos
+// externos; o 'todos', los de cualquier departamento.
 export function listarMunicipios({ alcance, incluirInactivos } = {}) {
   return solicitar(conConsulta('/municipios', { alcance, incluirInactivos }))
 }
@@ -39,7 +40,31 @@ export function reactivarDistrito(id) {
   return solicitar(`/distritos/${id}/reactivar`, { metodo: 'POST' })
 }
 
-export function listarEstablecimientos({ activo } = {}) {
-  const consulta = activo === undefined ? '' : `?activo=${activo}`
-  return solicitar(`/establecimientos${consulta}`)
+export function listarEstablecimientos({ activo, municipioId, tipoEstablecimientoId } = {}) {
+  return solicitar(conConsulta('/establecimientos', { activo, municipioId, tipoEstablecimientoId }))
+}
+
+export function obtenerEstablecimiento(id) {
+  return solicitar(`/establecimientos/${id}`)
+}
+
+export function crearEstablecimiento(datos) {
+  return solicitar('/establecimientos', { metodo: 'POST', cuerpo: datos })
+}
+
+// Solo los campos que cambiaron.
+export function editarEstablecimiento(id, cambios) {
+  return solicitar(`/establecimientos/${id}`, { metodo: 'PATCH', cuerpo: cambios })
+}
+
+export function desactivarEstablecimiento(id) {
+  return solicitar(`/establecimientos/${id}/desactivar`, { metodo: 'POST' })
+}
+
+export function reactivarEstablecimiento(id) {
+  return solicitar(`/establecimientos/${id}/reactivar`, { metodo: 'POST' })
+}
+
+export function listarTiposEstablecimiento() {
+  return solicitar('/tipos-establecimiento')
 }

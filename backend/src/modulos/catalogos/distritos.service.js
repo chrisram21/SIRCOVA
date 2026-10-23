@@ -3,7 +3,7 @@ import { ErrorApi } from '../../middlewares/errores.js';
 import { validarNombreDistrito } from '../../validaciones/campos.js';
 import { registrarBitacora, diferencias, MODULOS, ACCIONES } from '../auditoria/auditoria.service.js';
 import { filtroAlcance } from '../auth/alcance.service.js';
-import { entradaInvalida, leerBooleano, revisarParametros } from './catalogos.service.js';
+import { entradaInvalida, leerBooleano, revisarCampos, revisarParametros } from './catalogos.service.js';
 
 const errores = {
   noEncontrado: () => new ErrorApi(404, 'NO_ENCONTRADO', 'El distrito de salud no existe.'),
@@ -49,15 +49,6 @@ function leerNombre(valor) {
   const resultado = validarNombreDistrito(valor);
   if (resultado.error) throw entradaInvalida(resultado.error);
   return resultado.valor;
-}
-
-function revisarCampos(cuerpo, permitidos) {
-  if (cuerpo === null || typeof cuerpo !== 'object' || Array.isArray(cuerpo)) {
-    throw entradaInvalida('El cuerpo debe ser un objeto JSON.');
-  }
-  for (const campo of Object.keys(cuerpo)) {
-    if (!permitidos.includes(campo)) throw entradaInvalida(`Campo no permitido: ${campo}.`);
-  }
 }
 
 async function buscarDistrito(conexion, id) {

@@ -71,6 +71,12 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('DISTRITO_CREAR',            'CONFIGURACION_CATALOGOS', 'Registrar distritos de salud en su DDRISS'),
  ('DISTRITO_EDITAR',           'CONFIGURACION_CATALOGOS', 'Renombrar, desactivar y reactivar distritos de salud de su DDRISS');
 
+-- SPEC 14 (HU-09): establecimientos de salud e instituciones
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('ESTABLECIMIENTO_CREAR',          'CONFIGURACION_CATALOGOS', 'Registrar establecimientos en su DDRISS'),
+ ('ESTABLECIMIENTO_EDITAR',         'CONFIGURACION_CATALOGOS', 'Editar, desactivar y reactivar establecimientos de su DDRISS'),
+ ('TIPO_ESTABLECIMIENTO_CONSULTAR', 'CONFIGURACION_CATALOGOS', 'Consultar los tipos de establecimiento');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -103,6 +109,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'ADMINISTRADOR'
    AND p.codigo IN ('CONFIGURACION_CONSULTAR', 'DISTRITO_CONSULTAR', 'DISTRITO_CREAR', 'DISTRITO_EDITAR');
+
+-- SPEC 14 (HU-09): solo el Administrador gestiona los establecimientos
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'ADMINISTRADOR'
+   AND p.codigo IN ('ESTABLECIMIENTO_CREAR', 'ESTABLECIMIENTO_EDITAR', 'TIPO_ESTABLECIMIENTO_CONSULTAR');
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

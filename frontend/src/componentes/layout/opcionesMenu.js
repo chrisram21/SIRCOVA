@@ -13,6 +13,8 @@ import {
   Users,
 } from 'lucide-react'
 import PaginaConfiguracion from '@/paginas/configuracion/PaginaConfiguracion.jsx'
+import PaginaEditarEstablecimiento from '@/paginas/configuracion/PaginaEditarEstablecimiento.jsx'
+import PaginaRegistrarEstablecimiento from '@/paginas/configuracion/PaginaRegistrarEstablecimiento.jsx'
 import PaginaInicio from '@/paginas/inicio/PaginaInicio.jsx'
 import PaginaEditarUsuario from '@/paginas/usuarios/PaginaEditarUsuario.jsx'
 import PaginaRegistrarPersonal from '@/paginas/usuarios/PaginaRegistrarPersonal.jsx'
@@ -48,6 +50,20 @@ const opcionesMenu = [
     permiso: 'CONFIGURACION_CONSULTAR',
     icono: Settings,
     pagina: PaginaConfiguracion,
+    subrutas: [
+      {
+        titulo: 'Registrar establecimiento',
+        ruta: '/configuracion/establecimientos/nuevo',
+        permiso: 'ESTABLECIMIENTO_CREAR',
+        pagina: PaginaRegistrarEstablecimiento,
+      },
+      {
+        titulo: 'Editar establecimiento',
+        ruta: '/configuracion/establecimientos/:id/editar',
+        permiso: 'ESTABLECIMIENTO_EDITAR',
+        pagina: PaginaEditarEstablecimiento,
+      },
+    ],
   },
   { titulo: 'Roles y permisos', ruta: '/permisos', permiso: 'PERMISO_CONSULTAR', icono: ShieldCheck },
 ]

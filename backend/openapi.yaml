@@ -739,14 +739,17 @@ paths:
           ordenados por nombre.
         - `alcance=procedencia`: además, el `9999` «Migrantes / fuera de San Marcos» y los municipios fuera del
           departamento donde la DDRISS tiene un establecimiento (p. ej. Coatepeque); por nombre, con el `9999` al final.
-        - La autoridad nacional (sin DDRISS) recibe todos los municipios con cualquiera de los dos valores.
+        - `alcance=todos`: todos los municipios de la tabla, de cualquier departamento, incluido el `9999`; por nombre
+          del departamento y del municipio, con el `9999` al final. Lo usa el formulario de establecimientos para
+          registrar uno externo.
+        - La autoridad nacional (sin DDRISS) recibe todos los municipios con `departamento` y `procedencia`.
         - Sin `incluirInactivos=true` solo devuelve los activos.
         - Un parámetro inválido, desconocido o repetido responde 400 `ENTRADA_INVALIDA`.
       x-permiso: MUNICIPIO_CONSULTAR
       parameters:
         - name: alcance
           in: query
-          schema: { type: string, enum: [departamento, procedencia], default: departamento }
+          schema: { type: string, enum: [departamento, procedencia, todos], default: departamento }
         - name: incluirInactivos
           in: query
           schema: { type: boolean, default: false }
@@ -774,7 +777,7 @@ paths:
               examples:
                 alcance:
                   value:
-                    error: { codigo: ENTRADA_INVALIDA, mensaje: alcance debe ser departamento o procedencia. }
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: alcance debe ser departamento, procedencia o todos. }
                 incluirInactivos:
                   value:
                     error: { codigo: ENTRADA_INVALIDA, mensaje: incluirInactivos debe ser true o false. }
@@ -1003,16 +1006,50 @@ paths:
                 error: { codigo: MUNICIPIO_INVALIDO, mensaje: El municipio no existe, está inactivo o no es del departamento de su DDRISS. }
 
 
+  /tipos-establecimiento:
+    get:
+      tags: [Catálogos]
+      summary: Listar los tipos de establecimiento
+      description: |
+        Solo consulta: el catálogo de tipos viene del script 01. Ordenados por nombre. No acepta parámetros;
+        cualquiera responde 400 `ENTRADA_INVALIDA`.
+      x-permiso: TIPO_ESTABLECIMIENTO_CONSULTAR
+      responses:
+        "200":
+          description: Lista de tipos de establecimiento
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, codigo, nombre]
+                  properties:
+                    id: { type: integer, example: 4 }
+                    codigo: { type: string, example: PS }
+                    nombre: { type: string, example: Puesto de Salud }
+        "400":
+          description: Un parámetro no permitido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: activo." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+
   /establecimientos:
     get:
       tags: [Catálogos]
       summary: Listar establecimientos e instituciones del ámbito del usuario
       description: |
-        Ordenados por nombre. El personal de establecimiento solo recibe el suyo; los demás roles, los de su DDRISS;
-        la autoridad nacional, todos. Versión mínima de HU-04; HU-09 la amplía.
+        Ordenados por nombre, activos e inactivos salvo que se filtre por `activo`. Sin paginar. El personal de
+        establecimiento solo recibe el suyo; los demás roles, los de su DDRISS; la autoridad nacional, todos.
+        Un parámetro inválido, desconocido o repetido responde 400 `ENTRADA_INVALIDA`.
       x-permiso: ESTABLECIMIENTO_CONSULTAR
       parameters:
-        - { name: municipioId, in: query, schema: { type: integer } }
+        - { name: municipioId, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: tipoEstablecimientoId, in: query, schema: { type: integer, minimum: 1 } }
         - { name: activo, in: query, schema: { type: boolean } }
       responses:
         "200":
@@ -1021,50 +1058,240 @@ paths:
             application/json:
               schema:
                 type: array
-                items:
-                  type: object
-                  properties:
-                    id: { type: integer }
-                    codigo: { type: string }
-                    nombre: { type: string }
-                    tipoEstablecimientoId: { type: integer }
-                    tipoEstablecimientoNombre: { type: string }
-                    distritoSaludId: { type: integer, nullable: true }
-                    municipioId: { type: integer }
-                    municipioNombre: { type: string }
-                    reportaProduccion: { type: boolean }
-                    esExterno: { type: boolean }
-                    activo: { type: boolean }
+                items: { $ref: "#/components/schemas/Establecimiento" }
         "400":
-          $ref: "#/components/responses/EntradaInvalida"
+          description: Un parámetro inválido, desconocido o repetido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                municipioId:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El parámetro municipioId no es válido. }
+                tipoEstablecimientoId:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El parámetro tipoEstablecimientoId no es válido. }
+                activo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El parámetro activo debe ser true o false. }
+                desconocido:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: orden." }
+                repetido:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: activo no se puede repetir. }
         "401": { $ref: "#/components/responses/NoAutenticado" }
         "403": { $ref: "#/components/responses/SinPermiso" }
-        "500":
-          description: Error interno al consultar establecimientos
     post:
       tags: [Catálogos]
-      summary: Crear un establecimiento (Administrador)
+      summary: Registrar un establecimiento en la DDRISS del usuario
+      description: |
+        La DDRISS sale del token. El municipio debe existir, estar activo y no ser el `9999`.
+
+        - Si el municipio es del departamento sede de la DDRISS, el establecimiento no es externo y el distrito es
+          obligatorio: activo, de la misma DDRISS y del mismo municipio.
+        - Si es de otro departamento, el establecimiento es externo (`esExterno = true`) y no lleva distrito.
+
+        `reporta5c` o `soloCobertura` exigen `reportaProduccion`. El nombre no puede repetirse en el mismo municipio,
+        sin distinguir mayúsculas ni tildes.
+
+        El código lo genera el sistema: `{código del tipo}-{código INE del municipio}-{NN}`, donde `NN` es el mayor
+        consecutivo de los códigos con ese prefijo (activos e inactivos) más uno, con al menos dos dígitos. Un código
+        sin consecutivo (`CS-1201`, de los datos de prueba) cuenta como `01`; los que no siguen el formato
+        (`HOSP-SM`) no cuentan. El código no se puede cambiar después.
+      x-permiso: ESTABLECIMIENTO_CREAR
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/EstablecimientoEntrada" }
+            schema: { $ref: "#/components/schemas/EstablecimientoNuevo" }
       responses:
-        "201": { description: Establecimiento creado }
-        "409": { $ref: "#/components/responses/Conflicto" }
+        "201":
+          description: Establecimiento registrado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Establecimiento" }
+        "400":
+          description: Campo inválido, faltante o no permitido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                nombre:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El nombre del establecimiento debe tener entre 3 y 150 caracteres. }
+                telefono:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El teléfono debe tener 8 dígitos y empezar con 2 a 7. }
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: codigo." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "409":
+          description: Ya hay un establecimiento con ese nombre en el municipio
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ESTABLECIMIENTO_DUPLICADO, mensaje: Ya hay un establecimiento con ese nombre en el municipio. }
+        "422":
+          description: Tipo, municipio o distrito inválidos, o marcas incoherentes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                tipo:
+                  value:
+                    error: { codigo: TIPO_INVALIDO, mensaje: El tipo de establecimiento no existe. }
+                municipio:
+                  value:
+                    error: { codigo: MUNICIPIO_INVALIDO, mensaje: El municipio no existe, está inactivo o no admite establecimientos. }
+                distrito:
+                  value:
+                    error: { codigo: DISTRITO_INVALIDO, mensaje: El distrito de salud no existe, está inactivo o no es del municipio. }
+                distritoExterno:
+                  value:
+                    error: { codigo: DISTRITO_INVALIDO, mensaje: Un establecimiento externo no lleva distrito de salud. }
+                marcas:
+                  value:
+                    error: { codigo: MARCAS_INVALIDAS, mensaje: Un establecimiento que envía el 5C o solo cuenta para cobertura debe reportar producción. }
 
   /establecimientos/{id}:
+    get:
+      tags: [Catálogos]
+      summary: Consultar un establecimiento del ámbito del usuario
+      x-permiso: ESTABLECIMIENTO_CONSULTAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: El establecimiento
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Establecimiento" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/EstablecimientoNoEncontrado" }
     patch:
       tags: [Catálogos]
-      summary: Actualizar o desactivar un establecimiento
+      summary: Editar el nombre, la dirección, el contacto o las marcas de un establecimiento
+      description: |
+        Cambio parcial, también de un establecimiento inactivo. El código, el tipo, el municipio y el distrito no se
+        pueden cambiar; para eso se desactiva el establecimiento y se registra otro. Solo se validan los campos que
+        cambian. Las reglas de marcas se revisan sobre el estado final. Si nada cambia, responde 200 sin registrar
+        nada en la bitácora. Para desactivar o reactivar se usan `/desactivar` y `/reactivar`.
+      x-permiso: ESTABLECIMIENTO_EDITAR
       parameters:
         - { $ref: "#/components/parameters/Id" }
       requestBody:
+        required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/EstablecimientoEntrada" }
+            schema: { $ref: "#/components/schemas/EstablecimientoCambios" }
       responses:
-        "200": { description: Establecimiento actualizado }
+        "200":
+          description: Establecimiento actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Establecimiento" }
+        "400":
+          description: Campo inválido, que no se puede cambiar o no permitido, o cuerpo vacío
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                nombre:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El nombre del establecimiento debe tener entre 3 y 150 caracteres. }
+                municipio:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: municipioId no se puede cambiar. }
+                codigo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: codigo no se puede cambiar. }
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: activo." }
+                vacio:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: Indique al menos un dato del establecimiento. }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/EstablecimientoNoEncontrado" }
+        "409":
+          description: Ya hay otro establecimiento con ese nombre en el municipio
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ESTABLECIMIENTO_DUPLICADO, mensaje: Ya hay un establecimiento con ese nombre en el municipio. }
+        "422":
+          description: Marcas incoherentes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: MARCAS_INVALIDAS, mensaje: Un establecimiento que envía el 5C o solo cuenta para cobertura debe reportar producción. }
+
+  /establecimientos/{id}/desactivar:
+    post:
+      tags: [Catálogos]
+      summary: Desactivar un establecimiento
+      description: |
+        Desactivación lógica: el establecimiento no se borra. No se puede desactivar mientras tenga cuentas activas
+        de su personal. Uno ya inactivo responde 200 sin registrar nada en la bitácora.
+      x-permiso: ESTABLECIMIENTO_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Establecimiento desactivado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Establecimiento" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/EstablecimientoNoEncontrado" }
+        "409":
+          description: El establecimiento tiene cuentas activas
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ESTABLECIMIENTO_CON_CUENTAS, mensaje: El establecimiento tiene 2 cuentas activas; muévalas o desactívelas en Usuarios primero. }
+
+  /establecimientos/{id}/reactivar:
+    post:
+      tags: [Catálogos]
+      summary: Reactivar un establecimiento
+      description: |
+        Exige que el municipio siga activo y, si no es externo, también su distrito. Uno ya activo responde 200
+        sin registrar nada en la bitácora.
+      x-permiso: ESTABLECIMIENTO_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Establecimiento reactivado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Establecimiento" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/EstablecimientoNoEncontrado" }
+        "422":
+          description: El municipio o el distrito están inactivos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                municipio:
+                  value:
+                    error: { codigo: MUNICIPIO_INVALIDO, mensaje: El municipio no existe, está inactivo o no admite establecimientos. }
+                distrito:
+                  value:
+                    error: { codigo: DISTRITO_INVALIDO, mensaje: El distrito de salud no existe, está inactivo o no es del municipio. }
 
   /vacunas:
     get:
@@ -1603,6 +1830,13 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
           example:
             error: { codigo: NO_ENCONTRADO, mensaje: El distrito de salud no existe. }
+    EstablecimientoNoEncontrado:
+      description: El establecimiento no existe o es de otra DDRISS
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: NO_ENCONTRADO, mensaje: El establecimiento no existe. }
     Conflicto:
       description: Duplicado o versionFila desactualizada
       content:
@@ -1874,21 +2108,109 @@ components:
           example: 0
         activo: { type: boolean, example: true }
 
-    EstablecimientoEntrada:
+    TextoNombreEstablecimiento:
+      type: string
+      minLength: 3
+      maxLength: 150
+      description: |
+        Letras (con tildes, ñ y ü), dígitos, espacios y `. , - ( ) / '`. Se quitan los espacios de los extremos
+        y se reducen los dobles; de 3 a 150 caracteres después de limpiar.
+      example: Puesto de Salud Aldea Tochab, Tajumulco
+
+    TextoDireccion:
+      type: string
+      maxLength: 255
+      description: Letras, dígitos, espacios y `. , - ( ) / # '`; hasta 255 caracteres. Vacía o null guarda NULL
+      example: Aldea Tochab, Tajumulco
+
+    TextoNombreContacto:
+      type: string
+      maxLength: 150
+      description: Nombre de persona, con la misma regla de `TextoNombres`; hasta 150 caracteres. Vacío o null guarda NULL
+      example: Ana Lucía Pérez
+
+    Establecimiento:
       type: object
+      required:
+        [id, codigo, nombre, tipoEstablecimientoId, tipoEstablecimientoCodigo, tipoEstablecimientoNombre, ddrissId,
+         distritoSaludId, distritoSaludCodigo, distritoSaludNombre, municipioId, municipioCodigoIne, municipioNombre,
+         reportaProduccion, reporta5c, soloCobertura, esExterno, direccion, telefono, correo, nombreContacto,
+         cuentasActivas, activo]
       properties:
-        codigo: { type: string }
-        nombre: { type: string }
-        tipoEstablecimientoId: { type: integer }
-        distritoSaludId: { type: integer, nullable: true }
-        municipioId: { type: integer }
+        id: { type: integer, example: 41 }
+        codigo: { type: string, description: "Generado por el sistema; no cambia", example: PS-1209-02 }
+        nombre: { type: string, example: Puesto de Salud Aldea Tochab, Tajumulco }
+        tipoEstablecimientoId: { type: integer, example: 4 }
+        tipoEstablecimientoCodigo: { type: string, example: PS }
+        tipoEstablecimientoNombre: { type: string, example: Puesto de Salud }
+        ddrissId: { type: integer, example: 1 }
+        distritoSaludId: { type: integer, nullable: true, description: NULL solo en los externos, example: 9 }
+        distritoSaludCodigo: { type: string, nullable: true, example: DS-1209 }
+        distritoSaludNombre: { type: string, nullable: true, example: Distrito de Salud Tajumulco }
+        municipioId: { type: integer, description: Municipio de aplicación de sus dosis, example: 9 }
+        municipioCodigoIne: { type: string, example: "1209" }
+        municipioNombre: { type: string, example: Tajumulco }
+        reportaProduccion: { type: boolean, description: false si otro establecimiento consolida su producción }
+        reporta5c: { type: boolean, description: true si envía un 5C a la DDRISS }
+        soloCobertura: { type: boolean, description: true si su producción solo cuenta para la cobertura (Hospital de San Marcos) }
+        esExterno:
+          type: boolean
+          description: true si su municipio no es del departamento sede de la DDRISS (p. ej. Coatepeque); lo deduce el backend
+        direccion: { type: string, nullable: true, example: Aldea Tochab, Tajumulco }
+        telefono: { type: string, nullable: true, example: 5550-3010 }
+        correo: { type: string, nullable: true, example: null }
+        nombreContacto: { type: string, nullable: true, example: Ana Lucía Pérez }
+        cuentasActivas:
+          type: integer
+          minimum: 0
+          description: Cuentas activas de su personal (cuenta y empleado activos); mientras sea mayor que 0 no se puede desactivar
+          example: 0
+        activo: { type: boolean, example: true }
+
+    EstablecimientoNuevo:
+      type: object
+      required: [tipoEstablecimientoId, municipioId, nombre]
+      additionalProperties: false
+      description: |
+        `codigo`, `ddrissId`, `esExterno`, `activo` o cualquier otro campo responden 400. `distritoSaludId` es
+        obligatorio si el municipio es del departamento sede, y debe faltar o ser null si es de otro departamento.
+      properties:
+        tipoEstablecimientoId: { type: integer, minimum: 1, example: 4 }
+        municipioId: { type: integer, minimum: 1, example: 9 }
+        distritoSaludId: { type: integer, minimum: 1, nullable: true, example: 9 }
+        nombre: { $ref: "#/components/schemas/TextoNombreEstablecimiento" }
+        direccion: { allOf: [{ $ref: "#/components/schemas/TextoDireccion" }], nullable: true }
+        telefono:
+          allOf: [{ $ref: "#/components/schemas/TextoTelefono" }]
+          nullable: true
+          description: Opcional; vacío o null guarda NULL
+        correo:
+          type: string
+          nullable: true
+          maxLength: 150
+          description: Opcional; vacío o null guarda NULL. Con texto, la regla de `TextoCorreo` (sin la de duplicado)
+        nombreContacto: { allOf: [{ $ref: "#/components/schemas/TextoNombreContacto" }], nullable: true }
+        reportaProduccion: { type: boolean, default: true }
+        reporta5c: { type: boolean, default: false }
+        soloCobertura: { type: boolean, default: false }
+
+    EstablecimientoCambios:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      description: |
+        Cambio parcial. `codigo`, `tipoEstablecimientoId`, `municipioId`, `distritoSaludId`, `ddrissId` y
+        `esExterno` responden 400 ("{campo} no se puede cambiar."); `activo` y cualquier otro campo, 400
+        ("Campo no permitido: {nombre}.").
+      properties:
+        nombre: { $ref: "#/components/schemas/TextoNombreEstablecimiento" }
+        direccion: { allOf: [{ $ref: "#/components/schemas/TextoDireccion" }], nullable: true }
+        telefono: { allOf: [{ $ref: "#/components/schemas/TextoTelefono" }], nullable: true, description: Vacío o null lo borra }
+        correo: { type: string, nullable: true, maxLength: 150, description: Vacío o null lo borra }
+        nombreContacto: { allOf: [{ $ref: "#/components/schemas/TextoNombreContacto" }], nullable: true }
         reportaProduccion: { type: boolean }
-        esExterno: { type: boolean }
-        direccion: { type: string }
-        telefono: { type: string }
-        correo: { type: string }
-        nombreContacto: { type: string }
-        activo: { type: boolean }
+        reporta5c: { type: boolean }
+        soloCobertura: { type: boolean }
 
     Reporte:
       type: object

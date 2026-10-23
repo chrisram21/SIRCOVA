@@ -12,6 +12,15 @@ export function revisarParametros(query, permitidos) {
   }
 }
 
+export function revisarCampos(cuerpo, permitidos) {
+  if (cuerpo === null || typeof cuerpo !== 'object' || Array.isArray(cuerpo)) {
+    throw entradaInvalida('El cuerpo debe ser un objeto JSON.');
+  }
+  for (const campo of Object.keys(cuerpo)) {
+    if (!permitidos.includes(campo)) throw entradaInvalida(`Campo no permitido: ${campo}.`);
+  }
+}
+
 export function leerBooleano(query, nombre) {
   if (query[nombre] === undefined) return undefined;
   if (query[nombre] !== 'true' && query[nombre] !== 'false') throw entradaInvalida(`${nombre} debe ser true o false.`);
@@ -37,24 +46,30 @@ export async function listarDdriss(usuario) {
   }));
 }
 
-const ALCANCES_MUNICIPIO = ['departamento', 'procedencia'];
+const ALCANCES_MUNICIPIO = ['departamento', 'procedencia', 'todos'];
+const ORDEN_MUNICIPIOS = {
+  departamento: 'm.nombre',
+  procedencia: "m.codigo_ine = '9999', m.nombre",
+  todos: "m.codigo_ine = '9999', dep.nombre, m.nombre",
+};
 
 function leerFiltrosMunicipios(query) {
   revisarParametros(query, ['alcance', 'incluirInactivos']);
   const alcance = query.alcance ?? 'departamento';
-  if (!ALCANCES_MUNICIPIO.includes(alcance)) throw entradaInvalida('alcance debe ser departamento o procedencia.');
+  if (!ALCANCES_MUNICIPIO.includes(alcance)) throw entradaInvalida('alcance debe ser departamento, procedencia o todos.');
   return { alcance, incluirInactivos: leerBooleano(query, 'incluirInactivos') ?? false };
 }
 
 // Los municipios de una DDRISS son los de su departamento sede; con alcance=procedencia se suman el 9999 y los
-// municipios de sus establecimientos externos (p. ej. Coatepeque). La autoridad nacional los ve todos.
+// municipios de sus establecimientos externos (p. ej. Coatepeque). Con alcance=todos, o para la autoridad
+// nacional, son todos los de la tabla.
 export async function listarMunicipios(usuario, query = {}) {
   const { alcance, incluirInactivos } = leerFiltrosMunicipios(query);
   const deLaDdriss = filtroAlcance(usuario, { ddriss: 'd.id' });
   const parametros = [...deLaDdriss.parametros];
   let ambito = `EXISTS (SELECT 1 FROM ddriss d WHERE d.departamento_id = m.departamento_id AND ${deLaDdriss.condicion})`;
 
-  if (esAlcanceNacional(usuario)) {
+  if (alcance === 'todos' || esAlcanceNacional(usuario)) {
     ambito = '1 = 1';
     parametros.length = 0;
   } else if (alcance === 'procedencia') {
@@ -71,7 +86,7 @@ export async function listarMunicipios(usuario, query = {}) {
        FROM municipio m
        JOIN departamento dep ON dep.id = m.departamento_id
       WHERE ${incluirInactivos ? '1 = 1' : 'm.activo = TRUE'} AND ${ambito}
-      ORDER BY ${alcance === 'procedencia' ? "m.codigo_ine = '9999', " : ''}m.nombre`,
+      ORDER BY ${ORDEN_MUNICIPIOS[alcance]}`,
     parametros,
   );
   return filas.map((f) => ({
@@ -80,63 +95,6 @@ export async function listarMunicipios(usuario, query = {}) {
     departamentoNombre: f.departamento_nombre,
     codigoIne: f.codigo_ine,
     nombre: f.nombre,
-    activo: Boolean(f.activo),
-  }));
-}
-
-function leerFiltrosEstablecimientos(consulta) {
-  const filtros = {};
-  if (consulta.municipioId !== undefined) {
-    const id = Number(consulta.municipioId);
-    if (!Number.isInteger(id) || id <= 0) throw entradaInvalida('El parámetro municipioId no es válido.');
-    filtros.municipioId = id;
-  }
-  if (consulta.activo !== undefined) {
-    if (consulta.activo !== 'true' && consulta.activo !== 'false') {
-      throw entradaInvalida('El parámetro activo debe ser true o false.');
-    }
-    filtros.activo = consulta.activo === 'true';
-  }
-  return filtros;
-}
-
-export async function listarEstablecimientos(usuario, consulta = {}) {
-  const filtros = leerFiltrosEstablecimientos(consulta);
-  const alcance = filtroAlcance(usuario, { establecimiento: 'e.id', ddriss: 'e.ddriss_id' });
-  const condiciones = [alcance.condicion];
-  const parametros = [...alcance.parametros];
-
-  if (filtros.municipioId !== undefined) {
-    condiciones.push('e.municipio_id = ?');
-    parametros.push(filtros.municipioId);
-  }
-  if (filtros.activo !== undefined) {
-    condiciones.push('e.activo = ?');
-    parametros.push(filtros.activo);
-  }
-
-  const [filas] = await pool.query(
-    `SELECT e.id, e.codigo, e.nombre, e.tipo_establecimiento_id, t.nombre AS tipo_nombre,
-            e.distrito_salud_id, e.municipio_id, m.nombre AS municipio_nombre,
-            e.reporta_produccion, e.es_externo, e.activo
-       FROM establecimiento e
-       JOIN tipo_establecimiento t ON t.id = e.tipo_establecimiento_id
-       JOIN municipio m ON m.id = e.municipio_id
-      WHERE ${condiciones.join(' AND ')}
-      ORDER BY e.nombre`,
-    parametros,
-  );
-  return filas.map((f) => ({
-    id: f.id,
-    codigo: f.codigo,
-    nombre: f.nombre,
-    tipoEstablecimientoId: f.tipo_establecimiento_id,
-    tipoEstablecimientoNombre: f.tipo_nombre,
-    distritoSaludId: f.distrito_salud_id,
-    municipioId: f.municipio_id,
-    municipioNombre: f.municipio_nombre,
-    reportaProduccion: Boolean(f.reporta_produccion),
-    esExterno: Boolean(f.es_externo),
     activo: Boolean(f.activo),
   }));
 }
