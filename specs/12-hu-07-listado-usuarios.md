@@ -1,6 +1,6 @@
 # SPEC 12 — Listado de usuarios con búsqueda, filtros y paginación
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-07
 > **Depende de:** SPEC 04, SPEC 06, SPEC 07, SPEC 08, SPEC 10
 > **Fecha:** 2026-10-22
