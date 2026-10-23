@@ -1,12 +1,19 @@
 import pool, { enTransaccion } from '../../config/mysql.js';
 import { ErrorApi } from '../../middlewares/errores.js';
 import { validarNombreDistrito } from '../../validaciones/campos.js';
-import { registrarBitacora, MODULOS, ACCIONES } from '../auditoria/auditoria.service.js';
+import { registrarBitacora, diferencias, MODULOS, ACCIONES } from '../auditoria/auditoria.service.js';
 import { filtroAlcance } from '../auth/alcance.service.js';
 import { entradaInvalida, leerBooleano, revisarParametros } from './catalogos.service.js';
 
 const errores = {
+  noEncontrado: () => new ErrorApi(404, 'NO_ENCONTRADO', 'El distrito de salud no existe.'),
   duplicado: () => new ErrorApi(409, 'DISTRITO_DUPLICADO', 'Ya hay un distrito con ese nombre en el municipio.'),
+  conEstablecimientos: (n) =>
+    new ErrorApi(
+      409,
+      'DISTRITO_CON_ESTABLECIMIENTOS',
+      `El distrito tiene ${n} ${n === 1 ? 'establecimiento activo' : 'establecimientos activos'}; muévalos o desactívelos primero.`,
+    ),
   municipioInvalido: () =>
     new ErrorApi(422, 'MUNICIPIO_INVALIDO', 'El municipio no existe, está inactivo o no es del departamento de su DDRISS.'),
 };
@@ -151,3 +158,80 @@ export async function crearDistrito(cuerpo, administrador, contexto) {
     return distrito;
   });
 }
+
+// Un distrito de otra DDRISS responde el mismo 404 que uno inexistente, para no revelar qué hay fuera del ámbito.
+async function bloquearDistrito(conexion, id, usuario) {
+  const distritoId = /^\d+$/.test(id) ? Number(id) : 0;
+  const { condicion, parametros } = filtroAlcance(usuario, { ddriss: 'ds.ddriss_id' });
+  const [[fila]] = await conexion.query(
+    `SELECT ds.id, ds.ddriss_id, ds.municipio_id, ds.nombre, ds.activo FROM distrito_salud ds
+      WHERE ds.id = ? AND ${condicion}
+      FOR UPDATE`,
+    [distritoId, ...parametros],
+  );
+  if (!fila) throw errores.noEncontrado();
+  return fila;
+}
+
+async function registrarCambio(conexion, contexto, accion, distritoId, cambios) {
+  await registrarBitacora(conexion, {
+    ...contexto,
+    modulo: MODULOS.CONFIGURACION,
+    accion,
+    entidad: 'distrito_salud',
+    entidadId: distritoId,
+    valoresAnteriores: cambios.anteriores,
+    valoresNuevos: cambios.nuevos,
+  });
+}
+
+// Solo el nombre: el código no se renombra (regla 6) y el municipio no cambia porque el código lleva su INE.
+export async function renombrarDistrito(id, cuerpo, usuario, contexto) {
+  if (cuerpo !== null && typeof cuerpo === 'object') {
+    for (const campo of ['municipioId', 'codigo']) {
+      if (Object.hasOwn(cuerpo, campo)) throw entradaInvalida(`${campo} no se puede cambiar.`);
+    }
+  }
+  revisarCampos(cuerpo, ['nombre']);
+  const nombre = leerNombre(cuerpo.nombre);
+
+  return enTransaccion(async (conexion) => {
+    const distrito = await bloquearDistrito(conexion, id, usuario);
+    const cambios = diferencias({ nombre: distrito.nombre }, { nombre });
+    if (cambios) {
+      await verificarNombreLibre(
+        conexion,
+        { ddrissId: distrito.ddriss_id, municipioId: distrito.municipio_id, nombre },
+        distrito.id,
+      );
+      await conexion.query('UPDATE distrito_salud SET nombre = ? WHERE id = ?', [nombre, distrito.id]);
+      await registrarCambio(conexion, contexto, ACCIONES.ACTUALIZAR, distrito.id, cambios);
+    }
+    return buscarDistrito(conexion, distrito.id);
+  });
+}
+
+async function cambiarEstadoDistrito(id, activo, usuario, contexto) {
+  return enTransaccion(async (conexion) => {
+    const distrito = await bloquearDistrito(conexion, id, usuario);
+    const cambios = diferencias({ activo: Boolean(distrito.activo) }, { activo });
+    if (cambios) {
+      if (activo) {
+        await bloquearMunicipio(conexion, distrito.municipio_id, distrito.ddriss_id);
+      } else {
+        const [[{ total }]] = await conexion.query(
+          'SELECT COUNT(*) AS total FROM establecimiento WHERE distrito_salud_id = ? AND activo = TRUE',
+          [distrito.id],
+        );
+        if (total > 0) throw errores.conEstablecimientos(Number(total));
+      }
+      await conexion.query('UPDATE distrito_salud SET activo = ? WHERE id = ?', [activo, distrito.id]);
+      await registrarCambio(conexion, contexto, activo ? ACCIONES.REACTIVAR : ACCIONES.DESACTIVAR, distrito.id, cambios);
+    }
+    return buscarDistrito(conexion, distrito.id);
+  });
+}
+
+export const desactivarDistrito = (id, usuario, contexto) => cambiarEstadoDistrito(id, false, usuario, contexto);
+
+export const reactivarDistrito = (id, usuario, contexto) => cambiarEstadoDistrito(id, true, usuario, contexto);
