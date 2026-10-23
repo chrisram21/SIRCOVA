@@ -12,6 +12,10 @@ import {
   validarNombreEstablecimiento,
   validarDireccion,
   validarNombreContacto,
+  validarCodigoVacuna,
+  validarNombreVacuna,
+  validarDescripcionVacuna,
+  validarNombreDosis,
 } from './campos.js'
 
 // La misma lista está en backend/tests/campos.test.js: si cambia una, se cambia la otra.
@@ -210,11 +214,94 @@ const CASOS = {
       ['a'.repeat(151), 'El nombre del contacto: como máximo 150 caracteres.'],
     ],
   },
+  validarCodigoVacuna: {
+    validos: [
+      ['HEXA', 'HEXA'],
+      ['  mpox ', 'MPOX'],
+      ['influ_ped', 'INFLU_PED'],
+      ['COVID19', 'COVID19'],
+      ['FA', 'FA'],
+      ['A'.repeat(20), 'A'.repeat(20)],
+    ],
+    invalidos: [
+      ['', MENSAJES.codigoVacunaObligatorio],
+      ['   ', MENSAJES.codigoVacunaObligatorio],
+      [null, MENSAJES.codigoVacunaObligatorio],
+      ['A', MENSAJES.codigoVacunaLargo],
+      ['A'.repeat(21), MENSAJES.codigoVacunaLargo],
+      ['19COVID', MENSAJES.codigoVacuna],
+      ['_HEXA', MENSAJES.codigoVacuna],
+      ['HEP-B', MENSAJES.codigoVacuna],
+      ['HEP B', MENSAJES.codigoVacuna],
+      ['NEUMOCÓCICA', MENSAJES.codigoVacuna],
+    ],
+  },
+  validarNombreVacuna: {
+    validos: [
+      ['Hexavalente', 'Hexavalente'],
+      ['  Viruela   símica (Mpox) ', 'Viruela símica (Mpox)'],
+      ['Sarampión, Paperas y Rubéola (SPR)', 'Sarampión, Paperas y Rubéola (SPR)'],
+      ['COVID-19', 'COVID-19'],
+      ["Td + Tdap / adulto d'Ana.", "Td + Tdap / adulto d'Ana."],
+      ['Güiro Ñandú', 'Güiro Ñandú'],
+      ['BCG', 'BCG'],
+      ['a'.repeat(120), 'a'.repeat(120)],
+    ],
+    invalidos: [
+      ['', MENSAJES.nombreVacunaObligatorio],
+      ['   ', MENSAJES.nombreVacunaObligatorio],
+      [null, MENSAJES.nombreVacunaObligatorio],
+      ['TD', MENSAJES.nombreVacunaLargo],
+      ['a'.repeat(121), MENSAJES.nombreVacunaLargo],
+      ['Hexa @ 6', MENSAJES.nombreVacuna],
+      ['Hexa_6', MENSAJES.nombreVacuna],
+      ['Hexa; 6', MENSAJES.nombreVacuna],
+    ],
+  },
+  validarDescripcionVacuna: {
+    validos: [
+      ['Dos dosis; grupos de riesgo: adultos.', 'Dos dosis; grupos de riesgo: adultos.'],
+      ['  Vacuna   oral ', 'Vacuna oral'],
+      ["Intramuscular (IM) / 0,5 ml + refuerzo d'Ana", "Intramuscular (IM) / 0,5 ml + refuerzo d'Ana"],
+      ['Fórmula pediátrica', 'Fórmula pediátrica'],
+      ['a'.repeat(255), 'a'.repeat(255)],
+      ['', null],
+      ['   ', null],
+      [null, null],
+    ],
+    invalidos: [
+      ['Dosis @ 2', MENSAJES.descripcionVacuna],
+      ['Dosis_2', MENSAJES.descripcionVacuna],
+      ['<b>', MENSAJES.descripcionVacuna],
+      ['a'.repeat(256), 'La descripción: como máximo 255 caracteres.'],
+    ],
+  },
+  validarNombreDosis: {
+    validos: [
+      ['Primera dosis', 'Primera dosis'],
+      ['  Segundo   refuerzo ', 'Segundo refuerzo'],
+      ['Dosis única', 'Dosis única'],
+      ['Dosis 2 (6-11 meses), adic./B', 'Dosis 2 (6-11 meses), adic./B'],
+      ['D1a', 'D1a'],
+      ['a'.repeat(60), 'a'.repeat(60)],
+    ],
+    invalidos: [
+      ['', MENSAJES.nombreDosisObligatorio],
+      ['   ', MENSAJES.nombreDosisObligatorio],
+      [null, MENSAJES.nombreDosisObligatorio],
+      ['D1', MENSAJES.nombreDosisLargo],
+      ['a'.repeat(61), MENSAJES.nombreDosisLargo],
+      ['Dosis + 1', MENSAJES.nombreDosis],
+      ["Dosis d'Ana", MENSAJES.nombreDosis],
+      ['Dosis_1', MENSAJES.nombreDosis],
+    ],
+  },
 }
 
 const REGLAS = {
   validarNombres, validarApellidos, validarCargo, validarTelefono, validarCorreo, validarCui, validarNombreUsuario,
-  validarNombreDistrito, validarNombreEstablecimiento, validarDireccion, validarNombreContacto,
+  validarNombreDistrito, validarNombreEstablecimiento, validarDireccion, validarNombreContacto, validarCodigoVacuna,
+  validarNombreVacuna, validarDescripcionVacuna, validarNombreDosis,
 }
 
 describe.each(Object.entries(CASOS))('%s', (nombre, { validos, invalidos }) => {
@@ -241,5 +328,9 @@ describe('valores que no son texto', () => {
     expect(validarNombreEstablecimiento(123)).toEqual({ error: MENSAJES.nombreEstablecimiento })
     expect(validarDireccion(5)).toEqual({ error: MENSAJES.direccion })
     expect(validarNombreContacto({})).toEqual({ error: MENSAJES.nombreContacto })
+    expect(validarCodigoVacuna(123)).toEqual({ error: MENSAJES.codigoVacuna })
+    expect(validarNombreVacuna(123)).toEqual({ error: MENSAJES.nombreVacuna })
+    expect(validarDescripcionVacuna(5)).toEqual({ error: MENSAJES.descripcionVacuna })
+    expect(validarNombreDosis({})).toEqual({ error: MENSAJES.nombreDosis })
   })
 })
