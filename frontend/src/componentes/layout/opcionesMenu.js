@@ -15,6 +15,8 @@ import {
 import PaginaConfiguracion from '@/paginas/configuracion/PaginaConfiguracion.jsx'
 import PaginaEditarEstablecimiento from '@/paginas/configuracion/PaginaEditarEstablecimiento.jsx'
 import PaginaRegistrarEstablecimiento from '@/paginas/configuracion/PaginaRegistrarEstablecimiento.jsx'
+import PaginaEditarVacuna from '@/paginas/configuracion/PaginaEditarVacuna.jsx'
+import PaginaRegistrarVacuna from '@/paginas/configuracion/PaginaRegistrarVacuna.jsx'
 import PaginaInicio from '@/paginas/inicio/PaginaInicio.jsx'
 import PaginaEditarUsuario from '@/paginas/usuarios/PaginaEditarUsuario.jsx'
 import PaginaRegistrarPersonal from '@/paginas/usuarios/PaginaRegistrarPersonal.jsx'
@@ -62,6 +64,18 @@ const opcionesMenu = [
         ruta: '/configuracion/establecimientos/:id/editar',
         permiso: 'ESTABLECIMIENTO_EDITAR',
         pagina: PaginaEditarEstablecimiento,
+      },
+      {
+        titulo: 'Registrar vacuna',
+        ruta: '/configuracion/vacunas/nueva',
+        permiso: 'VACUNA_CREAR',
+        pagina: PaginaRegistrarVacuna,
+      },
+      {
+        titulo: 'Editar vacuna',
+        ruta: '/configuracion/vacunas/:id/editar',
+        permiso: 'VACUNA_EDITAR',
+        pagina: PaginaEditarVacuna,
       },
     ],
   },
