@@ -3,7 +3,8 @@
 
 export const LARGOS = {
   nombres: 100, apellidos: 100, cargo: 100, correo: 150, nombreUsuario: 50, nombreDistrito: 120,
-  nombreEstablecimiento: 150, direccion: 255, nombreContacto: 150,
+  nombreEstablecimiento: 150, direccion: 255, nombreContacto: 150, codigoVacuna: 20, nombreVacuna: 120,
+  descripcionVacuna: 255, nombreDosis: 60,
 };
 
 export const MENSAJES = {
@@ -30,6 +31,18 @@ export const MENSAJES = {
   nombreEstablecimientoLargo: 'El nombre del establecimiento debe tener entre 3 y 150 caracteres.',
   direccion: "La dirección solo puede tener letras, números, espacios y los signos . , - ( ) / # '.",
   nombreContacto: 'El nombre del contacto solo puede tener letras, espacios, apóstrofos y guiones.',
+  codigoVacunaObligatorio: 'El código de la vacuna es obligatorio.',
+  codigoVacuna:
+    'El código de la vacuna debe empezar con una letra y solo puede tener letras sin tildes, números y guion bajo.',
+  codigoVacunaLargo: 'El código de la vacuna debe tener entre 2 y 20 caracteres.',
+  nombreVacunaObligatorio: 'El nombre de la vacuna es obligatorio.',
+  nombreVacuna: "El nombre de la vacuna solo puede tener letras, números, espacios y los signos . , - ( ) / + '.",
+  nombreVacunaLargo: 'El nombre de la vacuna debe tener entre 3 y 120 caracteres.',
+  descripcionVacuna:
+    "La descripción solo puede tener letras, números, espacios y los signos . , - ( ) / + ' ; :.",
+  nombreDosisObligatorio: 'El nombre de la dosis es obligatorio.',
+  nombreDosis: 'El nombre de la dosis solo puede tener letras, números, espacios y los signos . , - ( ) /.',
+  nombreDosisLargo: 'El nombre de la dosis debe tener entre 3 y 60 caracteres.',
 };
 
 const demasiadoLargo = (campo, largo) => `${campo}: como máximo ${largo} caracteres.`;
@@ -42,6 +55,10 @@ const TELEFONO = /^[2-7]\d{7}$/;
 const NOMBRE_DISTRITO = /^[\p{L}\d .()-]+$/u;
 const NOMBRE_ESTABLECIMIENTO = /^[\p{L}\d .,()/'-]+$/u;
 const DIRECCION = /^[\p{L}\d .,()/#'-]+$/u;
+const CODIGO_VACUNA = /^[A-Z][A-Z0-9_]*$/;
+const NOMBRE_VACUNA = /^[\p{L}\d .,()/+'-]+$/u;
+const DESCRIPCION_VACUNA = /^[\p{L}\d .,()/+';:-]+$/u;
+const NOMBRE_DOSIS = /^[\p{L}\d .,()/-]+$/u;
 const DEPARTAMENTOS = 22;
 
 // Sin texto (null, undefined o solo espacios) devuelve ''. Un valor que no es texto devuelve null.
@@ -164,5 +181,42 @@ export function validarNombreContacto(valor) {
   if (texto.length > LARGOS.nombreContacto) {
     return { error: demasiadoLargo('El nombre del contacto', LARGOS.nombreContacto) };
   }
+  return { valor: texto };
+}
+
+// Se guarda en mayúsculas. Es la llave que usan los esquemas de captura en MongoDB.
+export function validarCodigoVacuna(valor) {
+  const texto = limpiar(valor);
+  if (texto === '') return { error: MENSAJES.codigoVacunaObligatorio };
+  const codigo = texto?.toUpperCase();
+  if (texto === null || !CODIGO_VACUNA.test(codigo)) return { error: MENSAJES.codigoVacuna };
+  if (codigo.length < 2 || codigo.length > LARGOS.codigoVacuna) return { error: MENSAJES.codigoVacunaLargo };
+  return { valor: codigo };
+}
+
+export function validarNombreVacuna(valor) {
+  const texto = limpiar(valor);
+  if (texto === '') return { error: MENSAJES.nombreVacunaObligatorio };
+  if (texto === null || !NOMBRE_VACUNA.test(texto)) return { error: MENSAJES.nombreVacuna };
+  if (texto.length < 3 || texto.length > LARGOS.nombreVacuna) return { error: MENSAJES.nombreVacunaLargo };
+  return { valor: texto };
+}
+
+// Opcional: vacío devuelve { valor: null }.
+export function validarDescripcionVacuna(valor) {
+  const texto = limpiar(valor);
+  if (texto === '') return { valor: null };
+  if (texto === null || !DESCRIPCION_VACUNA.test(texto)) return { error: MENSAJES.descripcionVacuna };
+  if (texto.length > LARGOS.descripcionVacuna) {
+    return { error: demasiadoLargo('La descripción', LARGOS.descripcionVacuna) };
+  }
+  return { valor: texto };
+}
+
+export function validarNombreDosis(valor) {
+  const texto = limpiar(valor);
+  if (texto === '') return { error: MENSAJES.nombreDosisObligatorio };
+  if (texto === null || !NOMBRE_DOSIS.test(texto)) return { error: MENSAJES.nombreDosis };
+  if (texto.length < 3 || texto.length > LARGOS.nombreDosis) return { error: MENSAJES.nombreDosisLargo };
   return { valor: texto };
 }

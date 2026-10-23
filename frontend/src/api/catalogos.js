@@ -68,3 +68,47 @@ export function reactivarEstablecimiento(id) {
 export function listarTiposEstablecimiento() {
   return solicitar('/tipos-establecimiento')
 }
+
+// El catálogo de vacunas es nacional: no se filtra por DDRISS. Cada vacuna trae todas sus dosis, también las
+// inactivas.
+export function listarVacunas({ activa } = {}) {
+  return solicitar(conConsulta('/vacunas', { activa }))
+}
+
+export function obtenerVacuna(id) {
+  return solicitar(`/vacunas/${id}`)
+}
+
+export function crearVacuna(datos) {
+  return solicitar('/vacunas', { metodo: 'POST', cuerpo: datos })
+}
+
+// Solo los campos que cambiaron.
+export function editarVacuna(id, cambios) {
+  return solicitar(`/vacunas/${id}`, { metodo: 'PATCH', cuerpo: cambios })
+}
+
+export function desactivarVacuna(id) {
+  return solicitar(`/vacunas/${id}/desactivar`, { metodo: 'POST' })
+}
+
+export function reactivarVacuna(id) {
+  return solicitar(`/vacunas/${id}/reactivar`, { metodo: 'POST' })
+}
+
+// Las funciones de dosis devuelven la vacuna completa, con la marca de "completa el esquema" ya recalculada.
+export function agregarDosis(vacunaId, datos) {
+  return solicitar(`/vacunas/${vacunaId}/dosis`, { metodo: 'POST', cuerpo: datos })
+}
+
+export function editarDosis(vacunaId, dosisId, cambios) {
+  return solicitar(`/vacunas/${vacunaId}/dosis/${dosisId}`, { metodo: 'PATCH', cuerpo: cambios })
+}
+
+export function desactivarDosis(vacunaId, dosisId) {
+  return solicitar(`/vacunas/${vacunaId}/dosis/${dosisId}/desactivar`, { metodo: 'POST' })
+}
+
+export function reactivarDosis(vacunaId, dosisId) {
+  return solicitar(`/vacunas/${vacunaId}/dosis/${dosisId}/reactivar`, { metodo: 'POST' })
+}

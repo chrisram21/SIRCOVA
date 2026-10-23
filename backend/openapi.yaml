@@ -1296,7 +1296,17 @@ paths:
   /vacunas:
     get:
       tags: [Catálogos]
-      summary: Listar vacunas con sus dosis
+      summary: Listar las vacunas del catálogo nacional con sus dosis
+      description: |
+        El catálogo de vacunas es nacional: no se filtra por DDRISS. Activas e inactivas salvo que se filtre por
+        `activa`; cada vacuna trae todas sus dosis (también las inactivas), ordenadas por `orden`. Las vacunas se
+        ordenan por `ordenInforme` y nombre. Sin paginar. Un parámetro inválido, desconocido o repetido responde
+        400 `ENTRADA_INVALIDA`.
+      x-permiso: VACUNA_CONSULTAR
+      parameters:
+        - name: activa
+          in: query
+          schema: { type: boolean }
       responses:
         "200":
           description: Lista de vacunas con sus dosis
@@ -1304,48 +1314,360 @@ paths:
             application/json:
               schema:
                 type: array
-                items:
-                  type: object
-                  properties:
-                    id: { type: integer }
-                    codigo: { type: string }
-                    nombre: { type: string }
-                    descripcion: { type: string, nullable: true }
-                    ordenInforme: { type: integer }
-                    activa: { type: boolean }
-                    dosis:
-                      type: array
-                      items:
-                        type: object
-                        properties:
-                          id: { type: integer }
-                          codigo: { type: string }
-                          nombre: { type: string }
-                          orden: { type: integer }
-                          activa: { type: boolean }
+                items: { $ref: "#/components/schemas/Vacuna" }
+        "400":
+          description: Un parámetro inválido, desconocido o repetido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                activa:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: activa debe ser true o false. }
+                desconocido:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: orden." }
+                repetido:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: activa no se puede repetir. }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
     post:
       tags: [Catálogos]
-      summary: Registrar una vacuna nueva con sus dosis (Administrador)
+      summary: Registrar una vacuna con sus dosis
+      description: |
+        El catálogo es nacional: la vacuna queda para todas las DDRISS. El código de la vacuna lo escribe el
+        usuario y no cambia después. El código y el `orden` de cada dosis los genera el sistema según su `tipo`
+        y su lugar en la lista (`UNICA`, `D1`, `D2`…, `R1`, `R2`…), y también calcula `completaEsquema`.
+
+        Reglas de la secuencia (422 `SECUENCIA_INVALIDA`): como máximo una dosis `UNICA`, que no se combina con
+        dosis `DOSIS` pero sí con refuerzos; los refuerzos van después de las dosis `UNICA` o `DOSIS`.
+
+        El código y el nombre de la vacuna no pueden repetirse (el nombre, sin distinguir mayúsculas ni tildes), ni
+        el nombre de una dosis dentro de la lista. Sin `ordenInforme`, la vacuna va al final del informe.
+
+        La vacuna, sus dosis y el cálculo de `completaEsquema` van en una sola transacción, con una sola fila en
+        la bitácora. La vacuna queda sin esquema de captura: se crea aparte (HU-16).
+      x-permiso: VACUNA_CREAR
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [codigo, nombre, dosis]
-              properties:
-                codigo: { type: string, example: PENTA }
-                nombre: { type: string, example: Pentavalente }
-                dosis:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      codigo: { type: string, example: D1 }
-                      nombre: { type: string, example: Primera dosis }
-                      orden: { type: integer, example: 1 }
+            schema: { $ref: "#/components/schemas/VacunaNueva" }
       responses:
-        "201": { description: Vacuna creada }
+        "201":
+          description: Vacuna registrada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vacuna" }
+        "400":
+          description: Campo inválido, faltante o no permitido, tipo inválido o vacuna sin dosis
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                codigo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El código de la vacuna debe empezar con una letra y solo puede tener letras sin tildes, números y guion bajo. }
+                nombre:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El nombre de la vacuna debe tener entre 3 y 120 caracteres. }
+                ordenInforme:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: ordenInforme debe ser un número entero entre 0 y 65535. }
+                sinDosis:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: Indique al menos una dosis. }
+                tipo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El tipo de la dosis debe ser UNICA, DOSIS o REFUERZO. }
+                nombreDosis:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El nombre de la dosis debe tener entre 3 y 60 caracteres. }
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: activa." }
+                campoDosis:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: completaEsquema." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "409":
+          description: Código o nombre de vacuna repetido, o dos dosis con el mismo nombre
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                codigo:
+                  value:
+                    error: { codigo: VACUNA_DUPLICADA, mensaje: Ya hay una vacuna con ese código. }
+                nombre:
+                  value:
+                    error: { codigo: VACUNA_DUPLICADA, mensaje: Ya hay una vacuna con ese nombre. }
+                dosis:
+                  value:
+                    error: { codigo: DOSIS_DUPLICADA, mensaje: La vacuna ya tiene una dosis con ese nombre. }
+        "422": { $ref: "#/components/responses/SecuenciaInvalida" }
+
+  /vacunas/{id}:
+    get:
+      tags: [Catálogos]
+      summary: Consultar una vacuna con sus dosis
+      x-permiso: VACUNA_CONSULTAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: La vacuna, con todas sus dosis ordenadas por `orden`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vacuna" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/VacunaNoEncontrada" }
+    patch:
+      tags: [Catálogos]
+      summary: Editar el nombre, la descripción o el orden en el informe de una vacuna
+      description: |
+        Cambio parcial, también de una vacuna inactiva. El código no se puede cambiar. Las dosis se cambian con
+        sus propias rutas, y para desactivar o reactivar se usan `/desactivar` y `/reactivar`. Solo se validan
+        los campos que cambian. Si nada cambia, responde 200 sin registrar nada en la bitácora.
+      x-permiso: VACUNA_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VacunaCambios" }
+      responses:
+        "200":
+          description: Vacuna actualizada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vacuna" }
+        "400":
+          description: Campo inválido, que no se puede cambiar o no permitido, o cuerpo vacío
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                nombre:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El nombre de la vacuna debe tener entre 3 y 120 caracteres. }
+                codigo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: codigo no se puede cambiar. }
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: dosis." }
+                vacio:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: Indique al menos un dato de la vacuna. }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/VacunaNoEncontrada" }
+        "409":
+          description: Ya hay otra vacuna con ese nombre
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: VACUNA_DUPLICADA, mensaje: Ya hay una vacuna con ese nombre. }
+
+  /vacunas/{id}/desactivar:
+    post:
+      tags: [Catálogos]
+      summary: Desactivar una vacuna
+      description: |
+        Desactivación lógica: la vacuna y sus dosis no se borran y los reportes anteriores la conservan. Solo
+        cambia `activa` de la vacuna; sus dosis quedan como están. Una vacuna ya inactiva responde 200 sin
+        registrar nada en la bitácora.
+      x-permiso: VACUNA_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Vacuna desactivada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vacuna" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/VacunaNoEncontrada" }
+
+  /vacunas/{id}/reactivar:
+    post:
+      tags: [Catálogos]
+      summary: Reactivar una vacuna
+      description: |
+        La vacuna vuelve con las mismas dosis activas e inactivas que tenía. Una vacuna ya activa responde 200
+        sin registrar nada en la bitácora.
+      x-permiso: VACUNA_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Vacuna reactivada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vacuna" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/VacunaNoEncontrada" }
+
+  /vacunas/{id}/dosis:
+    post:
+      tags: [Catálogos]
+      summary: Agregar una dosis a una vacuna
+      description: |
+        También en una vacuna inactiva. La dosis va al final: su código es el siguiente de su tipo (`D{n}`,
+        `R{n}`, contando las activas y las inactivas, sin reutilizar) y su `orden` es el mayor de la vacuna más
+        uno. Después se recalcula `completaEsquema` de todas las dosis de la vacuna.
+
+        Una `UNICA` en una vacuna que ya tiene una `UNICA` o dosis `DOSIS`, o una `DOSIS` en una que tiene
+        `UNICA`, responde 422 `SECUENCIA_INVALIDA`.
+
+        Bitácora: una fila `CREAR` de la dosis y una `ACTUALIZAR` por cada otra dosis cuyo `completaEsquema`
+        cambió.
+      x-permiso: VACUNA_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DosisNueva" }
+      responses:
+        "201":
+          description: Dosis agregada; devuelve la vacuna completa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vacuna" }
+        "400":
+          description: Campo inválido, faltante o no permitido, o tipo inválido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                tipo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El tipo de la dosis debe ser UNICA, DOSIS o REFUERZO. }
+                nombre:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El nombre de la dosis debe tener entre 3 y 60 caracteres. }
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: orden." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/VacunaNoEncontrada" }
+        "409": { $ref: "#/components/responses/DosisDuplicada" }
+        "422": { $ref: "#/components/responses/SecuenciaInvalida" }
+
+  /vacunas/{id}/dosis/{dosisId}:
+    patch:
+      tags: [Catálogos]
+      summary: Editar el nombre o la marca de trazadora de una dosis
+      description: |
+        Cambio parcial, también de una dosis o una vacuna inactivas. El código, el tipo, el orden y
+        `completaEsquema` no se pueden cambiar. Si nada cambia, responde 200 sin registrar nada en la bitácora.
+      x-permiso: VACUNA_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { $ref: "#/components/parameters/DosisId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DosisCambios" }
+      responses:
+        "200":
+          description: Dosis actualizada; devuelve la vacuna completa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vacuna" }
+        "400":
+          description: Campo inválido, que no se puede cambiar o no permitido, o cuerpo vacío
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                nombre:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El nombre de la dosis debe tener entre 3 y 60 caracteres. }
+                esTrazadora:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: esTrazadora debe ser true o false. }
+                completaEsquema:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: completaEsquema no se puede cambiar. }
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: activa." }
+                vacio:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: Indique al menos un dato de la dosis. }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/VacunaODosisNoEncontrada" }
+        "409": { $ref: "#/components/responses/DosisDuplicada" }
+
+  /vacunas/{id}/dosis/{dosisId}/desactivar:
+    post:
+      tags: [Catálogos]
+      summary: Desactivar una dosis
+      description: |
+        Desactivación lógica: la dosis no se borra y su código no se reutiliza. La vacuna debe conservar al
+        menos una dosis activa, aunque esté inactiva. Después se recalcula `completaEsquema`. Una dosis ya
+        inactiva responde 200 sin registrar nada en la bitácora.
+
+        Bitácora: una fila `DESACTIVAR` de la dosis y una `ACTUALIZAR` por cada otra dosis cuyo
+        `completaEsquema` cambió.
+      x-permiso: VACUNA_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { $ref: "#/components/parameters/DosisId" }
+      responses:
+        "200":
+          description: Dosis desactivada; devuelve la vacuna completa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vacuna" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/VacunaODosisNoEncontrada" }
+        "409":
+          description: Es la última dosis activa de la vacuna
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: VACUNA_SIN_DOSIS_ACTIVAS, mensaje: La vacuna debe conservar al menos una dosis activa; desactive la vacuna si ya no se aplica. }
+
+  /vacunas/{id}/dosis/{dosisId}/reactivar:
+    post:
+      tags: [Catálogos]
+      summary: Reactivar una dosis
+      description: |
+        Después se recalcula `completaEsquema`. Una dosis ya activa responde 200 sin registrar nada en la
+        bitácora.
+
+        Bitácora: una fila `REACTIVAR` de la dosis y una `ACTUALIZAR` por cada otra dosis cuyo
+        `completaEsquema` cambió.
+      x-permiso: VACUNA_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { $ref: "#/components/parameters/DosisId" }
+      responses:
+        "200":
+          description: Dosis reactivada; devuelve la vacuna completa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vacuna" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/VacunaODosisNoEncontrada" }
 
   /periodos:
     get:
@@ -1764,6 +2086,11 @@ components:
       in: path
       required: true
       schema: { type: integer }
+    DosisId:
+      name: dosisId
+      in: path
+      required: true
+      schema: { type: integer }
     Pagina:
       name: pagina
       in: query
@@ -1837,6 +2164,44 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
           example:
             error: { codigo: NO_ENCONTRADO, mensaje: El establecimiento no existe. }
+    VacunaNoEncontrada:
+      description: La vacuna no existe
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: NO_ENCONTRADO, mensaje: La vacuna no existe. }
+    VacunaODosisNoEncontrada:
+      description: La vacuna no existe, o la dosis no existe o es de otra vacuna
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            vacuna:
+              value:
+                error: { codigo: NO_ENCONTRADO, mensaje: La vacuna no existe. }
+            dosis:
+              value:
+                error: { codigo: NO_ENCONTRADO, mensaje: La dosis no existe. }
+    DosisDuplicada:
+      description: La vacuna ya tiene una dosis con ese nombre
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: DOSIS_DUPLICADA, mensaje: La vacuna ya tiene una dosis con ese nombre. }
+    SecuenciaInvalida:
+      description: La secuencia de dosis no cumple las reglas del tipo
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            unica:
+              value:
+                error: { codigo: SECUENCIA_INVALIDA, mensaje: Una vacuna con dosis única no lleva otras dosis, solo refuerzos. }
+            refuerzo:
+              value:
+                error: { codigo: SECUENCIA_INVALIDA, mensaje: Los refuerzos van después de las dosis. }
     Conflicto:
       description: Duplicado o versionFila desactualizada
       content:
@@ -2211,6 +2576,143 @@ components:
         reportaProduccion: { type: boolean }
         reporta5c: { type: boolean }
         soloCobertura: { type: boolean }
+
+    TextoCodigoVacuna:
+      type: string
+      minLength: 2
+      maxLength: 20
+      description: |
+        Empieza con una letra; letras A-Z sin tildes, dígitos y `_`. Se quitan los espacios de los extremos y se
+        convierte a mayúsculas. De 2 a 20 caracteres. Es la llave que usan los esquemas de captura; no cambia.
+      example: MPOX
+
+    TextoNombreVacuna:
+      type: string
+      minLength: 3
+      maxLength: 120
+      description: |
+        Letras (con tildes, ñ y ü), dígitos, espacios y `. , - ( ) / + '`. Se quitan los espacios de los extremos
+        y se reducen los dobles; de 3 a 120 caracteres después de limpiar.
+      example: Viruela símica (Mpox)
+
+    TextoDescripcionVacuna:
+      type: string
+      maxLength: 255
+      description: Los caracteres de `TextoNombreVacuna` más `; :`; hasta 255 caracteres. Vacía o null guarda NULL
+      example: "Dos dosis con 4 semanas de intervalo; grupos de riesgo."
+
+    TextoNombreDosis:
+      type: string
+      minLength: 3
+      maxLength: 60
+      description: |
+        Letras (con tildes, ñ y ü), dígitos, espacios y `. , - ( ) /`. Se quitan los espacios de los extremos y
+        se reducen los dobles; de 3 a 60 caracteres después de limpiar. Único dentro de la vacuna.
+      example: Primera dosis
+
+    TipoDosis:
+      type: string
+      enum: [UNICA, DOSIS, REFUERZO]
+      description: |
+        Se deduce del código de la dosis: `UNICA` → `UNICA`, `D{n}` → `DOSIS`, `R{n}` → `REFUERZO`.
+
+    Dosis:
+      type: object
+      required: [id, codigo, tipo, nombre, orden, completaEsquema, esTrazadora, activa]
+      properties:
+        id: { type: integer, example: 4 }
+        codigo: { type: string, description: "Generado por el sistema según el tipo; no cambia ni se reutiliza", example: D3 }
+        tipo: { $ref: "#/components/schemas/TipoDosis" }
+        nombre: { type: string, example: Tercera dosis }
+        orden: { type: integer, minimum: 1, description: "Generado por el sistema; no cambia", example: 3 }
+        completaEsquema:
+          type: boolean
+          description: |
+            Lo calcula el sistema: la dosis activa `UNICA` o `DOSIS` de mayor orden o, si no hay, el refuerzo
+            activo de mayor orden. Exactamente una por vacuna.
+          example: true
+        esTrazadora: { type: boolean, example: true }
+        activa: { type: boolean, example: true }
+
+    Vacuna:
+      type: object
+      required: [id, codigo, nombre, descripcion, ordenInforme, activa, dosis]
+      properties:
+        id: { type: integer, example: 2 }
+        codigo: { type: string, example: HEXA }
+        nombre: { type: string, example: Hexavalente }
+        descripcion: { type: string, nullable: true, example: null }
+        ordenInforme: { type: integer, minimum: 0, maximum: 65535, example: 4 }
+        activa: { type: boolean, example: true }
+        dosis:
+          type: array
+          description: Todas las dosis de la vacuna, también las inactivas, ordenadas por `orden`
+          items: { $ref: "#/components/schemas/Dosis" }
+
+    DosisNueva:
+      type: object
+      required: [tipo, nombre]
+      additionalProperties: false
+      description: |
+        `codigo`, `orden`, `completaEsquema`, `activa` o cualquier otro campo responden 400 ("Campo no permitido:
+        {nombre}."). El código, el orden y la marca de completa los genera el sistema.
+      properties:
+        tipo: { $ref: "#/components/schemas/TipoDosis" }
+        nombre: { $ref: "#/components/schemas/TextoNombreDosis" }
+        esTrazadora: { type: boolean, default: false }
+
+    VacunaNueva:
+      type: object
+      required: [codigo, nombre, dosis]
+      additionalProperties: false
+      description: |
+        `id`, `activa` o cualquier otro campo responden 400 ("Campo no permitido: {nombre}.").
+      properties:
+        codigo: { $ref: "#/components/schemas/TextoCodigoVacuna" }
+        nombre: { $ref: "#/components/schemas/TextoNombreVacuna" }
+        descripcion: { allOf: [{ $ref: "#/components/schemas/TextoDescripcionVacuna" }], nullable: true }
+        ordenInforme:
+          type: integer
+          minimum: 0
+          maximum: 65535
+          description: Opcional; sin él, el mayor `ordenInforme` más uno. Puede repetirse
+          example: 23
+        dosis:
+          type: array
+          minItems: 1
+          description: En el orden del esquema; los refuerzos van después de las dosis `UNICA` o `DOSIS`
+          items: { $ref: "#/components/schemas/DosisNueva" }
+      example:
+        codigo: MPOX
+        nombre: Viruela símica (Mpox)
+        descripcion: ""
+        ordenInforme: 23
+        dosis:
+          - { tipo: DOSIS, nombre: Primera dosis, esTrazadora: false }
+          - { tipo: DOSIS, nombre: Segunda dosis, esTrazadora: true }
+
+    VacunaCambios:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      description: |
+        Cambio parcial. `codigo` responde 400 ("codigo no se puede cambiar."); `dosis`, `activa` y cualquier
+        otro campo, 400 ("Campo no permitido: {nombre}.").
+      properties:
+        nombre: { $ref: "#/components/schemas/TextoNombreVacuna" }
+        descripcion: { allOf: [{ $ref: "#/components/schemas/TextoDescripcionVacuna" }], nullable: true, description: Vacía o null la borra }
+        ordenInforme: { type: integer, minimum: 0, maximum: 65535 }
+
+    DosisCambios:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      description: |
+        Cambio parcial. `codigo`, `tipo`, `orden` y `completaEsquema` responden 400 ("{campo} no se puede
+        cambiar."); `activa` y cualquier otro campo, 400 ("Campo no permitido: {nombre}.").
+      properties:
+        nombre: { $ref: "#/components/schemas/TextoNombreDosis" }
+        esTrazadora: { type: boolean }
 
     Reporte:
       type: object

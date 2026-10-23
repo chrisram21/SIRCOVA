@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import PestanaEstablecimientos from './PestanaEstablecimientos.jsx'
 import PestanaTerritorio from './PestanaTerritorio.jsx'
+import PestanaVacunas from './PestanaVacunas.jsx'
 
 // Cada spec de catálogo agrega aquí su pestaña, con los permisos de los endpoints que usa.
 const PESTANAS = [
@@ -17,6 +18,12 @@ const PESTANAS = [
     titulo: 'Establecimientos',
     permisos: ['ESTABLECIMIENTO_CONSULTAR'],
     Contenido: PestanaEstablecimientos,
+  },
+  {
+    valor: 'vacunas',
+    titulo: 'Vacunas',
+    permisos: ['VACUNA_CONSULTAR'],
+    Contenido: PestanaVacunas,
   },
 ]
 
