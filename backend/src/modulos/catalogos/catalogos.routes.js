@@ -64,5 +64,40 @@ router.get(
   requierePermiso('TIPO_ESTABLECIMIENTO_CONSULTAR'),
   catalogosController.listarTiposEstablecimiento,
 );
+router.get('/vacunas', autenticar, requierePermiso('VACUNA_CONSULTAR'), catalogosController.listarVacunas);
+router.post('/vacunas', autenticar, requierePermiso('VACUNA_CREAR'), catalogosController.crearVacuna);
+router.get('/vacunas/:id', autenticar, requierePermiso('VACUNA_CONSULTAR'), catalogosController.obtenerVacuna);
+router.patch('/vacunas/:id', autenticar, requierePermiso('VACUNA_EDITAR'), catalogosController.editarVacuna);
+router.post(
+  '/vacunas/:id/desactivar',
+  autenticar,
+  requierePermiso('VACUNA_EDITAR'),
+  catalogosController.desactivarVacuna,
+);
+router.post(
+  '/vacunas/:id/reactivar',
+  autenticar,
+  requierePermiso('VACUNA_EDITAR'),
+  catalogosController.reactivarVacuna,
+);
+router.post('/vacunas/:id/dosis', autenticar, requierePermiso('VACUNA_EDITAR'), catalogosController.agregarDosis);
+router.patch(
+  '/vacunas/:id/dosis/:dosisId',
+  autenticar,
+  requierePermiso('VACUNA_EDITAR'),
+  catalogosController.editarDosis,
+);
+router.post(
+  '/vacunas/:id/dosis/:dosisId/desactivar',
+  autenticar,
+  requierePermiso('VACUNA_EDITAR'),
+  catalogosController.desactivarDosis,
+);
+router.post(
+  '/vacunas/:id/dosis/:dosisId/reactivar',
+  autenticar,
+  requierePermiso('VACUNA_EDITAR'),
+  catalogosController.reactivarDosis,
+);
 
 export default router;
