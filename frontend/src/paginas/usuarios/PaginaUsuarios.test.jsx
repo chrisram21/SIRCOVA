@@ -1,10 +1,12 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
+import { listarEstablecimientos } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
 import { guardarSesion } from '@/api/sesion.js'
 import {
   desactivarCuenta,
   desbloquearCuenta,
+  listarRoles,
   listarUsuarios,
   restablecerContrasena,
   restaurarCuenta,
@@ -16,14 +18,27 @@ import { paginasVisibles } from './PaginacionUsuarios.jsx'
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
 vi.mock('@/api/usuarios.js', () => ({
   listarUsuarios: vi.fn(),
+  listarRoles: vi.fn(),
   desactivarCuenta: vi.fn(),
   restaurarCuenta: vi.fn(),
   desbloquearCuenta: vi.fn(),
   restablecerContrasena: vi.fn(),
 }))
+vi.mock('@/api/catalogos.js', () => ({ listarEstablecimientos: vi.fn() }))
+
+const ROLES = [
+  { id: 2, codigo: 'REVISOR', nombre: 'Estadígrafa / revisor DDRISS' },
+  { id: 4, codigo: 'ADMINISTRADOR', nombre: 'Administrador' },
+]
+const ESTABLECIMIENTOS = [
+  { id: 7, nombre: 'Centro de Salud Tacaná', activo: true },
+  { id: 9, nombre: 'Puesto de Salud Cerrado', activo: false },
+]
 
 const TODOS_LOS_PERMISOS = [
   'USUARIO_CONSULTAR',
+  'ROL_CONSULTAR',
+  'ESTABLECIMIENTO_CONSULTAR',
   'EMPLEADO_CREAR',
   'USUARIO_EDITAR',
   'USUARIO_DESACTIVAR',
@@ -128,6 +143,12 @@ beforeEach(() => {
   vi.clearAllMocks()
   sessionStorage.clear()
   listarUsuarios.mockResolvedValue(respuesta(CUENTAS))
+  listarRoles.mockResolvedValue(ROLES)
+  listarEstablecimientos.mockResolvedValue(ESTABLECIMIENTOS)
+})
+
+afterEach(() => {
+  vi.useRealTimers()
 })
 
 test('muestra una fila por cuenta con su estado, el cargo y el establecimiento o "DDRISS"', async () => {
@@ -461,5 +482,150 @@ describe('HU-07: paginación', () => {
     expect(screen.queryByRole('cell', { name: 'vieja' })).toBeNull()
     expect(screen.getByRole('cell', { name: 'nueva' })).toBeTruthy()
     expect(ubicacion()).toBe('?pagina=3')
+  })
+})
+
+describe('HU-07: búsqueda y filtros', () => {
+  // Radix Select deja un <select> nativo oculto dentro del formulario; cambiarlo actualiza el valor del Select.
+  const nativo = (nombre) => document.querySelector(`select[name="${nombre}"]`)
+  const elegirFiltro = (nombre, valor) => fireEvent.change(nativo(nombre), { target: { value: String(valor) } })
+  const busqueda = () => screen.getByRole('searchbox', { name: 'Buscar por nombre o usuario' })
+
+  test('la búsqueda espera 300 ms después de la última tecla y pide una sola vez, en la página 1', async () => {
+    await abrir(TODOS_LOS_PERMISOS, '/usuarios?pagina=2')
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    listarUsuarios.mockClear()
+
+    for (const texto of ['a', 'an', 'ana']) {
+      fireEvent.change(busqueda(), { target: { value: texto } })
+      act(() => vi.advanceTimersByTime(100))
+    }
+    act(() => vi.advanceTimersByTime(199))
+    expect(listarUsuarios).not.toHaveBeenCalled()
+
+    act(() => vi.advanceTimersByTime(1))
+    await waitFor(() => expect(listarUsuarios).toHaveBeenCalledTimes(1))
+    expect(listarUsuarios).toHaveBeenCalledWith({ busqueda: 'ana', pagina: 1, porPagina: 20 })
+    expect(ubicacion()).toBe('?busqueda=ana')
+    expect(busqueda().value).toBe('ana')
+  })
+
+  test('elegir un rol, "Sede de la DDRISS" o "Bloqueadas" pide con ese filtro y vuelve a la página 1', async () => {
+    await abrir(TODOS_LOS_PERMISOS, '/usuarios?pagina=2')
+    await waitFor(() => expect(nativo('rolId').options).toHaveLength(3))
+
+    expect([...nativo('establecimientoId').options].map((o) => o.textContent)).toEqual([
+      'Todos los establecimientos',
+      'Sede de la DDRISS',
+      'Centro de Salud Tacaná',
+      'Puesto de Salud Cerrado (inactivo)',
+    ])
+
+    elegirFiltro('rolId', 2)
+    await waitFor(() => expect(listarUsuarios).toHaveBeenLastCalledWith({ rolId: 2, pagina: 1, porPagina: 20 }))
+    expect(ubicacion()).toBe('?rolId=2')
+
+    elegirFiltro('establecimientoId', 'ninguno')
+    await waitFor(() =>
+      expect(listarUsuarios).toHaveBeenLastCalledWith({ rolId: 2, establecimientoId: 'ninguno', pagina: 1, porPagina: 20 }),
+    )
+
+    elegirFiltro('estado', 'BLOQUEADA')
+    await waitFor(() =>
+      expect(listarUsuarios).toHaveBeenLastCalledWith({
+        rolId: 2,
+        establecimientoId: 'ninguno',
+        estado: 'BLOQUEADA',
+        pagina: 1,
+        porPagina: 20,
+      }),
+    )
+    expect(ubicacion()).toBe('?rolId=2&establecimientoId=ninguno&estado=BLOQUEADA')
+
+    elegirFiltro('rolId', 'todos')
+    await waitFor(() => expect(ubicacion()).toBe('?establecimientoId=ninguno&estado=BLOQUEADA'))
+  })
+
+  test('con filtros en la URL, los controles los muestran y se pide con ellos', async () => {
+    await abrir(TODOS_LOS_PERMISOS, '/usuarios?estado=DESACTIVADA&busqueda=ana')
+
+    expect(listarUsuarios).toHaveBeenCalledWith({ busqueda: 'ana', estado: 'DESACTIVADA', pagina: 1, porPagina: 20 })
+    expect(busqueda().value).toBe('ana')
+    expect(nativo('estado').value).toBe('DESACTIVADA')
+  })
+
+  test('"Limpiar filtros" aparece solo con un filtro activo y deja la URL en /usuarios', async () => {
+    await abrir()
+    expect(screen.queryByRole('button', { name: 'Limpiar filtros' })).toBeNull()
+
+    elegirFiltro('estado', 'ACTIVA')
+    fireEvent.click(await screen.findByRole('button', { name: 'Limpiar filtros' }))
+
+    await waitFor(() => expect(ubicacion()).toBe(''))
+    expect(screen.queryByRole('button', { name: 'Limpiar filtros' })).toBeNull()
+  })
+
+  test('"Limpiar filtros" también vacía el campo de búsqueda', async () => {
+    await abrir(TODOS_LOS_PERMISOS, '/usuarios?busqueda=ana&estado=ACTIVA')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar filtros' }))
+
+    await waitFor(() => expect(ubicacion()).toBe(''))
+    expect(busqueda().value).toBe('')
+    expect(listarUsuarios).toHaveBeenLastCalledWith({ pagina: 1, porPagina: 20 })
+  })
+
+  test('sin resultados con filtros, muestra el aviso con "Limpiar filtros"', async () => {
+    listarUsuarios.mockResolvedValue(respuesta([]))
+    await abrir(TODOS_LOS_PERMISOS, '/usuarios?busqueda=zzz')
+
+    expect(screen.getByText('No hay cuentas que coincidan con la búsqueda o los filtros.')).toBeTruthy()
+    expect(screen.queryByText('No hay cuentas registradas en su DDRISS.')).toBeNull()
+    expect(screen.getAllByRole('button', { name: 'Limpiar filtros' })).toHaveLength(2)
+  })
+
+  test('sin ROL_CONSULTAR ni ESTABLECIMIENTO_CONSULTAR solo queda el filtro de estado', async () => {
+    await abrir(['USUARIO_CONSULTAR'])
+
+    expect(screen.queryByRole('combobox', { name: 'Filtrar por rol' })).toBeNull()
+    expect(screen.queryByRole('combobox', { name: 'Filtrar por establecimiento' })).toBeNull()
+    expect(screen.getByRole('combobox', { name: 'Filtrar por estado' })).toBeTruthy()
+    expect(listarRoles).not.toHaveBeenCalled()
+    expect(listarEstablecimientos).not.toHaveBeenCalled()
+  })
+
+  test('si falla GET /roles, su filtro queda deshabilitado, aparece el aviso y la tabla se carga igual', async () => {
+    listarRoles.mockRejectedValue(new ErrorApi(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.'))
+    await abrir()
+
+    expect(await screen.findByText('No se pudieron cargar los filtros: No se pudo conectar con el servidor.')).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: 'Filtrar por rol' }).disabled).toBe(true)
+    expect(screen.getByRole('combobox', { name: 'Filtrar por establecimiento' }).disabled).toBe(false)
+    expect(screen.getAllByRole('row')).toHaveLength(CUENTAS.length + 1)
+  })
+
+  test('con el filtro "Activas", una cuenta bloqueada muestra "Activa" y "Bloqueada", y otra solo "Activa"', async () => {
+    listarUsuarios.mockResolvedValue(respuesta([CUENTAS[1], CUENTAS[3]]))
+    await abrir(TODOS_LOS_PERMISOS, '/usuarios?estado=ACTIVA')
+
+    expect(listarUsuarios).toHaveBeenCalledWith({ estado: 'ACTIVA', pagina: 1, porPagina: 20 })
+    expect(within(fila('rgomez')).getByText('Activa')).toBeTruthy()
+    expect(within(fila('rgomez')).getByText('Bloqueada')).toBeTruthy()
+    expect(within(fila('alopez')).getByText('Activa')).toBeTruthy()
+    expect(within(fila('alopez')).queryByText('Bloqueada')).toBeNull()
+  })
+
+  test('después de desactivar con el filtro "Activas", la fila sigue visible y no se vuelve a pedir la página', async () => {
+    desactivarCuenta.mockResolvedValue({ ...CUENTAS[1], activo: false })
+    await abrir(TODOS_LOS_PERMISOS, '/usuarios?estado=ACTIVA')
+    expect(listarUsuarios).toHaveBeenCalledTimes(1)
+
+    await elegir('alopez', 'Desactivar')
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Desactivar' }))
+
+    expect(await screen.findByText('Se desactivó la cuenta alopez.')).toBeTruthy()
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(within(fila('alopez')).getByText('Desactivada')).toBeTruthy()
+    expect(listarUsuarios).toHaveBeenCalledTimes(1)
   })
 })

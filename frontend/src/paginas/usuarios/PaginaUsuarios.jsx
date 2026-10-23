@@ -31,6 +31,7 @@ import {
 } from '@/api/usuarios.js'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import DialogoContrasenaTemporal from './DialogoContrasenaTemporal.jsx'
+import FiltrosUsuarios from './FiltrosUsuarios.jsx'
 import PaginacionUsuarios, { FILAS_POR_PAGINA } from './PaginacionUsuarios.jsx'
 
 const POR_PAGINA_INICIAL = 20
@@ -89,6 +90,8 @@ export default function PaginaUsuarios() {
   function irA(cambios, { reemplazar = false } = {}) {
     setParametros(new URLSearchParams(consultaDe({ ...filtros, pagina: 1, ...cambios })), { replace: reemplazar })
   }
+
+  const limpiarFiltros = () => setParametros(new URLSearchParams())
 
   function hrefDe(pagina) {
     const consulta = consultaDe({ ...filtros, pagina })
@@ -216,6 +219,8 @@ export default function PaginaUsuarios() {
         )}
       </div>
 
+      <FiltrosUsuarios filtros={filtros} hayFiltros={hayFiltros} alCambiar={irA} alLimpiar={limpiarFiltros} />
+
       {aviso?.tipo === 'exito' && (
         <Alert role="status" className="border-ring/40 bg-accent text-accent-foreground">
           <CircleCheck />
@@ -244,7 +249,7 @@ export default function PaginaUsuarios() {
         hayFiltros ? (
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-muted-foreground">No hay cuentas que coincidan con la búsqueda o los filtros.</p>
-            <Button variant="ghost" onClick={() => setParametros(new URLSearchParams())}>
+            <Button variant="ghost" onClick={limpiarFiltros}>
               Limpiar filtros
             </Button>
           </div>
