@@ -263,11 +263,149 @@ describe('GET /establecimientos', () => {
   });
 });
 
-describe('permisos de los catálogos', () => {
-  it.each(['/roles', '/ddriss', '/municipios', '/establecimientos'])('%s sin su permiso responde 403 SIN_PERMISO', async (ruta) => {
-    const res = await consultar(ruta, firmar({ permisos: ['POBLACION_REGISTRAR'] }));
+describe('GET /establecimientos (HU-09)', () => {
+  it('trae las marcas, el distrito, el contacto y las cuentas activas', async () => {
+    const res = await consultar('/establecimientos');
 
-    expect(res.status).toBe(403);
-    expect(res.body.error.codigo).toBe('SIN_PERMISO');
+    expect(res.status).toBe(200);
+    expect(Object.keys(res.body[0]).sort()).toEqual([
+      'activo', 'codigo', 'correo', 'cuentasActivas', 'ddrissId', 'direccion', 'distritoSaludCodigo',
+      'distritoSaludId', 'distritoSaludNombre', 'esExterno', 'id', 'municipioCodigoIne', 'municipioId',
+      'municipioNombre', 'nombre', 'nombreContacto', 'reporta5c', 'reportaProduccion', 'soloCobertura', 'telefono',
+      'tipoEstablecimientoCodigo', 'tipoEstablecimientoId', 'tipoEstablecimientoNombre',
+    ]);
+    expect(res.body.find((e) => e.codigo === 'HOSP-SM')).toMatchObject({
+      reporta5c: true, soloCobertura: true, esExterno: false, tipoEstablecimientoCodigo: 'HOSP',
+    });
+    expect(res.body.find((e) => e.codigo === 'EXT-COATE')).toMatchObject({
+      esExterno: true, distritoSaludId: null, distritoSaludCodigo: null, distritoSaludNombre: null,
+      municipioCodigoIne: '0920',
+    });
   });
+
+  it('cuentasActivas coincide con las cuentas activas de su personal', async () => {
+    const [[esperado]] = await pool.query(
+      `SELECT e.id, COUNT(u.id) AS total
+         FROM establecimiento e
+         JOIN empleado em ON em.establecimiento_id = e.id AND em.activo = TRUE
+         JOIN usuario u ON u.empleado_id = em.id AND u.activo = TRUE
+        WHERE e.ddriss_id = ?
+        GROUP BY e.id
+        ORDER BY total DESC
+        LIMIT 1`,
+      [administrador.ddrissId],
+    );
+    if (!esperado) return;
+
+    const res = await consultar('/establecimientos');
+
+    expect(res.body.find((e) => e.id === esperado.id).cuentasActivas).toBe(Number(esperado.total));
+  });
+
+  it('con tipoEstablecimientoId filtra por tipo', async () => {
+    const [[tipo]] = await pool.query("SELECT id FROM tipo_establecimiento WHERE codigo = 'PS'");
+
+    const res = await consultar(`/establecimientos?tipoEstablecimientoId=${tipo.id}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.length).toBeGreaterThan(0);
+    expect(res.body.every((e) => e.tipoEstablecimientoId === tipo.id)).toBe(true);
+  });
+
+  it.each(['tipoEstablecimientoId=abc', 'tipoEstablecimientoId=0', 'orden=nombre', 'activo=true&activo=false'])(
+    '%s responde 400 ENTRADA_INVALIDA',
+    async (consulta) => {
+      const res = await consultar(`/establecimientos?${consulta}`);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.codigo).toBe('ENTRADA_INVALIDA');
+    },
+  );
+});
+
+describe('GET /establecimientos/{id}', () => {
+  it('devuelve un establecimiento de su DDRISS', async () => {
+    const [[establecimiento]] = await pool.query("SELECT id FROM establecimiento WHERE codigo = 'CS-1201'");
+
+    const res = await consultar(`/establecimientos/${establecimiento.id}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ id: establecimiento.id, codigo: 'CS-1201', municipioCodigoIne: '1201' });
+  });
+
+  it('uno inexistente o de otra DDRISS responde 404 NO_ENCONTRADO', async () => {
+    const [[establecimiento]] = await pool.query("SELECT id FROM establecimiento WHERE codigo = 'CS-1201'");
+    const otraDdriss = firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['ESTABLECIMIENTO_CONSULTAR'] });
+
+    for (const [ruta, credencial] of [
+      ['/establecimientos/999999999', token],
+      ['/establecimientos/abc', token],
+      [`/establecimientos/${establecimiento.id}`, otraDdriss],
+    ]) {
+      const res = await consultar(ruta, credencial);
+      expect(res.status).toBe(404);
+      expect(res.body.error).toEqual({ codigo: 'NO_ENCONTRADO', mensaje: 'El establecimiento no existe.' });
+    }
+  });
+});
+
+describe('GET /tipos-establecimiento', () => {
+  it('devuelve los tipos de la tabla ordenados por nombre', async () => {
+    const [tipos] = await pool.query('SELECT id, codigo, nombre FROM tipo_establecimiento');
+
+    const res = await consultar('/tipos-establecimiento');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(tipos.length);
+    expect(res.body).toEqual(expect.arrayContaining(tipos.map((t) => ({ ...t }))));
+    const nombres = res.body.map((t) => t.nombre);
+    expect(nombres).toEqual([...nombres].sort((a, b) => a.localeCompare(b, 'es')));
+  });
+
+  it('con un parámetro responde 400 ENTRADA_INVALIDA', async () => {
+    const res = await consultar('/tipos-establecimiento?activo=true');
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toEqual({ codigo: 'ENTRADA_INVALIDA', mensaje: 'Parámetro no permitido: activo.' });
+  });
+});
+
+describe('GET /municipios?alcance=todos (HU-09)', () => {
+  it('trae los de San Marcos, Coatepeque y el 9999 al final', async () => {
+    const [[{ total }]] = await pool.query('SELECT COUNT(*) AS total FROM municipio WHERE activo = TRUE');
+
+    const res = await consultar('/municipios?alcance=todos');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(total);
+    const codigos = res.body.map((m) => m.codigoIne);
+    expect(codigos.at(-1)).toBe('9999');
+    expect(codigos).toEqual(expect.arrayContaining(['1201', '1230', '0920']));
+    const resto = res.body.slice(0, -1).map((m) => `${m.departamentoNombre}|${m.nombre}`);
+    const comparar = (a, b) => {
+      const [depA, munA] = a.split('|');
+      const [depB, munB] = b.split('|');
+      return depA.localeCompare(depB, 'es') || munA.localeCompare(munB, 'es');
+    };
+    expect(resto).toEqual([...resto].sort(comparar));
+  });
+
+  it('alcance=otro responde 400 con el mensaje de los tres valores', async () => {
+    const res = await consultar('/municipios?alcance=otro');
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.mensaje).toBe('alcance debe ser departamento, procedencia o todos.');
+  });
+});
+
+describe('permisos de los catálogos', () => {
+  it.each(['/roles', '/ddriss', '/municipios', '/establecimientos', '/tipos-establecimiento'])(
+    '%s sin su permiso responde 403 SIN_PERMISO',
+    async (ruta) => {
+      const res = await consultar(ruta, firmar({ permisos: ['POBLACION_REGISTRAR'] }));
+
+      expect(res.status).toBe(403);
+      expect(res.body.error.codigo).toBe('SIN_PERMISO');
+    },
+  );
 });

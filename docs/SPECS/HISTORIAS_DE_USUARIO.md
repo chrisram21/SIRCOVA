@@ -244,11 +244,13 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Cómo se hará:** Pantalla de establecimientos; endpoints `GET/POST /establecimientos` y `PATCH /establecimientos/{id}`; tablas `establecimiento` (marcas `reporta_5c`, `solo_cobertura` y `es_externo`) y `tipo_establecimiento` (CS, CAP, CAIMI, puesto, CC, CM, hospital, institución).
 
 **Criterios de aceptación:**
-- [ ] Puedo registrar un establecimiento con tipo, municipio, distrito, dirección, teléfono, correo y contacto.
-- [ ] Puedo marcar qué establecimientos envían el 5C (31: el que centraliza cada municipio y el Hospital de San Marcos).
-- [ ] Puedo marcar un establecimiento cuya producción solo cuenta para cobertura (Hospital de San Marcos) y uno externo (por ejemplo, el de Coatepeque).
-- [ ] Un establecimiento desactivado no puede crear reportes nuevos.
-- [ ] Puedo filtrar el listado por municipio y tipo.
+- [x] Puedo registrar un establecimiento con tipo, municipio, distrito, dirección, teléfono, correo y contacto.
+- [x] Puedo marcar qué establecimientos envían el 5C (31: el que centraliza cada municipio y el Hospital de San Marcos).
+- [x] Puedo marcar un establecimiento cuya producción solo cuenta para cobertura (Hospital de San Marcos) y uno externo (por ejemplo, el de Coatepeque).
+- [ ] Un establecimiento desactivado no puede crear reportes nuevos. (Pasa a HU-19; ver el avance.)
+- [x] Puedo filtrar el listado por municipio y tipo.
+
+**Avance:** criterios cumplidos, salvo el de los reportes nuevos, que pasa a HU-19; queda terminada al integrar el spec 14 a `main`. Backend y frontend en `specs/14-hu-09-establecimientos.md`. Hay cuatro diferencias con la historia, porque mandan `AGENTS.md` y el modelo. Primera: "un establecimiento desactivado no puede crear reportes nuevos" depende de `POST /reportes`, que todavía no existe; el criterio pasa a HU-19, y este spec garantiza que el establecimiento quede inactivo y no aparezca en los formularios que piden `activo=true`. Segunda: editar es solo cambiar el nombre, la dirección, el teléfono, el correo, el contacto y las marcas; el código no se renombra (regla 6), y el tipo, el municipio y el distrito no cambian (para eso se desactiva y se registra otro). Tercera: desactivar y reactivar van en `POST /establecimientos/{id}/desactivar` y `/reactivar`, no en el `PATCH`. Cuarta: `es_externo` no es una casilla: lo deduce el backend del departamento del municipio. Endpoints: `GET /establecimientos` (más campos, filtro `tipoEstablecimientoId`), `GET`/`PATCH /establecimientos/{id}`, `POST /establecimientos`, `GET /tipos-establecimiento` y `GET /municipios?alcance=todos`, con los permisos `ESTABLECIMIENTO_CREAR`, `ESTABLECIMIENTO_EDITAR` y `TIPO_ESTABLECIMIENTO_CONSULTAR`. El backend genera el código `{TIPO}-{INE}-{NN}`. Un nombre repetido en el municipio responde 409, igual que desactivar un establecimiento con cuentas activas; `reporta5c` o `soloCobertura` sin `reportaProduccion` responden 422. La pantalla es la pestaña «Establecimientos» de `/configuracion`, con subrutas para registrar y editar. Verificado contra la API real el 2026-10-23: la pestaña mostró los 40 establecimientos de la semilla y "Envían el 5C: 31"; se registraron `PS-1209-36` en Tajumulco y `CS-0920-01` en Coatepeque (externo, sin distrito); se editó el contacto del externo y se desactivó y reactivó, con sus filas en la bitácora; "Desactivar" quedó deshabilitado en `CS-1201`, que tiene cuentas; y el desactivado no apareció en `/usuarios/nuevo`. Los dos establecimientos de prueba quedaron desactivados.
 
 **Nota (2026-10-21, spec 07):** `GET /establecimientos` ya existe en versión mínima, de solo lectura (`backend/src/modulos/catalogos/`, permiso `ESTABLECIMIENTO_CONSULTAR`, hoy solo del Administrador), porque lo necesita el formulario de HU-04. Devuelve los campos del contrato, filtrados por ámbito con `filtroAlcance`, y acepta `municipioId` y `activo`. Esta historia lo amplía (filtro por tipo, alta y edición) en lugar de crearlo de nuevo.
 
@@ -407,6 +409,7 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [ ] Solo puedo elegir periodos abiertos.
 - [ ] Solo los establecimientos que envían el 5C (uno por municipio y el Hospital de San Marcos) pueden crear reportes.
 - [ ] No puedo crear dos reportes del mismo establecimiento para el mismo periodo.
+- [ ] Un establecimiento desactivado no puede crear reportes nuevos (viene de HU-09).
 - [ ] El reporte nace en estado Borrador.
 
 #### HU-20. Capturar la producción con el formulario dinámico

@@ -28,5 +28,41 @@ router.get(
   requierePermiso('ESTABLECIMIENTO_CONSULTAR'),
   catalogosController.listarEstablecimientos,
 );
+router.post(
+  '/establecimientos',
+  autenticar,
+  requierePermiso('ESTABLECIMIENTO_CREAR'),
+  catalogosController.crearEstablecimiento,
+);
+router.get(
+  '/establecimientos/:id',
+  autenticar,
+  requierePermiso('ESTABLECIMIENTO_CONSULTAR'),
+  catalogosController.obtenerEstablecimiento,
+);
+router.patch(
+  '/establecimientos/:id',
+  autenticar,
+  requierePermiso('ESTABLECIMIENTO_EDITAR'),
+  catalogosController.editarEstablecimiento,
+);
+router.post(
+  '/establecimientos/:id/desactivar',
+  autenticar,
+  requierePermiso('ESTABLECIMIENTO_EDITAR'),
+  catalogosController.desactivarEstablecimiento,
+);
+router.post(
+  '/establecimientos/:id/reactivar',
+  autenticar,
+  requierePermiso('ESTABLECIMIENTO_EDITAR'),
+  catalogosController.reactivarEstablecimiento,
+);
+router.get(
+  '/tipos-establecimiento',
+  autenticar,
+  requierePermiso('TIPO_ESTABLECIMIENTO_CONSULTAR'),
+  catalogosController.listarTiposEstablecimiento,
+);
 
 export default router;

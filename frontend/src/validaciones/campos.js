@@ -1,7 +1,10 @@
 // Reglas de formato de los campos de texto. Cada una devuelve { valor } con el valor limpio o { error }.
 // Hay una copia con las mismas reglas en backend/src/validaciones/campos.js: un cambio va en las dos.
 
-export const LARGOS = { nombres: 100, apellidos: 100, cargo: 100, correo: 150, nombreUsuario: 50, nombreDistrito: 120 }
+export const LARGOS = {
+  nombres: 100, apellidos: 100, cargo: 100, correo: 150, nombreUsuario: 50, nombreDistrito: 120,
+  nombreEstablecimiento: 150, direccion: 255, nombreContacto: 150,
+}
 
 export const MENSAJES = {
   nombresObligatorio: 'Los nombres son obligatorios.',
@@ -21,6 +24,12 @@ export const MENSAJES = {
   nombreDistritoObligatorio: 'El nombre del distrito es obligatorio.',
   nombreDistrito: 'El nombre del distrito solo puede tener letras, números, espacios y los signos . - ( ).',
   nombreDistritoLargo: 'El nombre del distrito debe tener entre 3 y 120 caracteres.',
+  nombreEstablecimientoObligatorio: 'El nombre del establecimiento es obligatorio.',
+  nombreEstablecimiento:
+    "El nombre del establecimiento solo puede tener letras, números, espacios y los signos . , - ( ) / '.",
+  nombreEstablecimientoLargo: 'El nombre del establecimiento debe tener entre 3 y 150 caracteres.',
+  direccion: "La dirección solo puede tener letras, números, espacios y los signos . , - ( ) / # '.",
+  nombreContacto: 'El nombre del contacto solo puede tener letras, espacios, apóstrofos y guiones.',
 }
 
 const demasiadoLargo = (campo, largo) => `${campo}: como máximo ${largo} caracteres.`
@@ -31,6 +40,8 @@ const CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 const NOMBRE_USUARIO = /^[a-z0-9._-]{4,50}$/
 const TELEFONO = /^[2-7]\d{7}$/
 const NOMBRE_DISTRITO = /^[\p{L}\d .()-]+$/u
+const NOMBRE_ESTABLECIMIENTO = /^[\p{L}\d .,()/'-]+$/u
+const DIRECCION = /^[\p{L}\d .,()/#'-]+$/u
 const DEPARTAMENTOS = 22
 
 // Sin texto (null, undefined o solo espacios) devuelve ''. Un valor que no es texto devuelve null.
@@ -123,5 +134,35 @@ export function validarNombreDistrito(valor) {
   if (texto === '') return { error: MENSAJES.nombreDistritoObligatorio }
   if (texto === null || !NOMBRE_DISTRITO.test(texto)) return { error: MENSAJES.nombreDistrito }
   if (texto.length < 3 || texto.length > LARGOS.nombreDistrito) return { error: MENSAJES.nombreDistritoLargo }
+  return { valor: texto }
+}
+
+export function validarNombreEstablecimiento(valor) {
+  const texto = limpiar(valor)
+  if (texto === '') return { error: MENSAJES.nombreEstablecimientoObligatorio }
+  if (texto === null || !NOMBRE_ESTABLECIMIENTO.test(texto)) return { error: MENSAJES.nombreEstablecimiento }
+  if (texto.length < 3 || texto.length > LARGOS.nombreEstablecimiento) {
+    return { error: MENSAJES.nombreEstablecimientoLargo }
+  }
+  return { valor: texto }
+}
+
+// Opcional: vacío devuelve { valor: null }.
+export function validarDireccion(valor) {
+  const texto = limpiar(valor)
+  if (texto === '') return { valor: null }
+  if (texto === null || !DIRECCION.test(texto)) return { error: MENSAJES.direccion }
+  if (texto.length > LARGOS.direccion) return { error: demasiadoLargo('La dirección', LARGOS.direccion) }
+  return { valor: texto }
+}
+
+// Opcional: vacío devuelve { valor: null }. Es el nombre de una persona, con la regla de los nombres.
+export function validarNombreContacto(valor) {
+  const texto = limpiar(valor)
+  if (texto === '') return { valor: null }
+  if (texto === null || !NOMBRE.test(texto)) return { error: MENSAJES.nombreContacto }
+  if (texto.length > LARGOS.nombreContacto) {
+    return { error: demasiadoLargo('El nombre del contacto', LARGOS.nombreContacto) }
+  }
   return { valor: texto }
 }
