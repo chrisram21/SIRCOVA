@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react'
+import PaginaConfiguracion from '@/paginas/configuracion/PaginaConfiguracion.jsx'
 import PaginaInicio from '@/paginas/inicio/PaginaInicio.jsx'
 import PaginaEditarUsuario from '@/paginas/usuarios/PaginaEditarUsuario.jsx'
 import PaginaRegistrarPersonal from '@/paginas/usuarios/PaginaRegistrarPersonal.jsx'
@@ -41,7 +42,13 @@ const opcionesMenu = [
       { titulo: 'Editar usuario', ruta: '/usuarios/:id/editar', permiso: 'USUARIO_EDITAR', pagina: PaginaEditarUsuario },
     ],
   },
-  { titulo: 'Configuración', ruta: '/configuracion', permiso: 'CONFIGURACION_CONSULTAR', icono: Settings },
+  {
+    titulo: 'Configuración',
+    ruta: '/configuracion',
+    permiso: 'CONFIGURACION_CONSULTAR',
+    icono: Settings,
+    pagina: PaginaConfiguracion,
+  },
   { titulo: 'Roles y permisos', ruta: '/permisos', permiso: 'PERMISO_CONSULTAR', icono: ShieldCheck },
 ]
 

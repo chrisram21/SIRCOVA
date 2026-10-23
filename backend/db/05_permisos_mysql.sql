@@ -64,6 +64,13 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('USUARIO_DESBLOQUEAR',            'USUARIOS',           'Quitar el bloqueo por intentos fallidos de una cuenta'),
  ('USUARIO_RESTABLECER_CONTRASENA', 'USUARIOS',           'Restablecer la contraseña de una cuenta con una temporal generada');
 
+-- SPEC 13 (HU-08): pantalla de configuración y distritos de salud
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('CONFIGURACION_CONSULTAR',   'CONFIGURACION_CATALOGOS', 'Ver la pantalla de configuración'),
+ ('DISTRITO_CONSULTAR',        'CONFIGURACION_CATALOGOS', 'Consultar los distritos de salud de su ámbito'),
+ ('DISTRITO_CREAR',            'CONFIGURACION_CATALOGOS', 'Registrar distritos de salud en su DDRISS'),
+ ('DISTRITO_EDITAR',           'CONFIGURACION_CATALOGOS', 'Renombrar, desactivar y reactivar distritos de salud de su DDRISS');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -90,6 +97,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'ADMINISTRADOR'
    AND p.codigo IN ('USUARIO_DESBLOQUEAR', 'USUARIO_RESTABLECER_CONTRASENA');
+
+-- SPEC 13 (HU-08): solo el Administrador ve la configuración y gestiona los distritos de salud
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'ADMINISTRADOR'
+   AND p.codigo IN ('CONFIGURACION_CONSULTAR', 'DISTRITO_CONSULTAR', 'DISTRITO_CREAR', 'DISTRITO_EDITAR');
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

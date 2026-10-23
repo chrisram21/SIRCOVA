@@ -1,6 +1,6 @@
 # SPEC 13 — Catálogo territorial: consulta de municipios y gestión de distritos de salud
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-08
 > **Depende de:** SPEC 04, SPEC 05, SPEC 06, SPEC 07, SPEC 11
 > **Fecha:** 2026-10-22
@@ -188,7 +188,7 @@ En `backend/src/validaciones/campos.js` y `frontend/src/validaciones/campos.js`,
 
 - Encabezado "CONFIGURACIÓN" y el título "Catálogos del sistema".
 - Tabs de shadcn. La pestaña activa va en la URL (`?pestana=territorio`) con `useSearchParams`. Sin parámetro, o con uno desconocido, se abre la primera pestaña visible.
-- Este spec solo agrega la pestaña «Territorio». Se ve con `MUNICIPIO_CONSULTAR` y `DISTRITO_CONSULTAR`.
+- Este spec solo agrega la pestaña «Territorio». Se ve con `DDRISS_CONSULTAR`, `MUNICIPIO_CONSULTAR` y `DISTRITO_CONSULTAR`.
 - Sin ninguna pestaña visible: "No tiene acceso a ningún catálogo."
 
 **Pestaña «Territorio» (`PestanaTerritorio.jsx`).** Pide en paralelo `listarDdriss()`, `listarMunicipios({ alcance: 'procedencia', incluirInactivos: true })` y `listarDistritos()`.
@@ -370,6 +370,15 @@ CLAUDE.md                                      ← nota del código de distrito 
 - **Sí:** `/configuracion` es una página con Tabs y la pestaña activa en la URL. HU-09, HU-10, HU-12 y las siguientes agregan su pestaña sin crear opciones nuevas en el menú. **No:** una subruta por catálogo, ni una opción propia en el menú.
 - **Sí:** Dialog para registrar y renombrar, porque son dos campos. **No:** subrutas de formulario como las de Usuarios.
 - **Sí:** después de cada acción, la fila se agrega o se reemplaza con la respuesta, sin volver a pedir la lista, como en Usuarios.
+- **Sí:** la pestaña «Territorio» se ve con `DDRISS_CONSULTAR`, `MUNICIPIO_CONSULTAR` y `DISTRITO_CONSULTAR`, no solo con los dos últimos. La pestaña también pide `GET /ddriss`, y sin ese permiso se abriría con un error de carga. Decidido durante la implementación.
+- **Sí:** un solo mensaje para el nombre demasiado corto o demasiado largo: "El nombre del distrito debe tener entre 3 y 120 caracteres.". Los ejemplos de 400 del contrato usan los mensajes reales de la regla. Decidido durante la implementación.
+- **Sí:** con `alcance=procedencia`, el 9999 solo se suma si el usuario tiene una DDRISS en su ámbito. Así un rol sin ámbito de DDRISS, como el personal de establecimiento, no lo recibe, igual que no recibe ningún otro municipio. Decidido durante la implementación.
+- **Sí:** el 409 `DISTRITO_CON_ESTABLECIMIENTOS` usa el singular con un solo establecimiento ("1 establecimiento activo"). Decidido durante la implementación.
+- **Sí:** la prueba existente de `GET /ddriss` que compara las claves exactas se ajustó para incluir `departamentoNombre`; no se quitó ningún caso. Decidido durante la implementación.
+- **Sí:** las pruebas del municipio inactivo insertan uno propio en el departamento sede, con un código que empieza con `Z` (no es un INE), en lugar de desactivar un municipio real de la base compartida. La prueba de `incluirInactivos` de `catalogos.test.js` desactiva Coatepeque un momento, porque no tiene distritos y ninguna otra prueba depende de él. Las de distritos limpian en `beforeAll` y en `afterAll`. Decidido durante la implementación.
+- **Sí:** el caso "de otra DDRISS" se prueba con un token del mismo usuario de prueba con otra `ddrissId`, porque en la base hay una sola DDRISS y `autenticar` no compara la DDRISS. Decidido durante la implementación.
+- **Sí:** el menú de acciones con "Renombrar" entró en el paso 8, porque el Dialog de renombrar necesita abrirse desde ahí; el paso 9 le agregó "Desactivar" y "Reactivar". El AlertDialog de reactivar lleva la descripción "Se le podrán volver a asignar establecimientos.". Decidido durante la implementación.
+- **Sí:** la verificación manual se hizo con Playwright contra Aiven; la persona inició sesión a mano en la pestaña. El Select de Radix no se abría con el clic de Playwright, así que el municipio se eligió con su `<select>` nativo. Decidido durante la implementación.
 
 ## Riesgos
 

@@ -8,6 +8,7 @@ import {
   validarCorreo,
   validarCui,
   validarNombreUsuario,
+  validarNombreDistrito,
 } from '../src/validaciones/campos.js';
 
 // La misma lista está en frontend/src/validaciones/campos.test.js: si cambia una, se cambia la otra.
@@ -131,10 +132,32 @@ const CASOS = {
       ['', MENSAJES.nombreUsuario],
     ],
   },
+  validarNombreDistrito: {
+    validos: [
+      ['Distrito de Salud Tacaná Norte', 'Distrito de Salud Tacaná Norte'],
+      ['  Distrito   de Salud  Ixchiguán ', 'Distrito de Salud Ixchiguán'],
+      ['Distrito (Área 2) - Sur.', 'Distrito (Área 2) - Sur.'],
+      ['Güinil Ñuñoa', 'Güinil Ñuñoa'],
+      ['Sur', 'Sur'],
+      ['a'.repeat(120), 'a'.repeat(120)],
+    ],
+    invalidos: [
+      ['', MENSAJES.nombreDistritoObligatorio],
+      ['   ', MENSAJES.nombreDistritoObligatorio],
+      [null, MENSAJES.nombreDistritoObligatorio],
+      ['DS', MENSAJES.nombreDistritoLargo],
+      ['  Sa  ', MENSAJES.nombreDistritoLargo],
+      ['a'.repeat(121), MENSAJES.nombreDistritoLargo],
+      ['Distrito @ Norte', MENSAJES.nombreDistrito],
+      ['Distrito_Norte', MENSAJES.nombreDistrito],
+      ['Distrito/Norte', MENSAJES.nombreDistrito],
+    ],
+  },
 };
 
 const REGLAS = {
   validarNombres, validarApellidos, validarCargo, validarTelefono, validarCorreo, validarCui, validarNombreUsuario,
+  validarNombreDistrito,
 };
 
 describe.each(Object.entries(CASOS))('%s', (nombre, { validos, invalidos }) => {
@@ -157,5 +180,6 @@ describe('valores que no son texto', () => {
     expect(validarCorreo({})).toEqual({ error: MENSAJES.correo });
     expect(validarCargo(['Enfermera'])).toEqual({ error: MENSAJES.cargo });
     expect(validarNombreUsuario(42)).toEqual({ error: MENSAJES.nombreUsuario });
+    expect(validarNombreDistrito(123)).toEqual({ error: MENSAJES.nombreDistrito });
   });
 });

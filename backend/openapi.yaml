@@ -724,17 +724,32 @@ paths:
                     codigo: { type: string, example: DDRISS_SM }
                     nombre: { type: string }
                     departamentoId: { type: integer }
+                    departamentoNombre: { type: string, example: San Marcos }
         "401": { $ref: "#/components/responses/NoAutenticado" }
         "403": { $ref: "#/components/responses/SinPermiso" }
 
   /municipios:
     get:
       tags: [Catálogos]
-      summary: Listar los municipios activos del ámbito del usuario (codigo_ine es la llave del GeoJSON)
+      summary: Listar los municipios del ámbito del usuario (codigo_ine es la llave del GeoJSON)
       description: |
-        Devuelve los municipios del departamento sede de la DDRISS del usuario, ordenados por nombre;
-        la autoridad nacional (sin DDRISS) recibe todos. Versión mínima de HU-04; HU-08 la amplía.
+        Solo consulta: los municipios son el catálogo INE y no se crean, editan ni borran desde la API.
+
+        - `alcance=departamento` (por defecto): los municipios del departamento sede de la DDRISS del usuario,
+          ordenados por nombre.
+        - `alcance=procedencia`: además, el `9999` «Migrantes / fuera de San Marcos» y los municipios fuera del
+          departamento donde la DDRISS tiene un establecimiento (p. ej. Coatepeque); por nombre, con el `9999` al final.
+        - La autoridad nacional (sin DDRISS) recibe todos los municipios con cualquiera de los dos valores.
+        - Sin `incluirInactivos=true` solo devuelve los activos.
+        - Un parámetro inválido, desconocido o repetido responde 400 `ENTRADA_INVALIDA`.
       x-permiso: MUNICIPIO_CONSULTAR
+      parameters:
+        - name: alcance
+          in: query
+          schema: { type: string, enum: [departamento, procedencia], default: departamento }
+        - name: incluirInactivos
+          in: query
+          schema: { type: boolean, default: false }
       responses:
         "200":
           description: Lista de municipios
@@ -747,11 +762,245 @@ paths:
                   properties:
                     id: { type: integer }
                     departamentoId: { type: integer }
-                    codigoIne: { type: string }
-                    nombre: { type: string }
+                    departamentoNombre: { type: string, example: San Marcos }
+                    codigoIne: { type: string, example: "1207" }
+                    nombre: { type: string, example: Tacaná }
                     activo: { type: boolean }
+        "400":
+          description: Un parámetro inválido, desconocido o repetido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                alcance:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: alcance debe ser departamento o procedencia. }
+                incluirInactivos:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: incluirInactivos debe ser true o false. }
+                desconocido:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: orden." }
+                repetido:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: alcance no se puede repetir. }
         "401": { $ref: "#/components/responses/NoAutenticado" }
         "403": { $ref: "#/components/responses/SinPermiso" }
+
+  /distritos:
+    get:
+      tags: [Catálogos]
+      summary: Listar los distritos de salud del ámbito del usuario
+      description: |
+        Los distritos de la DDRISS del usuario (la autoridad nacional ve todos), activos e inactivos salvo que
+        se filtre por `activo`. Ordenados por nombre del municipio y código. Sin paginar.
+        Un parámetro inválido, desconocido o repetido responde 400 `ENTRADA_INVALIDA`.
+      x-permiso: DISTRITO_CONSULTAR
+      parameters:
+        - name: municipioId
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: activo
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Lista de distritos de salud
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DistritoSalud" }
+        "400":
+          description: Un parámetro inválido, desconocido o repetido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                municipioId:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: municipioId debe ser un número entero positivo. }
+                activo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: activo debe ser true o false. }
+                desconocido:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: orden." }
+                repetido:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: activo no se puede repetir. }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+    post:
+      tags: [Catálogos]
+      summary: Registrar un distrito de salud en la DDRISS del usuario
+      description: |
+        La DDRISS sale del token. El municipio debe estar activo y ser del departamento sede de la DDRISS
+        (el `9999` y los municipios de establecimientos externos no se aceptan). El nombre no puede repetirse
+        en el mismo municipio, sin distinguir mayúsculas ni tildes.
+
+        El código lo genera el sistema: `DS-{código INE del municipio}-{NN}`, donde `NN` es el mayor consecutivo
+        de los códigos de ese municipio (activos e inactivos) más uno, con al menos dos dígitos. Un código sin
+        consecutivo (`DS-1201`, de los datos de prueba) cuenta como `01`. El código no se puede cambiar después.
+      x-permiso: DISTRITO_CREAR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [municipioId, nombre]
+              additionalProperties: false
+              properties:
+                municipioId: { type: integer, minimum: 1, example: 7 }
+                nombre: { $ref: "#/components/schemas/TextoNombreDistrito" }
+      responses:
+        "201":
+          description: Distrito registrado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DistritoSalud" }
+        "400":
+          description: Nombre inválido o campo no permitido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                nombre:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El nombre del distrito debe tener entre 3 y 120 caracteres. }
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: codigo." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "409":
+          description: Ya hay un distrito con ese nombre en el municipio
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: DISTRITO_DUPLICADO, mensaje: Ya hay un distrito con ese nombre en el municipio. }
+        "422":
+          description: El municipio no existe, está inactivo o no es del departamento sede de la DDRISS
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: MUNICIPIO_INVALIDO, mensaje: El municipio no existe, está inactivo o no es del departamento de su DDRISS. }
+
+  /distritos/{id}:
+    patch:
+      tags: [Catálogos]
+      summary: Cambiar el nombre de un distrito de salud
+      description: |
+        Solo cambia el nombre, también de un distrito inactivo. El código y el municipio no se pueden cambiar;
+        para otro municipio se desactiva el distrito y se registra otro. El mismo nombre responde 200 sin
+        registrar nada en la bitácora.
+      x-permiso: DISTRITO_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre]
+              additionalProperties: false
+              properties:
+                nombre: { $ref: "#/components/schemas/TextoNombreDistrito" }
+      responses:
+        "200":
+          description: Distrito actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DistritoSalud" }
+        "400":
+          description: Nombre inválido o ausente, campo que no se puede cambiar o campo no permitido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                nombre:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El nombre del distrito debe tener entre 3 y 120 caracteres. }
+                sinNombre:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El nombre del distrito es obligatorio. }
+                municipio:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: municipioId no se puede cambiar. }
+                codigo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: codigo no se puede cambiar. }
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: activo." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/DistritoNoEncontrado" }
+        "409":
+          description: Ya hay otro distrito con ese nombre en el municipio
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: DISTRITO_DUPLICADO, mensaje: Ya hay un distrito con ese nombre en el municipio. }
+
+  /distritos/{id}/desactivar:
+    post:
+      tags: [Catálogos]
+      summary: Desactivar un distrito de salud
+      description: |
+        Desactivación lógica: el distrito no se borra. No se puede desactivar mientras tenga establecimientos
+        activos. Un distrito ya inactivo responde 200 sin registrar nada en la bitácora.
+      x-permiso: DISTRITO_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Distrito desactivado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DistritoSalud" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/DistritoNoEncontrado" }
+        "409":
+          description: El distrito tiene establecimientos activos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: DISTRITO_CON_ESTABLECIMIENTOS, mensaje: El distrito tiene 3 establecimientos activos; muévalos o desactívelos primero. }
+
+  /distritos/{id}/reactivar:
+    post:
+      tags: [Catálogos]
+      summary: Reactivar un distrito de salud
+      description: |
+        Exige que el municipio del distrito siga activo. Un distrito ya activo responde 200 sin registrar nada
+        en la bitácora.
+      x-permiso: DISTRITO_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Distrito reactivado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DistritoSalud" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/DistritoNoEncontrado" }
+        "422":
+          description: El municipio del distrito está inactivo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: MUNICIPIO_INVALIDO, mensaje: El municipio no existe, está inactivo o no es del departamento de su DDRISS. }
 
 
   /establecimientos:
@@ -1347,6 +1596,13 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
           example:
             error: { codigo: NO_ENCONTRADO, mensaje: El recurso solicitado no existe. }
+    DistritoNoEncontrado:
+      description: El distrito no existe o es de otra DDRISS
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: NO_ENCONTRADO, mensaje: El distrito de salud no existe. }
     Conflicto:
       description: Duplicado o versionFila desactualizada
       content:
@@ -1590,6 +1846,33 @@ components:
         total: { type: integer, minimum: 0, example: 57 }
         pagina: { type: integer, minimum: 1, example: 2 }
         porPagina: { type: integer, minimum: 1, maximum: 100, example: 20 }
+
+    TextoNombreDistrito:
+      type: string
+      minLength: 3
+      maxLength: 120
+      description: |
+        Nombre del distrito: letras (con tildes, ñ y ü), dígitos, espacios y `.`, `-`, `(`, `)`. Se quitan los
+        espacios de los extremos y se reducen los dobles; de 3 a 120 caracteres después de limpiar.
+      example: Distrito de Salud Tacaná Norte
+
+    DistritoSalud:
+      type: object
+      required: [id, codigo, nombre, ddrissId, municipioId, municipioCodigoIne, municipioNombre, establecimientosActivos, activo]
+      properties:
+        id: { type: integer, example: 31 }
+        codigo: { type: string, description: "Generado por el sistema; no cambia", example: DS-1207-02 }
+        nombre: { type: string, example: Distrito de Salud Tacaná Norte }
+        ddrissId: { type: integer, example: 1 }
+        municipioId: { type: integer, example: 7 }
+        municipioCodigoIne: { type: string, example: "1207" }
+        municipioNombre: { type: string, example: Tacaná }
+        establecimientosActivos:
+          type: integer
+          minimum: 0
+          description: Establecimientos activos ligados al distrito; mientras sea mayor que 0 no se puede desactivar
+          example: 0
+        activo: { type: boolean, example: true }
 
     EstablecimientoEntrada:
       type: object
