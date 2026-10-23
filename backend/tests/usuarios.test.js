@@ -713,6 +713,143 @@ describe('HU-05: cuentas existentes', () => {
     });
   });
 
+  describe('HU-07: búsqueda, filtros y paginación de GET /usuarios', () => {
+    const PREFIJO_HU07 = 'vitest-hu07-';
+    // Marca solo con letras (la regla de apellidos no acepta números) para que la búsqueda no encuentre cuentas ajenas.
+    const marca = Array.from({ length: 10 }, () => 'abcdefghijklmnopqrstuvwxyz'[randomInt(0, 26)]).join('');
+    const apellidos = `López ${marca[0].toUpperCase()}${marca.slice(1)}`;
+    const cuentas = {};
+
+    const listar = (query, credencial) => pedir('get', '/usuarios', credencial).query(query);
+    const idsDe = (res) => res.body.elementos.map((u) => u.id);
+
+    beforeAll(async () => {
+      // Mismos apellidos, así el orden (apellidos, nombres) queda Ana, Beto, Ceci, Dora.
+      cuentas.ana = await crearPersonal({
+        prefijo: PREFIJO_HU07,
+        empleado: { nombres: 'Ana', apellidos, establecimientoId: establecimientoActivo.id },
+      });
+      cuentas.beto = await crearPersonal({ prefijo: PREFIJO_HU07, rol: 'EPIDEMIOLOGIA', empleado: { nombres: 'Beto', apellidos } });
+      cuentas.ceci = await crearPersonal({ prefijo: PREFIJO_HU07, empleado: { nombres: 'Ceci', apellidos } });
+      cuentas.dora = await crearPersonal({ prefijo: PREFIJO_HU07, empleado: { nombres: 'Dora', apellidos } });
+      await desactivarPorSql(cuentas.beto.usuario.id);
+      await pool.query(
+        'UPDATE usuario SET intentos_fallidos = 5, bloqueado_hasta = NOW() + INTERVAL 15 MINUTE WHERE id = ?',
+        [cuentas.ceci.usuario.id],
+      );
+    });
+
+    afterAll(async () => {
+      await pool.query('DELETE FROM usuario WHERE nombre_usuario LIKE ?', [`${PREFIJO_HU07}%`]);
+      await pool.query('DELETE FROM empleado WHERE correo LIKE ?', [`${PREFIJO_HU07}%`]);
+    });
+
+    const ids = (...nombres) => nombres.map((n) => cuentas[n].usuario.id);
+
+    it('busca por nombre y apellido juntos y por parte del nombre de usuario', async () => {
+      const porNombre = await listar({ busqueda: `Ana ${apellidos}` });
+      expect(porNombre.status).toBe(200);
+      expect(idsDe(porNombre)).toEqual(ids('ana'));
+      expect(porNombre.body.total).toBe(1);
+
+      const usuario = cuentas.dora.usuario.nombreUsuario;
+      const porUsuario = await listar({ busqueda: usuario.slice(PREFIJO_HU07.length - 3) });
+      expect(idsDe(porUsuario)).toEqual(ids('dora'));
+    });
+
+    it('busca sin distinguir mayúsculas ni tildes y limpia los espacios', async () => {
+      const res = await listar({ busqueda: `  LOPEZ   ${marca}  ` });
+      expect(idsDe(res)).toEqual(ids('ana', 'beto', 'ceci', 'dora'));
+      expect(res.body.total).toBe(4);
+    });
+
+    // Ningún nombre ni nombre de usuario válido tiene %, \ ni "L_pez": si se tomaran como comodines, habría resultados.
+    it('trata %, _ y \\ como texto y no como comodines', async () => {
+      for (const busqueda of [`${marca}%`, `L_pez ${marca}`, `López\\ ${marca}`, '%']) {
+        const res = await listar({ busqueda });
+        expect(res.status, busqueda).toBe(200);
+        expect(res.body.total, busqueda).toBe(0);
+      }
+    });
+
+    it('filtra por rol, establecimiento (incluido ninguno) y estado, combinados con la búsqueda', async () => {
+      const casos = [
+        [{ rolId: roles.EPIDEMIOLOGIA }, ['beto']],
+        [{ rolId: roles.REVISOR }, ['ana', 'ceci', 'dora']],
+        [{ establecimientoId: establecimientoActivo.id }, ['ana']],
+        [{ establecimientoId: 'ninguno' }, ['beto', 'ceci', 'dora']],
+        [{ estado: 'ACTIVA' }, ['ana', 'ceci', 'dora']],
+        [{ estado: 'DESACTIVADA' }, ['beto']],
+        [{ estado: 'BLOQUEADA' }, ['ceci']],
+        [{ rolId: roles.REVISOR, establecimientoId: 'ninguno', estado: 'ACTIVA' }, ['ceci', 'dora']],
+        [{ rolId: 999999 }, []],
+      ];
+      for (const [filtros, esperadas] of casos) {
+        const res = await listar({ busqueda: marca, ...filtros });
+        expect(res.status, JSON.stringify(filtros)).toBe(200);
+        expect(idsDe(res), JSON.stringify(filtros)).toEqual(ids(...esperadas));
+        expect(res.body.total, JSON.stringify(filtros)).toBe(esperadas.length);
+      }
+    });
+
+    it('pagina sin repetir cuentas, con el mismo total en cada página', async () => {
+      const primera = await listar({ busqueda: marca, porPagina: 2 });
+      const segunda = await listar({ busqueda: marca, porPagina: 2, pagina: 2 });
+
+      expect(primera.body).toMatchObject({ total: 4, pagina: 1, porPagina: 2 });
+      expect(segunda.body).toMatchObject({ total: 4, pagina: 2, porPagina: 2 });
+      expect(idsDe(primera)).toEqual(ids('ana', 'beto'));
+      expect(idsDe(segunda)).toEqual(ids('ceci', 'dora'));
+    });
+
+    it('una página mayor que la última responde 200 vacía con el total real', async () => {
+      const res = await listar({ busqueda: marca, porPagina: 2, pagina: 3 });
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ elementos: [], total: 4, pagina: 3, porPagina: 2 });
+    });
+
+    it('no muestra ni cuenta las cuentas de otra DDRISS', async () => {
+      const otraDdriss = firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['USUARIO_CONSULTAR'] });
+      const res = await listar({ busqueda: marca }, otraDdriss);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ elementos: [], total: 0, pagina: 1, porPagina: 20 });
+    });
+
+    it('responde 400 ENTRADA_INVALIDA ante un parámetro inválido, desconocido o repetido', async () => {
+      const casos = [
+        ['pagina=0', 'pagina debe ser un número entero mayor o igual a 1.'],
+        ['pagina=1.5', 'pagina debe ser un número entero mayor o igual a 1.'],
+        ['porPagina=101', 'porPagina debe ser un número entero entre 1 y 100.'],
+        ['porPagina=0', 'porPagina debe ser un número entero entre 1 y 100.'],
+        ['rolId=abc', 'rolId debe ser un número entero positivo.'],
+        ['rolId=', 'rolId debe ser un número entero positivo.'],
+        ['establecimientoId=otro', "establecimientoId debe ser un número entero positivo o 'ninguno'."],
+        ['estado=OTRO', 'estado debe ser ACTIVA, DESACTIVADA o BLOQUEADA.'],
+        ['estado=activa', 'estado debe ser ACTIVA, DESACTIVADA o BLOQUEADA.'],
+        [`busqueda=${'a'.repeat(101)}`, 'busqueda: como máximo 100 caracteres.'],
+        ['orden=nombre', 'Parámetro no permitido: orden.'],
+        ['estado=ACTIVA&estado=BLOQUEADA', 'estado no se puede repetir.'],
+      ];
+      for (const [consulta, mensaje] of casos) {
+        const res = await pedir('get', `/usuarios?${consulta}`);
+        expect(res.status, consulta).toBe(400);
+        expect(res.body.error, consulta).toEqual({ codigo: 'ENTRADA_INVALIDA', mensaje });
+      }
+    });
+
+    it('ningún elemento trae el hash, los intentos fallidos ni la fecha del bloqueo', async () => {
+      const res = await listar({ busqueda: marca });
+      const [[{ hash }]] = await pool.query('SELECT hash_contrasena AS hash FROM usuario WHERE id = ?', [cuentas.ceci.usuario.id]);
+      expect(JSON.stringify(res.body)).not.toContain(hash);
+      for (const cuenta of res.body.elementos) {
+        for (const clave of ['hashContrasena', 'intentosFallidos', 'bloqueadoHasta']) {
+          expect(cuenta).not.toHaveProperty(clave);
+        }
+      }
+      expect(res.body.elementos.find((u) => u.id === cuentas.ceci.usuario.id).bloqueada).toBe(true);
+    });
+  });
+
   describe('HU-62: POST /usuarios/{id}/desbloquear', () => {
     const PREFIJO_HU62 = 'vitest-hu62-';
     const desbloquear = (id, credencial) => pedir('post', `/usuarios/${id}/desbloquear`, credencial);
