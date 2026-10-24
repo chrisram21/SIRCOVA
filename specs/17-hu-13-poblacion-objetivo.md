@@ -1,6 +1,6 @@
 # SPEC 17 — Registro de la población objetivo
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-13
 > **Depende de:** SPEC 04, SPEC 05, SPEC 06, SPEC 11, SPEC 12, SPEC 13, SPEC 16
 > **Fecha:** 2026-10-23
@@ -239,20 +239,20 @@ CLAUDE.md                                      ← nota de población
 ## Criterios de aceptación
 
 - [ ] `backend/openapi.yaml` documenta `GET /poblaciones-objetivo` y `PUT /poblaciones-objetivo/{municipioId}/{anio}` con su `x-permiso`, el borrador anterior (con `vacunaId`) ya no está, y `/api/docs` carga sin errores.
-- [ ] `npm test` pasa en `backend/` y en `frontend/` sin desactivar ni quitar ninguna prueba, y las pruebas no dejan filas de 2021 en `periodo` ni en `poblacion_objetivo`.
-- [ ] `frontend/package.json` y `backend/package.json` no cambian, y nada en `backend/db/` cambia salvo `05_permisos_mysql.sql`.
-- [ ] Desde la pantalla se puede registrar la población de un municipio, un año y uno o varios grupos de edad.
-- [ ] Después de cualquier número de guardados hay una sola fila por municipio, año y grupo.
-- [ ] Una cantidad que no es un entero de 0 a 9 999 999 se rechaza en la pantalla y en la API (400).
-- [ ] Un grupo ya registrado se puede corregir y no se puede vaciar ni borrar.
-- [ ] Un año sin meses en el calendario responde 422 y no aparece en el selector.
-- [ ] Un municipio fuera del departamento de la DDRISS, el `9999` o uno inactivo responde 404.
-- [ ] Cada grupo creado deja una fila `CREAR` y cada grupo cambiado una fila `ACTUALIZAR` en la bitácora, con el módulo `CONFIGURACION`; un guardado sin cambios no deja filas.
-- [ ] Sin `POBLACION_CONSULTAR` o `POBLACION_REGISTRAR`, sus endpoints responden 403 y la pantalla oculta la pestaña o el botón "Editar".
-- [ ] El Administrador y el Revisor ven la pestaña «Población» y pueden guardar.
-- [ ] El año elegido queda en la URL y se conserva al recargar.
-- [ ] Ningún componente propio tiene colores escritos a mano ni llama a `fetch` directamente.
-- [ ] HU-13 tiene su avance y sus criterios marcados, HU-14 tiene su nota y `CLAUDE.md` tiene la nota.
+- [x] `npm test` pasa en `backend/` y en `frontend/` sin desactivar ni quitar ninguna prueba, y las pruebas no dejan filas de 2021 en `periodo` ni en `poblacion_objetivo`.
+- [x] `frontend/package.json` y `backend/package.json` no cambian, y nada en `backend/db/` cambia salvo `05_permisos_mysql.sql`.
+- [x] Desde la pantalla se puede registrar la población de un municipio, un año y uno o varios grupos de edad.
+- [x] Después de cualquier número de guardados hay una sola fila por municipio, año y grupo.
+- [x] Una cantidad que no es un entero de 0 a 9 999 999 se rechaza en la pantalla y en la API (400).
+- [x] Un grupo ya registrado se puede corregir y no se puede vaciar ni borrar.
+- [x] Un año sin meses en el calendario responde 422 y no aparece en el selector.
+- [x] Un municipio fuera del departamento de la DDRISS, el `9999` o uno inactivo responde 404.
+- [x] Cada grupo creado deja una fila `CREAR` y cada grupo cambiado una fila `ACTUALIZAR` en la bitácora, con el módulo `CONFIGURACION`; un guardado sin cambios no deja filas.
+- [x] Sin `POBLACION_CONSULTAR` o `POBLACION_REGISTRAR`, sus endpoints responden 403 y la pantalla oculta la pestaña o el botón "Editar".
+- [x] El Administrador y el Revisor ven la pestaña «Población» y pueden guardar.
+- [x] El año elegido queda en la URL y se conserva al recargar.
+- [x] Ningún componente propio tiene colores escritos a mano ni llama a `fetch` directamente.
+- [x] HU-13 tiene su avance y sus criterios marcados, HU-14 tiene su nota y `CLAUDE.md` tiene la nota.
 
 ## Decisiones
 
