@@ -8,6 +8,7 @@ import sistemaRoutes from './modulos/sistema/sistema.routes.js';
 import authRoutes from './modulos/auth/auth.routes.js';
 import usuariosRoutes from './modulos/usuarios/usuarios.routes.js';
 import catalogosRoutes from './modulos/catalogos/catalogos.routes.js';
+import configuracionRoutes from './modulos/configuracion/configuracion.routes.js';
 import { rutaNoEncontrada, manejarErrores } from './middlewares/errores.js';
 
 const app = express();
@@ -21,6 +22,7 @@ app.use('/api/v1', sistemaRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1', usuariosRoutes);
 app.use('/api/v1', catalogosRoutes);
+app.use('/api/v1', configuracionRoutes);
 
 app.use(rutaNoEncontrada);
 app.use(manejarErrores);

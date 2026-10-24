@@ -4,7 +4,8 @@
 export const LARGOS = {
   nombres: 100, apellidos: 100, cargo: 100, correo: 150, nombreUsuario: 50, nombreDistrito: 120,
   nombreEstablecimiento: 150, direccion: 255, nombreContacto: 150, codigoVacuna: 20, nombreVacuna: 120,
-  descripcionVacuna: 255, nombreDosis: 60, fuentePoblacion: 150,
+  descripcionVacuna: 255, nombreDosis: 60, fuentePoblacion: 150, codigoDimension: 30, codigoValorDimension: 30,
+  nombreDimension: 60, descripcionDimension: 255, etiquetaValorDimension: 60,
 }
 
 export const MENSAJES = {
@@ -45,6 +46,13 @@ export const MENSAJES = {
   nombreDosisLargo: 'El nombre de la dosis debe tener entre 3 y 60 caracteres.',
   cantidadPoblacion: 'La cantidad debe ser un número entero entre 0 y 9,999,999.',
   fuentePoblacion: 'La fuente admite hasta 150 caracteres.',
+  codigoDimension:
+    'El código debe empezar con una letra minúscula y usar solo minúsculas, números y guion bajo (hasta 30).',
+  codigoValorDimension: 'El código del valor usa solo mayúsculas, números y guion bajo (hasta 30).',
+  nombreDimension: 'El nombre debe tener entre 2 y 60 caracteres.',
+  descripcionDimension: 'La descripción admite hasta 255 caracteres.',
+  etiquetaValorDimension: 'La etiqueta debe tener entre 1 y 60 caracteres.',
+  edadMeses: 'La edad debe ser un número entero de meses entre 0 y 1,200.',
 }
 
 const demasiadoLargo = (campo, largo) => `${campo}: como máximo ${largo} caracteres.`
@@ -63,6 +71,9 @@ const DESCRIPCION_VACUNA = /^[\p{L}\d .,()/+';:-]+$/u
 const NOMBRE_DOSIS = /^[\p{L}\d .,()/-]+$/u
 const DEPARTAMENTOS = 22
 const CANTIDAD_POBLACION_MAXIMA = 9_999_999
+const CODIGO_DIMENSION = /^[a-z][a-z0-9_]*$/
+const CODIGO_VALOR_DIMENSION = /^[A-Z0-9_]+$/
+const EDAD_MAXIMA_MESES = 1200
 
 // Sin texto (null, undefined o solo espacios) devuelve ''. Un valor que no es texto devuelve null.
 function limpiar(valor) {
@@ -239,4 +250,47 @@ export function validarFuentePoblacion(valor) {
   if (texto === '') return { valor: null }
   if (texto === null || texto.length > LARGOS.fuentePoblacion) return { error: MENSAJES.fuentePoblacion }
   return { valor: texto }
+}
+
+export function validarCodigoDimension(valor) {
+  const texto = limpiar(valor)
+  if (!texto || !CODIGO_DIMENSION.test(texto) || texto.length < 2 || texto.length > LARGOS.codigoDimension) {
+    return { error: MENSAJES.codigoDimension }
+  }
+  return { valor: texto }
+}
+
+export function validarCodigoValorDimension(valor) {
+  const codigo = limpiar(valor)?.toUpperCase()
+  if (!codigo || !CODIGO_VALOR_DIMENSION.test(codigo) || codigo.length > LARGOS.codigoValorDimension) {
+    return { error: MENSAJES.codigoValorDimension }
+  }
+  return { valor: codigo }
+}
+
+export function validarNombreDimension(valor) {
+  const texto = limpiar(valor)
+  if (!texto || texto.length < 2 || texto.length > LARGOS.nombreDimension) return { error: MENSAJES.nombreDimension }
+  return { valor: texto }
+}
+
+export function validarDescripcionDimension(valor) {
+  const texto = limpiar(valor)
+  if (texto === '') return { valor: null }
+  if (texto === null || texto.length > LARGOS.descripcionDimension) return { error: MENSAJES.descripcionDimension }
+  return { valor: texto }
+}
+
+export function validarEtiquetaValorDimension(valor) {
+  const texto = limpiar(valor)
+  if (!texto || texto.length > LARGOS.etiquetaValorDimension) return { error: MENSAJES.etiquetaValorDimension }
+  return { valor: texto }
+}
+
+// Acepta el texto de un Input, como validarCantidadPoblacion.
+export function validarEdadMeses(valor) {
+  const texto = typeof valor === 'string' ? valor.trim() : null
+  const meses = texto === null ? valor : /^\d+$/.test(texto) ? Number(texto) : NaN
+  if (!Number.isInteger(meses) || meses < 0 || meses > EDAD_MAXIMA_MESES) return { error: MENSAJES.edadMeses }
+  return { valor: meses }
 }

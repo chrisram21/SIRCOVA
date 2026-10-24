@@ -1,6 +1,7 @@
 import { useSearchParams } from 'react-router-dom'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
+import PestanaDimensiones from './PestanaDimensiones.jsx'
 import PestanaEstablecimientos from './PestanaEstablecimientos.jsx'
 import PestanaPeriodos from './PestanaPeriodos.jsx'
 import PestanaPoblacion from './PestanaPoblacion.jsx'
@@ -26,6 +27,12 @@ const PESTANAS = [
     titulo: 'Vacunas',
     permisos: ['VACUNA_CONSULTAR'],
     Contenido: PestanaVacunas,
+  },
+  {
+    valor: 'dimensiones',
+    titulo: 'Dimensiones',
+    permisos: ['DIMENSION_CONSULTAR'],
+    Contenido: PestanaDimensiones,
   },
   {
     valor: 'periodos',
