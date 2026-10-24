@@ -1,6 +1,6 @@
 // =============================================================================
 // SIRCOVA - Datos de prueba para MongoDB (vacunacion_config)
-// Requiere: 02_colecciones_mongodb.js ya ejecutado (MongoDB v0.6).
+// Requiere: 02_colecciones_mongodb.js ya ejecutado (MongoDB v0.7).
 //
 // Uso:  mongosh "<cadena de conexión de Atlas>" --file 04_datos_prueba_mongodb.js
 //
@@ -12,9 +12,11 @@
 //
 // Qué agrega (además de lo que ya trae el 02):
 //   - Dimensión "pueblo" (ejemplo de dimensión nueva; solo la usa un borrador).
-//   - Esquemas VIGENTES de Rotavirus, SPR y Neumococo pediátrico, para probar
-//     el formulario dinámico con más vacunas.
-//   - Hexavalente v3 en BORRADOR (propuesta que agrega "pueblo").
+//   - Esquemas VIGENTES nacionales de Rotavirus, SPR y Neumococo pediátrico,
+//     para probar el formulario dinámico con más vacunas.
+//   - Hexavalente v3 en BORRADOR: ejemplo de formulario propio de DDRISS_SM.
+//     Es una copia de la v2 nacional (basado_en) que agrega "pueblo"; es el
+//     primero de esa DDRISS, así que version_anterior_id es null.
 //   - VARIACION_HISTORICA v2 solo para DDRISS_SM (umbral de 40 %), para probar
 //     que una regla de la DDRISS reemplaza a la nacional.
 //   - Regla RANGO_DOSIS_MES en BORRADOR.
@@ -42,6 +44,7 @@ const auditoriaPrueba = { creado_por: NumberInt(1), creado_en: fechaPrueba, publ
 const auditoriaBorrador = { creado_por: NumberInt(1), creado_en: fechaPrueba, publicado_por: null, publicado_en: null, motivo_cambio: null };
 const desdeOctubre = { desde: new Date("2026-10-01"), hasta: null };
 const territorioNacional = { nivel: "NACIONAL", ddriss_codigo: null };
+const territorioSanMarcos = { nivel: "DDRISS", ddriss_codigo: "DDRISS_SM" };
 const reglasBasicas = [
   { codigo: "CAMPOS_COMPLETOS", version: NumberInt(1) },
   { codigo: "NO_NEGATIVO", version: NumberInt(1) },
@@ -67,7 +70,8 @@ db_.catalogo_dimensiones.insertOne({
 db_.esquemas_captura.insertMany([
   {
     vacuna: { id: NumberInt(7), codigo: "ROTA", nombre: "Rotavirus" },
-    version: NumberInt(1), estado: "VIGENTE", vigencia: desdeOctubre, version_anterior_id: null,
+    version: NumberInt(1), territorio: territorioNacional, basado_en: null,
+    estado: "VIGENTE", vigencia: desdeOctubre, version_anterior_id: null,
     dimensiones: {
       dosis: [{ codigo: "D1", etiqueta: "1.ª dosis" }, { codigo: "D2", etiqueta: "2.ª dosis" }],
       procedencia: { modo: "MUNICIPIO_DETALLADO", permite_no_especificado: true },
@@ -84,7 +88,8 @@ db_.esquemas_captura.insertMany([
   },
   {
     vacuna: { id: NumberInt(3), codigo: "SPR", nombre: "Sarampión, Paperas y Rubéola (SPR)" },
-    version: NumberInt(1), estado: "VIGENTE", vigencia: desdeOctubre, version_anterior_id: null,
+    version: NumberInt(1), territorio: territorioNacional, basado_en: null,
+    estado: "VIGENTE", vigencia: desdeOctubre, version_anterior_id: null,
     dimensiones: {
       dosis: [{ codigo: "D1", etiqueta: "1.ª dosis" }, { codigo: "D2", etiqueta: "2.ª dosis" }],
       procedencia: { modo: "MUNICIPIO_DETALLADO", permite_no_especificado: true },
@@ -102,7 +107,8 @@ db_.esquemas_captura.insertMany([
   },
   {
     vacuna: { id: NumberInt(8), codigo: "NEUMO", nombre: "Neumococo pediátrico" },
-    version: NumberInt(1), estado: "VIGENTE", vigencia: desdeOctubre, version_anterior_id: null,
+    version: NumberInt(1), territorio: territorioNacional, basado_en: null,
+    estado: "VIGENTE", vigencia: desdeOctubre, version_anterior_id: null,
     dimensiones: {
       dosis: [
         { codigo: "D1", etiqueta: "1.ª dosis" }, { codigo: "D2", etiqueta: "2.ª dosis" },
@@ -123,11 +129,14 @@ db_.esquemas_captura.insertMany([
     datos_prueba: true
   },
   {
-    // Borrador: no se usa para capturar hasta que se publique.
+    // Borrador del formulario de San Marcos: no se usa para capturar hasta que
+    // se publique. La v2 nacional no cambia.
     vacuna: { id: NumberInt(2), codigo: "HEXA", nombre: "Hexavalente" },
-    version: NumberInt(3), estado: "BORRADOR",
+    version: NumberInt(3), territorio: territorioSanMarcos,
+    basado_en: { esquema_id: hexa_v2, version: NumberInt(2) },
+    estado: "BORRADOR",
     vigencia: { desde: new Date("2027-01-01"), hasta: null },
-    version_anterior_id: hexa_v2,
+    version_anterior_id: null,
     dimensiones: {
       dosis: [
         { codigo: "D1", etiqueta: "1.ª dosis" },
@@ -157,7 +166,7 @@ db_.esquemas_captura.insertMany([
       { codigo: "VARIACION_HISTORICA", version: NumberInt(2) }
     ],
     presentacion: { filas: "dosis", columnas: ["seccion", "pueblo"], subtabla_por: "procedencia" },
-    auditoria: { ...auditoriaBorrador, motivo_cambio: "Prueba: propuesta de desagregar por pueblo." },
+    auditoria: { ...auditoriaBorrador, motivo_cambio: "Prueba: San Marcos propone desagregar por pueblo." },
     datos_prueba: true
   }
 ]);

@@ -1,7 +1,13 @@
 // =============================================================================
 //  Plataforma web de producción de vacunación — DDRISS San Marcos (MSPAS)
 //  Diseño preliminar de colecciones MongoDB (MongoDB 7.x, ejecutar con mongosh)
-//  Versión: 0.6 (propuesta para revisión)   Fecha: 2026-10-18
+//  Versión: 0.7 (propuesta para revisión)   Fecha: 2026-10-23
+//  Cambios v0.7 (MySQL sigue en v0.9): esquemas_captura agrega "territorio"
+//  y "basado_en". Una DDRISS puede publicar su propio formulario a partir del
+//  nacional: se copia en un documento nuevo con territorio DDRISS y basado_en
+//  apunta a la versión nacional de la que salió; la nacional no se modifica.
+//  Las dimensiones de un esquema solo pueden venir de catalogo_dimensiones
+//  (valores activos); lo valida el backend al guardar o publicar.
 //  Cambios v0.6 (BD v0.8): IPV y OPV se fusionan en la vacuna POLIO (id 6);
 //  nueva dimensión "presentacion" (IPV u OPV) para registrar cómo se aplicó
 //  cada dosis. Es información adicional: la cobertura y la deserción cuentan
@@ -28,8 +34,9 @@
 //  reglas_validacion y configuracion_indicadores agregan "territorio"
 //  (NACIONAL o una DDRISS). Una versión vigente de una DDRISS prevalece sobre
 //  la nacional del mismo código. Las semillas son todas NACIONAL; el proyecto
-//  solo opera la DDRISS San Marcos. catalogo_dimensiones y esquemas_captura no
-//  cambian, porque el formulario 5C es nacional.
+//  solo opera la DDRISS San Marcos. En v0.3 catalogo_dimensiones y
+//  esquemas_captura no cambiaron porque el formulario 5C se tomó como
+//  nacional; desde v0.7 esquemas_captura también lleva territorio.
 //  Cambios v0.2: nueva colección catalogo_dimensiones; cada esquema de captura
 //  declara sus propias dimensiones de desagregación (sexo, grupo de edad,
 //  embarazo u otras nuevas) en lugar de usar sexo y grupo de edad fijos.
@@ -84,7 +91,8 @@ const auditoria = {
 
 const estadoVersion = { enum: ["BORRADOR", "VIGENTE", "HISTORICO"] };
 
-// Subesquema reutilizable: territorio al que aplica una regla o indicador.
+// Subesquema reutilizable: territorio al que aplica una regla, un indicador o
+// un esquema de captura.
 // NACIONAL aplica a todas las DDRISS; DDRISS aplica solo a la indicada
 // (ddriss_codigo = ddriss.codigo de MySQL, p. ej. "DDRISS_SM").
 // Resolución en el backend: para una DDRISS se usa la versión VIGENTE con su
@@ -149,12 +157,16 @@ db_.catalogo_dimensiones.createIndex({ codigo: 1 }, { unique: true, name: "uq_di
 //    Las filas del formulario son el producto dosis x valores de cada
 //    dimensión; una dosis puede restringir o quitar dimensiones. El formulario
 //    de React se genera a partir de este documento.
+//    v0.7: el esquema NACIONAL es la base; una DDRISS que lo edita crea una
+//    copia con su territorio (basado_en = versión nacional de la que parte).
+//    Cada dimensión y valor de "desagregacion" debe existir activo en
+//    catalogo_dimensiones; $jsonSchema no puede revisarlo, lo valida el backend.
 // -----------------------------------------------------------------------------
 db_.createCollection("esquemas_captura", {
   validator: {
     $jsonSchema: {
       bsonType: "object",
-      required: ["vacuna", "version", "estado", "vigencia", "dimensiones", "reglas", "auditoria"],
+      required: ["vacuna", "version", "territorio", "estado", "vigencia", "dimensiones", "reglas", "auditoria"],
       properties: {
         vacuna: {
           bsonType: "object",
@@ -165,10 +177,20 @@ db_.createCollection("esquemas_captura", {
             nombre: { bsonType: "string" }
           }
         },
-        version:  { bsonType: "int", minimum: 1 },
-        estado:   estadoVersion,
-        vigencia: vigencia,
-        version_anterior_id: { bsonType: ["objectId", "null"] },
+        version:    { bsonType: "int", minimum: 1 },
+        territorio: territorio,
+        estado:     estadoVersion,
+        vigencia:   vigencia,
+        version_anterior_id: { bsonType: ["objectId", "null"], description: "Versión anterior del mismo territorio" },
+        basado_en: {
+          bsonType: ["object", "null"],
+          description: "Versión NACIONAL de la que se copió este formulario de DDRISS; null en los nacionales",
+          required: ["esquema_id", "version"],
+          properties: {
+            esquema_id: { bsonType: "objectId", description: "_id del esquema nacional usado como base" },
+            version:    { bsonType: "int", description: "Copia del número de versión de la base" }
+          }
+        },
         dimensiones: {
           bsonType: "object",
           required: ["dosis", "procedencia", "desagregacion"],
@@ -269,13 +291,17 @@ db_.createCollection("esquemas_captura", {
   validationAction: "error"
 });
 
+// (vacuna.codigo, version) sigue siendo único en todo el país, como en las
+// reglas: así reporte_vacuna.esquema_version no es ambiguo. Si HEXA v2 es
+// nacional, el primer formulario de San Marcos para HEXA será v3.
 db_.esquemas_captura.createIndex({ "vacuna.codigo": 1, version: 1 }, { unique: true, name: "uq_vacuna_version" });
-// Solo una versión VIGENTE por vacuna
+// Solo una versión VIGENTE por vacuna y territorio (una nacional y, si hace
+// falta, una por DDRISS).
 db_.esquemas_captura.createIndex(
-  { "vacuna.codigo": 1 },
-  { unique: true, partialFilterExpression: { estado: "VIGENTE" }, name: "uq_vigente_por_vacuna" }
+  { "vacuna.codigo": 1, "territorio.nivel": 1, "territorio.ddriss_codigo": 1 },
+  { unique: true, partialFilterExpression: { estado: "VIGENTE" }, name: "uq_esquema_vigente_territorio" }
 );
-db_.esquemas_captura.createIndex({ "vacuna.codigo": 1, "vigencia.desde": -1 }, { name: "ix_vigencia" });
+db_.esquemas_captura.createIndex({ "vacuna.codigo": 1, "territorio.ddriss_codigo": 1, "vigencia.desde": -1 }, { name: "ix_vigencia" });
 
 // -----------------------------------------------------------------------------
 // 3. reglas_validacion
@@ -433,9 +459,10 @@ db_.configuracion_indicadores.createIndex({ "aplica_a.vacuna": 1, estado: 1 }, {
 
 const ahora = new Date("2026-10-01T00:00:00Z");
 const auditoriaEjemplo = { creado_por: NumberInt(1), creado_en: ahora, publicado_por: NumberInt(1), publicado_en: ahora, motivo_cambio: null };
-// Todas las reglas e indicadores de ejemplo son nacionales.
+// Todas las reglas, indicadores y esquemas de captura de ejemplo son nacionales.
 const territorioNacional = { nivel: "NACIONAL", ddriss_codigo: null };
 const conTerritorioNacional = (doc) => ({ ...doc, territorio: territorioNacional });
+const esquemaNacional = (doc) => ({ ...conTerritorioNacional(doc), basado_en: null });
 
 // --- Catálogo de dimensiones ---------------------------------------------------
 db_.catalogo_dimensiones.insertMany([
@@ -599,7 +626,7 @@ db_.esquemas_captura.insertMany([
     presentacion: { filas: "dosis", columnas: ["seccion"], subtabla_por: "procedencia" },
     auditoria: { ...auditoriaEjemplo, motivo_cambio: "Se agrega la sección de 1 a < 6 años (esquema atrasado) y la procedencia por municipio." }
   }
-]);
+].map(esquemaNacional));
 
 // --- Esquemas con dimensiones distintas ----------------------------------------
 // BCG: sin desagregación, solo el total de la dosis única al nacer.
@@ -722,7 +749,7 @@ db_.esquemas_captura.insertMany([
     presentacion: { filas: "dosis", columnas: ["seccion", "presentacion"] },
     auditoria: auditoriaEjemplo
   }
-]);
+].map(esquemaNacional));
 
 // --- Configuración de indicadores ---------------------------------------------
 const baseIndicador = {
