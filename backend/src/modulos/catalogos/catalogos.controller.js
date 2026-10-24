@@ -2,6 +2,7 @@ import * as catalogosService from './catalogos.service.js';
 import * as distritosService from './distritos.service.js';
 import * as establecimientosService from './establecimientos.service.js';
 import * as periodosService from './periodos.service.js';
+import * as poblacionService from './poblacion.service.js';
 import * as vacunasService from './vacunas.service.js';
 import { contextoAuditoria } from '../auditoria/auditoria.service.js';
 
@@ -123,4 +124,13 @@ export async function abrirPeriodo(req, res) {
 
 export async function cambiarFechaLimite(req, res) {
   res.json(await periodosService.cambiarFechaLimite(req.params.id, req.body, req.usuario, contextoAuditoria(req)));
+}
+
+export async function consultarPoblacion(req, res) {
+  res.json(await poblacionService.consultarPoblacion(req.usuario, req.query));
+}
+
+export async function guardarPoblacion(req, res) {
+  const { municipioId, anio } = req.params;
+  res.json(await poblacionService.guardarPoblacion(municipioId, anio, req.body, req.usuario, contextoAuditoria(req)));
 }
