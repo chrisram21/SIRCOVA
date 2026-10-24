@@ -2,7 +2,7 @@
 
 > **Para qué sirve este documento.** Da contexto preciso sobre la base de datos del proyecto a otros agentes de IA y a los integrantes del equipo. Resume qué se trabajó, cómo está organizada la persistencia (MySQL + MongoDB) y qué es y para qué sirve cada tabla y cada colección.
 >
-> **Estado:** modelo preliminar **v0.9** (22 de octubre de 2026): v0.5 (preparado para varias DDRISS), los bloques A a D de la v0.6 (población por grupo de edad, dosis que cuentan para cobertura, secciones del formulario y avance contra la meta del mes) la v0.7 (Excel del 5C y semillas del Registro Único de Vacunación), la v0.8 (Hospital de San Marcos y vacuna Polio) y la v0.9 (CUI del empleado como huella HMAC). El modelo se sigue refinando por sprint.
+> **Estado:** modelo preliminar **v0.9** (22 de octubre de 2026): v0.5 (preparado para varias DDRISS), los bloques A a D de la v0.6 (población por grupo de edad, dosis que cuentan para cobertura, secciones del formulario y avance contra la meta del mes) la v0.7 (Excel del 5C y semillas del Registro Único de Vacunación), la v0.8 (Hospital de San Marcos y vacuna Polio) y la v0.9 (CUI del empleado como huella HMAC). Script de MongoDB **v0.7** (23 de octubre de 2026): formularios de captura por DDRISS. El modelo se sigue refinando por sprint.
 >
 > **Fuente de verdad:** si este resumen y los scripts difieren, mandan los scripts.
 > - `01_modelo_relacional_mysql.sql`: DDL de MySQL 8.0.
@@ -38,11 +38,12 @@
 | **v0.2** | 2026-09-29 | **Decisión del equipo:** los formularios deben admitir dimensiones nuevas por vacuna, y por eso se eligió MongoDB. Sexo y grupo de edad dejan de ser columnas: se crean la tabla genérica `detalle_dimension`, la colección `catalogo_dimensiones` y la regla `DIMENSIONES_VALIDAS`. Se elimina la tabla `grupo_edad`. |
 | **v0.3** | 2026-09-29 | Alineación con la **propuesta v2**. "Corrección solicitada" regresa a **Borrador** (antes iba a Enviado). Se asigna un revisor al pasar a En revisión (`revisor_id`, `asignado_en`). Nuevos tipos de establecimiento (CAIMI, centro comunitario, casa materna, otra institución). Se admiten establecimientos **externos** (caso Coatepeque, Quetzaltenango). |
 | **v0.4** | 2026-10-08 | **Normalización de usuario:** se separa `empleado` (datos del personal) de `usuario` (solo datos de acceso), con relación 1:1. Se agregan **dirección y contacto** a `establecimiento`. |
-| **v0.5** | 2026-10-10 | **Modelo preparado para varias DDRISS**, operando solo San Marcos. Bloque A: tabla `ddriss`, `distrito_salud.ddriss_id`, `establecimiento.ddriss_id` (DDRISS a la que reporta) y se elimina `municipio.es_jurisdiccion`. Bloque B: `empleado.ddriss_id`; los 5 roles se conservan y `AUTORIDAD` sin DDRISS es la autoridad nacional. Bloque C: `periodo` queda como calendario común y la nueva tabla `cierre_periodo` guarda el estado del mes por DDRISS; `alerta.ddriss_id`; las vistas exponen la DDRISS. MongoDB (script v0.3): campo `territorio` en reglas e indicadores. |
+| **v0.5** | 2026-10-10 | **Modelo preparado para varias DDRISS**, operando solo San Marcos. Bloque A: tabla `ddriss`, `distrito_salud.ddriss_id`, `establecimiento.ddriss_id` (DDRISS a la que reporta) y se elimina `municipio.es_jurisdiccion`. Bloque B: `empleado.ddriss_id`; los 5 roles se conservan y `AUTORIDAD` sin DDRISS es la autoridad nacional. Bloque C: `periodo` queda como calendario común y la nueva tabla `cierre_periodo` guarda el estado del mes por DDRISS; `alerta.ddriss_id`; las vistas exponen la DDRISS. MongoDB (script v0.3): campo `territorio` en reglas e indicadores (los esquemas de captura lo reciben en el script v0.7). |
 | **v0.6** | 2026-10-10 | Información de campo (entrevistas a la estadígrafa y a Epidemiología). **Bloque A:** `poblacion_objetivo` sin `vacuna_id` (población por municipio, año y grupo de edad), semillas de `clasificacion_poblacion` según los encabezados del 5C y permiso `POBLACION_REGISTRAR` solo para el Administrador (provisional). **Bloque B:** `dosis.completa_esquema` y `dosis.es_trazadora`; 13 vacunas del 5C como semillas de ejemplo. **Bloque C** (MongoDB, script v0.4): `esquemas_captura.secciones[]` y valores de `grupo_edad` con los códigos de `clasificacion_poblacion`; esquema de ejemplo de OPV. **Bloque D** (MongoDB): tipo `AVANCE_META_MES` e indicador `AVANCE_PENTA3` para el mapa, semáforo 80/90 provisional. Bloque E en pausa. |
 | **v0.7** | 2026-10-17 | Excel del 5C y Registro Único de Vacunación. `establecimiento.reporta_5c` (el que envía el 5C de su municipio, uno por municipio); municipio `9999` = "Migrantes / fuera de San Marcos"; `v_produccion_atribuida` (Excel 3) solo cuenta procedencias del departamento de la DDRISS; grupo `1_A_4` → `1_A_5` ("De 1 a < 6 años"); 22 vacunas semilla (Hexavalente reemplaza a Pentavalente con el id 2, `INFLU` → `INFLU_PED`). MongoDB (script v0.5): `PENTA` → `HEXA` en ejemplos e indicadores; sexo solo en VPH (y Tdap de 10 años), nuevo esquema de ejemplo de VPH. |
 | **v0.8** | 2026-10-18 | Hospitales e IPV/OPV. 31 formularios 5C (30 municipios y el Hospital de San Marcos), así que `reporta_5c` deja de ser uno por municipio; nueva marca `establecimiento.solo_cobertura` (su producción solo cuenta en el Excel 3; caso Hospital de San Marcos); `v_produccion` expone `solo_cobertura` y `v_consolidado_establecimiento` la excluye. IPV y OPV se fusionan en `POLIO` (id 6): 21 vacunas, 60 dosis. MongoDB (script v0.6): dimensión `presentacion` (IPV u OPV) en el esquema de Polio. |
 | **v0.9** | 2026-10-22 | CUI del empleado (SPEC 11, asesoría del 2026-10-21). `empleado.codigo_empleado` pasa a `empleado.cui_hmac` `CHAR(64)` con el índice único `uq_empleado_cui`: la huella HMAC-SHA256 del CUI del DPI, para no registrar dos veces a la misma persona. El código de empleado no servía para eso: hay personas con dos códigos y el personal contratado usa otros. Se guarda la huella y no el CUI, con una clave secreta (`CUI_HMAC_CLAVE`), porque el CUI tiene pocas combinaciones y un SHA-256 simple se podría revertir. La columna es NULL en la base y la API la exige al crear. Las bases que ya existían se migran con `07_cui_empleado_mysql.sql`, que vacía los códigos anteriores. |
+| **MongoDB v0.7** | 2026-10-23 | Solo cambia el script de MongoDB; el modelo MySQL sigue en v0.9. **Decisión del equipo:** cada DDRISS puede tener su propio formulario de captura. `esquemas_captura` agrega `territorio` (el mismo subesquema de reglas e indicadores) y `basado_en` (versión nacional de la que se copió un formulario de DDRISS). El índice `uq_vigente_por_vacuna` se reemplaza por `uq_esquema_vigente_territorio` (una VIGENTE por vacuna y territorio) e `ix_vigencia` incluye `territorio.ddriss_codigo`; `uq_vacuna_version` no cambia, así que `reporte_vacuna.esquema_version` sigue sin ser ambiguo. Las dimensiones de un esquema solo pueden venir de `catalogo_dimensiones`. Las semillas del 02 son NACIONAL; en el 04, el borrador Hexavalente v3 pasa a ser el ejemplo de formulario de `DDRISS_SM`. |
 
 Entregables generados en el hilo, todos en `/mnt/project-files/diseno-bd/`:
 
@@ -272,7 +273,7 @@ Base de datos `vacunacion_config`. Las cuatro colecciones guardan configuración
 
 Mecánica de versionado, común a las tres últimas:
 - Llave única (`codigo`, `version`); en esquemas, (`vacuna.codigo`, `version`).
-- `estado`: BORRADOR, VIGENTE o HISTORICO. Un índice único parcial asegura **una sola versión VIGENTE** por código (en reglas e indicadores, por código y territorio).
+- `estado`: BORRADOR, VIGENTE o HISTORICO. Un índice único parcial asegura **una sola versión VIGENTE** por código y territorio (en esquemas, por vacuna y territorio desde el script v0.7).
 - Subdocumento `vigencia` (`desde`, `hasta`).
 - Subdocumento `auditoria`: `creado_por` y `publicado_por` son ids de `usuario` en MySQL, más `motivo_cambio`.
 
@@ -281,7 +282,9 @@ Mecánica de versionado, común a las tres últimas:
 - No se versiona: los valores solo se agregan o se desactivan, nunca se borran ni renombran, para que los códigos guardados en `detalle_dimension` sigan siendo válidos.
 
 **`esquemas_captura`**: el "molde" del formulario de cada vacuna. A partir de él, React genera el formulario.
-- `vacuna` (`id` y `codigo` de MySQL), `version`, `estado`, `vigencia`, `version_anterior_id`.
+- `vacuna` (`id` y `codigo` de MySQL), `version`, `estado`, `vigencia`, `version_anterior_id` (la versión anterior **del mismo territorio**: la cadena de esa DDRISS o la nacional).
+- `territorio` (script v0.7): igual que en `reglas_validacion`. El formulario NACIONAL es la base; una DDRISS puede tener el suyo.
+- `basado_en` (script v0.7): `{ esquema_id, version }` de la versión NACIONAL de la que se copió un formulario de DDRISS; null en los nacionales.
 - `dimensiones.dosis[]`: cada dosis puede traer su propia `desagregacion`, que reemplaza la general.
 - `dimensiones.procedencia.modo`: `MUNICIPIO_DETALLADO` o `PROPIO_Y_OTROS` (réplica del 5C).
 - `dimensiones.desagregacion[]`: qué dimensiones usa la vacuna y con qué subconjunto de valores.
@@ -289,7 +292,14 @@ Mecánica de versionado, común a las tres últimas:
 - `campos_adicionales[]`, `reglas[]` (código y versión de cada regla), `presentacion`.
 - Las celdas del formulario son las dosis × los valores de cada dimensión; con secciones, una celda existe solo si su dosis está en la sección de su grupo de edad.
 
-Ejemplos incluidos en el script:
+Reglas de los formularios por DDRISS (script v0.7):
+- **Resolución.** Para capturar una vacuna en un establecimiento, el backend toma la DDRISS del establecimiento (`establecimiento.ddriss_id` → `ddriss.codigo`) y busca el esquema VIGENTE de esa vacuna con ese `ddriss_codigo`; si no hay, usa el VIGENTE NACIONAL. El reporte guarda el que usó en `reporte_vacuna.esquema_mongo_id` + `esquema_version`.
+- **Crear o editar el formulario de una DDRISS.** Se copia el esquema VIGENTE (el de la DDRISS si ya tiene uno; si no, el nacional) a un documento nuevo en BORRADOR con el `territorio` de la DDRISS, `version` = la mayor versión de esa vacuna en todo el país + 1, `version_anterior_id` = la versión anterior de esa DDRISS (o null) y `basado_en` = la versión nacional de la que parte. Al publicarlo, la VIGENTE anterior de esa DDRISS pasa a HISTORICO. La nacional no se toca. Ejemplo: si HEXA v2 es nacional, el primer formulario de San Marcos para HEXA es v3 con territorio `DDRISS_SM`.
+- **Desactualización (`basado_en`).** Cuando se publica una versión nacional nueva de una vacuna, los formularios de DDRISS cuyo `basado_en.esquema_id` ya no es la VIGENTE nacional quedan desactualizados. El sistema puede avisar a esa DDRISS para que revise si adopta los cambios; el aviso no cambia su formulario.
+- **Dimensiones solo del catálogo (obligatoria).** Cada `dimensiones.desagregacion[].dimension`, y las de las desagregaciones por dosis, debe existir en `catalogo_dimensiones` con `activo: true`, y cada código de `valores` debe ser un valor activo de esa dimensión. Así el consolidado nacional y la comparación entre DDRISS siguen sumando. Una DDRISS puede usar cualquier dimensión del catálogo, pero no inventar una: agregar una dimensión al catálogo sigue siendo una acción global. `$jsonSchema` no puede validar contra otra colección, así que lo valida el backend al guardar o publicar un esquema.
+- **Lo que no cambia.** Las dosis siguen viniendo de MySQL (`vacuna`/`dosis`), así que una DDRISS no puede inventar dosis. Las reglas que referencia un esquema se siguen resolviendo por territorio.
+
+Ejemplos incluidos en el script (todos NACIONAL; el 04 agrega Hexavalente v3 en BORRADOR como formulario de `DDRISS_SM`, basado en la v2 y con la dimensión `pueblo`):
 
 | Vacuna | Dosis | Desagregación |
 |---|---|---|
@@ -353,7 +363,7 @@ No hay llaves foráneas entre motores. Los vínculos son estos:
 | `auditoria.creado_por` / `publicado_por` | `usuario.id` |
 
 **Flujos principales:**
-1. **Abrir un formulario.** El backend lee el esquema VIGENTE de la vacuna y el catálogo de dimensiones, y genera las celdas. Si el reporte ya existe, usa la versión guardada en `reporte_vacuna`.
+1. **Abrir un formulario.** El backend lee el esquema VIGENTE de la vacuna para la DDRISS del establecimiento (o el NACIONAL si la DDRISS no tiene uno) y el catálogo de dimensiones, y genera las celdas. Si el reporte ya existe, usa la versión guardada en `reporte_vacuna`.
 2. **Guardar.** Cada celda se escribe en `detalle_produccion` y `detalle_dimension` dentro de una misma transacción.
 3. **Enviar.** Se ejecutan las reglas del esquema y se guardan en `resultado_validacion`. Si quedan errores abiertos, el envío se rechaza.
 4. **Revisar y cerrar.** Cada transición se valida contra `transicion_estado` y se registra en `historial_estado_reporte` y en `bitacora`.
@@ -367,6 +377,7 @@ No hay llaves foráneas entre motores. Los vínculos son estos:
 - No agregar columnas fijas por dimensión (sexo, edad…) a `detalle_produccion`. Las dimensiones nuevas van en `catalogo_dimensiones` y en el esquema de la vacuna.
 - Toda escritura de celdas debe mantener coherentes `clave_combinacion` y las filas de `detalle_dimension`.
 - No editar ni borrar versiones VIGENTE o HISTORICO en MongoDB; crear una versión nueva.
+- Un esquema de captura solo usa dimensiones y valores activos de `catalogo_dimensiones`, sea nacional o de una DDRISS; lo valida el backend.
 - No borrar ni renombrar códigos de catálogos ni valores de dimensiones; desactivarlos.
 - Los cambios de estado de un reporte solo se hacen si existen en `transicion_estado` para el rol del usuario.
 - Las acciones auditables apuntan a `usuario`. Los datos de la persona se consultan en `empleado`.
