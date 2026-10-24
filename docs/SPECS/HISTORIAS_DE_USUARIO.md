@@ -302,9 +302,11 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Cómo se hará:** Tablas `periodo` (calendario común) y `cierre_periodo` (estado y fecha límite por DDRISS); endpoint `GET /periodos`.
 
 **Criterios de aceptación:**
-- [ ] Puedo crear los 12 periodos de un año.
-- [ ] Puedo definir la fecha límite de envío de cada periodo.
-- [ ] Un periodo cerrado no admite reportes nuevos.
+- [x] Puedo crear los 12 periodos de un año.
+- [x] Puedo definir la fecha límite de envío de cada periodo.
+- [ ] Un periodo cerrado no admite reportes nuevos. (Pasa a HU-19; ver el avance.)
+
+**Avance:** criterios cumplidos, salvo el de los reportes nuevos, que pasa a HU-19; queda terminada al integrar el spec 16 a `main`. Backend y frontend en `specs/16-hu-12-periodos-de-reporte.md`. Hay cuatro diferencias con la historia, porque mandan `AGENTS.md` y el modelo. Primera: `cierre_periodo` no tiene un estado «programado», así que crear su fila es abrir el mes; por eso «crear los 12 periodos» (`POST /periodos { anio }`) solo agrega al calendario común (`periodo`) los meses que falten del año, sin abrir ninguno, y cada mes se abre aparte para la DDRISS del usuario con `POST /periodos/{id}/abrir { fechaLimiteEnvio }`. Los años van de 2020 al siguiente al actual (fecha de Guatemala); un año con sus 12 meses responde 409 y uno incompleto se completa. Segunda: al abrir se crea solo la fila de la DDRISS del usuario, no una por DDRISS activa como dice el comentario del script 01, que no se tocó. Tercera: la fecha límite se cambia con `PATCH /periodos/{id}` en un mes `ABIERTO` o `EN_CIERRE` (no en uno sin abrir o `CERRADO`, 409), y debe ser posterior al fin del mes (422); en `EN_CIERRE`, una fecha de hoy o posterior lo devuelve a `ABIERTO`. Cuarta: «un periodo cerrado no admite reportes nuevos» depende de `POST /reportes`, que todavía no existe; el criterio pasa a HU-19, y `GET /periodos` ya devuelve cada mes con el estado y la fecha límite de la DDRISS del usuario (`null` si no está abierto) y filtra por `anio` y `estado`. El Administrador y el Revisor tienen `PERIODO_CONSULTAR`, `PERIODO_CREAR` y `PERIODO_EDITAR`. La pantalla es la pestaña «Periodos» de `/configuracion`, con el año en `?anio=`. Verificado contra la API real el 2026-10-23: como Administrador, la pestaña mostró 2026 con el estado de la semilla; se creó 2025 (12 meses "Sin abrir", 12 filas `CREAR`); se abrió diciembre de 2025 con la fecha sugerida 10/01/2026 y se cambió a 20/01/2026; y al recargar, 2025 siguió elegido. Como Revisor, Configuración mostró «Vacunas» y «Periodos», y se cambió la fecha límite de octubre de 2026 y se devolvió a 10/11/2026, con sus filas `ACTUALIZAR`. El año 2025 quedó en el calendario.
 
 #### HU-13. Registrar la población objetivo
 
@@ -415,7 +417,10 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [ ] No puedo crear dos reportes del mismo establecimiento para el mismo periodo.
 - [ ] Un establecimiento desactivado no puede crear reportes nuevos (viene de HU-09).
 - [ ] Una vacuna inactiva, o una dosis inactiva, no aparece en reportes nuevos; los reportes anteriores la conservan (viene de HU-10).
+- [ ] Solo se crean reportes en un mes `ABIERTO` en la DDRISS del establecimiento; uno sin abrir, en cierre o cerrado no admite reportes nuevos (viene de HU-12).
 - [ ] El reporte nace en estado Borrador.
+
+**Nota (2026-10-23, spec 16):** `GET /periodos?estado=ABIERTO` devuelve los meses abiertos en la DDRISS del usuario. Hoy solo el Administrador y el Revisor tienen `PERIODO_CONSULTAR`: el spec de HU-19 se lo asigna al Personal de establecimiento en `05_permisos_mysql.sql`.
 
 #### HU-20. Capturar la producción con el formulario dinámico
 
@@ -601,6 +606,8 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [ ] El cierre final lo hace la estadígrafa; el sistema muestra cuántos reportes faltan por aprobar antes de cerrar.
 - [ ] Al cerrar, todos los reportes aprobados del periodo pasan a Cerrado.
 - [ ] Un reporte cerrado no se edita por el procedimiento ordinario.
+
+**Nota (2026-10-23, spec 16):** Ampliar la fecha límite de un mes `EN_CIERRE` a hoy o después lo devuelve a `ABIERTO` (`PATCH /periodos/{id}`, SPEC 16); la tarea programada debe volver a revisarlo con la fecha nueva.
 
 #### HU-32. Solicitar una rectificación
 
