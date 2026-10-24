@@ -1846,30 +1846,114 @@ paths:
   /poblaciones-objetivo:
     get:
       tags: [Catálogos]
-      summary: Consultar denominadores de cobertura
+      summary: Consultar la población de un año por municipio y grupo de edad
+      description: |
+        Devuelve los 7 grupos de `clasificacion_poblacion` (ordenados por id) y los municipios activos del
+        departamento sede de la DDRISS del usuario, sin el `9999`, ordenados por nombre y aunque no tengan
+        población. Un grupo sin registrar no aparece en `poblacion`. El año debe tener al menos un mes en el
+        calendario de periodos. `anio` es obligatorio; un parámetro inválido, desconocido o repetido responde
+        400 `ENTRADA_INVALIDA`.
+      x-permiso: POBLACION_CONSULTAR
       parameters:
-        - { name: anio, in: query, schema: { type: integer } }
-        - { name: municipioId, in: query, schema: { type: integer } }
+        - name: anio
+          in: query
+          required: true
+          schema: { type: integer, example: 2026 }
       responses:
-        "200": { description: Lista de poblaciones objetivo }
-    post:
+        "200":
+          description: Población del año
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PoblacionAnio" }
+        "400":
+          description: anio ausente o no entero, o un parámetro desconocido o repetido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                anio:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: anio debe ser un número entero. }
+                desconocido:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: municipioId." }
+                repetido:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: anio no se puede repetir. }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "422": { $ref: "#/components/responses/AnioSinPeriodos" }
+
+  /poblaciones-objetivo/{municipioId}/{anio}:
+    put:
       tags: [Catálogos]
-      summary: Registrar o actualizar la población objetivo de un municipio
+      summary: Registrar o corregir la población de un municipio y un año
+      description: |
+        Crea o corrige, en una sola transacción, los grupos que vienen en `grupos`. Los que no vienen no cambian
+        y nunca se borra una fila, así que hay una sola por municipio, año y grupo. `fuente` se aplica a los
+        grupos del cuerpo; si no viene, una fila nueva queda sin fuente y una existente conserva la suya.
+
+        Se valida en este orden: `municipioId` o `anio` no enteros (400); municipio inexistente, inactivo o fuera
+        del departamento sede de la DDRISS (404); año sin meses en el calendario (422); grupo inexistente (400).
+
+        Bitácora (`entidad = poblacion_objetivo`): una fila `CREAR` por grupo creado y una `ACTUALIZAR` por grupo
+        cuya cantidad o fuente cambió. Un guardado sin cambios responde 200 sin registrar nada.
+      x-permiso: POBLACION_REGISTRAR
+      parameters:
+        - name: municipioId
+          in: path
+          required: true
+          schema: { type: integer, example: 1 }
+        - name: anio
+          in: path
+          required: true
+          schema: { type: integer, example: 2026 }
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [municipioId, anio, vacunaId, clasificacionPoblacion, cantidad]
-              properties:
-                municipioId: { type: integer }
-                anio: { type: integer }
-                clasificacionPoblacion: { type: string, example: MENOR_1 }
-                cantidad: { type: integer, minimum: 0 }
-                fuente: { type: string }
+            schema: { $ref: "#/components/schemas/PoblacionGuardar" }
       responses:
-        "201": { description: Población registrada }
+        "200":
+          description: El municipio con su población del año
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PoblacionMunicipio" }
+        "400":
+          description: Ruta, campo, cantidad, fuente o grupo inválidos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                ruta:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: anio debe ser un número entero. }
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: anio." }
+                sinGrupos:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: Debe registrar al menos un grupo. }
+                cantidad:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "La cantidad debe ser un número entero entre 0 y 9,999,999." }
+                fuente:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: La fuente admite hasta 150 caracteres. }
+                grupo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El grupo MENOR_5 no existe. }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: Otro guardado del mismo grupo ocurrió al mismo tiempo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: POBLACION_EN_CONFLICTO, mensaje: Otra persona guardó esta población al mismo tiempo. Vuelva a intentarlo. }
+        "422": { $ref: "#/components/responses/AnioSinPeriodos" }
 
   # ---------------------------------------------------------------- Configuración (MongoDB)
   /dimensiones:
@@ -2334,6 +2418,13 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
           example:
             error: { codigo: NO_ENCONTRADO, mensaje: El periodo no existe. }
+    AnioSinPeriodos:
+      description: El año no tiene meses en el calendario de periodos
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: ANIO_SIN_PERIODOS, mensaje: El año 2019 no está en el calendario de periodos. }
     FechaLimiteInvalidaFormato:
       description: Falta la fecha, no es una fecha AAAA-MM-DD válida, o hay un campo no permitido
       content:
@@ -2904,6 +2995,63 @@ components:
           format: date
           description: Posterior al fin del mes
           example: "2026-11-10"
+
+    GrupoPoblacion:
+      type: object
+      properties:
+        codigo: { type: string, description: "Código de clasificacion_poblacion (encabezado del 5C)", example: MENOR_1 }
+        descripcion: { type: string, example: Menores de 1 año }
+
+    PoblacionGrupo:
+      type: object
+      properties:
+        cantidad: { type: integer, minimum: 0, maximum: 9999999, example: 1450 }
+        fuente: { type: string, nullable: true, example: Archivo MSPAS 2026 }
+        actualizadoEn: { type: string, format: date-time, example: "2026-01-05T15:00:00.000Z" }
+
+    PoblacionMunicipio:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        codigoIne: { type: string, example: "1201" }
+        nombre: { type: string, example: San Marcos }
+        poblacion:
+          type: object
+          description: Por código de grupo; un grupo sin registrar no aparece
+          additionalProperties: { $ref: "#/components/schemas/PoblacionGrupo" }
+          example:
+            NACIDOS_VIVOS: { cantidad: 1494, fuente: Archivo MSPAS 2026, actualizadoEn: "2026-01-05T15:00:00.000Z" }
+            MENOR_1: { cantidad: 1450, fuente: Archivo MSPAS 2026, actualizadoEn: "2026-01-05T15:00:00.000Z" }
+
+    PoblacionAnio:
+      type: object
+      properties:
+        anio: { type: integer, example: 2026 }
+        grupos:
+          type: array
+          items: { $ref: "#/components/schemas/GrupoPoblacion" }
+        municipios:
+          type: array
+          items: { $ref: "#/components/schemas/PoblacionMunicipio" }
+
+    PoblacionGuardar:
+      type: object
+      required: [grupos]
+      additionalProperties: false
+      description: 'Cualquier otro campo responde 400 ("Campo no permitido: {nombre}.").'
+      properties:
+        fuente:
+          type: string
+          nullable: true
+          maxLength: 150
+          description: Opcional; se recortan los espacios y vacío pasa a null
+          example: Archivo MSPAS 2026
+        grupos:
+          type: object
+          minProperties: 1
+          description: Por código de grupo, un entero de 0 a 9 999 999. Al menos un grupo.
+          additionalProperties: { type: integer, minimum: 0, maximum: 9999999 }
+          example: { MENOR_1: 1450, 4_ANIOS: 1378 }
 
     Reporte:
       type: object
