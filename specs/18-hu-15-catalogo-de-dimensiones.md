@@ -1,6 +1,6 @@
 # SPEC 18 — Catálogo de dimensiones de desagregación
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-15
 > **Depende de:** SPEC 04, SPEC 05, SPEC 06, SPEC 11, SPEC 15, SPEC 17
 > **Fecha:** 2026-10-23
