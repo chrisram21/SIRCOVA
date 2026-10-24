@@ -19,6 +19,12 @@ import {
   validarNombreDosis,
   validarCantidadPoblacion,
   validarFuentePoblacion,
+  validarCodigoDimension,
+  validarCodigoValorDimension,
+  validarNombreDimension,
+  validarDescripcionDimension,
+  validarEtiquetaValorDimension,
+  validarEdadMeses,
 } from '../src/validaciones/campos.js';
 
 // La misma lista está en frontend/src/validaciones/campos.test.js: si cambia una, se cambia la otra.
@@ -334,12 +340,112 @@ const CASOS = {
       ['a'.repeat(151), MENSAJES.fuentePoblacion],
     ],
   },
+  validarCodigoDimension: {
+    validos: [
+      ['via', 'via'],
+      ['grupo_edad', 'grupo_edad'],
+      ['  pueblo  ', 'pueblo'],
+      ['v2', 'v2'],
+      ['a'.repeat(30), 'a'.repeat(30)],
+    ],
+    invalidos: [
+      ['Via', MENSAJES.codigoDimension],
+      ['via-aplicacion', MENSAJES.codigoDimension],
+      ['2via', MENSAJES.codigoDimension],
+      ['_via', MENSAJES.codigoDimension],
+      ['v', MENSAJES.codigoDimension],
+      ['a'.repeat(31), MENSAJES.codigoDimension],
+      ['', MENSAJES.codigoDimension],
+      ['   ', MENSAJES.codigoDimension],
+      [null, MENSAJES.codigoDimension],
+    ],
+  },
+  validarCodigoValorDimension: {
+    validos: [
+      ['IM', 'IM'],
+      ['im', 'IM'],
+      [' 1_a_5 ', '1_A_5'],
+      ['MENOR_1', 'MENOR_1'],
+      ['A'.repeat(30), 'A'.repeat(30)],
+    ],
+    invalidos: [
+      ['NO-INDICA', MENSAJES.codigoValorDimension],
+      ['NIÑO', MENSAJES.codigoValorDimension],
+      ['A B', MENSAJES.codigoValorDimension],
+      ['A'.repeat(31), MENSAJES.codigoValorDimension],
+      ['', MENSAJES.codigoValorDimension],
+      ['   ', MENSAJES.codigoValorDimension],
+      [null, MENSAJES.codigoValorDimension],
+    ],
+  },
+  validarNombreDimension: {
+    validos: [
+      ['Vía de aplicación', 'Vía de aplicación'],
+      ['  Pueblo   de pertenencia ', 'Pueblo de pertenencia'],
+      ['ab', 'ab'],
+      ['a'.repeat(60), 'a'.repeat(60)],
+    ],
+    invalidos: [
+      ['a', MENSAJES.nombreDimension],
+      ['a'.repeat(61), MENSAJES.nombreDimension],
+      ['', MENSAJES.nombreDimension],
+      ['   ', MENSAJES.nombreDimension],
+      [null, MENSAJES.nombreDimension],
+    ],
+  },
+  validarDescripcionDimension: {
+    validos: [
+      ['Cómo se aplicó la dosis (p. ej. IPV u OPV).', 'Cómo se aplicó la dosis (p. ej. IPV u OPV).'],
+      ['a'.repeat(255), 'a'.repeat(255)],
+      ['', null],
+      ['   ', null],
+      [null, null],
+    ],
+    invalidos: [
+      ['a'.repeat(256), MENSAJES.descripcionDimension],
+    ],
+  },
+  validarEtiquetaValorDimension: {
+    validos: [
+      ['< 1 año', '< 1 año'],
+      ['M', 'M'],
+      ['  De 1 a < 6   años ', 'De 1 a < 6 años'],
+      ['a'.repeat(60), 'a'.repeat(60)],
+    ],
+    invalidos: [
+      ['', MENSAJES.etiquetaValorDimension],
+      ['   ', MENSAJES.etiquetaValorDimension],
+      [null, MENSAJES.etiquetaValorDimension],
+      ['a'.repeat(61), MENSAJES.etiquetaValorDimension],
+    ],
+  },
+  validarEdadMeses: {
+    validos: [
+      [0, 0],
+      [48, 48],
+      [1200, 1200],
+      ['24', 24],
+      [' 60 ', 60],
+    ],
+    invalidos: [
+      [1201, MENSAJES.edadMeses],
+      [-1, MENSAJES.edadMeses],
+      [1.5, MENSAJES.edadMeses],
+      ['2a', MENSAJES.edadMeses],
+      ['-1', MENSAJES.edadMeses],
+      ['1201', MENSAJES.edadMeses],
+      ['', MENSAJES.edadMeses],
+      [null, MENSAJES.edadMeses],
+    ],
+  },
 };
 
 const REGLAS = {
   validarNombres, validarApellidos, validarCargo, validarTelefono, validarCorreo, validarCui, validarNombreUsuario,
   validarNombreDistrito, validarNombreEstablecimiento, validarDireccion, validarNombreContacto, validarCodigoVacuna,
   validarNombreVacuna, validarDescripcionVacuna, validarNombreDosis, validarCantidadPoblacion, validarFuentePoblacion,
+  validarCodigoDimension, validarCodigoValorDimension, validarNombreDimension, validarDescripcionDimension,
+  validarEtiquetaValorDimension, validarEdadMeses,
 };
 
 describe.each(Object.entries(CASOS))('%s', (nombre, { validos, invalidos }) => {
@@ -372,6 +478,12 @@ describe('valores que no son texto', () => {
     expect(validarNombreDosis({})).toEqual({ error: MENSAJES.nombreDosis });
     expect(validarCantidadPoblacion({})).toEqual({ error: MENSAJES.cantidadPoblacion });
     expect(validarFuentePoblacion(5)).toEqual({ error: MENSAJES.fuentePoblacion });
+    expect(validarCodigoDimension(123)).toEqual({ error: MENSAJES.codigoDimension });
+    expect(validarCodigoValorDimension(1)).toEqual({ error: MENSAJES.codigoValorDimension });
+    expect(validarNombreDimension({})).toEqual({ error: MENSAJES.nombreDimension });
+    expect(validarDescripcionDimension(5)).toEqual({ error: MENSAJES.descripcionDimension });
+    expect(validarEtiquetaValorDimension(['M'])).toEqual({ error: MENSAJES.etiquetaValorDimension });
+    expect(validarEdadMeses({})).toEqual({ error: MENSAJES.edadMeses });
   });
 });
 

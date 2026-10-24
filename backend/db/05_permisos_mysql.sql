@@ -93,6 +93,12 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
 INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('POBLACION_CONSULTAR',       'CONFIGURACION_CATALOGOS', 'Consultar la población anual por municipio y grupo de edad');
 
+-- SPEC 18 (HU-15): catálogo nacional de dimensiones de desagregación (MongoDB)
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('DIMENSION_CONSULTAR',       'CONFIGURACION_CATALOGOS', 'Consultar el catálogo de dimensiones de desagregación'),
+ ('DIMENSION_CREAR',           'CONFIGURACION_CATALOGOS', 'Registrar dimensiones de desagregación con sus valores'),
+ ('DIMENSION_EDITAR',          'CONFIGURACION_CATALOGOS', 'Editar, desactivar y reactivar dimensiones, y agregar, editar, ordenar, desactivar y reactivar sus valores');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -155,6 +161,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo IN ('ADMINISTRADOR', 'REVISOR')
    AND p.codigo IN ('POBLACION_CONSULTAR', 'POBLACION_REGISTRAR');
+
+-- SPEC 18 (HU-15): el Administrador y el Revisor gestionan las dimensiones
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo IN ('ADMINISTRADOR', 'REVISOR')
+   AND p.codigo IN ('DIMENSION_CONSULTAR', 'DIMENSION_CREAR', 'DIMENSION_EDITAR');
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

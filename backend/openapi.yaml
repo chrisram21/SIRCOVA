@@ -1959,39 +1959,425 @@ paths:
   /dimensiones:
     get:
       tags: [Configuración]
-      summary: Catálogo de dimensiones de desagregación y sus valores
+      summary: Listar las dimensiones de desagregación con sus valores
+      description: |
+        El catálogo de dimensiones (`catalogo_dimensiones` en MongoDB) es nacional: no se filtra por DDRISS.
+        Activas e inactivas salvo que se filtre por `activa`; cada dimensión trae todos sus valores (también los
+        inactivos), ordenados por `orden`. Las dimensiones se ordenan por `nombre`. Sin paginar. Un parámetro
+        inválido, desconocido o repetido responde 400 `ENTRADA_INVALIDA`.
+      x-permiso: DIMENSION_CONSULTAR
+      parameters:
+        - name: activa
+          in: query
+          schema: { type: boolean }
       responses:
         "200":
-          description: Lista de dimensiones configuradas
+          description: Lista de dimensiones con sus valores
           content:
             application/json:
               schema:
                 type: array
-                items:
-                  type: object
-                  properties:
-                    codigo: { type: string }
-                    nombre: { type: string }
-                    descripcion: { type: string, nullable: true }
-                    tipo: { type: string }
-                    activo: { type: boolean }
-                    valores:
-                      type: array
-                      items:
-                        type: object
-                        properties:
-                          codigo: { type: string }
-                          etiqueta: { type: string }
-                          orden: { type: integer }
-                          activo: { type: boolean }
-                          edadMinMeses: { type: integer }
-                          edadMaxMeses: { type: integer }
-        "500":
-          description: Error al consultar las dimensiones
+                items: { $ref: "#/components/schemas/Dimension" }
+        "400":
+          description: Un parámetro inválido, desconocido o repetido
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                activa:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: activa debe ser true o false. }
+                desconocido:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: tipo." }
+                repetido:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: activa no se puede repetir. }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+    post:
+      tags: [Configuración]
+      summary: Registrar una dimensión categórica con sus valores
+      description: |
+        El catálogo es nacional: la dimensión queda para todas las DDRISS. Las dimensiones nuevas son siempre
+        `CATEGORICA`; `grupo_edad` es la única `RANGO_EDAD` y a ella solo se le agregan valores. Los códigos los
+        escribe el usuario y no cambian después. Cada valor queda activo, con `orden` según su posición en la
+        lista (1, 2, 3…).
+
+        Bitácora: una fila `CREAR` (entidad `catalogo_dimensiones`, `entidadId` el ObjectId) con el documento
+        completo.
+      x-permiso: DIMENSION_CREAR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DimensionCrear" }
+      responses:
+        "201":
+          description: Dimensión registrada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Dimension" }
+        "400":
+          description: Campo inválido, faltante o no permitido, dimensión sin valores o valor repetido en la lista
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                codigo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El código debe empezar con una letra minúscula y usar solo minúsculas, números y guion bajo (hasta 30). }
+                nombre:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El nombre debe tener entre 2 y 60 caracteres. }
+                sinValores:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: Indique al menos un valor. }
+                codigoValor:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El código del valor usa solo mayúsculas, números y guion bajo (hasta 30). }
+                etiqueta:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: La etiqueta debe tener entre 1 y 60 caracteres. }
+                valorRepetido:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El valor IM está repetido. }
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: tipo." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "409":
+          description: Ya hay una dimensión con ese código
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: DIMENSION_DUPLICADA, mensaje: Ya existe una dimensión con el código via. }
+
+  /dimensiones/{codigo}:
+    get:
+      tags: [Configuración]
+      summary: Consultar una dimensión con sus valores
+      description: |
+        En una dimensión `RANGO_EDAD` agrega `gruposPoblacionDisponibles`: los grupos de
+        `clasificacion_poblacion` que la dimensión todavía no tiene, ordenados por `id`.
+      x-permiso: DIMENSION_CONSULTAR
+      parameters:
+        - { $ref: "#/components/parameters/CodigoDimension" }
+      responses:
+        "200":
+          description: La dimensión, con todos sus valores ordenados por `orden`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Dimension" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+    patch:
+      tags: [Configuración]
+      summary: Editar el nombre o la descripción de una dimensión
+      description: |
+        Cambio parcial, también de una dimensión inactiva. El código y el tipo no se pueden cambiar; los valores
+        se cambian con sus propias rutas. Si nada cambia, responde 200 sin escribir ni registrar nada en la
+        bitácora. Si cambia, registra `ACTUALIZAR` con los campos que cambiaron.
+      x-permiso: DIMENSION_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/CodigoDimension" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DimensionEditar" }
+      responses:
+        "200":
+          description: Dimensión actualizada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Dimension" }
+        "400":
+          description: Campo inválido, que no se puede cambiar o no permitido, o cuerpo vacío
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                nombre:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El nombre debe tener entre 2 y 60 caracteres. }
+                descripcion:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: La descripción admite hasta 255 caracteres. }
+                codigo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: codigo." }
+                vacio:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: Indique al menos un dato de la dimensión. }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+
+  /dimensiones/{codigo}/desactivar:
+    post:
+      tags: [Configuración]
+      summary: Desactivar una dimensión
+      description: |
+        Desactivación lógica: la dimensión no se borra y los códigos guardados en `detalle_dimension` siguen
+        siendo válidos. Sus valores quedan como están. No se desactiva si la usa un esquema de captura `VIGENTE`
+        o `BORRADOR` de cualquier territorio (en su desagregación general o por dosis). Bitácora: `DESACTIVAR`.
+      x-permiso: DIMENSION_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/CodigoDimension" }
+      responses:
+        "200":
+          description: Dimensión desactivada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Dimension" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: La usa un esquema vigente o en borrador, o ya está inactiva
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                enUso:
+                  value:
+                    error: { codigo: DIMENSION_EN_USO, mensaje: La dimensión sexo la usa un esquema de captura vigente o en borrador. }
+                yaInactiva:
+                  value:
+                    error: { codigo: DIMENSION_YA_INACTIVA, mensaje: La dimensión ya está inactiva. }
+
+  /dimensiones/{codigo}/reactivar:
+    post:
+      tags: [Configuración]
+      summary: Reactivar una dimensión
+      description: La dimensión vuelve con los mismos valores activos e inactivos que tenía. Bitácora `REACTIVAR`.
+      x-permiso: DIMENSION_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/CodigoDimension" }
+      responses:
+        "200":
+          description: Dimensión reactivada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Dimension" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: Ya está activa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: DIMENSION_YA_ACTIVA, mensaje: La dimensión ya está activa. }
+
+  /dimensiones/{codigo}/valores:
+    post:
+      tags: [Configuración]
+      summary: Agregar un valor a una dimensión
+      description: |
+        También en una dimensión inactiva. El valor queda activo, al final: su `orden` es el mayor de la
+        dimensión más uno. Un código que la dimensión ya tiene, activo o inactivo, responde 409.
+
+        En una dimensión `CATEGORICA` solo van `codigo` y `etiqueta`; `edadMinMeses` o `edadMaxMeses` responden
+        400. En una `RANGO_EDAD` (`grupo_edad`), `edadMinMeses` y `edadMaxMeses` son obligatorios, el mínimo debe
+        ser menor que el máximo, y el código debe existir en `clasificacion_poblacion`.
+
+        Bitácora: `ACTUALIZAR` con `valoresAnteriores` null y `valoresNuevos` `{ valor: {…} }`.
+      x-permiso: DIMENSION_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/CodigoDimension" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ValorDimensionCrear" }
+      responses:
+        "201":
+          description: Valor agregado; devuelve la dimensión completa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Dimension" }
+        "400":
+          description: Campo inválido, faltante o no permitido, rango inválido o grupo fuera de la clasificación de población
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                codigo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El código del valor usa solo mayúsculas, números y guion bajo (hasta 30). }
+                etiqueta:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: La etiqueta debe tener entre 1 y 60 caracteres. }
+                edad:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "La edad debe ser un número entero de meses entre 0 y 1,200." }
+                rango:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: La edad mínima debe ser menor que la máxima. }
+                grupo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El grupo 2_A_3 no existe en la clasificación de población. }
+                edadEnCategorica:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: edadMinMeses." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: La dimensión ya tiene un valor con ese código
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: VALOR_DUPLICADO, mensaje: La dimensión ya tiene el valor SC. }
+
+  /dimensiones/{codigo}/valores/orden:
+    put:
+      tags: [Configuración]
+      summary: Cambiar el orden de los valores de una dimensión
+      description: |
+        La lista trae todos los valores de la dimensión (activos e inactivos), cada uno una vez, en el orden
+        nuevo; se les asigna `orden` 1…n. Si el orden no cambia, responde 200 sin registrar nada. Si cambia,
+        registra `ACTUALIZAR` con `{ orden: [códigos] }` antes y después.
+      x-permiso: DIMENSION_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/CodigoDimension" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrdenValores" }
+      responses:
+        "200":
+          description: Orden actualizado; devuelve la dimensión completa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Dimension" }
+        "400":
+          description: La lista no trae cada valor una sola vez, o hay un campo no permitido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                lista:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: La lista debe traer cada valor de la dimensión una sola vez. }
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: valores." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+
+  /dimensiones/{codigo}/valores/{valor}:
+    patch:
+      tags: [Configuración]
+      summary: Editar la etiqueta de un valor
+      description: |
+        También de un valor o una dimensión inactivos. El código, el orden y el rango de edad no se cambian por
+        aquí. Si la etiqueta no cambia, responde 200 sin registrar nada. Si cambia, registra `ACTUALIZAR` con la
+        etiqueta antes y después.
+      x-permiso: DIMENSION_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/CodigoDimension" }
+        - { $ref: "#/components/parameters/CodigoValor" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ValorDimensionEditar" }
+      responses:
+        "200":
+          description: Valor actualizado; devuelve la dimensión completa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Dimension" }
+        "400":
+          description: Etiqueta inválida o faltante, o campo no permitido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                etiqueta:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: La etiqueta debe tener entre 1 y 60 caracteres. }
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: edadMinMeses." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+
+  /dimensiones/{codigo}/valores/{valor}/desactivar:
+    post:
+      tags: [Configuración]
+      summary: Desactivar un valor de una dimensión
+      description: |
+        Desactivación lógica: el valor no se borra y su código no se reutiliza. No se desactiva si lo usa un
+        esquema de captura `VIGENTE` o `BORRADOR` de cualquier territorio (desagregación general, por dosis o
+        `secciones[].grupo_edad`), ni si es el último valor activo de la dimensión. Bitácora: `DESACTIVAR` con
+        `{ valor: código }`.
+      x-permiso: DIMENSION_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/CodigoDimension" }
+        - { $ref: "#/components/parameters/CodigoValor" }
+      responses:
+        "200":
+          description: Valor desactivado; devuelve la dimensión completa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Dimension" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: Lo usa un esquema vigente o en borrador, es el último valor activo o ya está inactivo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                enUso:
+                  value:
+                    error: { codigo: VALOR_EN_USO, mensaje: El valor MENOR_1 lo usa un esquema de captura vigente o en borrador. }
+                ultimo:
+                  value:
+                    error: { codigo: ULTIMO_VALOR_ACTIVO, mensaje: La dimensión debe conservar al menos un valor activo. }
+                yaInactivo:
+                  value:
+                    error: { codigo: VALOR_YA_INACTIVO, mensaje: El valor ya está inactivo. }
+
+  /dimensiones/{codigo}/valores/{valor}/reactivar:
+    post:
+      tags: [Configuración]
+      summary: Reactivar un valor de una dimensión
+      description: 'Bitácora: `REACTIVAR` con `{ valor: código }`.'
+      x-permiso: DIMENSION_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/CodigoDimension" }
+        - { $ref: "#/components/parameters/CodigoValor" }
+      responses:
+        "200":
+          description: Valor reactivado; devuelve la dimensión completa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Dimension" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: Ya está activo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: VALOR_YA_ACTIVO, mensaje: El valor ya está activo. }
+
   /vacunas/{codigo}/esquema-vigente:
     get:
       tags: [Configuración]
@@ -2300,6 +2686,18 @@ components:
       in: path
       required: true
       schema: { type: integer }
+    CodigoDimension:
+      name: codigo
+      in: path
+      required: true
+      description: Código de la dimensión en `catalogo_dimensiones`
+      schema: { type: string, example: grupo_edad }
+    CodigoValor:
+      name: valor
+      in: path
+      required: true
+      description: Código del valor dentro de la dimensión
+      schema: { type: string, example: MENOR_1 }
     Pagina:
       name: pagina
       in: query
@@ -3052,6 +3450,184 @@ components:
           description: Por código de grupo, un entero de 0 a 9 999 999. Al menos un grupo.
           additionalProperties: { type: integer, minimum: 0, maximum: 9999999 }
           example: { MENOR_1: 1450, 4_ANIOS: 1378 }
+
+    TextoCodigoDimension:
+      type: string
+      pattern: "^[a-z][a-z0-9_]*$"
+      minLength: 2
+      maxLength: 30
+      description: |
+        Empieza con una letra minúscula; minúsculas, dígitos y `_`. Se quitan los espacios de los extremos. Es la
+        llave de `detalle_dimension.dimension_codigo`; no cambia.
+      example: via
+
+    TextoCodigoValorDimension:
+      type: string
+      pattern: "^[A-Z0-9_]+$"
+      minLength: 1
+      maxLength: 30
+      description: |
+        Mayúsculas, dígitos y `_`. Se quitan los espacios de los extremos y se convierte a mayúsculas. Es la
+        llave de `detalle_dimension.valor_codigo`; no cambia. Único dentro de la dimensión.
+      example: IM
+
+    TextoNombreDimension:
+      type: string
+      minLength: 2
+      maxLength: 60
+      description: Se quitan los espacios de los extremos; de 2 a 60 caracteres
+      example: Vía de aplicación
+
+    TextoDescripcionDimension:
+      type: string
+      maxLength: 255
+      description: Se quitan los espacios de los extremos; hasta 255 caracteres. Vacía o null la quita
+      example: Cómo se aplicó la dosis.
+
+    TextoEtiquetaValorDimension:
+      type: string
+      minLength: 1
+      maxLength: 60
+      description: Se quitan los espacios de los extremos; de 1 a 60 caracteres
+      example: Intramuscular
+
+    EdadMeses:
+      type: integer
+      minimum: 0
+      maximum: 1200
+      example: 48
+
+    TipoDimension:
+      type: string
+      enum: [CATEGORICA, RANGO_EDAD]
+      description: "`RANGO_EDAD` solo lo tiene `grupo_edad`; las dimensiones nuevas son `CATEGORICA`"
+
+    ValorDimension:
+      type: object
+      required: [codigo, etiqueta, orden, activo, enUso]
+      properties:
+        codigo: { type: string, example: MENOR_1 }
+        etiqueta: { type: string, example: "< 1 año" }
+        orden: { type: integer, minimum: 1, example: 1 }
+        activo: { type: boolean, example: true }
+        edadMinMeses: { type: integer, description: Solo en una dimensión `RANGO_EDAD`, example: 0 }
+        edadMaxMeses: { type: integer, description: Solo en una dimensión `RANGO_EDAD`, example: 12 }
+        enUso:
+          type: boolean
+          description: Lo usa un esquema de captura `VIGENTE` o `BORRADOR`; si es true, no se puede desactivar
+          example: true
+        sinPoblacion:
+          type: boolean
+          description: Solo en una dimensión `RANGO_EDAD`; true si el código no está en `clasificacion_poblacion`
+          example: false
+
+    Dimension:
+      type: object
+      required: [id, codigo, nombre, descripcion, tipo, activa, enUso, valores]
+      properties:
+        id: { type: string, description: ObjectId del documento en MongoDB, example: 6720f0c1a2b3c4d5e6f70812 }
+        codigo: { type: string, example: grupo_edad }
+        nombre: { type: string, example: Grupo de edad }
+        descripcion: { type: string, nullable: true, example: null }
+        tipo: { $ref: "#/components/schemas/TipoDimension" }
+        activa: { type: boolean, example: true }
+        enUso:
+          type: boolean
+          description: La usa un esquema de captura `VIGENTE` o `BORRADOR`; si es true, no se puede desactivar
+          example: true
+        valores:
+          type: array
+          description: Todos los valores, también los inactivos, ordenados por `orden`
+          items: { $ref: "#/components/schemas/ValorDimension" }
+        gruposPoblacionDisponibles:
+          type: array
+          description: |
+            Solo en `GET /dimensiones/{codigo}` de una dimensión `RANGO_EDAD`: los grupos de
+            `clasificacion_poblacion` que la dimensión todavía no tiene, ordenados por `id`
+          items: { $ref: "#/components/schemas/GrupoPoblacion" }
+
+    ValorDimensionNuevo:
+      type: object
+      required: [codigo, etiqueta]
+      additionalProperties: false
+      description: 'Un valor de la lista de `DimensionCrear`. Cualquier otro campo responde 400 ("Campo no permitido: {nombre}.").'
+      properties:
+        codigo: { $ref: "#/components/schemas/TextoCodigoValorDimension" }
+        etiqueta: { $ref: "#/components/schemas/TextoEtiquetaValorDimension" }
+
+    DimensionCrear:
+      type: object
+      required: [codigo, nombre, valores]
+      additionalProperties: false
+      description: |
+        `tipo`, `activa` o cualquier otro campo responden 400 ("Campo no permitido: {nombre}."). La dimensión
+        queda `CATEGORICA` y activa.
+      properties:
+        codigo: { $ref: "#/components/schemas/TextoCodigoDimension" }
+        nombre: { $ref: "#/components/schemas/TextoNombreDimension" }
+        descripcion: { allOf: [{ $ref: "#/components/schemas/TextoDescripcionDimension" }], nullable: true }
+        valores:
+          type: array
+          minItems: 1
+          description: En el orden en que se muestran; dos valores con el mismo código responden 400
+          items: { $ref: "#/components/schemas/ValorDimensionNuevo" }
+      example:
+        codigo: via
+        nombre: Vía de aplicación
+        descripcion: null
+        valores:
+          - { codigo: IM, etiqueta: Intramuscular }
+          - { codigo: SC, etiqueta: Subcutánea }
+
+    DimensionEditar:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      description: |
+        Cambio parcial. `codigo`, `tipo`, `activa`, `valores` o cualquier otro campo responden 400 ("Campo no
+        permitido: {nombre}.").
+      properties:
+        nombre: { $ref: "#/components/schemas/TextoNombreDimension" }
+        descripcion: { allOf: [{ $ref: "#/components/schemas/TextoDescripcionDimension" }], nullable: true, description: Vacía o null la quita }
+
+    ValorDimensionCrear:
+      type: object
+      required: [codigo, etiqueta]
+      additionalProperties: false
+      description: |
+        En una dimensión `RANGO_EDAD`, `edadMinMeses` y `edadMaxMeses` son obligatorios y el código debe existir
+        en `clasificacion_poblacion`. En una `CATEGORICA` las edades responden 400 ("Campo no permitido:
+        {nombre}."), igual que cualquier otro campo.
+      properties:
+        codigo: { $ref: "#/components/schemas/TextoCodigoValorDimension" }
+        etiqueta: { $ref: "#/components/schemas/TextoEtiquetaValorDimension" }
+        edadMinMeses: { $ref: "#/components/schemas/EdadMeses" }
+        edadMaxMeses: { $ref: "#/components/schemas/EdadMeses" }
+      example:
+        codigo: EMBARAZADAS
+        etiqueta: Embarazadas
+        edadMinMeses: 120
+        edadMaxMeses: 600
+
+    ValorDimensionEditar:
+      type: object
+      required: [etiqueta]
+      additionalProperties: false
+      description: 'Cualquier otro campo responde 400 ("Campo no permitido: {nombre}.").'
+      properties:
+        etiqueta: { $ref: "#/components/schemas/TextoEtiquetaValorDimension" }
+
+    OrdenValores:
+      type: object
+      required: [codigos]
+      additionalProperties: false
+      description: 'Cualquier otro campo responde 400 ("Campo no permitido: {nombre}.").'
+      properties:
+        codigos:
+          type: array
+          description: Todos los códigos de valor de la dimensión (activos e inactivos), cada uno una vez, en el orden nuevo
+          items: { type: string }
+          example: [MENOR_1, 1_A_MENOR_2, 4_ANIOS, 1_A_5, 2_4, 10_14, MEF_15_49]
 
     Reporte:
       type: object

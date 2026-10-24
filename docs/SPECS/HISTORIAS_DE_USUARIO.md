@@ -354,9 +354,11 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Cómo se hará:** Colección `catalogo_dimensiones` en MongoDB; endpoint `GET /dimensiones`; pantalla de administración.
 
 **Criterios de aceptación:**
-- [ ] Puedo crear una dimensión nueva con sus valores.
-- [ ] Los valores de grupo de edad coinciden con los códigos de `clasificacion_poblacion`.
-- [ ] No puedo borrar una dimensión que ya usa algún esquema.
+- [x] Puedo crear una dimensión nueva con sus valores.
+- [x] Los valores de grupo de edad coinciden con los códigos de `clasificacion_poblacion`.
+- [x] No puedo borrar una dimensión que ya usa algún esquema.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 18 a `main`. Backend y frontend en `specs/18-hu-15-catalogo-de-dimensiones.md`. Es el primer módulo que escribe en MongoDB (módulo `configuracion` del backend): cada escritura deja primero su fila en la bitácora, dentro de la transacción de MySQL, después hace un solo cambio en `catalogo_dimensiones` y al final se confirma MySQL. Hay cuatro diferencias con la historia, decididas por el equipo. Primera: nada se borra (`AGENTS.md` §5.6); «no puedo borrar» se cumple porque no se puede **desactivar** una dimensión ni un valor que usa un esquema `VIGENTE` o `BORRADOR` de cualquier territorio (409 `DIMENSION_EN_USO` / `VALOR_EN_USO`); los esquemas `HISTORICO` no lo impiden. Segunda: los valores nuevos de `grupo_edad`, la única dimensión `RANGO_EDAD`, deben ser un código de `clasificacion_poblacion` y llevar su rango en meses; los de la semilla que no coinciden (`2_4`, `10_14`) se quedan y la pantalla los marca «Sin población». Un grupo de edad nuevo es un valor de `grupo_edad`, no una dimensión, y necesita existir antes en `clasificacion_poblacion` (hoy solo por SQL). Tercera: las dimensiones nuevas son siempre `CATEGORICA`; los códigos los escribe el usuario y no cambian, como tampoco el tipo ni el rango de un valor; se editan el nombre, la descripción, la etiqueta y el orden de los valores. Cuarta: el Administrador y el Revisor tienen `DIMENSION_CONSULTAR`, `DIMENSION_CREAR` y `DIMENSION_EDITAR`. Además de `GET /dimensiones` hay `GET /dimensiones/{codigo}`, `POST`, `PATCH`, `/desactivar`, `/reactivar` y las rutas de `/valores` (agregar, editar etiqueta, ordenar, desactivar y reactivar). La pantalla es la pestaña «Dimensiones» de `/configuracion`, con el estado en `?activa=`, y las subrutas `/configuracion/dimensiones/nueva` y `/configuracion/dimensiones/:codigo/editar`. Verificado contra la API real el 2026-10-24: como Administrador, la pestaña mostró las 5 dimensiones (las 4 de la semilla y `pueblo` del 04), todas «En uso»; `grupo_edad` marcó `2_4` y `10_14` «Sin población» y «Agregar valor» solo ofreció `NACIDOS_VIVOS` y `EMBARAZADAS`. Se creó `prueba_manual_hu15`, se renombró, se le agregó un valor, se reordenó, se desactivó un valor y la dimensión, y el filtro «Inactivas» se mantuvo al recargar. Como Revisor, Configuración mostró «Vacunas», «Dimensiones», «Periodos» y «Población», y se reactivó la dimensión y se editó una etiqueta. Cada acción dejó su fila en la bitácora (8 en total).
 
 #### HU-16. Crear el esquema de captura de una vacuna
 
@@ -375,6 +377,8 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [ ] El sistema rechaza un esquema que use dimensiones o dosis inexistentes.
 
 **Nota (2026-10-23, spec 15):** Una vacuna registrada en HU-10 no tiene esquema de captura: el editor debe ofrecer las vacunas activas sin esquema vigente y solo sus dosis activas.
+
+**Nota (2026-10-24, spec 18):** El esquema solo usa dimensiones y valores activos (`GET /dimensiones?activa=true`, SPEC 18); un esquema VIGENTE o BORRADOR impide desactivarlos. Los códigos de dimensión y de valor llegan a 30 caracteres: el esquema debe revisar que la combinación quepa en los 255 de `clave_combinacion`.
 
 #### HU-17. Versionar y publicar esquemas
 
@@ -442,6 +446,8 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [ ] Los totales por fila y columna se calculan en pantalla.
 - [ ] No se guarda ningún dato personal de pacientes.
 - [ ] Una vacuna inactiva, o una dosis inactiva, no aparece en reportes nuevos; los reportes anteriores la conservan (viene de HU-10).
+
+**Nota (2026-10-24, spec 18):** Para mostrar las etiquetas, el formulario necesita leer el catálogo de dimensiones; el spec decide si da `DIMENSION_CONSULTAR` al personal de establecimiento o si `GET /reportes/{id}/formulario` trae las etiquetas.
 
 #### HU-21. Registrar el municipio de procedencia
 

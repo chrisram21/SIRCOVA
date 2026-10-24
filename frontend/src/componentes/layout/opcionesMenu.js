@@ -17,6 +17,8 @@ import PaginaEditarEstablecimiento from '@/paginas/configuracion/PaginaEditarEst
 import PaginaRegistrarEstablecimiento from '@/paginas/configuracion/PaginaRegistrarEstablecimiento.jsx'
 import PaginaEditarVacuna from '@/paginas/configuracion/PaginaEditarVacuna.jsx'
 import PaginaRegistrarVacuna from '@/paginas/configuracion/PaginaRegistrarVacuna.jsx'
+import PaginaRegistrarDimension from '@/paginas/configuracion/PaginaRegistrarDimension.jsx'
+import PaginaEditarDimension from '@/paginas/configuracion/PaginaEditarDimension.jsx'
 import PaginaInicio from '@/paginas/inicio/PaginaInicio.jsx'
 import PaginaEditarUsuario from '@/paginas/usuarios/PaginaEditarUsuario.jsx'
 import PaginaRegistrarPersonal from '@/paginas/usuarios/PaginaRegistrarPersonal.jsx'
@@ -76,6 +78,18 @@ const opcionesMenu = [
         ruta: '/configuracion/vacunas/:id/editar',
         permiso: 'VACUNA_EDITAR',
         pagina: PaginaEditarVacuna,
+      },
+      {
+        titulo: 'Registrar dimensión',
+        ruta: '/configuracion/dimensiones/nueva',
+        permiso: 'DIMENSION_CREAR',
+        pagina: PaginaRegistrarDimension,
+      },
+      {
+        titulo: 'Editar dimensión',
+        ruta: '/configuracion/dimensiones/:codigo/editar',
+        permiso: 'DIMENSION_EDITAR',
+        pagina: PaginaEditarDimension,
       },
     ],
   },
