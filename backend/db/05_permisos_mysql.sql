@@ -83,6 +83,12 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('VACUNA_CREAR',              'CONFIGURACION_CATALOGOS', 'Registrar vacunas con sus dosis'),
  ('VACUNA_EDITAR',             'CONFIGURACION_CATALOGOS', 'Editar, desactivar y reactivar vacunas, y agregar, editar, desactivar y reactivar sus dosis');
 
+-- SPEC 16 (HU-12): calendario común de periodos y su apertura por DDRISS
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('PERIODO_CONSULTAR',         'CONFIGURACION_CATALOGOS', 'Consultar los meses del calendario con su estado en su DDRISS'),
+ ('PERIODO_CREAR',             'CONFIGURACION_CATALOGOS', 'Agregar al calendario común los meses de un año'),
+ ('PERIODO_EDITAR',            'CONFIGURACION_CATALOGOS', 'Abrir meses en su DDRISS y cambiar su fecha límite de envío');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -132,6 +138,12 @@ SELECT r.id, p.id FROM rol r JOIN permiso p
 INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'REVISOR' AND p.codigo = 'CONFIGURACION_CONSULTAR';
+
+-- SPEC 16 (HU-12): el Administrador y el Revisor gestionan los periodos
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo IN ('ADMINISTRADOR', 'REVISOR')
+   AND p.codigo IN ('PERIODO_CONSULTAR', 'PERIODO_CREAR', 'PERIODO_EDITAR');
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas
