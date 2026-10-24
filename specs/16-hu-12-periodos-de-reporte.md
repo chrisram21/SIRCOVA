@@ -1,6 +1,6 @@
 # SPEC 16 — Periodos de reporte
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-12
 > **Depende de:** SPEC 04, SPEC 05, SPEC 06, SPEC 12, SPEC 13
 > **Fecha:** 2026-10-23
@@ -259,7 +259,7 @@ CLAUDE.md                                      ← nota de periodos
 
    Comprobación: `npm test` del frontend pasa completo.
 10. **Verificación manual y documentación.** Con el backend contra Aiven y Playwright (la persona inicia sesión a mano):
-    - **Como Administrador:** abrir la pestaña «Periodos» y ver 2026 con el estado de la semilla; crear el año 2025 y ver sus 12 meses "Sin abrir"; abrir diciembre de 2025 con la fecha sugerida; cambiar su fecha límite; volver a la pestaña desde otra y ver que el año sigue elegido.
+    - **Como Administrador:** abrir la pestaña «Periodos» y ver 2026 con el estado de la semilla; crear el año 2025 y ver sus 12 meses "Sin abrir"; abrir diciembre de 2025 con la fecha sugerida; cambiar su fecha límite; recargar la página y ver que el año sigue elegido. Al cambiar de pestaña el año no se conserva, como los filtros de las demás pestañas: `PaginaConfiguracion.jsx` deja solo `pestana` en la URL.
     - **Como Revisor:** ver las pestañas «Vacunas» y «Periodos», y cambiar la fecha límite de octubre de 2026.
     - **Al terminar:** revisar por SQL las filas de la bitácora, devolver la fecha límite de octubre de 2026 a `2026-11-10` desde la pantalla y, **con autorización**, borrar por SQL la fila de `cierre_periodo` de diciembre de 2025. El año 2025 queda en el calendario.
 

@@ -1672,51 +1672,176 @@ paths:
   /periodos:
     get:
       tags: [Catálogos]
-      summary: Listar periodos mensuales de reporte
+      summary: Listar los meses del calendario con su estado en la DDRISS del usuario
+      description: |
+        El calendario (`periodo`) es común para todo el país. `estado`, `fechaLimiteEnvio` y `cerradoEn` salen de
+        la fila de `cierre_periodo` de la DDRISS del usuario; si el mes no está abierto en esa DDRISS, los tres
+        valen `null`. Ordenados por año y mes, sin paginar. Un parámetro inválido, desconocido o repetido responde
+        400 `ENTRADA_INVALIDA`.
+      x-permiso: PERIODO_CONSULTAR
       parameters:
-        - { name: anio, in: query, schema: { type: integer } }
-      
+        - name: anio
+          in: query
+          schema: { type: integer, example: 2026 }
+        - name: estado
+          in: query
+          description: Solo los meses con ese estado en la DDRISS del usuario
+          schema: { $ref: "#/components/schemas/EstadoPeriodo" }
       responses:
         "200":
-          description: Lista de períodos mensuales
+          description: Meses del calendario
           content:
             application/json:
               schema:
                 type: array
-                items:
-                  type: object
-                  properties:
-                    id: { type: integer }
-                    anio: { type: integer }
-                    mes: { type: integer }
-                    fechaInicio: { type: string, format: date }
-                    fechaFin: { type: string, format: date }
-                    fechaLimiteEnvio: { type: string, format: date }
-                    estado:
-                      type: string
-                      enum: [ABIERTO, EN_CIERRE, CERRADO]
+                items: { $ref: "#/components/schemas/Periodo" }
         "400":
-          $ref: "#/components/responses/EntradaInvalida"
-        "500":
-          description: Error interno al consultar períodos
-
+          description: Un parámetro inválido, desconocido o repetido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                anio:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: anio debe ser un número entero. }
+                estado:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "estado debe ser ABIERTO, EN_CIERRE o CERRADO." }
+                desconocido:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: mes." }
+                repetido:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: anio no se puede repetir. }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
     post:
       tags: [Catálogos]
-      summary: Abrir un periodo mensual
+      summary: Agregar al calendario los meses que falten de un año
+      description: |
+        Crea en el calendario común los meses del año que todavía no están, con `fechaInicio` el día 1 y
+        `fechaFin` el último día del mes. **No abre ninguno**: cada mes se abre aparte para la DDRISS con
+        `POST /periodos/{id}/abrir`. El año debe estar entre 2020 y el siguiente al actual (fecha de Guatemala).
+        Si ya están los 12 meses, responde 409. Deja una fila `CREAR` en la bitácora por cada mes creado.
+      x-permiso: PERIODO_CREAR
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [anio, mes, fechaLimiteEnvio]
-              properties:
-                anio: { type: integer, example: 2026 }
-                mes: { type: integer, minimum: 1, maximum: 12 }
-                fechaLimiteEnvio: { type: string, format: date }
+            schema: { $ref: "#/components/schemas/PeriodoAnioNuevo" }
       responses:
-        "201": { description: Periodo creado }
-        "409": { $ref: "#/components/responses/Conflicto" }
+        "201":
+          description: Los 12 meses del año
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Periodo" }
+        "400":
+          description: anio no es entero, o hay un campo no permitido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                anio:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: anio debe ser un número entero. }
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: mes." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "409":
+          description: El año ya tiene sus 12 meses en el calendario
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: PERIODO_ANIO_EXISTENTE, mensaje: El año 2026 ya tiene sus 12 meses en el calendario. }
+        "422":
+          description: El año está fuera del rango permitido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ANIO_FUERA_DE_RANGO, mensaje: El año debe estar entre 2020 y 2027. }
+
+  /periodos/{id}:
+    patch:
+      tags: [Catálogos]
+      summary: Cambiar la fecha límite de envío de un mes en la DDRISS del usuario
+      description: |
+        Solo en un mes `ABIERTO` o `EN_CIERRE` en la DDRISS del usuario. En `ABIERTO`, el mes sigue `ABIERTO`
+        aunque la fecha nueva ya haya pasado. En `EN_CIERRE`, una fecha de hoy o posterior (fecha de Guatemala)
+        devuelve el mes a `ABIERTO` en la misma transacción; una fecha anterior solo cambia la fecha. La misma
+        fecha responde 200 sin registrar nada en la bitácora.
+      x-permiso: PERIODO_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FechaLimite" }
+      responses:
+        "200":
+          description: Mes con la fecha límite nueva
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Periodo" }
+        "400": { $ref: "#/components/responses/FechaLimiteInvalidaFormato" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/PeriodoNoEncontrado" }
+        "409":
+          description: El mes no está abierto en la DDRISS, o ya está cerrado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                noAbierto:
+                  value:
+                    error: { codigo: PERIODO_NO_ABIERTO, mensaje: El mes no está abierto en su DDRISS. }
+                cerrado:
+                  value:
+                    error: { codigo: PERIODO_CERRADO, mensaje: El mes está cerrado; solo admite rectificaciones. }
+        "422": { $ref: "#/components/responses/FechaLimiteInvalida" }
+
+  /periodos/{id}/abrir:
+    post:
+      tags: [Catálogos]
+      summary: Abrir un mes para la DDRISS del usuario
+      description: |
+        Crea la fila de `cierre_periodo` de la DDRISS del usuario, y solo la de esa DDRISS, con estado `ABIERTO`.
+        Se puede abrir cualquier mes del calendario, sin orden y aunque todavía no haya empezado. La fecha límite
+        debe ser posterior al fin del mes. Un mes que ya tiene fila en la DDRISS, en cualquier estado, responde
+        409. Deja una fila `CREAR` en la bitácora.
+      x-permiso: PERIODO_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FechaLimite" }
+      responses:
+        "201":
+          description: Mes abierto
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Periodo" }
+        "400": { $ref: "#/components/responses/FechaLimiteInvalidaFormato" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/PeriodoNoEncontrado" }
+        "409":
+          description: El mes ya tiene fila en la DDRISS
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: PERIODO_YA_ABIERTO, mensaje: El mes ya fue abierto en su DDRISS. }
+        "422": { $ref: "#/components/responses/FechaLimiteInvalida" }
 
   /poblaciones-objetivo:
     get:
@@ -2202,6 +2327,32 @@ components:
             refuerzo:
               value:
                 error: { codigo: SECUENCIA_INVALIDA, mensaje: Los refuerzos van después de las dosis. }
+    PeriodoNoEncontrado:
+      description: El mes no existe en el calendario
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: NO_ENCONTRADO, mensaje: El periodo no existe. }
+    FechaLimiteInvalidaFormato:
+      description: Falta la fecha, no es una fecha AAAA-MM-DD válida, o hay un campo no permitido
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            fecha:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: fechaLimiteEnvio debe ser una fecha AAAA-MM-DD. }
+            campo:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: estado." }
+    FechaLimiteInvalida:
+      description: La fecha límite es igual o anterior al fin del mes
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: FECHA_LIMITE_INVALIDA, mensaje: La fecha límite debe ser posterior al 2026-10-31. }
     Conflicto:
       description: Duplicado o versionFila desactualizada
       content:
@@ -2713,6 +2864,46 @@ components:
       properties:
         nombre: { $ref: "#/components/schemas/TextoNombreDosis" }
         esTrazadora: { type: boolean }
+
+    EstadoPeriodo:
+      type: string
+      enum: [ABIERTO, EN_CIERRE, CERRADO]
+
+    Periodo:
+      type: object
+      required: [id, anio, mes, fechaInicio, fechaFin, estado, fechaLimiteEnvio, cerradoEn]
+      description: |
+        Un mes del calendario común. `estado`, `fechaLimiteEnvio` y `cerradoEn` son los de la DDRISS del usuario,
+        o `null` si el mes no está abierto en ella.
+      properties:
+        id: { type: integer, example: 10 }
+        anio: { type: integer, example: 2026 }
+        mes: { type: integer, minimum: 1, maximum: 12, example: 10 }
+        fechaInicio: { type: string, format: date, example: "2026-10-01" }
+        fechaFin: { type: string, format: date, example: "2026-10-31" }
+        estado: { allOf: [{ $ref: "#/components/schemas/EstadoPeriodo" }], nullable: true, example: ABIERTO }
+        fechaLimiteEnvio: { type: string, format: date, nullable: true, example: "2026-11-10" }
+        cerradoEn: { type: string, format: date-time, nullable: true, example: null }
+
+    PeriodoAnioNuevo:
+      type: object
+      required: [anio]
+      additionalProperties: false
+      description: 'Cualquier otro campo responde 400 ("Campo no permitido: {nombre}.").'
+      properties:
+        anio: { type: integer, minimum: 2020, description: "Hasta el año siguiente al actual", example: 2027 }
+
+    FechaLimite:
+      type: object
+      required: [fechaLimiteEnvio]
+      additionalProperties: false
+      description: 'Cualquier otro campo responde 400 ("Campo no permitido: {nombre}.").'
+      properties:
+        fechaLimiteEnvio:
+          type: string
+          format: date
+          description: Posterior al fin del mes
+          example: "2026-11-10"
 
     Reporte:
       type: object

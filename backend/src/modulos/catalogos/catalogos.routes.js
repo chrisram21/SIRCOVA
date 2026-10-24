@@ -99,5 +99,9 @@ router.post(
   requierePermiso('VACUNA_EDITAR'),
   catalogosController.reactivarDosis,
 );
+router.get('/periodos', autenticar, requierePermiso('PERIODO_CONSULTAR'), catalogosController.listarPeriodos);
+router.post('/periodos', autenticar, requierePermiso('PERIODO_CREAR'), catalogosController.crearAnioPeriodos);
+router.patch('/periodos/:id', autenticar, requierePermiso('PERIODO_EDITAR'), catalogosController.cambiarFechaLimite);
+router.post('/periodos/:id/abrir', autenticar, requierePermiso('PERIODO_EDITAR'), catalogosController.abrirPeriodo);
 
 export default router;

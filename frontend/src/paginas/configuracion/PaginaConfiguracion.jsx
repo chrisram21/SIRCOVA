@@ -2,6 +2,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import PestanaEstablecimientos from './PestanaEstablecimientos.jsx'
+import PestanaPeriodos from './PestanaPeriodos.jsx'
 import PestanaTerritorio from './PestanaTerritorio.jsx'
 import PestanaVacunas from './PestanaVacunas.jsx'
 
@@ -24,6 +25,12 @@ const PESTANAS = [
     titulo: 'Vacunas',
     permisos: ['VACUNA_CONSULTAR'],
     Contenido: PestanaVacunas,
+  },
+  {
+    valor: 'periodos',
+    titulo: 'Periodos',
+    permisos: ['PERIODO_CONSULTAR'],
+    Contenido: PestanaPeriodos,
   },
 ]
 

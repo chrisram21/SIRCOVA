@@ -1,6 +1,7 @@
 import * as catalogosService from './catalogos.service.js';
 import * as distritosService from './distritos.service.js';
 import * as establecimientosService from './establecimientos.service.js';
+import * as periodosService from './periodos.service.js';
 import * as vacunasService from './vacunas.service.js';
 import { contextoAuditoria } from '../auditoria/auditoria.service.js';
 
@@ -104,4 +105,22 @@ export async function desactivarDosis(req, res) {
 
 export async function reactivarDosis(req, res) {
   res.json(await vacunasService.reactivarDosis(req.params.id, req.params.dosisId, contextoAuditoria(req)));
+}
+
+export async function listarPeriodos(req, res) {
+  res.json(await periodosService.listarPeriodos(req.usuario, req.query));
+}
+
+export async function crearAnioPeriodos(req, res) {
+  res.status(201).json(await periodosService.crearAnio(req.body, req.usuario, contextoAuditoria(req)));
+}
+
+export async function abrirPeriodo(req, res) {
+  res
+    .status(201)
+    .json(await periodosService.abrirPeriodo(req.params.id, req.body, req.usuario, contextoAuditoria(req)));
+}
+
+export async function cambiarFechaLimite(req, res) {
+  res.json(await periodosService.cambiarFechaLimite(req.params.id, req.body, req.usuario, contextoAuditoria(req)));
 }

@@ -112,3 +112,22 @@ export function desactivarDosis(vacunaId, dosisId) {
 export function reactivarDosis(vacunaId, dosisId) {
   return solicitar(`/vacunas/${vacunaId}/dosis/${dosisId}/reactivar`, { metodo: 'POST' })
 }
+
+// El calendario es común; estado, fechaLimiteEnvio y cerradoEn son los de la DDRISS del usuario (null si el mes no
+// está abierto en ella).
+export function listarPeriodos({ anio, estado } = {}) {
+  return solicitar(conConsulta('/periodos', { anio, estado }))
+}
+
+// Agrega al calendario los meses que falten del año, sin abrir ninguno.
+export function crearAnioPeriodos(anio) {
+  return solicitar('/periodos', { metodo: 'POST', cuerpo: { anio } })
+}
+
+export function abrirPeriodo(id, fechaLimiteEnvio) {
+  return solicitar(`/periodos/${id}/abrir`, { metodo: 'POST', cuerpo: { fechaLimiteEnvio } })
+}
+
+export function cambiarFechaLimite(id, fechaLimiteEnvio) {
+  return solicitar(`/periodos/${id}`, { metodo: 'PATCH', cuerpo: { fechaLimiteEnvio } })
+}
