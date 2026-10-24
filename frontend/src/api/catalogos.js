@@ -131,3 +131,14 @@ export function abrirPeriodo(id, fechaLimiteEnvio) {
 export function cambiarFechaLimite(id, fechaLimiteEnvio) {
   return solicitar(`/periodos/${id}`, { metodo: 'PATCH', cuerpo: { fechaLimiteEnvio } })
 }
+
+// Los 7 grupos y los municipios del departamento sede de la DDRISS, cada uno con su población del año por grupo.
+export function consultarPoblacion(anio) {
+  return solicitar(conConsulta('/poblaciones-objetivo', { anio }))
+}
+
+// Crea o corrige los grupos que vienen; los demás no cambian. Sin fuente, las filas existentes conservan la suya.
+export function guardarPoblacion(municipioId, anio, { fuente, grupos }) {
+  const cuerpo = fuente === undefined ? { grupos } : { fuente, grupos }
+  return solicitar(`/poblaciones-objetivo/${municipioId}/${anio}`, { metodo: 'PUT', cuerpo })
+}

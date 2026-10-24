@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import PestanaEstablecimientos from './PestanaEstablecimientos.jsx'
 import PestanaPeriodos from './PestanaPeriodos.jsx'
+import PestanaPoblacion from './PestanaPoblacion.jsx'
 import PestanaTerritorio from './PestanaTerritorio.jsx'
 import PestanaVacunas from './PestanaVacunas.jsx'
 
@@ -31,6 +32,13 @@ const PESTANAS = [
     titulo: 'Periodos',
     permisos: ['PERIODO_CONSULTAR'],
     Contenido: PestanaPeriodos,
+  },
+  {
+    valor: 'poblacion',
+    titulo: 'Población',
+    // Los años del selector salen del calendario de periodos.
+    permisos: ['POBLACION_CONSULTAR', 'PERIODO_CONSULTAR'],
+    Contenido: PestanaPoblacion,
   },
 ]
 

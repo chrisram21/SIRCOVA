@@ -103,5 +103,17 @@ router.get('/periodos', autenticar, requierePermiso('PERIODO_CONSULTAR'), catalo
 router.post('/periodos', autenticar, requierePermiso('PERIODO_CREAR'), catalogosController.crearAnioPeriodos);
 router.patch('/periodos/:id', autenticar, requierePermiso('PERIODO_EDITAR'), catalogosController.cambiarFechaLimite);
 router.post('/periodos/:id/abrir', autenticar, requierePermiso('PERIODO_EDITAR'), catalogosController.abrirPeriodo);
+router.get(
+  '/poblaciones-objetivo',
+  autenticar,
+  requierePermiso('POBLACION_CONSULTAR'),
+  catalogosController.consultarPoblacion,
+);
+router.put(
+  '/poblaciones-objetivo/:municipioId/:anio',
+  autenticar,
+  requierePermiso('POBLACION_REGISTRAR'),
+  catalogosController.guardarPoblacion,
+);
 
 export default router;

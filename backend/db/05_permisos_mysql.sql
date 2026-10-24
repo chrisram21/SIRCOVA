@@ -89,6 +89,10 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('PERIODO_CREAR',             'CONFIGURACION_CATALOGOS', 'Agregar al calendario común los meses de un año'),
  ('PERIODO_EDITAR',            'CONFIGURACION_CATALOGOS', 'Abrir meses en su DDRISS y cambiar su fecha límite de envío');
 
+-- SPEC 17 (HU-13): población objetivo por municipio, año y grupo de edad
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('POBLACION_CONSULTAR',       'CONFIGURACION_CATALOGOS', 'Consultar la población anual por municipio y grupo de edad');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -144,6 +148,13 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo IN ('ADMINISTRADOR', 'REVISOR')
    AND p.codigo IN ('PERIODO_CONSULTAR', 'PERIODO_CREAR', 'PERIODO_EDITAR');
+
+-- SPEC 17 (HU-13): el Administrador y el Revisor consultan y registran la población
+-- (POBLACION_REGISTRAR ya era del Administrador desde el modelo v0.6)
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo IN ('ADMINISTRADOR', 'REVISOR')
+   AND p.codigo IN ('POBLACION_CONSULTAR', 'POBLACION_REGISTRAR');
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

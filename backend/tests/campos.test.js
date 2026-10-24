@@ -17,6 +17,8 @@ import {
   validarNombreVacuna,
   validarDescripcionVacuna,
   validarNombreDosis,
+  validarCantidadPoblacion,
+  validarFuentePoblacion,
 } from '../src/validaciones/campos.js';
 
 // La misma lista está en frontend/src/validaciones/campos.test.js: si cambia una, se cambia la otra.
@@ -297,12 +299,47 @@ const CASOS = {
       ['Dosis_1', MENSAJES.nombreDosis],
     ],
   },
+  validarCantidadPoblacion: {
+    validos: [
+      [0, 0],
+      [1450, 1450],
+      [9999999, 9999999],
+      ['123', 123],
+      [' 1450 ', 1450],
+      ['007', 7],
+    ],
+    invalidos: [
+      [10000000, MENSAJES.cantidadPoblacion],
+      [-1, MENSAJES.cantidadPoblacion],
+      [1.5, MENSAJES.cantidadPoblacion],
+      ['12a', MENSAJES.cantidadPoblacion],
+      ['-1', MENSAJES.cantidadPoblacion],
+      ['1,450', MENSAJES.cantidadPoblacion],
+      ['10000000', MENSAJES.cantidadPoblacion],
+      ['', MENSAJES.cantidadPoblacion],
+      ['   ', MENSAJES.cantidadPoblacion],
+      [null, MENSAJES.cantidadPoblacion],
+    ],
+  },
+  validarFuentePoblacion: {
+    validos: [
+      ['Archivo MSPAS 2026', 'Archivo MSPAS 2026'],
+      ['  Archivo   MSPAS ', 'Archivo MSPAS'],
+      ['a'.repeat(150), 'a'.repeat(150)],
+      ['', null],
+      ['   ', null],
+      [null, null],
+    ],
+    invalidos: [
+      ['a'.repeat(151), MENSAJES.fuentePoblacion],
+    ],
+  },
 };
 
 const REGLAS = {
   validarNombres, validarApellidos, validarCargo, validarTelefono, validarCorreo, validarCui, validarNombreUsuario,
   validarNombreDistrito, validarNombreEstablecimiento, validarDireccion, validarNombreContacto, validarCodigoVacuna,
-  validarNombreVacuna, validarDescripcionVacuna, validarNombreDosis,
+  validarNombreVacuna, validarDescripcionVacuna, validarNombreDosis, validarCantidadPoblacion, validarFuentePoblacion,
 };
 
 describe.each(Object.entries(CASOS))('%s', (nombre, { validos, invalidos }) => {
@@ -333,6 +370,8 @@ describe('valores que no son texto', () => {
     expect(validarNombreVacuna(123)).toEqual({ error: MENSAJES.nombreVacuna });
     expect(validarDescripcionVacuna(5)).toEqual({ error: MENSAJES.descripcionVacuna });
     expect(validarNombreDosis({})).toEqual({ error: MENSAJES.nombreDosis });
+    expect(validarCantidadPoblacion({})).toEqual({ error: MENSAJES.cantidadPoblacion });
+    expect(validarFuentePoblacion(5)).toEqual({ error: MENSAJES.fuentePoblacion });
   });
 });
 

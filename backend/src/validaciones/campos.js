@@ -4,7 +4,7 @@
 export const LARGOS = {
   nombres: 100, apellidos: 100, cargo: 100, correo: 150, nombreUsuario: 50, nombreDistrito: 120,
   nombreEstablecimiento: 150, direccion: 255, nombreContacto: 150, codigoVacuna: 20, nombreVacuna: 120,
-  descripcionVacuna: 255, nombreDosis: 60,
+  descripcionVacuna: 255, nombreDosis: 60, fuentePoblacion: 150,
 };
 
 export const MENSAJES = {
@@ -43,6 +43,8 @@ export const MENSAJES = {
   nombreDosisObligatorio: 'El nombre de la dosis es obligatorio.',
   nombreDosis: 'El nombre de la dosis solo puede tener letras, números, espacios y los signos . , - ( ) /.',
   nombreDosisLargo: 'El nombre de la dosis debe tener entre 3 y 60 caracteres.',
+  cantidadPoblacion: 'La cantidad debe ser un número entero entre 0 y 9,999,999.',
+  fuentePoblacion: 'La fuente admite hasta 150 caracteres.',
 };
 
 const demasiadoLargo = (campo, largo) => `${campo}: como máximo ${largo} caracteres.`;
@@ -60,6 +62,7 @@ const NOMBRE_VACUNA = /^[\p{L}\d .,()/+'-]+$/u;
 const DESCRIPCION_VACUNA = /^[\p{L}\d .,()/+';:-]+$/u;
 const NOMBRE_DOSIS = /^[\p{L}\d .,()/-]+$/u;
 const DEPARTAMENTOS = 22;
+const CANTIDAD_POBLACION_MAXIMA = 9_999_999;
 
 // Sin texto (null, undefined o solo espacios) devuelve ''. Un valor que no es texto devuelve null.
 function limpiar(valor) {
@@ -218,5 +221,22 @@ export function validarNombreDosis(valor) {
   if (texto === '') return { error: MENSAJES.nombreDosisObligatorio };
   if (texto === null || !NOMBRE_DOSIS.test(texto)) return { error: MENSAJES.nombreDosis };
   if (texto.length < 3 || texto.length > LARGOS.nombreDosis) return { error: MENSAJES.nombreDosisLargo };
+  return { valor: texto };
+}
+
+// Acepta texto de solo dígitos por el Input del frontend; la API exige un número antes de llamarla.
+export function validarCantidadPoblacion(valor) {
+  const texto = typeof valor === 'string' ? valor.trim() : null;
+  const cantidad = texto === null ? valor : /^\d+$/.test(texto) ? Number(texto) : NaN;
+  if (!Number.isInteger(cantidad) || cantidad < 0 || cantidad > CANTIDAD_POBLACION_MAXIMA) {
+    return { error: MENSAJES.cantidadPoblacion };
+  }
+  return { valor: cantidad };
+}
+
+export function validarFuentePoblacion(valor) {
+  const texto = limpiar(valor);
+  if (texto === '') return { valor: null };
+  if (texto === null || texto.length > LARGOS.fuentePoblacion) return { error: MENSAJES.fuentePoblacion };
   return { valor: texto };
 }

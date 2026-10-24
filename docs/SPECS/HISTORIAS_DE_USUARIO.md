@@ -319,10 +319,12 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Cómo se hará:** Pantalla de población por año y municipio; endpoint `POST /poblaciones-objetivo`; tablas `poblacion_objetivo` y `clasificacion_poblacion` (grupos = encabezados del 5C, como «< 1 año» y «De 1 a < 6 años»).
 
 **Criterios de aceptación:**
-- [ ] Puedo registrar la población por municipio, año y grupo de edad.
-- [ ] No se permite registrar dos veces el mismo municipio, año y grupo.
-- [ ] Las cantidades deben ser enteros no negativos.
-- [ ] Cada cambio de población queda en la bitácora.
+- [x] Puedo registrar la población por municipio, año y grupo de edad.
+- [x] No se permite registrar dos veces el mismo municipio, año y grupo.
+- [x] Las cantidades deben ser enteros no negativos.
+- [x] Cada cambio de población queda en la bitácora.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 17 a `main`. Backend y frontend en `specs/17-hu-13-poblacion-objetivo.md`. Hay cuatro diferencias con la historia, decididas por el equipo. Primera: en lugar de `POST /poblaciones-objetivo` se usa `PUT /poblaciones-objetivo/{municipioId}/{anio} { fuente?, grupos: { CODIGO: cantidad } }`, que crea o corrige en una sola transacción los grupos que vienen; los demás no cambian y nunca se borra una fila, así que «no registrar dos veces» lo garantizan el `UNIQUE (municipio_id, anio, clasificacion_poblacion_id)` y el `PUT`, sin un 409 por duplicado (solo hay 409 `POBLACION_EN_CONFLICTO` si dos guardados del mismo grupo chocan). Segunda: solo se registra la población de los años con al menos un mes en el calendario de periodos (422 `ANIO_SIN_PERIODOS`) y de los municipios activos del departamento sede de la DDRISS, sin el `9999` ni los externos como Coatepeque (404). Tercera: la cantidad es un entero de 0 a 9 999 999 (`validarCantidadPoblacion` en los dos `campos.js`); se puede guardar solo una parte de los grupos, y un grupo ya registrado se corrige pero no se vacía. La `fuente` es opcional; sin ella, una fila existente conserva la suya. Cuarta: el Administrador y el Revisor tienen `POBLACION_CONSULTAR` (nuevo) y `POBLACION_REGISTRAR`. `GET /poblaciones-objetivo?anio=` devuelve los 7 grupos y los municipios con su población por grupo. La bitácora deja un `CREAR` por grupo creado y un `ACTUALIZAR` por grupo cuya cantidad o fuente cambió. La pantalla es la pestaña «Población» de `/configuracion`, con el año en `?anio=` y un Dialog por municipio. Verificado contra la API real el 2026-10-23: como Administrador, la pestaña mostró 2026 con los 30 municipios y la población de la semilla; San Marcos se editó (menores de 1 año de 1,450 a 1,460, con otra fuente), se mantuvo al recargar con el año en la URL, dejar vacío un grupo registrado mostró el error, y se devolvió a la semilla. Como Revisor, Configuración mostró «Vacunas», «Periodos» y «Población», y se corrigió Tacaná y se devolvió a su valor. Cada guardado dejó sus filas `ACTUALIZAR` en la bitácora.
 
 #### HU-14. Importar la población desde Excel
 
@@ -338,6 +340,8 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [ ] El sistema muestra una vista previa con las filas válidas y las que tienen error.
 - [ ] Las filas con municipio o grupo inexistente se reportan y no se guardan.
 - [ ] Puedo confirmar o cancelar la importación.
+
+**Nota (2026-10-23, spec 17):** la importación guarda con la misma lógica de `PUT /poblaciones-objetivo/{municipioId}/{anio}` (SPEC 17): solo años del calendario, municipios del departamento de la DDRISS, cantidades de `validarCantidadPoblacion`, y una fila de bitácora por grupo creado o cambiado.
 
 #### HU-15. Gestionar el catálogo de dimensiones
 
