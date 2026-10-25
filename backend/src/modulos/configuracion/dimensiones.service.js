@@ -1,5 +1,5 @@
 import { Int32, ObjectId } from 'mongodb';
-import pool, { enTransaccion } from '../../config/mysql.js';
+import pool from '../../config/mysql.js';
 import { obtenerDb } from '../../config/mongodb.js';
 import { ErrorApi } from '../../middlewares/errores.js';
 import {
@@ -10,8 +10,9 @@ import {
   validarEtiquetaValorDimension,
   validarNombreDimension,
 } from '../../validaciones/campos.js';
-import { registrarBitacora, diferencias, MODULOS, ACCIONES } from '../auditoria/auditoria.service.js';
+import { diferencias, ACCIONES } from '../auditoria/auditoria.service.js';
 import { entradaInvalida, leerBooleano, revisarCampos, revisarParametros } from '../catalogos/catalogos.service.js';
+import { escribirConBitacora as escribirEnMongoConBitacora } from './mongoBitacora.js';
 
 // El catálogo de dimensiones es nacional: ninguna consulta se filtra por DDRISS.
 
@@ -155,19 +156,8 @@ async function buscarDimension(codigo) {
   return doc;
 }
 
-// La fila de bitácora va primero, dentro de la transacción de MySQL; luego un solo cambio en MongoDB, que es atómico
-// por documento. Si MongoDB falla o su condición no se cumple, escribirMongo lanza y la bitácora se deshace.
-async function escribirConBitacora(contexto, bitacora, escribirMongo) {
-  await enTransaccion(async (conexion) => {
-    await registrarBitacora(conexion, {
-      ...contexto,
-      modulo: MODULOS.CONFIGURACION,
-      entidad: 'catalogo_dimensiones',
-      ...bitacora,
-    });
-    await escribirMongo(await coleccion());
-  });
-}
+const escribirConBitacora = (contexto, bitacora, escribirMongo) =>
+  escribirEnMongoConBitacora('catalogo_dimensiones', contexto, bitacora, escribirMongo);
 
 function leerValoresNuevos(valores) {
   if (!Array.isArray(valores) || valores.length === 0) throw entradaInvalida('Indique al menos un valor.');

@@ -19,6 +19,8 @@ import PaginaEditarVacuna from '@/paginas/configuracion/PaginaEditarVacuna.jsx'
 import PaginaRegistrarVacuna from '@/paginas/configuracion/PaginaRegistrarVacuna.jsx'
 import PaginaRegistrarDimension from '@/paginas/configuracion/PaginaRegistrarDimension.jsx'
 import PaginaEditarDimension from '@/paginas/configuracion/PaginaEditarDimension.jsx'
+import PaginaRegistrarEsquema from '@/paginas/configuracion/PaginaRegistrarEsquema.jsx'
+import PaginaEditarEsquema from '@/paginas/configuracion/PaginaEditarEsquema.jsx'
 import PaginaInicio from '@/paginas/inicio/PaginaInicio.jsx'
 import PaginaEditarUsuario from '@/paginas/usuarios/PaginaEditarUsuario.jsx'
 import PaginaRegistrarPersonal from '@/paginas/usuarios/PaginaRegistrarPersonal.jsx'
@@ -90,6 +92,18 @@ const opcionesMenu = [
         ruta: '/configuracion/dimensiones/:codigo/editar',
         permiso: 'DIMENSION_EDITAR',
         pagina: PaginaEditarDimension,
+      },
+      {
+        titulo: 'Nuevo borrador de esquema',
+        ruta: '/configuracion/esquemas/nuevo',
+        permiso: 'ESQUEMA_CREAR',
+        pagina: PaginaRegistrarEsquema,
+      },
+      {
+        titulo: 'Editar borrador de esquema',
+        ruta: '/configuracion/esquemas/:id/editar',
+        permiso: 'ESQUEMA_EDITAR',
+        pagina: PaginaEditarEsquema,
       },
     ],
   },

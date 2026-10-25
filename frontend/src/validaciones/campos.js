@@ -6,6 +6,7 @@ export const LARGOS = {
   nombreEstablecimiento: 150, direccion: 255, nombreContacto: 150, codigoVacuna: 20, nombreVacuna: 120,
   descripcionVacuna: 255, nombreDosis: 60, fuentePoblacion: 150, codigoDimension: 30, codigoValorDimension: 30,
   nombreDimension: 60, descripcionDimension: 255, etiquetaValorDimension: 60,
+  tituloSeccion: 60,
 }
 
 export const MENSAJES = {
@@ -53,6 +54,7 @@ export const MENSAJES = {
   descripcionDimension: 'La descripción admite hasta 255 caracteres.',
   etiquetaValorDimension: 'La etiqueta debe tener entre 1 y 60 caracteres.',
   edadMeses: 'La edad debe ser un número entero de meses entre 0 y 1,200.',
+  tituloSeccion: 'El título de la sección debe tener entre 1 y 60 caracteres.',
 }
 
 const demasiadoLargo = (campo, largo) => `${campo}: como máximo ${largo} caracteres.`
@@ -293,4 +295,10 @@ export function validarEdadMeses(valor) {
   const meses = texto === null ? valor : /^\d+$/.test(texto) ? Number(texto) : NaN
   if (!Number.isInteger(meses) || meses < 0 || meses > EDAD_MAXIMA_MESES) return { error: MENSAJES.edadMeses }
   return { valor: meses }
+}
+
+export function validarTituloSeccion(valor) {
+  const texto = limpiar(valor)
+  if (!texto || texto.length > LARGOS.tituloSeccion) return { error: MENSAJES.tituloSeccion }
+  return { valor: texto }
 }

@@ -50,3 +50,26 @@ export function desactivarValorDimension(codigo, valor) {
 export function reactivarValorDimension(codigo, valor) {
   return solicitar(`${rutaValor(codigo, valor)}/reactivar`, { metodo: 'POST' })
 }
+
+// Esquemas de captura: los nacionales y los de la DDRISS del usuario. Los borradores son siempre de su DDRISS.
+export function listarEsquemas() {
+  return solicitar('/esquemas-captura')
+}
+
+export function obtenerEsquema(id) {
+  return solicitar(`/esquemas-captura/${encodeURIComponent(id)}`)
+}
+
+// copiaDe es el id del vigente que aplica, o null para empezar vacío.
+export function crearEsquema(datos) {
+  return solicitar('/esquemas-captura', { metodo: 'POST', cuerpo: datos })
+}
+
+// Reemplaza procedencia, dosis, desagregación y secciones de un borrador.
+export function editarEsquema(id, datos) {
+  return solicitar(`/esquemas-captura/${encodeURIComponent(id)}`, { metodo: 'PUT', cuerpo: datos })
+}
+
+export function descartarEsquema(id) {
+  return solicitar(`/esquemas-captura/${encodeURIComponent(id)}`, { metodo: 'DELETE' })
+}

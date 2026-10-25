@@ -1,4 +1,5 @@
 import * as dimensionesService from './dimensiones.service.js';
+import * as esquemasService from './esquemas.service.js';
 import { contextoAuditoria } from '../auditoria/auditoria.service.js';
 
 export async function listarDimensiones(req, res) {
@@ -44,4 +45,25 @@ export async function desactivarValor(req, res) {
 
 export async function reactivarValor(req, res) {
   res.json(await dimensionesService.reactivarValor(req.params.codigo, req.params.valor, contextoAuditoria(req)));
+}
+
+export async function listarEsquemas(req, res) {
+  res.json(await esquemasService.listarEsquemas(req.query, req.usuario));
+}
+
+export async function obtenerEsquema(req, res) {
+  res.json(await esquemasService.obtenerEsquema(req.params.id, req.usuario));
+}
+
+export async function crearEsquema(req, res) {
+  res.status(201).json(await esquemasService.crearEsquema(req.body, contextoAuditoria(req), req.usuario));
+}
+
+export async function editarEsquema(req, res) {
+  res.json(await esquemasService.editarEsquema(req.params.id, req.body, contextoAuditoria(req), req.usuario));
+}
+
+export async function descartarEsquema(req, res) {
+  await esquemasService.descartarEsquema(req.params.id, contextoAuditoria(req), req.usuario);
+  res.status(204).end();
 }

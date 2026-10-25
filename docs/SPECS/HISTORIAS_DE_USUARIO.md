@@ -371,10 +371,12 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Cómo se hará:** Editor de esquemas en React; endpoint `POST /esquemas-captura`; colección `esquemas_captura` en MongoDB con `secciones[]` y desagregación por dosis.
 
 **Criterios de aceptación:**
-- [ ] Puedo elegir las dosis de la vacuna y las dimensiones de cada una.
-- [ ] Puedo organizar el formulario en secciones por grupo de edad.
-- [ ] El esquema se guarda como borrador hasta publicarlo.
-- [ ] El sistema rechaza un esquema que use dimensiones o dosis inexistentes.
+- [x] Puedo elegir las dosis de la vacuna y las dimensiones de cada una.
+- [x] Puedo organizar el formulario en secciones por grupo de edad.
+- [x] El esquema se guarda como borrador hasta publicarlo.
+- [x] El sistema rechaza un esquema que use dimensiones o dosis inexistentes.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 19 a `main`. Backend y frontend en `specs/19-hu-16-esquema-de-captura.md`. Además de `POST /esquemas-captura` hay `GET /esquemas-captura` (una fila por vacuna con su vigente que aplica y el borrador de la DDRISS), `GET /esquemas-captura/{id}`, `PUT` y `DELETE`, con los permisos `ESQUEMA_CONSULTAR`, `ESQUEMA_CREAR` y `ESQUEMA_EDITAR`. Hay cuatro diferencias con la historia, decididas por el equipo. Primera: el Revisor tiene los mismos permisos que el Administrador, como en vacunas y dimensiones. Segunda: todo esquema que se crea es un `BORRADOR` de la DDRISS del usuario, uno por vacuna; empieza vacío o como copia del vigente que aplica (el de la DDRISS o el nacional), y descartarlo lo borra (bitácora `ELIMINAR`). Nadie crea esquemas nacionales. Tercera: este spec no publica; la vigencia la fija HU-17 y mientras tanto el borrador guarda una fecha provisional que la API no devuelve (`vigencia: null`). Cuarta: el editor arma dosis, desagregación general y por dosis, secciones y procedencia; las reglas de validación y los campos adicionales se copian de la base (o, en uno vacío, van `CAMPOS_COMPLETOS`, `DIMENSIONES_VALIDAS` y `NO_NEGATIVO`), y no se editan aquí. «Rechaza un esquema con dimensiones o dosis inexistentes» se cumple con 422 `ESQUEMA_INVALIDO`: dosis activas de la vacuna, dimensiones y valores activos del catálogo, `grupo_edad` en la desagregación de cada dosis si y solo si la vacuna lo usa, secciones coherentes (un grupo de edad distinto por sección y permitido por sus dosis, cada dosis en alguna) y combinaciones de hasta 255 caracteres; el editor muestra los mismos problemas antes de guardar. La pantalla es la pestaña «Esquemas» de `/configuracion` y las subrutas `/configuracion/esquemas/nuevo` y `/configuracion/esquemas/:id/editar`. Verificado contra la API real el 2026-10-24: como Administrador, la pestaña mostró las 21 vacunas activas, con Hexavalente v2 nacional y su borrador v3; se creó un borrador de Td copiando el vigente (R1 con su propia desagregación por edad), el editor marcó «La dosis R1 no aparece en ninguna sección.» al quitarla de las secciones, se guardó como versión 2, se editó la procedencia y se creó un borrador vacío de Varicela con la dimensión sexo (versión 1); los dos se descartaron. Como Revisor, se creó y descartó un borrador de Varicela. Cada acción dejó su fila en la bitácora (7 en total) y el borrador Hexavalente v3 del 04 no cambió.
 
 **Nota (2026-10-23, spec 15):** Una vacuna registrada en HU-10 no tiene esquema de captura: el editor debe ofrecer las vacunas activas sin esquema vigente y solo sus dosis activas.
 
@@ -395,6 +397,8 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [ ] Los reportes ya capturados siguen mostrándose con su versión original.
 - [ ] Puedo consultar el historial de versiones de una vacuna.
 
+**Nota (2026-10-24, spec 19):** Los borradores los crea el SPEC 19 (solo de la DDRISS del usuario) con una `vigencia.desde` provisional que la API no devuelve: publicar debe fijar la vigencia, volver a pasar las reglas de coherencia de `esquemas.service.js` y crear `ESQUEMA_PUBLICAR`.
+
 #### HU-18. Previsualizar el formulario de un esquema
 
 > **Como** administrador, **quiero** ver cómo quedará el formulario antes de publicar el esquema, **para** detectar errores de configuración antes de que lo use el personal.
@@ -408,6 +412,8 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Criterios de aceptación:**
 - [ ] La vista previa muestra secciones, dosis y dimensiones tal como las verá el establecimiento.
 - [ ] La vista previa no guarda datos.
+
+**Nota (2026-10-24, spec 19):** La vista previa parte de `GET /esquemas-captura/{id}` (SPEC 19) y puede ir como botón en el editor de borradores.
 
 #### HU-19. Crear el reporte mensual
 
@@ -448,6 +454,8 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [ ] Una vacuna inactiva, o una dosis inactiva, no aparece en reportes nuevos; los reportes anteriores la conservan (viene de HU-10).
 
 **Nota (2026-10-24, spec 18):** Para mostrar las etiquetas, el formulario necesita leer el catálogo de dimensiones; el spec decide si da `DIMENSION_CONSULTAR` al personal de establecimiento o si `GET /reportes/{id}/formulario` trae las etiquetas.
+
+**Nota (2026-10-24, spec 19):** `GET /esquemas-captura/{id}` devuelve el esquema en camelCase con `secciones[].grupoEdad` y `dosis[].desagregacion` (`null` = la general); el formulario resuelve el vigente que aplica igual que `GET /esquemas-captura`.
 
 #### HU-21. Registrar el municipio de procedencia
 

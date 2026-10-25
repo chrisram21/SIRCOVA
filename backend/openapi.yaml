@@ -2389,19 +2389,158 @@ paths:
         "404": { $ref: "#/components/responses/NoEncontrado" }
 
   /esquemas-captura:
+    get:
+      tags: [Configuración]
+      summary: Listar las vacunas con su esquema vigente que aplica y el borrador de la DDRISS
+      description: |
+        Una fila por vacuna activa, más las inactivas que tengan un borrador de la DDRISS del usuario,
+        ordenadas por `nombre`. `vigente` es el esquema `VIGENTE` de la DDRISS del usuario o, si no hay, el
+        `VIGENTE` nacional (el que se usaría para capturar). `borrador` es el `BORRADOR` de la DDRISS del
+        usuario. Los esquemas de otras DDRISS no aparecen, ni los `HISTORICO`. Sin paginar. Un parámetro
+        responde 400 `ENTRADA_INVALIDA`.
+      x-permiso: ESQUEMA_CONSULTAR
+      responses:
+        "200":
+          description: Una fila por vacuna
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/EsquemaPorVacuna" }
+        "400":
+          description: Un parámetro no permitido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: estado." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
     post:
       tags: [Configuración]
-      summary: Crear una versión nueva (BORRADOR) del esquema de una vacuna
+      summary: Crear el borrador del esquema de captura de una vacuna para la DDRISS del usuario
+      description: |
+        Crea un esquema `BORRADOR` con el territorio de la DDRISS del usuario. Puede empezar vacío o como copia
+        del vigente que aplica (`copiaDe`, el `id` de `vigente` en `GET /esquemas-captura`).
+
+        El backend calcula:
+        - `version`: la mayor versión de la vacuna en todo el país (todos los territorios y estados) + 1;
+        - `versionAnteriorId`: el `VIGENTE` de la vacuna en la DDRISS, o null;
+        - `basadoEn`: en una copia del nacional, ese esquema y su versión; en una copia del vigente de la
+          DDRISS, el mismo `basadoEn` de ese vigente; vacío, null;
+        - `reglas` y `camposAdicionales`: los de la base en una copia; en uno vacío, `CAMPOS_COMPLETOS`,
+          `DIMENSIONES_VALIDAS` y `NO_NEGATIVO` en su versión vigente nacional, y sin campos adicionales;
+        - `presentacion`: `filas: dosis` y `columnas` = `seccion` si hay más de una sección, más las dimensiones
+          de la desagregación general sin `grupo_edad` (una copia conserva las demás claves de la base);
+        - la etiqueta de cada dosis (`dosis.nombre` de MySQL), el código de cada sección (su `grupoEdad`, o
+          `GENERAL`) y su `orden` (su posición en la lista);
+        - una vigencia provisional que la API no devuelve (`vigencia: null`); la fija la publicación.
+
+        Las dosis se guardan en el orden de MySQL y los valores en el orden del catálogo. Las reglas de
+        coherencia responden 422 `ESQUEMA_INVALIDO` con el primer problema que se encuentra.
+
+        Bitácora: una fila `CREAR` (módulo `CONFIGURACION`, entidad `esquemas_captura`, `entidadId` el
+        ObjectId) con el documento completo.
+      x-permiso: ESQUEMA_CREAR
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              description: Estructura de esquemas_captura (ver 05_contexto_base_de_datos.md, sección 6)
+            schema: { $ref: "#/components/schemas/EsquemaCrear" }
       responses:
-        "201": { description: Versión creada en BORRADOR }
-        "422": { $ref: "#/components/responses/ReglaNegocio" }
+        "201":
+          description: Borrador creado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EsquemaCaptura" }
+        "400": { $ref: "#/components/responses/EsquemaEntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/VacunaNoEncontrada" }
+        "409":
+          description: La DDRISS ya tiene un borrador de la vacuna, o `copiaDe` ya no es el vigente que aplica
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                borradorExistente:
+                  value:
+                    error: { codigo: BORRADOR_EXISTENTE, mensaje: Ya existe un borrador del esquema de Hexavalente para su DDRISS. }
+                altaSimultanea:
+                  value:
+                    error: { codigo: BORRADOR_EXISTENTE, mensaje: Se creó otra versión de Hexavalente al mismo tiempo; intente de nuevo. }
+                baseDesactualizada:
+                  value:
+                    error: { codigo: BASE_DESACTUALIZADA, mensaje: El esquema vigente de Hexavalente cambió; vuelva a abrir la copia. }
+        "422": { $ref: "#/components/responses/EsquemaInvalido" }
+
+  /esquemas-captura/{id}:
+    get:
+      tags: [Configuración]
+      summary: Consultar un esquema de captura completo
+      description: |
+        Un esquema `NACIONAL` o de la DDRISS del usuario, en cualquier estado. Uno de otra DDRISS, inexistente
+        o con un `id` que no es un ObjectId responde 404. En un `BORRADOR`, `vigencia` es null.
+      x-permiso: ESQUEMA_CONSULTAR
+      parameters:
+        - { $ref: "#/components/parameters/IdEsquema" }
+      responses:
+        "200":
+          description: El esquema
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EsquemaCaptura" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+    put:
+      tags: [Configuración]
+      summary: Reemplazar el contenido de un borrador de la DDRISS
+      description: |
+        Solo un `BORRADOR` de la DDRISS del usuario. Reemplaza la procedencia, las dosis, la desagregación y
+        las secciones, con las mismas reglas y cálculos que `POST`. `basadoEn`, `reglas`, `camposAdicionales`,
+        la vigencia provisional y `auditoria` no cambian. Si nada cambia, responde 200 sin escribir ni
+        registrar nada. Si cambia, registra `ACTUALIZAR` con los campos que cambiaron.
+
+        La escritura lleva la condición `estado: BORRADOR`: si el borrador se publicó mientras se editaba,
+        responde 409 `ESQUEMA_NO_EDITABLE`.
+      x-permiso: ESQUEMA_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/IdEsquema" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EsquemaEditar" }
+      responses:
+        "200":
+          description: Borrador actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EsquemaCaptura" }
+        "400": { $ref: "#/components/responses/EsquemaEntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409": { $ref: "#/components/responses/EsquemaNoEditable" }
+        "422": { $ref: "#/components/responses/EsquemaInvalido" }
+    delete:
+      tags: [Configuración]
+      summary: Descartar un borrador de la DDRISS
+      description: |
+        Solo un `BORRADOR` de la DDRISS del usuario. Borra el documento: un borrador nunca se publicó, así que
+        la regla de versiones inmutables no aplica. La escritura lleva la condición `estado: BORRADOR`.
+
+        Bitácora: una fila `ELIMINAR` con el documento completo en `valoresAnteriores`.
+      x-permiso: ESQUEMA_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/IdEsquema" }
+      responses:
+        "204": { description: Borrador descartado }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409": { $ref: "#/components/responses/EsquemaNoEditable" }
 
   /esquemas-captura/{id}/publicar:
     post:
@@ -2698,6 +2837,12 @@ components:
       required: true
       description: Código del valor dentro de la dimensión
       schema: { type: string, example: MENOR_1 }
+    IdEsquema:
+      name: id
+      in: path
+      required: true
+      description: ObjectId del esquema en `esquemas_captura`; uno inválido responde 404
+      schema: { type: string, example: 66f8a1c2e4b0a1b2c3d4e5f6 }
     Pagina:
       name: pagina
       in: query
@@ -2842,6 +2987,97 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
           example:
             error: { codigo: FECHA_LIMITE_INVALIDA, mensaje: La fecha límite debe ser posterior al 2026-10-31. }
+    EsquemaEntradaInvalida:
+      description: Campo faltante, de tipo inválido o no permitido, código repetido, modo inválido o título inválido
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            campo:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: reglas." }
+            dosisRepetida:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: La dosis D1 está repetida. }
+            dimensionRepetida:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: La dimensión grupo_edad está repetida. }
+            valorRepetido:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: El valor MENOR_1 de grupo_edad está repetido. }
+            modo:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: El modo de procedencia debe ser MUNICIPIO_DETALLADO o PROPIO_Y_OTROS. }
+            titulo:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: El título de la sección debe tener entre 1 y 60 caracteres. }
+    EsquemaInvalido:
+      description: |
+        El esquema incumple una regla de coherencia. Se revisan en este orden y se responde con el primer
+        problema: vacuna activa; dosis activas de la vacuna; dimensiones y valores activos del catálogo
+        (general y por dosis); `grupo_edad` en la desagregación de cada dosis si y solo si la vacuna desagrega
+        por edad; secciones (al menos una, dosis del esquema, cada dosis en alguna, un grupo de edad distinto
+        por sección y permitido por sus dosis, o una sola sección sin grupo de edad); y que la combinación más
+        larga de cada dosis quepa en los 255 caracteres de `clave_combinacion`.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            vacunaInactiva:
+              value:
+                error: { codigo: ESQUEMA_INVALIDO, mensaje: La vacuna está inactiva; no admite esquemas nuevos. }
+            sinDosis:
+              value:
+                error: { codigo: ESQUEMA_INVALIDO, mensaje: Indique al menos una dosis. }
+            dosis:
+              value:
+                error: { codigo: ESQUEMA_INVALIDO, mensaje: La dosis R3 no es una dosis activa de HEXA. }
+            dimension:
+              value:
+                error: { codigo: ESQUEMA_INVALIDO, mensaje: La dimensión pueblo no existe o está inactiva. }
+            valor:
+              value:
+                error: { codigo: ESQUEMA_INVALIDO, mensaje: El valor 2_4 de grupo_edad no existe o está inactivo. }
+            grupoEdadDosis:
+              value:
+                error: { codigo: ESQUEMA_INVALIDO, mensaje: La dosis R1 debe desagregarse por grupo de edad, como la vacuna. }
+            dosisConEdad:
+              value:
+                error: { codigo: ESQUEMA_INVALIDO, mensaje: La dosis D1 no se desagrega por grupo de edad, porque la vacuna no lo hace. }
+            sinSecciones:
+              value:
+                error: { codigo: ESQUEMA_INVALIDO, mensaje: Indique al menos una sección. }
+            dosisAjena:
+              value:
+                error: { codigo: ESQUEMA_INVALIDO, mensaje: La sección < 1 año usa la dosis D2, que no está en el esquema. }
+            dosisSinSeccion:
+              value:
+                error: { codigo: ESQUEMA_INVALIDO, mensaje: La dosis D3 no aparece en ninguna sección. }
+            seccionSinGrupo:
+              value:
+                error: { codigo: ESQUEMA_INVALIDO, mensaje: La sección < 1 año necesita un grupo de edad. }
+            grupoRepetido:
+              value:
+                error: { codigo: ESQUEMA_INVALIDO, mensaje: Dos secciones usan el grupo de edad MENOR_1. }
+            grupoNoPermitido:
+              value:
+                error: { codigo: ESQUEMA_INVALIDO, mensaje: La dosis R1 no admite el grupo de edad MENOR_1 de la sección < 1 año. }
+            unaSeccion:
+              value:
+                error: { codigo: ESQUEMA_INVALIDO, mensaje: Sin desagregación por grupo de edad, el esquema lleva una sola sección. }
+            seccionConGrupo:
+              value:
+                error: { codigo: ESQUEMA_INVALIDO, mensaje: La sección General no lleva grupo de edad, porque la vacuna no se desagrega por edad. }
+            combinacion:
+              value:
+                error: { codigo: ESQUEMA_INVALIDO, mensaje: La combinación de la dosis D1 supera los 255 caracteres. }
+    EsquemaNoEditable:
+      description: El esquema no es un borrador de la DDRISS del usuario (es nacional, vigente o histórico)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: ESQUEMA_NO_EDITABLE, mensaje: Solo se edita un borrador de su DDRISS; para cambiar un esquema publicado, cree un borrador nuevo. }
     Conflicto:
       description: Duplicado o versionFila desactualizada
       content:
@@ -3628,6 +3864,241 @@ components:
           description: Todos los códigos de valor de la dimensión (activos e inactivos), cada uno una vez, en el orden nuevo
           items: { type: string }
           example: [MENOR_1, 1_A_MENOR_2, 4_ANIOS, 1_A_5, 2_4, 10_14, MEF_15_49]
+
+    EstadoEsquema:
+      type: string
+      enum: [BORRADOR, VIGENTE, HISTORICO]
+
+    TerritorioEsquema:
+      type: object
+      required: [nivel, ddrissCodigo]
+      properties:
+        nivel: { type: string, enum: [NACIONAL, DDRISS] }
+        ddrissCodigo: { type: string, nullable: true, description: null en un esquema nacional, example: DDRISS_SM }
+
+    ResumenEsquema:
+      type: object
+      required: [id, version, territorio]
+      properties:
+        id: { type: string, description: ObjectId del esquema, example: 66f8a1c2e4b0a1b2c3d4e5f6 }
+        version: { type: integer, minimum: 1, example: 2 }
+        territorio: { $ref: "#/components/schemas/TerritorioEsquema" }
+
+    EsquemaPorVacuna:
+      type: object
+      required: [vacuna, vigente, borrador]
+      properties:
+        vacuna:
+          type: object
+          required: [id, codigo, nombre, activa]
+          properties:
+            id: { type: integer, example: 2 }
+            codigo: { type: string, example: HEXA }
+            nombre: { type: string, example: Hexavalente }
+            activa: { type: boolean, example: true }
+        vigente:
+          allOf: [{ $ref: "#/components/schemas/ResumenEsquema" }]
+          nullable: true
+          description: El `VIGENTE` de la DDRISS del usuario o, si no hay, el `VIGENTE` nacional; null si no hay ninguno
+        borrador:
+          type: object
+          nullable: true
+          description: El `BORRADOR` de la DDRISS del usuario, o null
+          required: [id, version, creadoEn]
+          properties:
+            id: { type: string, example: 6721a0c1a2b3c4d5e6f70901 }
+            version: { type: integer, example: 3 }
+            creadoEn: { type: string, format: date-time, example: "2026-10-15T15:00:00.000Z" }
+      example:
+        vacuna: { id: 2, codigo: HEXA, nombre: Hexavalente, activa: true }
+        vigente: { id: 66f8a1c2e4b0a1b2c3d4e5f6, version: 2, territorio: { nivel: NACIONAL, ddrissCodigo: null } }
+        borrador: { id: 6721a0c1a2b3c4d5e6f70901, version: 3, creadoEn: "2026-10-15T15:00:00.000Z" }
+
+    DesagregacionEsquema:
+      type: object
+      required: [dimension, valores]
+      properties:
+        dimension: { type: string, description: Código de una dimensión activa de `catalogo_dimensiones`, example: grupo_edad }
+        valores:
+          type: array
+          minItems: 1
+          description: Valores activos de la dimensión, sin repetir; se guardan en el orden del catálogo
+          items: { type: string }
+          example: [MENOR_1, 1_A_5]
+
+    ProcedenciaEsquema:
+      type: object
+      required: [modo]
+      properties:
+        modo:
+          type: string
+          enum: [MUNICIPIO_DETALLADO, PROPIO_Y_OTROS]
+          description: "`MUNICIPIO_DETALLADO`: se elige el municipio de procedencia; `PROPIO_Y_OTROS`: réplica del 5C (propio y otros)"
+        permiteNoEspecificado: { type: boolean, default: true }
+
+    TextoTituloSeccion:
+      type: string
+      minLength: 1
+      maxLength: 60
+      description: Se quitan los espacios de los extremos; de 1 a 60 caracteres
+      example: "< 1 año"
+
+    DosisEsquemaEntrada:
+      type: object
+      required: [codigo]
+      additionalProperties: false
+      properties:
+        codigo: { type: string, description: Código de una dosis activa de la vacuna, example: R1 }
+        desagregacion:
+          type: array
+          nullable: true
+          description: |
+            null o ausente: la dosis usa la desagregación general. `[]`: la dosis no se desagrega. Una lista:
+            reemplaza la general solo para esta dosis; si la vacuna desagrega por `grupo_edad`, la lista lo lleva.
+          items: { $ref: "#/components/schemas/DesagregacionEsquema" }
+
+    SeccionEsquemaEntrada:
+      type: object
+      required: [titulo, grupoEdad, dosis]
+      additionalProperties: false
+      properties:
+        titulo: { $ref: "#/components/schemas/TextoTituloSeccion" }
+        grupoEdad:
+          type: string
+          nullable: true
+          description: Un valor de `grupo_edad` del esquema, distinto en cada sección; null si la vacuna no desagrega por edad
+          example: MENOR_1
+        dosis:
+          type: array
+          minItems: 1
+          description: Dosis del esquema que se capturan en la sección, sin repetir
+          items: { type: string }
+          example: [D1, D2, D3]
+
+    EsquemaEditar:
+      type: object
+      required: [procedencia, dosis, desagregacion, secciones]
+      additionalProperties: false
+      description: 'Cualquier otro campo responde 400 ("Campo no permitido: {nombre}.").'
+      properties:
+        procedencia: { $ref: "#/components/schemas/ProcedenciaEsquema" }
+        dosis:
+          type: array
+          minItems: 1
+          description: Las dosis que pide el formulario; se guardan en el orden de MySQL
+          items: { $ref: "#/components/schemas/DosisEsquemaEntrada" }
+        desagregacion:
+          type: array
+          description: Desagregación general; `[]` si solo se reporta el total por dosis
+          items: { $ref: "#/components/schemas/DesagregacionEsquema" }
+        secciones:
+          type: array
+          minItems: 1
+          description: En el orden en que se muestran
+          items: { $ref: "#/components/schemas/SeccionEsquemaEntrada" }
+
+    EsquemaCrear:
+      allOf:
+        - $ref: "#/components/schemas/EsquemaEditar"
+        - type: object
+          required: [vacunaId]
+          properties:
+            vacunaId: { type: integer, description: vacuna.id en MySQL, example: 4 }
+            copiaDe:
+              type: string
+              nullable: true
+              description: |
+                ObjectId del vigente que aplica (el `vigente.id` de `GET /esquemas-captura`) para copiarlo; null o
+                ausente para empezar vacío. Si ya no es el vigente que aplica, responde 409 `BASE_DESACTUALIZADA`.
+              example: 66f8a1c2e4b0a1b2c3d4e601
+      example:
+        vacunaId: 4
+        copiaDe: 66f8a1c2e4b0a1b2c3d4e601
+        procedencia: { modo: MUNICIPIO_DETALLADO, permiteNoEspecificado: true }
+        dosis:
+          - { codigo: D1, desagregacion: null }
+          - { codigo: R1, desagregacion: [{ dimension: grupo_edad, valores: [MEF_15_49] }] }
+        desagregacion:
+          - { dimension: estado_embarazo, valores: [EMBARAZADA, NO_EMBARAZADA] }
+          - { dimension: grupo_edad, valores: [MEF_15_49] }
+        secciones:
+          - { titulo: Mujer de 15 a 49 años, grupoEdad: MEF_15_49, dosis: [D1, R1] }
+
+    EsquemaCaptura:
+      type: object
+      required: [id, vacuna, version, territorio, estado, vigencia, versionAnteriorId, basadoEn, procedencia, dosis,
+        desagregacion, secciones, camposAdicionales, reglas, presentacion, creadoPor, creadoEn]
+      properties:
+        id: { type: string, example: 6721a0c1a2b3c4d5e6f70901 }
+        vacuna:
+          type: object
+          properties:
+            id: { type: integer, example: 4 }
+            codigo: { type: string, example: TD }
+            nombre: { type: string, example: Toxoide tetánico y diftérico (Td) }
+        version: { type: integer, minimum: 1, example: 5 }
+        territorio: { $ref: "#/components/schemas/TerritorioEsquema" }
+        estado: { $ref: "#/components/schemas/EstadoEsquema" }
+        vigencia:
+          type: object
+          nullable: true
+          description: null en un `BORRADOR`
+          properties:
+            desde: { type: string, format: date, example: "2026-10-01" }
+            hasta: { type: string, format: date, nullable: true, example: null }
+        versionAnteriorId: { type: string, nullable: true, example: null }
+        basadoEn:
+          type: object
+          nullable: true
+          properties:
+            esquemaId: { type: string, example: 66f8a1c2e4b0a1b2c3d4e601 }
+            version: { type: integer, example: 1 }
+        procedencia: { $ref: "#/components/schemas/ProcedenciaEsquema" }
+        dosis:
+          type: array
+          items:
+            type: object
+            required: [codigo, etiqueta, desagregacion]
+            properties:
+              codigo: { type: string, example: R1 }
+              etiqueta: { type: string, example: Primer refuerzo }
+              desagregacion:
+                type: array
+                nullable: true
+                description: null si la dosis usa la desagregación general; `[]` si no se desagrega
+                items: { $ref: "#/components/schemas/DesagregacionEsquema" }
+        desagregacion:
+          type: array
+          items: { $ref: "#/components/schemas/DesagregacionEsquema" }
+        secciones:
+          type: array
+          items:
+            type: object
+            required: [codigo, titulo, orden, grupoEdad, dosis]
+            properties:
+              codigo: { type: string, description: El `grupoEdad`, o `GENERAL`, example: MEF_15_49 }
+              titulo: { type: string, example: Mujer de 15 a 49 años }
+              orden: { type: integer, example: 1 }
+              grupoEdad: { type: string, nullable: true, example: MEF_15_49 }
+              dosis: { type: array, items: { type: string }, example: [D1, R1] }
+        camposAdicionales:
+          type: array
+          description: Copiados de la base; este spec no los edita
+          items: { type: object }
+        reglas:
+          type: array
+          items:
+            type: object
+            properties:
+              codigo: { type: string, example: CAMPOS_COMPLETOS }
+              version: { type: integer, example: 1 }
+              severidadOverride: { type: string, nullable: true, enum: [ERROR, ADVERTENCIA, null] }
+        presentacion:
+          type: object
+          description: La deduce el backend
+          example: { filas: dosis, columnas: [estado_embarazo] }
+        creadoPor: { type: integer, description: Id del usuario de MySQL, example: 1 }
+        creadoEn: { type: string, format: date-time, example: "2026-10-24T16:00:00.000Z" }
 
     Reporte:
       type: object

@@ -99,6 +99,12 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('DIMENSION_CREAR',           'CONFIGURACION_CATALOGOS', 'Registrar dimensiones de desagregación con sus valores'),
  ('DIMENSION_EDITAR',          'CONFIGURACION_CATALOGOS', 'Editar, desactivar y reactivar dimensiones, y agregar, editar, ordenar, desactivar y reactivar sus valores');
 
+-- SPEC 19 (HU-16): borradores de los esquemas de captura de la DDRISS (MongoDB)
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('ESQUEMA_CONSULTAR',         'CONFIGURACION_CATALOGOS', 'Consultar los esquemas de captura de las vacunas'),
+ ('ESQUEMA_CREAR',             'CONFIGURACION_CATALOGOS', 'Crear borradores de esquemas de captura para la DDRISS'),
+ ('ESQUEMA_EDITAR',            'CONFIGURACION_CATALOGOS', 'Editar y descartar borradores de esquemas de captura de la DDRISS');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -167,6 +173,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo IN ('ADMINISTRADOR', 'REVISOR')
    AND p.codigo IN ('DIMENSION_CONSULTAR', 'DIMENSION_CREAR', 'DIMENSION_EDITAR');
+
+-- SPEC 19 (HU-16): el Administrador y el Revisor gestionan los borradores de esquemas
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo IN ('ADMINISTRADOR', 'REVISOR')
+   AND p.codigo IN ('ESQUEMA_CONSULTAR', 'ESQUEMA_CREAR', 'ESQUEMA_EDITAR');
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas
