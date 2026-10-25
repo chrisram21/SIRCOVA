@@ -393,11 +393,31 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Cómo se hará:** Endpoint `POST /esquemas-captura/{id}/publicar`; índice único parcial que permite una sola versión VIGENTE por vacuna; cada `reporte_vacuna` guarda el id y la versión del esquema usado.
 
 **Criterios de aceptación:**
-- [ ] Al publicar una versión nueva, la anterior deja de estar vigente.
-- [ ] Los reportes ya capturados siguen mostrándose con su versión original.
-- [ ] Puedo consultar el historial de versiones de una vacuna.
+- [x] Al publicar una versión nueva, la anterior deja de estar vigente.
+- [x] Los reportes ya capturados siguen mostrándose con su versión original.
+- [x] Puedo consultar el historial de versiones de una vacuna.
 
 **Nota (2026-10-24, spec 19):** Los borradores los crea el SPEC 19 (solo de la DDRISS del usuario) con una `vigencia.desde` provisional que la API no devuelve: publicar debe fijar la vigencia, volver a pasar las reglas de coherencia de `esquemas.service.js` y crear `ESQUEMA_PUBLICAR`.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 20 a `main`. Backend y frontend en `specs/20-hu-17-publicar-esquemas.md`. Además de `POST /esquemas-captura/{id}/publicar` está `GET /esquemas-captura/historial?vacunaId=`, con el permiso nuevo `ESQUEMA_PUBLICAR` y `ESQUEMA_CONSULTAR`. Diferencias con la historia, decididas por el equipo:
+
+- El Revisor también publica, como en los demás permisos de esquemas.
+- Solo se publica un borrador de la DDRISS del usuario; nadie publica esquemas nacionales.
+- La vigencia empieza el día 1 de un mes del calendario de `periodo`, desde el mes actual y después del vigente de la DDRISS, y puede ser futura. Al publicar, la versión pasa a `VIGENTE` de inmediato y la anterior de la DDRISS pasa a `HISTORICO`, con `hasta` = el día anterior; de ella solo cambian `estado` y `vigencia.hasta`. Los dos documentos se escriben en una transacción de MongoDB. El nacional no se toca.
+- El motivo es obligatorio (de 1 a 300 caracteres), y publicar vuelve a pasar las reglas de coherencia del SPEC 19.
+- «Cada `reporte_vacuna` guarda el id y la versión del esquema usado» lo llena HU-20. Este spec garantiza que esa versión no cambia y se sigue consultando, y el historial cuenta los reportes de la DDRISS que usan cada versión.
+
+En la pantalla, «Publicar» está en la fila del borrador de la pestaña «Esquemas» y en el editor ("Guardar y publicar" si hay cambios), con un diálogo común. «Historial» abre `/configuracion/esquemas/historial/:vacunaId`, y "Ver" abre `/configuracion/esquemas/:id`, con el editor en solo lectura.
+
+Verificado contra la API real el 2026-10-24:
+
+- **Como Administrador:**
+  - se registró la vacuna de prueba manual `ZVM_HU17`; su borrador vacío se publicó desde la fila con vigencia desde noviembre de 2026;
+  - una copia se publicó desde el editor desde diciembre de 2026. El diálogo solo ofreció diciembre y avisó "La versión 1 dejará de usarse el 30/11/2026.";
+  - el historial mostró la v2 vigente y la v1 histórica (01/11 – 30/11/2026), con su motivo y su usuario;
+  - el historial de Hexavalente mostró la v1 histórica con los 248 reportes de la semilla, y su vista mostró los 34 controles deshabilitados.
+- **Como Revisor:** se vio el historial, el diálogo avisó que no quedaban meses en el calendario, y se descartó el borrador.
+- **Al terminar:** `ZVM_HU17` se desactivó. La bitácora tiene sus filas `CREAR`, `ACTUALIZAR`, `PUBLICAR_ESQUEMA` y `ELIMINAR`, y Hexavalente (v1, v2 y el borrador v3 del 04) no cambió.
 
 #### HU-18. Previsualizar el formulario de un esquema
 
@@ -414,6 +434,8 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [ ] La vista previa no guarda datos.
 
 **Nota (2026-10-24, spec 19):** La vista previa parte de `GET /esquemas-captura/{id}` (SPEC 19) y puede ir como botón en el editor de borradores.
+
+**Nota (2026-10-24, spec 20):** `EditorEsquema` tiene la prop `soloLectura` y `/configuracion/esquemas/:id` (SPEC 20) muestra una versión sin editar; la vista previa del formulario es otra cosa: reproduce lo que verá el establecimiento.
 
 #### HU-19. Crear el reporte mensual
 
@@ -456,6 +478,8 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Nota (2026-10-24, spec 18):** Para mostrar las etiquetas, el formulario necesita leer el catálogo de dimensiones; el spec decide si da `DIMENSION_CONSULTAR` al personal de establecimiento o si `GET /reportes/{id}/formulario` trae las etiquetas.
 
 **Nota (2026-10-24, spec 19):** `GET /esquemas-captura/{id}` devuelve el esquema en camelCase con `secciones[].grupoEdad` y `dosis[].desagregacion` (`null` = la general); el formulario resuelve el vigente que aplica igual que `GET /esquemas-captura`.
+
+**Nota (2026-10-24, spec 20):** El esquema de un periodo es el de la DDRISS del establecimiento (`VIGENTE` o `HISTORICO`) cuya vigencia cubre el día 1 del mes; si no hay, el nacional que la cubra. Un `VIGENTE` puede tener `desde` futuro (SPEC 20), así que no basta con buscar el `VIGENTE`. Esto corrige la nota del spec 19. También queda por decidir qué pasa con un reporte en borrador de un mes cuya versión cambió.
 
 #### HU-21. Registrar el municipio de procedencia
 

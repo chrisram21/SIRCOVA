@@ -21,6 +21,8 @@ import PaginaRegistrarDimension from '@/paginas/configuracion/PaginaRegistrarDim
 import PaginaEditarDimension from '@/paginas/configuracion/PaginaEditarDimension.jsx'
 import PaginaRegistrarEsquema from '@/paginas/configuracion/PaginaRegistrarEsquema.jsx'
 import PaginaEditarEsquema from '@/paginas/configuracion/PaginaEditarEsquema.jsx'
+import PaginaHistorialEsquemas from '@/paginas/configuracion/PaginaHistorialEsquemas.jsx'
+import PaginaVerEsquema from '@/paginas/configuracion/PaginaVerEsquema.jsx'
 import PaginaInicio from '@/paginas/inicio/PaginaInicio.jsx'
 import PaginaEditarUsuario from '@/paginas/usuarios/PaginaEditarUsuario.jsx'
 import PaginaRegistrarPersonal from '@/paginas/usuarios/PaginaRegistrarPersonal.jsx'
@@ -104,6 +106,19 @@ const opcionesMenu = [
         ruta: '/configuracion/esquemas/:id/editar',
         permiso: 'ESQUEMA_EDITAR',
         pagina: PaginaEditarEsquema,
+      },
+      // Los segmentos fijos (nuevo, historial) ganan sobre :id en React Router.
+      {
+        titulo: 'Historial de esquemas',
+        ruta: '/configuracion/esquemas/historial/:vacunaId',
+        permiso: 'ESQUEMA_CONSULTAR',
+        pagina: PaginaHistorialEsquemas,
+      },
+      {
+        titulo: 'Versión de esquema',
+        ruta: '/configuracion/esquemas/:id',
+        permiso: 'ESQUEMA_CONSULTAR',
+        pagina: PaginaVerEsquema,
       },
     ],
   },

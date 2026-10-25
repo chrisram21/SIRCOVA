@@ -1,15 +1,20 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
-import { obtenerVacuna } from '@/api/catalogos.js'
-import { editarEsquema, listarDimensiones, obtenerEsquema } from '@/api/configuracion.js'
+import { listarPeriodos, obtenerVacuna } from '@/api/catalogos.js'
+import { editarEsquema, listarDimensiones, listarEsquemas, obtenerEsquema, publicarEsquema } from '@/api/configuracion.js'
 import { ErrorApi } from '@/api/cliente.js'
+import { guardarSesion } from '@/api/sesion.js'
+import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 import PaginaEditarEsquema from './PaginaEditarEsquema.jsx'
 
-vi.mock('@/api/catalogos.js', () => ({ obtenerVacuna: vi.fn() }))
+vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
+vi.mock('@/api/catalogos.js', () => ({ obtenerVacuna: vi.fn(), listarPeriodos: vi.fn() }))
 vi.mock('@/api/configuracion.js', () => ({
   listarDimensiones: vi.fn(),
   obtenerEsquema: vi.fn(),
   editarEsquema: vi.fn(),
+  listarEsquemas: vi.fn(),
+  publicarEsquema: vi.fn(),
 }))
 
 const VACUNA = {
@@ -57,24 +62,46 @@ function Pestana() {
   )
 }
 
-function montar(id = 'b-1') {
+const EDITAR = ['ESQUEMA_CONSULTAR', 'ESQUEMA_EDITAR', 'VACUNA_CONSULTAR', 'DIMENSION_CONSULTAR']
+const PUBLICAR = [...EDITAR, 'ESQUEMA_PUBLICAR', 'PERIODO_CONSULTAR']
+
+function crearSesion(permisos) {
+  const codificar = (objeto) => btoa(JSON.stringify(objeto)).replace(/=+$/, '')
+  const exp = Math.floor(Date.now() / 1000) + 3600
+  return {
+    token: `${codificar({ alg: 'HS256', typ: 'JWT' })}.${codificar({ sub: '7', exp })}.firma`,
+    usuario: {
+      id: 7,
+      nombreUsuario: 'mlopez',
+      rol: 'ADMINISTRADOR',
+      permisos,
+      empleado: { nombres: 'María', apellidos: 'López', ddrissId: 1, establecimientoId: null, municipioId: null },
+    },
+  }
+}
+
+function montar(id = 'b-1', permisos = EDITAR) {
+  guardarSesion(crearSesion(permisos))
   render(
     <MemoryRouter initialEntries={[`/configuracion/esquemas/${id}/editar`]}>
-      <Routes>
-        <Route path="/configuracion/esquemas/:id/editar" element={<PaginaEditarEsquema />} />
-        <Route path="/configuracion" element={<Pestana />} />
-      </Routes>
+      <ProveedorSesion>
+        <Routes>
+          <Route path="/configuracion/esquemas/:id/editar" element={<PaginaEditarEsquema />} />
+          <Route path="/configuracion" element={<Pestana />} />
+        </Routes>
+      </ProveedorSesion>
     </MemoryRouter>,
   )
 }
 
-async function abrir(id) {
-  montar(id)
+async function abrir(id, permisos) {
+  montar(id, permisos)
   await waitFor(() => expect(screen.queryByLabelText('Cargando borrador')).toBeNull())
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
+  sessionStorage.clear()
   obtenerEsquema.mockResolvedValue(BORRADOR)
   obtenerVacuna.mockResolvedValue(VACUNA)
   listarDimensiones.mockResolvedValue(DIMENSIONES)
@@ -137,4 +164,100 @@ test('si falla la carga por otra razón lo dice', async () => {
   await abrir()
 
   expect(screen.getByText('No se pudo cargar el esquema: No se pudo conectar con el servidor.')).toBeTruthy()
+})
+
+describe('publicar desde el editor', () => {
+  const FILA = {
+    vacuna: { id: 2, codigo: 'ZVT', nombre: 'Vacuna de prueba', activa: true },
+    vigente: { id: 'v-1', version: 2, territorio: { nivel: 'NACIONAL', ddrissCodigo: null }, vigenciaDesde: '2026-01-01' },
+    borrador: { id: 'b-1', version: 3, creadoEn: '2026-10-15T15:00:00.000Z' },
+  }
+  const select = () => document.querySelector('select[name="vigenciaDesde"]')
+
+  beforeEach(() => {
+    // Solo la fecha: el "mes actual" del diálogo es octubre de 2026, sin falsear los temporizadores de waitFor.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-24T12:00:00-06:00'))
+    listarEsquemas.mockResolvedValue([FILA])
+    listarPeriodos.mockImplementation(async ({ anio }) =>
+      anio === 2026 ? [{ id: 11, anio: 2026, mes: 11, fechaInicio: '2026-11-01' }] : [],
+    )
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  test('sin ESQUEMA_PUBLICAR no aparece el botón', async () => {
+    await abrir('b-1', EDITAR)
+    expect(screen.queryByRole('button', { name: /publicar/i })).toBeNull()
+  })
+
+  test('sin cambios, "Publicar" abre el diálogo sin guardar', async () => {
+    await abrir('b-1', PUBLICAR)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Publicar' }))
+    const dialogo = await screen.findByRole('dialog')
+    expect(within(dialogo).getByText('Publicar la versión 3 de Vacuna de prueba')).toBeTruthy()
+    expect(within(dialogo).getByText(/en lugar de la nacional 2\./)).toBeTruthy()
+    expect(editarEsquema).not.toHaveBeenCalled()
+  })
+
+  test('con cambios, "Guardar y publicar" guarda antes de abrir el diálogo', async () => {
+    await abrir('b-1', PUBLICAR)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Título de la sección 1' }), {
+      target: { value: 'Menores de 1 año' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar y publicar' }))
+
+    await screen.findByRole('dialog')
+    expect(editarEsquema).toHaveBeenCalledTimes(1)
+    expect(editarEsquema.mock.calls[0][1].secciones[0].titulo).toBe('Menores de 1 año')
+  })
+
+  test('si guardar falla, muestra el error y no abre el diálogo', async () => {
+    editarEsquema.mockRejectedValue(
+      new ErrorApi(422, 'ESQUEMA_INVALIDO', 'La dosis R1 no aparece en ninguna sección.'),
+    )
+    await abrir('b-1', PUBLICAR)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Título de la sección 1' }), {
+      target: { value: 'Menores de 1 año' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar y publicar' }))
+
+    expect(await screen.findByText('La dosis R1 no aparece en ninguna sección.')).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(listarEsquemas).not.toHaveBeenCalled()
+  })
+
+  test('con un problema de coherencia el botón queda deshabilitado', async () => {
+    await abrir('b-1', PUBLICAR)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'R1 en la sección 2' }))
+    expect(screen.getByRole('button', { name: 'Guardar y publicar' }).disabled).toBe(true)
+  })
+
+  test('al publicar vuelve a la pestaña con el aviso', async () => {
+    publicarEsquema.mockResolvedValue({
+      ...BORRADOR,
+      estado: 'VIGENTE',
+      vigencia: { desde: '2026-11-01', hasta: null },
+    })
+    await abrir('b-1', PUBLICAR)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Publicar' }))
+    const dialogo = await screen.findByRole('dialog')
+    await waitFor(() => expect(select().disabled).toBe(false))
+    fireEvent.change(select(), { target: { value: '2026-11-01' } })
+    fireEvent.change(within(dialogo).getByLabelText('Motivo del cambio'), { target: { value: 'Cambio de prueba' } })
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Publicar' }))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('pestana').textContent).toBe(
+        '?pestana=esquemas|Versión 3 de Vacuna de prueba publicada; vigente desde 01/11/2026.',
+      ),
+    )
+    expect(publicarEsquema).toHaveBeenCalledWith('b-1', { vigenciaDesde: '2026-11-01', motivoCambio: 'Cambio de prueba' })
+  })
 })

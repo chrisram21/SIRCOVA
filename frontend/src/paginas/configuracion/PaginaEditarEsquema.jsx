@@ -5,28 +5,27 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { editarEsquema, obtenerEsquema } from '@/api/configuracion.js'
+import { editarEsquema, listarEsquemas, obtenerEsquema } from '@/api/configuracion.js'
 import { ErrorApi } from '@/api/cliente.js'
-import EditorEsquema, { cargarReferencias, PESTANA_ESQUEMAS } from './EditorEsquema.jsx'
+import { useSesion } from '@/componentes/ProveedorSesion.jsx'
+import DialogoPublicarEsquema, { avisoDePublicacion } from './DialogoPublicarEsquema.jsx'
+import EditorEsquema, { cargarReferencias, contenidoDe, PESTANA_ESQUEMAS } from './EditorEsquema.jsx'
 
 const NO_EXISTE = 'NO_EXISTE'
 const NO_EDITABLE = 'NO_EDITABLE'
-
-// El contenido que arma el editor, como lo guarda el PUT. Lo inactivo se queda: el editor lo marca como problema.
-const contenidoDe = (esquema) => ({
-  procedencia: esquema.procedencia,
-  dosis: esquema.dosis.map(({ codigo, desagregacion }) => ({ codigo, desagregacion })),
-  desagregacion: esquema.desagregacion,
-  secciones: esquema.secciones.map(({ titulo, grupoEdad, dosis }) => ({ titulo, grupoEdad, dosis })),
-})
 
 export default function PaginaEditarEsquema() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { state } = useLocation()
+  const { tienePermiso } = useSesion()
+  // El diálogo de publicar elige el mes en el calendario de periodos.
+  const puedePublicar = tienePermiso('ESQUEMA_PUBLICAR') && tienePermiso('PERIODO_CONSULTAR')
   const volverA = `/configuracion${state?.volverA || PESTANA_ESQUEMAS}`
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
+  // La fila de la vacuna en GET /esquemas-captura (con su vigente que aplica), mientras el diálogo está abierto.
+  const [porPublicar, setPorPublicar] = useState(null)
 
   useEffect(() => {
     let vigente = true
@@ -53,6 +52,15 @@ export default function PaginaEditarEsquema() {
     const guardado = await editarEsquema(id, contenido)
     navigate(volverA, { state: { aviso: `Borrador de ${datos.vacuna.nombre} guardado (versión ${guardado.version}).` } })
   }
+
+  // Con cambios, primero los guarda: si falla, el editor muestra el error y el diálogo no se abre.
+  async function prepararPublicacion(contenido) {
+    if (contenido) await editarEsquema(id, contenido)
+    const fila = (await listarEsquemas()).find((f) => f.vacuna.id === datos.esquema.vacuna.id)
+    setPorPublicar(fila)
+  }
+
+  const alPublicar = (publicado) => navigate(volverA, { state: { aviso: avisoDePublicacion(publicado) } })
 
   const esquema = datos?.esquema
   const notaCopia = esquema?.basadoEn
@@ -108,7 +116,18 @@ export default function PaginaEditarEsquema() {
           dimensiones={datos.dimensiones}
           inicial={contenidoDe(esquema)}
           onGuardar={guardar}
+          onPublicar={puedePublicar ? prepararPublicacion : undefined}
           volverA={volverA}
+        />
+      )}
+
+      {porPublicar && (
+        <DialogoPublicarEsquema
+          vacuna={porPublicar.vacuna}
+          borrador={{ id: esquema.id, version: esquema.version }}
+          vigente={porPublicar.vigente}
+          alPublicar={alPublicar}
+          alCerrar={() => setPorPublicar(null)}
         />
       )}
     </section>

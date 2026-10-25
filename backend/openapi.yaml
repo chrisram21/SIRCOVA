@@ -2396,7 +2396,8 @@ paths:
         Una fila por vacuna activa, más las inactivas que tengan un borrador de la DDRISS del usuario,
         ordenadas por `nombre`. `vigente` es el esquema `VIGENTE` de la DDRISS del usuario o, si no hay, el
         `VIGENTE` nacional (el que se usaría para capturar). `borrador` es el `BORRADOR` de la DDRISS del
-        usuario. Los esquemas de otras DDRISS no aparecen, ni los `HISTORICO`. Sin paginar. Un parámetro
+        usuario. `vigente.vigenciaDesde` puede ser futura: una versión publicada para un mes posterior es la
+        `VIGENTE` desde que se publica. Los esquemas de otras DDRISS no aparecen, ni los `HISTORICO`. Sin paginar. Un parámetro
         responde 400 `ENTRADA_INVALIDA`.
       x-permiso: ESQUEMA_CONSULTAR
       responses:
@@ -2480,7 +2481,9 @@ paths:
       summary: Consultar un esquema de captura completo
       description: |
         Un esquema `NACIONAL` o de la DDRISS del usuario, en cualquier estado. Uno de otra DDRISS, inexistente
-        o con un `id` que no es un ObjectId responde 404. En un `BORRADOR`, `vigencia` es null.
+        o con un `id` que no es un ObjectId responde 404. En un `BORRADOR`, `vigencia`, `publicadoPor`, `publicadoEn` y
+        `motivoCambio` son null (un borrador puede traer un `motivoCambio` guardado, como el de la semilla). Una
+        versión `HISTORICO` se sigue consultando completa.
       x-permiso: ESQUEMA_CONSULTAR
       parameters:
         - { $ref: "#/components/parameters/IdEsquema" }
@@ -2542,22 +2545,138 @@ paths:
         "404": { $ref: "#/components/responses/NoEncontrado" }
         "409": { $ref: "#/components/responses/EsquemaNoEditable" }
 
+  /esquemas-captura/historial:
+    get:
+      tags: [Configuración]
+      summary: Historial de versiones del esquema de captura de una vacuna
+      description: |
+        Las versiones `NACIONAL` y las de la DDRISS del usuario, en los tres estados, ordenadas por `version` de
+        mayor a menor. Las de otras DDRISS no aparecen. `reportes` es la cantidad de filas de `reporte_vacuna`
+        que usan cada versión, de reportes de establecimientos de la DDRISS del usuario, en cualquier estado.
+        No trae el contenido de cada versión: ese está en `GET /esquemas-captura/{id}`. Sin paginar.
+
+        `vacunaId` es obligatorio; si falta, es inválido o está repetido, o hay otro parámetro, responde 400.
+        Una vacuna inactiva sí responde, con `activa: false`.
+      x-permiso: ESQUEMA_CONSULTAR
+      parameters:
+        - name: vacunaId
+          in: query
+          required: true
+          description: Id de la vacuna en MySQL
+          schema: { type: integer, minimum: 1, example: 2 }
+      responses:
+        "200":
+          description: Las versiones de la vacuna
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HistorialEsquemas" }
+        "400":
+          description: Falta `vacunaId`, es inválido o repetido, o hay un parámetro no permitido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                vacunaId:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: vacunaId debe ser un número entero positivo. }
+                parametro:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: estado." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/VacunaNoEncontrada" }
+
   /esquemas-captura/{id}/publicar:
     post:
       tags: [Configuración]
-      summary: Publicar una versión (pasa a VIGENTE y la anterior a HISTORICO)
+      summary: Publicar un borrador de la DDRISS (pasa a VIGENTE y el vigente anterior de la DDRISS a HISTORICO)
+      description: |
+        Solo un `BORRADOR` de la DDRISS del usuario. Se revisa, en este orden: que el esquema sea visible (404),
+        que sea un borrador de la DDRISS (409 `ESQUEMA_NO_EDITABLE`), el cuerpo (400), las reglas de coherencia
+        de `POST /esquemas-captura` sobre el contenido guardado y el catálogo actual (422 `ESQUEMA_INVALIDO`) y
+        las reglas de la vigencia (422 `VIGENCIA_INVALIDA`).
+
+        Vigencia: `vigenciaDesde` es el día 1 de un mes que está en el calendario de periodos, no anterior al mes
+        actual (hora de Guatemala) y posterior al `desde` del `VIGENTE` de la DDRISS, si hay uno. Puede ser
+        futura: el borrador pasa a `VIGENTE` de inmediato y la versión anterior sigue aplicando hasta su `hasta`.
+
+        Al publicar:
+        - el borrador pasa a `VIGENTE` con `vigencia { desde: vigenciaDesde, hasta: null }`, `versionAnteriorId`
+          = el `VIGENTE` de la DDRISS (o null), `publicadoPor`, `publicadoEn` y `motivoCambio`; el resto no cambia;
+        - el `VIGENTE` anterior de la DDRISS, si existe, pasa a `HISTORICO` con `hasta` = el día anterior a
+          `vigenciaDesde`; solo cambian su `estado` y su `vigencia.hasta`;
+        - el `VIGENTE` nacional no cambia.
+
+        Los dos documentos se escriben en una transacción de MongoDB. Si otra publicación ganó la carrera o el
+        borrador se descartó mientras tanto, responde 409 y no cambia nada.
+
+        Bitácora (módulo `CONFIGURACION`, entidad `esquemas_captura`, `entidadId` el ObjectId de cada documento):
+        `PUBLICAR_ESQUEMA` del borrador y, si reemplaza a otra versión, `ACTUALIZAR` de esa versión.
+      x-permiso: ESQUEMA_PUBLICAR
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, description: ObjectId } }
+        - { $ref: "#/components/parameters/IdEsquema" }
       requestBody:
+        required: true
         content:
           application/json:
-            schema:
-              type: object
-              properties:
-                motivoCambio: { type: string }
+            schema: { $ref: "#/components/schemas/EsquemaPublicar" }
       responses:
-        "200": { description: Versión publicada }
-        "422": { $ref: "#/components/responses/ReglaNegocio" }
+        "200":
+          description: Versión publicada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EsquemaCaptura" }
+        "400":
+          description: Campo faltante o no permitido, fecha con otro formato o que no es día 1, o motivo inválido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: estado." }
+                formato:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: La vigencia debe ser una fecha AAAA-MM-DD. }
+                diaUno:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: La vigencia debe empezar el día 1 de un mes. }
+                motivo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El motivo del cambio debe tener entre 1 y 300 caracteres. }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: No es un borrador de la DDRISS, o el borrador o el vigente de la DDRISS cambiaron mientras tanto
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                noEditable:
+                  value:
+                    error: { codigo: ESQUEMA_NO_EDITABLE, mensaje: Solo se publica un borrador de su DDRISS. }
+                baseDesactualizada:
+                  value:
+                    error: { codigo: BASE_DESACTUALIZADA, mensaje: El esquema vigente de Hexavalente cambió; vuelva a intentarlo. }
+        "422":
+          description: El borrador incumple una regla de coherencia (`ESQUEMA_INVALIDO`) o de la vigencia (`VIGENCIA_INVALIDA`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                coherencia:
+                  value:
+                    error: { codigo: ESQUEMA_INVALIDO, mensaje: La dosis D3 no es una dosis activa de HEXA. }
+                sinPeriodo:
+                  value:
+                    error: { codigo: VIGENCIA_INVALIDA, mensaje: El mes 2027-01 no está en el calendario de periodos. }
+                mesPasado:
+                  value:
+                    error: { codigo: VIGENCIA_INVALIDA, mensaje: La vigencia no puede empezar antes del mes actual. }
+                anteriorVigente:
+                  value:
+                    error: { codigo: VIGENCIA_INVALIDA, mensaje: "La vigencia debe empezar después del 01/12/2026, cuando empezó la versión 4 de su DDRISS." }
 
   # ---------------------------------------------------------------- Producción
   /reportes:
@@ -3897,7 +4016,12 @@ components:
             nombre: { type: string, example: Hexavalente }
             activa: { type: boolean, example: true }
         vigente:
-          allOf: [{ $ref: "#/components/schemas/ResumenEsquema" }]
+          allOf:
+            - { $ref: "#/components/schemas/ResumenEsquema" }
+            - type: object
+              required: [vigenciaDesde]
+              properties:
+                vigenciaDesde: { type: string, format: date, description: Puede ser futura, example: "2026-10-01" }
           nullable: true
           description: El `VIGENTE` de la DDRISS del usuario o, si no hay, el `VIGENTE` nacional; null si no hay ninguno
         borrador:
@@ -3911,7 +4035,7 @@ components:
             creadoEn: { type: string, format: date-time, example: "2026-10-15T15:00:00.000Z" }
       example:
         vacuna: { id: 2, codigo: HEXA, nombre: Hexavalente, activa: true }
-        vigente: { id: 66f8a1c2e4b0a1b2c3d4e5f6, version: 2, territorio: { nivel: NACIONAL, ddrissCodigo: null } }
+        vigente: { id: 66f8a1c2e4b0a1b2c3d4e5f6, version: 2, territorio: { nivel: NACIONAL, ddrissCodigo: null }, vigenciaDesde: "2026-10-01" }
         borrador: { id: 6721a0c1a2b3c4d5e6f70901, version: 3, creadoEn: "2026-10-15T15:00:00.000Z" }
 
     DesagregacionEsquema:
@@ -4027,7 +4151,8 @@ components:
     EsquemaCaptura:
       type: object
       required: [id, vacuna, version, territorio, estado, vigencia, versionAnteriorId, basadoEn, procedencia, dosis,
-        desagregacion, secciones, camposAdicionales, reglas, presentacion, creadoPor, creadoEn]
+        desagregacion, secciones, camposAdicionales, reglas, presentacion, creadoPor, creadoEn,
+        publicadoPor, publicadoEn, motivoCambio]
       properties:
         id: { type: string, example: 6721a0c1a2b3c4d5e6f70901 }
         vacuna:
@@ -4099,6 +4224,100 @@ components:
           example: { filas: dosis, columnas: [estado_embarazo] }
         creadoPor: { type: integer, description: Id del usuario de MySQL, example: 1 }
         creadoEn: { type: string, format: date-time, example: "2026-10-24T16:00:00.000Z" }
+        publicadoPor: { $ref: "#/components/schemas/PublicadoPor" }
+        publicadoEn: { type: string, format: date-time, nullable: true, description: null en un `BORRADOR`, example: "2026-10-24T16:30:00.000Z" }
+        motivoCambio: { type: string, nullable: true, description: "El motivo guardado: null en un borrador del SPEC 19; al publicar, el del cuerpo", example: Se agrega la dimensión pueblo. }
+
+    PublicadoPor:
+      type: object
+      nullable: true
+      description: Usuario que publicó la versión; null en un `BORRADOR` o si el usuario no existe en MySQL
+      required: [id, nombreUsuario]
+      properties:
+        id: { type: integer, example: 1 }
+        nombreUsuario: { type: string, example: admin.prueba }
+
+    EsquemaPublicar:
+      type: object
+      required: [vigenciaDesde, motivoCambio]
+      additionalProperties: false
+      properties:
+        vigenciaDesde:
+          type: string
+          format: date
+          description: Día 1 de un mes del calendario de periodos, desde el mes actual
+          example: "2026-12-01"
+        motivoCambio: { type: string, minLength: 1, maxLength: 300, description: Se recorta, example: Se agrega la dimensión pueblo. }
+
+    HistorialEsquemas:
+      type: object
+      required: [vacuna, versiones]
+      properties:
+        vacuna:
+          type: object
+          required: [id, codigo, nombre, activa]
+          properties:
+            id: { type: integer, example: 2 }
+            codigo: { type: string, example: HEXA }
+            nombre: { type: string, example: Hexavalente }
+            activa: { type: boolean, example: true }
+        versiones:
+          type: array
+          items:
+            type: object
+            required: [id, version, territorio, estado, vigencia, versionAnteriorId, basadoEn, creadoEn, publicadoPor,
+              publicadoEn, motivoCambio, reportes]
+            properties:
+              id: { type: string, example: 66f8a1c2e4b0a1b2c3d4e5f5 }
+              version: { type: integer, example: 1 }
+              territorio: { $ref: "#/components/schemas/TerritorioEsquema" }
+              estado: { $ref: "#/components/schemas/EstadoEsquema" }
+              vigencia:
+                type: object
+                nullable: true
+                description: null en un `BORRADOR`
+                properties:
+                  desde: { type: string, format: date, example: "2026-01-01" }
+                  hasta: { type: string, format: date, nullable: true, example: "2026-09-30" }
+              versionAnteriorId: { type: string, nullable: true, example: null }
+              basadoEn:
+                type: object
+                nullable: true
+                properties:
+                  esquemaId: { type: string }
+                  version: { type: integer }
+              creadoEn: { type: string, format: date-time }
+              publicadoPor: { $ref: "#/components/schemas/PublicadoPor" }
+              publicadoEn: { type: string, format: date-time, nullable: true }
+              motivoCambio: { type: string, nullable: true }
+              reportes: { type: integer, minimum: 0, description: Filas de `reporte_vacuna` de la DDRISS del usuario que usan la versión, example: 6 }
+      example:
+        vacuna: { id: 2, codigo: HEXA, nombre: Hexavalente, activa: true }
+        versiones:
+          - id: 6721a0c1a2b3c4d5e6f70901
+            version: 3
+            territorio: { nivel: DDRISS, ddrissCodigo: DDRISS_SM }
+            estado: BORRADOR
+            vigencia: null
+            versionAnteriorId: null
+            basadoEn: { esquemaId: 66f8a1c2e4b0a1b2c3d4e5f6, version: 2 }
+            creadoEn: "2026-10-15T15:00:00.000Z"
+            publicadoPor: null
+            publicadoEn: null
+            motivoCambio: null
+            reportes: 0
+          - id: 66f8a1c2e4b0a1b2c3d4e5f5
+            version: 1
+            territorio: { nivel: NACIONAL, ddrissCodigo: null }
+            estado: HISTORICO
+            vigencia: { desde: "2026-01-01", hasta: "2026-09-30" }
+            versionAnteriorId: null
+            basadoEn: null
+            creadoEn: "2026-09-01T00:00:00.000Z"
+            publicadoPor: { id: 1, nombreUsuario: admin.prueba }
+            publicadoEn: "2026-09-01T00:00:00.000Z"
+            motivoCambio: null
+            reportes: 6
 
     Reporte:
       type: object

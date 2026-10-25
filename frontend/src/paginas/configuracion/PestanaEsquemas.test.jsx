@@ -1,18 +1,19 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
-import { listarVacunas } from '@/api/catalogos.js'
-import { descartarEsquema, listarDimensiones, listarEsquemas } from '@/api/configuracion.js'
+import { listarPeriodos, listarVacunas } from '@/api/catalogos.js'
+import { descartarEsquema, listarDimensiones, listarEsquemas, publicarEsquema } from '@/api/configuracion.js'
 import { ErrorApi } from '@/api/cliente.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 import PaginaConfiguracion from './PaginaConfiguracion.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
-vi.mock('@/api/catalogos.js', () => ({ listarVacunas: vi.fn() }))
+vi.mock('@/api/catalogos.js', () => ({ listarVacunas: vi.fn(), listarPeriodos: vi.fn() }))
 vi.mock('@/api/configuracion.js', () => ({
   listarDimensiones: vi.fn(),
   listarEsquemas: vi.fn(),
   descartarEsquema: vi.fn(),
+  publicarEsquema: vi.fn(),
 }))
 
 const NACIONAL = { nivel: 'NACIONAL', ddrissCodigo: null }
@@ -24,9 +25,9 @@ const fila = (id, codigo, nombre, vigente, borrador, activa = true) => ({
 })
 
 const FILAS = [
-  fila(2, 'HEXA', 'Hexavalente', { id: 'v-hexa', version: 2, territorio: NACIONAL }, { id: 'b-hexa', version: 3, creadoEn: '2026-10-15T15:00:00.000Z' }),
+  fila(2, 'HEXA', 'Hexavalente', { id: 'v-hexa', version: 2, territorio: NACIONAL, vigenciaDesde: '2026-10-01' }, { id: 'b-hexa', version: 3, creadoEn: '2026-10-15T15:00:00.000Z' }),
   fila(30, 'NUEVA', 'Nueva vacuna', null, null),
-  fila(4, 'TD', 'Td', { id: 'v-td', version: 4, territorio: SAN_MARCOS }, null),
+  fila(4, 'TD', 'Td', { id: 'v-td', version: 4, territorio: SAN_MARCOS, vigenciaDesde: '2026-11-01' }, null),
   fila(31, 'VIEJA', 'Vacuna retirada', null, { id: 'b-vieja', version: 1, creadoEn: '2026-10-20T15:00:00.000Z' }, false),
 ]
 
@@ -103,25 +104,28 @@ test.each([
   expect(listarEsquemas).not.toHaveBeenCalled()
 })
 
-test('la tabla muestra el vigente que aplica con su territorio, "Sin esquema", el borrador y las vacunas inactivas', async () => {
+test('la tabla muestra el vigente que aplica con su territorio y su inicio, "Sin esquema", el borrador y las vacunas inactivas', async () => {
   await abrir()
 
   const hexa = celdasDe('Hexavalente')
-  expect(hexa[1].textContent).toBe('Versión 2 · Nacional')
+  expect(hexa[1].textContent).toBe('Versión 2 · Nacional · desde 01/10/2026')
   expect(hexa[2].textContent).toBe('Versión 3')
 
   const td = celdasDe('Td')
-  expect(td[1].textContent).toBe('Versión 4 · DDRISS_SM')
+  expect(td[1].textContent).toBe('Versión 4 · DDRISS_SM · desde 01/11/2026')
   expect(td[2].textContent).toBe('—')
 
   expect(celdasDe('Nueva vacuna')[1].textContent).toBe('Sin esquema')
   expect(within(celdasDe('Vacuna retirada')[0]).getByText('Inactiva')).toBeTruthy()
 })
 
-test('sin ESQUEMA_CREAR ni ESQUEMA_EDITAR no hay columna de acciones', async () => {
+// Con solo los permisos de consulta, la columna de acciones solo trae el historial (SPEC 20).
+test('sin ESQUEMA_CREAR ni ESQUEMA_EDITAR las acciones son solo el historial', async () => {
   await abrir()
 
-  expect(within(tabla()).queryByRole('columnheader', { name: 'Acciones' })).toBeNull()
+  const acciones = within(filaDe('Hexavalente')).getAllByRole('link')
+  expect(acciones.map((enlace) => enlace.textContent)).toEqual(['Historial'])
+  expect(screen.queryByRole('button', { name: /Publicar/ })).toBeNull()
   expect(screen.queryByRole('button', { name: /Crear borrador/ })).toBeNull()
   expect(screen.queryByRole('button', { name: /Descartar/ })).toBeNull()
 })
@@ -222,4 +226,85 @@ test('si falla la carga muestra el aviso, y "Reintentar" vuelve a pedir', async 
 
   await waitFor(() => expect(tabla()).toBeTruthy())
   expect(listarEsquemas).toHaveBeenCalledTimes(2)
+})
+
+describe('historial', () => {
+  test('cada vacuna con vigente o borrador lleva a su historial, y una sin esquema no', async () => {
+    await abrir()
+
+    expect(screen.getByRole('link', { name: 'Historial de HEXA' }).getAttribute('href')).toBe(
+      '/configuracion/esquemas/historial/2',
+    )
+    expect(screen.getByRole('link', { name: 'Historial de TD' }).getAttribute('href')).toBe(
+      '/configuracion/esquemas/historial/4',
+    )
+    expect(screen.getByRole('link', { name: 'Historial de VIEJA' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Historial de NUEVA' })).toBeNull()
+  })
+})
+
+describe('publicar un borrador', () => {
+  const PUBLICAR = [...TODOS, 'ESQUEMA_PUBLICAR', 'PERIODO_CONSULTAR']
+  const mes = (anio, numero) => ({
+    id: anio * 100 + numero,
+    anio,
+    mes: numero,
+    fechaInicio: `${anio}-${String(numero).padStart(2, '0')}-01`,
+  })
+
+  beforeEach(() => {
+    // Solo la fecha: el "mes actual" del diálogo es octubre de 2026, sin falsear los temporizadores de waitFor.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-24T12:00:00-06:00'))
+    listarPeriodos.mockImplementation(async ({ anio }) =>
+      anio === 2026 ? [9, 10, 11, 12].map((n) => mes(2026, n)) : [1, 2].map((n) => mes(2027, n)),
+    )
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  test('"Publicar" aparece en el borrador de una vacuna activa solo con ESQUEMA_PUBLICAR y PERIODO_CONSULTAR', async () => {
+    await abrir([...TODOS, 'ESQUEMA_PUBLICAR'])
+    expect(screen.queryByRole('button', { name: /^Publicar/ })).toBeNull()
+  })
+
+  test('con los dos permisos, "Publicar" aparece en Hexavalente y no en la vacuna inactiva', async () => {
+    await abrir(PUBLICAR)
+    expect(screen.getByRole('button', { name: 'Publicar borrador de HEXA' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Publicar borrador de VIEJA' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Publicar borrador de TD' })).toBeNull()
+  })
+
+  test('publica con el mes y el motivo elegidos, recarga la tabla y muestra el aviso', async () => {
+    publicarEsquema.mockResolvedValue({
+      id: 'b-hexa',
+      version: 3,
+      vacuna: { id: 2, codigo: 'HEXA', nombre: 'Hexavalente' },
+      estado: 'VIGENTE',
+      vigencia: { desde: '2026-12-01', hasta: null },
+    })
+    await abrir(PUBLICAR)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Publicar borrador de HEXA' }))
+    const dialogo = await screen.findByRole('dialog')
+    expect(within(dialogo).getByText('Publicar la versión 3 de Hexavalente')).toBeTruthy()
+    const select = () => document.querySelector('select[name="vigenciaDesde"]')
+    await waitFor(() => expect(select().disabled).toBe(false))
+
+    fireEvent.change(select(), { target: { value: '2026-12-01' } })
+    fireEvent.change(within(dialogo).getByLabelText('Motivo del cambio'), {
+      target: { value: 'Se agrega la dimensión pueblo.' },
+    })
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Publicar' }))
+
+    expect(await screen.findByText('Versión 3 de Hexavalente publicada; vigente desde 01/12/2026.')).toBeTruthy()
+    expect(publicarEsquema).toHaveBeenCalledWith('b-hexa', {
+      vigenciaDesde: '2026-12-01',
+      motivoCambio: 'Se agrega la dimensión pueblo.',
+    })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    await waitFor(() => expect(listarEsquemas).toHaveBeenCalledTimes(2))
+  })
 })
