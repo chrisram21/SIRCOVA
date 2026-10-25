@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { obtenerVacuna } from '@/api/catalogos.js'
 import { listarDimensiones, obtenerEsquema } from '@/api/configuracion.js'
@@ -140,6 +140,28 @@ test('un borrador de la DDRISS ofrece "Editar borrador" con ESQUEMA_EDITAR', asy
 test('sin ESQUEMA_EDITAR un borrador no ofrece editarlo', async () => {
   await abrir('b-3', ['ESQUEMA_CONSULTAR'])
   expect(screen.queryByRole('link', { name: 'Editar borrador' })).toBeNull()
+})
+
+test('"Vista previa" muestra el contenido guardado, con su vigencia y las etiquetas de lo inactivo', async () => {
+  await abrir()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Vista previa' }))
+  const dialogo = await screen.findByRole('dialog')
+  expect(within(dialogo).getByRole('heading', { name: 'Vista previa · Hexavalente, versión 1' })).toBeTruthy()
+  expect(within(dialogo).getByText('Histórica')).toBeTruthy()
+  expect(
+    within(dialogo).getByText('Formulario generado por el esquema de captura: Hexavalente, versión 1, vigente desde 01/01/2026'),
+  ).toBeTruthy()
+  expect(within(dialogo).getByText('Dimensiones de este esquema:').textContent).toBe(
+    'Dimensiones de este esquema: Dosis · Grupo de edad · Pueblo',
+  )
+  expect(within(dialogo).getByRole('columnheader', { name: 'Maya' })).toBeTruthy()
+  expect(within(dialogo).getByRole('textbox', { name: 'Segunda dosis · Maya' })).toBeTruthy()
+  expect(within(dialogo).queryByRole('list', { name: 'Problemas del borrador' })).toBeNull()
+
+  fireEvent.click(within(dialogo).getByRole('button', { name: 'Cerrar' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(obtenerEsquema).toHaveBeenCalledTimes(1)
 })
 
 test('un id que no existe muestra "El esquema no existe."', async () => {

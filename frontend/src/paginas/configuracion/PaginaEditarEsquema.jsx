@@ -10,6 +10,7 @@ import { ErrorApi } from '@/api/cliente.js'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import DialogoPublicarEsquema, { avisoDePublicacion } from './DialogoPublicarEsquema.jsx'
 import EditorEsquema, { cargarReferencias, contenidoDe, PESTANA_ESQUEMAS } from './EditorEsquema.jsx'
+import VistaPreviaEsquema from './VistaPreviaEsquema.jsx'
 
 const NO_EXISTE = 'NO_EXISTE'
 const NO_EDITABLE = 'NO_EDITABLE'
@@ -26,6 +27,8 @@ export default function PaginaEditarEsquema() {
   const [error, setError] = useState(null)
   // La fila de la vacuna en GET /esquemas-captura (con su vigente que aplica), mientras el diálogo está abierto.
   const [porPublicar, setPorPublicar] = useState(null)
+  // { contenido, problemas } del editor mientras la vista previa está abierta.
+  const [vistaPrevia, setVistaPrevia] = useState(null)
 
   useEffect(() => {
     let vigente = true
@@ -117,7 +120,20 @@ export default function PaginaEditarEsquema() {
           inicial={contenidoDe(esquema)}
           onGuardar={guardar}
           onPublicar={puedePublicar ? prepararPublicacion : undefined}
+          onVistaPrevia={(contenido, problemas) => setVistaPrevia({ contenido, problemas })}
           volverA={volverA}
+        />
+      )}
+
+      {vistaPrevia && (
+        <VistaPreviaEsquema
+          abierta
+          alCambiarAbierta={(abierta) => !abierta && setVistaPrevia(null)}
+          esquema={esquema}
+          contenido={vistaPrevia.contenido}
+          vacuna={datos.vacuna}
+          dimensiones={datos.dimensiones}
+          problemas={vistaPrevia.problemas}
         />
       )}
 

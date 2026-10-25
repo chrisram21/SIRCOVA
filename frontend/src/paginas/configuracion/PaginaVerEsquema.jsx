@@ -4,7 +4,7 @@ import { CircleAlert } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { obtenerEsquema } from '@/api/configuracion.js'
 import { ErrorApi } from '@/api/cliente.js'
@@ -12,6 +12,7 @@ import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import EditorEsquema, { cargarReferencias, contenidoDe, PESTANA_ESQUEMAS } from './EditorEsquema.jsx'
 import { ESTADOS, textoPublicacion, textoVigencia } from './PaginaHistorialEsquemas.jsx'
 import { territorioDe } from './PestanaEsquemas.jsx'
+import VistaPreviaEsquema from './VistaPreviaEsquema.jsx'
 
 const NO_EXISTE = 'NO_EXISTE'
 
@@ -33,6 +34,7 @@ export default function PaginaVerEsquema() {
   const pestana = state?.volverA || PESTANA_ESQUEMAS
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
+  const [vistaPrevia, setVistaPrevia] = useState(false)
 
   useEffect(() => {
     let vigente = true
@@ -113,6 +115,11 @@ export default function PaginaVerEsquema() {
             <CardHeader>
               <CardTitle>Versión {esquema.version}</CardTitle>
               <CardDescription>Una versión publicada no se edita: para cambiarla se publica una nueva.</CardDescription>
+              <CardAction>
+                <Button type="button" variant="outline" onClick={() => setVistaPrevia(true)}>
+                  Vista previa
+                </Button>
+              </CardAction>
             </CardHeader>
             <CardContent>
               <dl className="grid gap-4 sm:grid-cols-3">
@@ -137,6 +144,17 @@ export default function PaginaVerEsquema() {
             volverA={historial}
             soloLectura
           />
+
+          {vistaPrevia && (
+            <VistaPreviaEsquema
+              abierta
+              alCambiarAbierta={setVistaPrevia}
+              esquema={esquema}
+              contenido={contenidoDe(esquema)}
+              vacuna={datos.vacuna}
+              dimensiones={datos.dimensiones}
+            />
+          )}
         </>
       )}
     </section>
