@@ -458,6 +458,8 @@ Verificado contra la API real el 2026-10-24:
 
 **Nota (2026-10-23, spec 16):** `GET /periodos?estado=ABIERTO` devuelve los meses abiertos en la DDRISS del usuario. Hoy solo el Administrador y el Revisor tienen `PERIODO_CONSULTAR`: el spec de HU-19 se lo asigna al Personal de establecimiento en `05_permisos_mysql.sql`.
 
+**Nota (2026-10-25, spec 21):** `GET /esquemas-captura/{id}` no devuelve la `etiqueta` de cada desagregación (`aDesagregacion` en `esquemas.service.js` solo pasa `dimension` y `valores`), así que la vista previa siempre muestra el `nombre` del catálogo. El spec de HU-19 la agrega a la respuesta (general y por dosis), con su contrato y su prueba; debe quedar hecho y probado antes de HU-20, porque `armarFormulario` (SPEC 21) ya la usa si viene.
+
 #### HU-20. Capturar la producción con el formulario dinámico
 
 > **Como** personal del establecimiento, **quiero** llenar la producción por vacuna, dosis y grupo de edad, y por sexo u otra dimensión solo en las vacunas que la usan, en un formulario generado desde el esquema vigente, **para** reemplazar el proceso físico de envio del formulario 5C físico y la digitación posterior en Excel.
