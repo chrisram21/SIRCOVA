@@ -2,11 +2,11 @@ import { Int32, ObjectId } from 'mongodb';
 import pool from '../../config/mysql.js';
 import { obtenerDb } from '../../config/mongodb.js';
 import { ErrorApi } from '../../middlewares/errores.js';
-import { validarTituloSeccion } from '../../validaciones/campos.js';
+import { validarMotivoCambio, validarTituloSeccion } from '../../validaciones/campos.js';
 import { ACCIONES, diferencias } from '../auditoria/auditoria.service.js';
 import { entradaInvalida, revisarCampos, revisarParametros } from '../catalogos/catalogos.service.js';
 import { hoyGuatemala } from '../catalogos/periodos.service.js';
-import { escribirConBitacora } from './mongoBitacora.js';
+import { escribirConBitacora, escribirEnTransaccionConBitacora } from './mongoBitacora.js';
 
 // Un usuario ve los esquemas nacionales y los de su DDRISS; los de otras DDRISS no existen para él (§5.10).
 
@@ -36,6 +36,10 @@ const errores = {
       'ESQUEMA_NO_EDITABLE',
       'Solo se edita un borrador de su DDRISS; para cambiar un esquema publicado, cree un borrador nuevo.',
     ),
+  noPublicable: () => new ErrorApi(409, 'ESQUEMA_NO_EDITABLE', 'Solo se publica un borrador de su DDRISS.'),
+  vigenteCambio: (vacuna) =>
+    new ErrorApi(409, 'BASE_DESACTUALIZADA', `El esquema vigente de ${vacuna} cambió; vuelva a intentarlo.`),
+  vigenciaInvalida: (mensaje) => new ErrorApi(422, 'VIGENCIA_INVALIDA', mensaje),
 };
 
 // Los mismos textos están en frontend/src/paginas/configuracion/coherenciaEsquema.js: un cambio va en los dos.
@@ -79,7 +83,8 @@ const aTerritorio = (territorio) => ({ nivel: territorio.nivel, ddrissCodigo: te
 
 const aDesagregacion = (lista) => lista.map(({ dimension, valores }) => ({ dimension, valores: [...valores] }));
 
-function aEsquema(doc) {
+// usuarios: id → nombre_usuario, para publicadoPor; sin él (bitácora) queda en null.
+function aEsquema(doc, usuarios = new Map()) {
   const { dimensiones } = doc;
   return {
     id: doc._id.toString(),
@@ -113,10 +118,32 @@ function aEsquema(doc) {
     presentacion: clavesACamel(doc.presentacion),
     creadoPor: doc.auditoria.creado_por,
     creadoEn: doc.auditoria.creado_en.toISOString(),
+    ...aPublicacion(doc.auditoria, usuarios),
   };
 }
 
-const aResumen = (doc) => ({ id: doc._id.toString(), version: doc.version, territorio: aTerritorio(doc.territorio) });
+function aPublicacion(auditoria, usuarios) {
+  const id = auditoria.publicado_por ?? null;
+  return {
+    publicadoPor: id !== null && usuarios.has(id) ? { id, nombreUsuario: usuarios.get(id) } : null,
+    publicadoEn: auditoria.publicado_en?.toISOString() ?? null,
+    motivoCambio: auditoria.motivo_cambio ?? null,
+  };
+}
+
+async function nombresDeUsuario(documentos) {
+  const ids = [...new Set(documentos.map((d) => d.auditoria.publicado_por).filter((id) => id !== null && id !== undefined))];
+  if (ids.length === 0) return new Map();
+  const [filas] = await pool.query('SELECT id, nombre_usuario FROM usuario WHERE id IN (?)', [ids]);
+  return new Map(filas.map((u) => [u.id, u.nombre_usuario]));
+}
+
+const aResumen = (doc) => ({
+  id: doc._id.toString(),
+  version: doc.version,
+  territorio: aTerritorio(doc.territorio),
+  vigenciaDesde: aFecha(doc.vigencia.desde),
+});
 
 // Una fila por vacuna activa, más las inactivas con borrador de la DDRISS. El vigente que aplica es el de la
 // DDRISS o, si no hay, el nacional: el mismo que se usará para capturar.
@@ -131,7 +158,7 @@ export async function listarEsquemas(query, usuario) {
     (await coleccion())
       .find(
         { estado: { $in: ESTADOS_ACTUALES }, $or: territorios },
-        { projection: { vacuna: 1, version: 1, territorio: 1, estado: 1, 'auditoria.creado_en': 1 } },
+        { projection: { vacuna: 1, version: 1, territorio: 1, estado: 1, 'vigencia.desde': 1, 'auditoria.creado_en': 1 } },
       )
       .toArray(),
   ]);
@@ -177,7 +204,64 @@ async function buscarVisible(id, usuario) {
 }
 
 export async function obtenerEsquema(id, usuario) {
-  return aEsquema(await buscarVisible(id, usuario));
+  const doc = await buscarVisible(id, usuario);
+  return aEsquema(doc, await nombresDeUsuario([doc]));
+}
+
+const CAMPOS_HISTORIAL = [
+  'id', 'version', 'territorio', 'estado', 'vigencia', 'versionAnteriorId', 'basadoEn', 'creadoEn',
+  'publicadoPor', 'publicadoEn', 'motivoCambio',
+];
+
+function leerVacunaIdDeConsulta(valor) {
+  if (valor === undefined || !/^[1-9]\d*$/.test(valor)) throw entradaInvalida(MENSAJE_VACUNA_ID);
+  return Number(valor);
+}
+
+// Las versiones nacionales y las de la DDRISS del usuario, con los reportes de su DDRISS que usa cada una.
+export async function historialEsquemas(query, usuario) {
+  revisarParametros(query, ['vacunaId']);
+  const vacunaId = leerVacunaIdDeConsulta(query.vacunaId);
+  const [[[vacuna]], ddriss] = await Promise.all([
+    pool.query('SELECT id, codigo, nombre, activa FROM vacuna WHERE id = ?', [vacunaId]),
+    codigoDdriss(usuario.ddrissId),
+  ]);
+  if (!vacuna) throw new ErrorApi(404, 'NO_ENCONTRADO', 'La vacuna no existe.');
+
+  const territorios = [{ 'territorio.nivel': NACIONAL }];
+  if (ddriss !== null) territorios.push({ 'territorio.ddriss_codigo': ddriss });
+  const documentos = await (await coleccion())
+    .find({ 'vacuna.codigo': vacuna.codigo, $or: territorios })
+    .sort({ version: -1 })
+    .toArray();
+
+  const [usuarios, reportes] = await Promise.all([nombresDeUsuario(documentos), reportesPorEsquema(documentos, usuario)]);
+  return {
+    vacuna: { id: vacuna.id, codigo: vacuna.codigo, nombre: vacuna.nombre, activa: Boolean(vacuna.activa) },
+    versiones: documentos.map((doc) => {
+      const esquema = aEsquema(doc, usuarios);
+      return {
+        ...Object.fromEntries(CAMPOS_HISTORIAL.map((campo) => [campo, esquema[campo]])),
+        reportes: reportes.get(esquema.id) ?? 0,
+      };
+    }),
+  };
+}
+
+// Sin DDRISS (AUTORIDAD), el alcance es el país.
+async function reportesPorEsquema(documentos, usuario) {
+  if (documentos.length === 0) return new Map();
+  const ddriss = usuario.ddrissId ?? null;
+  const [filas] = await pool.query(
+    `SELECT rv.esquema_mongo_id AS esquema, COUNT(*) AS reportes
+       FROM reporte_vacuna rv
+       JOIN reporte_produccion rp ON rp.id = rv.reporte_id
+       JOIN establecimiento e ON e.id = rp.establecimiento_id
+      WHERE rv.esquema_mongo_id IN (?) AND (? IS NULL OR e.ddriss_id = ?)
+      GROUP BY rv.esquema_mongo_id`,
+    [documentos.map((d) => d._id.toString()), ddriss, ddriss],
+  );
+  return new Map(filas.map((f) => [f.esquema, Number(f.reportes)]));
 }
 
 const esObjeto = (valor) => valor !== null && typeof valor === 'object' && !Array.isArray(valor);
@@ -422,8 +506,10 @@ async function reglasBasicas() {
     .map((r) => ({ codigo: r.codigo, version: new Int32(r.version) }));
 }
 
+const MENSAJE_VACUNA_ID = 'vacunaId debe ser un número entero positivo.';
+
 function leerVacunaId(valor) {
-  if (!Number.isInteger(valor) || valor <= 0) throw entradaInvalida('vacunaId debe ser un número entero positivo.');
+  if (!Number.isInteger(valor) || valor <= 0) throw entradaInvalida(MENSAJE_VACUNA_ID);
   return valor;
 }
 
@@ -512,9 +598,9 @@ export async function crearEsquema(cuerpo, contexto, usuario) {
 }
 
 // buscarVisible ya descarta los de otras DDRISS (404); de los visibles, solo un borrador de la DDRISS se cambia.
-async function buscarBorradorPropio(id, usuario) {
+async function buscarBorradorPropio(id, usuario, error = errores.noEditable) {
   const doc = await buscarVisible(id, usuario);
-  if (doc.territorio.nivel === NACIONAL || doc.estado !== 'BORRADOR') throw errores.noEditable();
+  if (doc.territorio.nivel === NACIONAL || doc.estado !== 'BORRADOR') throw error();
   return doc;
 }
 
@@ -566,4 +652,123 @@ export async function descartarEsquema(id, contexto, usuario) {
       if (deletedCount === 0) throw errores.noEditable();
     },
   );
+}
+
+const MENSAJES_VIGENCIA = {
+  formato: 'La vigencia debe ser una fecha AAAA-MM-DD.',
+  diaUno: 'La vigencia debe empezar el día 1 de un mes.',
+  sinPeriodo: (mes) => `El mes ${mes} no está en el calendario de periodos.`,
+  mesPasado: 'La vigencia no puede empezar antes del mes actual.',
+  anteriorVigente: (desde, version) =>
+    `La vigencia debe empezar después del ${desde}, cuando empezó la versión ${version} de su DDRISS.`,
+};
+
+const aDiaMesAnio = (fecha) => fecha.split('-').reverse().join('/');
+
+// El contenido guardado en la forma del cuerpo de POST/PUT, para volver a pasarle las reglas de coherencia.
+const aCuerpo = (esquema) => ({
+  procedencia: esquema.procedencia,
+  dosis: esquema.dosis.map(({ codigo, desagregacion }) => ({ codigo, desagregacion })),
+  desagregacion: esquema.desagregacion,
+  secciones: esquema.secciones.map(({ titulo, grupoEdad, dosis }) => ({ titulo, grupoEdad, dosis })),
+});
+
+function leerVigenciaDesde(valor) {
+  const partes = typeof valor === 'string' ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(valor) : null;
+  const fecha = partes && new Date(Date.UTC(Number(partes[1]), Number(partes[2]) - 1, Number(partes[3])));
+  if (!fecha || aFecha(fecha) !== valor) throw entradaInvalida(MENSAJES_VIGENCIA.formato);
+  if (fecha.getUTCDate() !== 1) throw entradaInvalida(MENSAJES_VIGENCIA.diaUno);
+  return fecha;
+}
+
+function leerPublicacion(cuerpo) {
+  revisarCampos(cuerpo, ['vigenciaDesde', 'motivoCambio']);
+  const desde = leerVigenciaDesde(cuerpo.vigenciaDesde);
+  const motivo = validarMotivoCambio(cuerpo.motivoCambio);
+  if (motivo.error) throw entradaInvalida(motivo.error);
+  return { desde, motivoCambio: motivo.valor };
+}
+
+// La vigencia va por meses completos: desde un mes del calendario, no anterior al actual, y después del vigente de
+// la DDRISS (que pasa a HISTORICO hasta el día anterior). El vigente nacional no la limita.
+async function revisarVigencia(desde, anterior) {
+  const [anio, mes] = [desde.getUTCFullYear(), desde.getUTCMonth() + 1];
+  const [[periodo]] = await pool.query('SELECT id FROM periodo WHERE anio = ? AND mes = ?', [anio, mes]);
+  if (!periodo) throw errores.vigenciaInvalida(MENSAJES_VIGENCIA.sinPeriodo(aFecha(desde).slice(0, 7)));
+  if (aFecha(desde) < `${hoyGuatemala().slice(0, 7)}-01`) throw errores.vigenciaInvalida(MENSAJES_VIGENCIA.mesPasado);
+  if (anterior && desde <= anterior.vigencia.desde) {
+    throw errores.vigenciaInvalida(
+      MENSAJES_VIGENCIA.anteriorVigente(aDiaMesAnio(aFecha(anterior.vigencia.desde)), Number(anterior.version)),
+    );
+  }
+}
+
+// El borrador pasa a VIGENTE y el vigente anterior de la DDRISS a HISTORICO (solo su estado y vigencia.hasta), en una
+// transacción de MongoDB. El nacional no se toca. Las condiciones de cada updateOne detectan otra publicación o un
+// descarte entre la lectura y la escritura.
+export async function publicarEsquema(id, cuerpo, contexto, usuario) {
+  const doc = await buscarBorradorPropio(id, usuario, errores.noPublicable);
+  const { desde, motivoCambio } = leerPublicacion(cuerpo);
+  revisarCoherencia(leerContenido(aCuerpo(aEsquema(doc))), await cargarReferencias(doc.vacuna.id));
+  const { vigenteDdriss: anterior } = await estadoDeLaVacuna(doc.vacuna.codigo, doc.territorio.ddriss_codigo);
+  await revisarVigencia(desde, anterior);
+
+  const hasta = new Date(desde.getTime() - 24 * 60 * 60 * 1000);
+  const vigencia = { desde, hasta: null };
+  const versionAnteriorId = anterior?._id ?? null;
+  const filas = [
+    {
+      accion: ACCIONES.PUBLICAR_ESQUEMA,
+      entidadId: doc._id.toString(),
+      valoresAnteriores: { estado: 'BORRADOR' },
+      valoresNuevos: {
+        estado: 'VIGENTE',
+        vigencia: { desde: aFecha(desde), hasta: null },
+        versionAnteriorId: versionAnteriorId?.toString() ?? null,
+        motivoCambio,
+      },
+    },
+  ];
+  if (anterior) {
+    filas.push({
+      accion: ACCIONES.ACTUALIZAR,
+      entidadId: anterior._id.toString(),
+      valoresAnteriores: { estado: 'VIGENTE', vigencia: { hasta: null } },
+      valoresNuevos: { estado: 'HISTORICO', vigencia: { hasta: aFecha(hasta) } },
+    });
+  }
+
+  try {
+    await escribirEnTransaccionConBitacora(ENTIDAD, contexto, filas, async (esquemas, sesion) => {
+      // Primero el anterior: uq_esquema_vigente_territorio no admite dos VIGENTE del mismo territorio.
+      if (anterior) {
+        const { matchedCount } = await esquemas.updateOne(
+          { _id: anterior._id, estado: 'VIGENTE' },
+          { $set: { estado: 'HISTORICO', 'vigencia.hasta': hasta } },
+          { session: sesion },
+        );
+        if (matchedCount === 0) throw errores.vigenteCambio(doc.vacuna.nombre);
+      }
+      const { matchedCount } = await esquemas.updateOne(
+        { _id: doc._id, estado: 'BORRADOR' },
+        {
+          $set: {
+            estado: 'VIGENTE',
+            vigencia,
+            version_anterior_id: versionAnteriorId,
+            'auditoria.publicado_por': new Int32(contexto.usuarioId),
+            'auditoria.publicado_en': new Date(),
+            'auditoria.motivo_cambio': motivoCambio,
+          },
+        },
+        { session: sesion },
+      );
+      if (matchedCount === 0) throw errores.noPublicable();
+    });
+  } catch (err) {
+    // Otra publicación de la DDRISS ganó la carrera: un VIGENTE repetido (11000) o un conflicto de escritura (112).
+    if (err.code === 11000 || err.code === 112) throw errores.vigenteCambio(doc.vacuna.nombre);
+    throw err;
+  }
+  return obtenerEsquema(doc._id.toString(), usuario);
 }

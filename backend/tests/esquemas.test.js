@@ -249,7 +249,12 @@ describe('GET /esquemas-captura', () => {
     expect(nombres).toEqual([...nombres].sort((a, b) => a.localeCompare(b, 'es')));
 
     const hexa = res.body.find((f) => f.vacuna.codigo === 'HEXA');
-    expect(hexa.vigente).toEqual({ id: HEXA_V2, version: 2, territorio: { nivel: 'NACIONAL', ddrissCodigo: null } });
+    expect(hexa.vigente).toEqual({
+      id: HEXA_V2,
+      version: 2,
+      territorio: { nivel: 'NACIONAL', ddrissCodigo: null },
+      vigenciaDesde: '2026-10-01',
+    });
     expect(ddrissUsuario).toBe('DDRISS_SM');
     expect(hexa.borrador).toMatchObject({ version: 3 });
     expect(hexa.borrador.creadoEn).toMatch(/^\d{4}-\d{2}-\d{2}T/);
@@ -258,7 +263,12 @@ describe('GET /esquemas-captura', () => {
     const prueba = res.body.find((f) => f.vacuna.codigo === VACUNA);
     expect(prueba).toEqual({
       vacuna: { id: vacunaId, codigo: VACUNA, nombre: 'vitest-hu16 Vacuna', activa: true },
-      vigente: { id: ids.vigenteNacional.toString(), version: 1, territorio: { nivel: 'NACIONAL', ddrissCodigo: null } },
+      vigente: {
+        id: ids.vigenteNacional.toString(),
+        version: 1,
+        territorio: { nivel: 'NACIONAL', ddrissCodigo: null },
+        vigenciaDesde: '2026-10-01',
+      },
       borrador: null,
     });
     expect(res.body.some((f) => f.vacuna.codigo === VACUNA_INACTIVA)).toBe(false);
@@ -283,6 +293,7 @@ describe('GET /esquemas-captura', () => {
         id: propio.toString(),
         version: 3,
         territorio: { nivel: 'DDRISS', ddrissCodigo: ddrissUsuario },
+        vigenciaDesde: '2026-10-01',
       });
     } finally {
       await esquemas.deleteOne({ _id: propio });

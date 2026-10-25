@@ -51,6 +51,10 @@ export async function listarEsquemas(req, res) {
   res.json(await esquemasService.listarEsquemas(req.query, req.usuario));
 }
 
+export async function historialEsquemas(req, res) {
+  res.json(await esquemasService.historialEsquemas(req.query, req.usuario));
+}
+
 export async function obtenerEsquema(req, res) {
   res.json(await esquemasService.obtenerEsquema(req.params.id, req.usuario));
 }
@@ -61,6 +65,10 @@ export async function crearEsquema(req, res) {
 
 export async function editarEsquema(req, res) {
   res.json(await esquemasService.editarEsquema(req.params.id, req.body, contextoAuditoria(req), req.usuario));
+}
+
+export async function publicarEsquema(req, res) {
+  res.json(await esquemasService.publicarEsquema(req.params.id, req.body, contextoAuditoria(req), req.usuario));
 }
 
 export async function descartarEsquema(req, res) {

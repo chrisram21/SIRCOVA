@@ -268,3 +268,59 @@ test('un error al guardar se muestra en un Alert y conserva lo editado', async (
   expect(screen.getByRole('textbox', { name: 'Título de la sección 1' }).value).toBe('Menores de 1 año')
   expect(botonGuardar().disabled).toBe(false)
 })
+
+test('en solo lectura los controles están deshabilitados y no hay problemas ni botones para guardar', () => {
+  render(
+    <MemoryRouter>
+      <EditorEsquema
+        vacuna={VACUNA}
+        origen="Versión 1 · Nacional"
+        dosisVacuna={DOSIS}
+        dimensiones={DIMENSIONES}
+        inicial={inicial()}
+        volverA="/configuracion/esquemas/historial/2"
+        soloLectura
+      />
+    </MemoryRouter>,
+  )
+
+  for (const casilla of screen.getAllByRole('checkbox')) expect(casilla.matches(':disabled')).toBe(true)
+  for (const interruptor of screen.getAllByRole('switch')) expect(interruptor.matches(':disabled')).toBe(true)
+  for (const opcion of screen.getAllByRole('radio')) expect(opcion.matches(':disabled')).toBe(true)
+  expect(screen.getByRole('textbox', { name: 'Título de la sección 1' }).matches(':disabled')).toBe(true)
+  expect(screen.queryByRole('button', { name: 'Quitar grupo_edad' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Subir la sección 2' })).toBeNull()
+  expect(screen.queryByRole('button', { name: /Agregar sección/ })).toBeNull()
+  expect(screen.queryByText('Problemas')).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Guardar borrador' })).toBeNull()
+  expect(screen.queryByRole('button', { name: /Publicar/ })).toBeNull()
+})
+
+test('con onPublicar, el botón dice "Publicar" sin cambios y "Guardar y publicar" con cambios', async () => {
+  const onPublicar = vi.fn().mockResolvedValue(undefined)
+  render(
+    <MemoryRouter>
+      <EditorEsquema
+        vacuna={VACUNA}
+        origen="Esquema nuevo"
+        dosisVacuna={DOSIS}
+        dimensiones={DIMENSIONES}
+        inicial={inicial()}
+        onGuardar={onGuardar}
+        onPublicar={onPublicar}
+        volverA="/configuracion?pestana=esquemas"
+      />
+    </MemoryRouter>,
+  )
+
+  fireEvent.click(screen.getByRole('button', { name: 'Publicar' }))
+  await waitFor(() => expect(onPublicar).toHaveBeenCalledWith(null))
+
+  fireEvent.change(screen.getByRole('textbox', { name: 'Título de la sección 1' }), { target: { value: 'Menores' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Guardar y publicar' }))
+  await waitFor(() => expect(onPublicar).toHaveBeenCalledTimes(2))
+  expect(onPublicar.mock.calls[1][0].secciones[0].titulo).toBe('Menores')
+  // Ya guardado, vuelve a decir "Publicar".
+  expect(await screen.findByRole('button', { name: 'Publicar' })).toBeTruthy()
+  expect(onGuardar).not.toHaveBeenCalled()
+})

@@ -20,6 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { descartarEsquema, listarEsquemas } from '@/api/configuracion.js'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
+import DialogoPublicarEsquema, { aDiaMesAnio, avisoDePublicacion } from './DialogoPublicarEsquema.jsx'
 
 export const territorioDe = (territorio) => (territorio.nivel === 'NACIONAL' ? 'Nacional' : territorio.ddrissCodigo)
 
@@ -27,6 +28,8 @@ export default function PestanaEsquemas() {
   const { tienePermiso } = useSesion()
   const puedeCrear = tienePermiso('ESQUEMA_CREAR')
   const puedeEditar = tienePermiso('ESQUEMA_EDITAR')
+  // El diálogo de publicar elige el mes en el calendario de periodos.
+  const puedePublicar = tienePermiso('ESQUEMA_PUBLICAR') && tienePermiso('PERIODO_CONSULTAR')
   const navigate = useNavigate()
   const { search, state } = useLocation()
   const [filas, setFilas] = useState(null)
@@ -36,6 +39,8 @@ export default function PestanaEsquemas() {
   // La fila cuyo borrador se va a descartar, mientras el AlertDialog está abierto.
   const [porDescartar, setPorDescartar] = useState(null)
   const [descartando, setDescartando] = useState(false)
+  // La fila cuyo borrador se va a publicar, mientras el diálogo está abierto.
+  const [porPublicar, setPorPublicar] = useState(null)
   // Cada carga tiene su número; una respuesta que llega después de otra carga se descarta.
   const cargaActual = useRef(0)
 
@@ -81,6 +86,12 @@ export default function PestanaEsquemas() {
     }
   }
 
+  function alPublicar(esquema) {
+    setPorPublicar(null)
+    setAviso({ tipo: 'exito', mensaje: avisoDePublicacion(esquema) })
+    cargar()
+  }
+
   if (errorCarga) {
     return (
       <div className="flex flex-col items-start gap-3">
@@ -94,8 +105,6 @@ export default function PestanaEsquemas() {
       </div>
     )
   }
-
-  const conAcciones = puedeCrear || puedeEditar
 
   return (
     <div className="flex flex-col gap-6">
@@ -136,7 +145,7 @@ export default function PestanaEsquemas() {
                     <TableHead>Vacuna</TableHead>
                     <TableHead>Vigente que aplica</TableHead>
                     <TableHead>Borrador</TableHead>
-                    {conAcciones && <TableHead className="text-right">Acciones</TableHead>}
+                    <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -150,7 +159,7 @@ export default function PestanaEsquemas() {
                       </TableCell>
                       <TableCell>
                         {vigente ? (
-                          `Versión ${vigente.version} · ${territorioDe(vigente.territorio)}`
+                          `Versión ${vigente.version} · ${territorioDe(vigente.territorio)} · desde ${aDiaMesAnio(vigente.vigenciaDesde)}`
                         ) : (
                           <span className="text-muted-foreground">Sin esquema</span>
                         )}
@@ -158,61 +167,79 @@ export default function PestanaEsquemas() {
                       <TableCell>
                         {borrador ? <Badge variant="secondary">Versión {borrador.version}</Badge> : '—'}
                       </TableCell>
-                      {conAcciones && (
-                        <TableCell>
-                          <div className="flex justify-end gap-2">
-                            {!borrador && puedeCrear && vacuna.activa && vigente && (
-                              <DropdownMenu modal={false}>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="outline" size="sm" aria-label={`Crear borrador de ${vacuna.codigo}`}>
-                                    Crear borrador
-                                    <ChevronDown />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onSelect={() => crearBorrador(vacuna, 'copia')}>
-                                    Copiar la versión vigente
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onSelect={() => crearBorrador(vacuna, 'vacio')}>
-                                    Empezar vacío
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            )}
-                            {!borrador && puedeCrear && vacuna.activa && !vigente && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                aria-label={`Crear borrador de ${vacuna.codigo}`}
-                                onClick={() => crearBorrador(vacuna, 'vacio')}
+                      <TableCell>
+                        <div className="flex justify-end gap-2">
+                          {!borrador && puedeCrear && vacuna.activa && vigente && (
+                            <DropdownMenu modal={false}>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm" aria-label={`Crear borrador de ${vacuna.codigo}`}>
+                                  Crear borrador
+                                  <ChevronDown />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onSelect={() => crearBorrador(vacuna, 'copia')}>
+                                  Copiar la versión vigente
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => crearBorrador(vacuna, 'vacio')}>
+                                  Empezar vacío
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                          {!borrador && puedeCrear && vacuna.activa && !vigente && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              aria-label={`Crear borrador de ${vacuna.codigo}`}
+                              onClick={() => crearBorrador(vacuna, 'vacio')}
+                            >
+                              Crear borrador
+                            </Button>
+                          )}
+                          {borrador && puedeEditar && vacuna.activa && (
+                            <Button asChild variant="outline" size="sm">
+                              <Link
+                                to={`/configuracion/esquemas/${borrador.id}/editar`}
+                                state={{ volverA: search }}
+                                aria-label={`Editar borrador de ${vacuna.codigo}`}
                               >
-                                Crear borrador
-                              </Button>
-                            )}
-                            {borrador && puedeEditar && vacuna.activa && (
-                              <Button asChild variant="outline" size="sm">
-                                <Link
-                                  to={`/configuracion/esquemas/${borrador.id}/editar`}
-                                  state={{ volverA: search }}
-                                  aria-label={`Editar borrador de ${vacuna.codigo}`}
-                                >
-                                  Editar borrador
-                                </Link>
-                              </Button>
-                            )}
-                            {borrador && puedeEditar && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                aria-label={`Descartar borrador de ${vacuna.codigo}`}
-                                onClick={() => setPorDescartar({ vacuna, borrador })}
+                                Editar borrador
+                              </Link>
+                            </Button>
+                          )}
+                          {borrador && puedePublicar && vacuna.activa && (
+                            <Button
+                              size="sm"
+                              aria-label={`Publicar borrador de ${vacuna.codigo}`}
+                              onClick={() => setPorPublicar({ vacuna, borrador, vigente })}
+                            >
+                              Publicar
+                            </Button>
+                          )}
+                          {borrador && puedeEditar && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              aria-label={`Descartar borrador de ${vacuna.codigo}`}
+                              onClick={() => setPorDescartar({ vacuna, borrador })}
+                            >
+                              Descartar
+                            </Button>
+                          )}
+                          {(vigente || borrador) && (
+                            <Button asChild variant="ghost" size="sm">
+                              <Link
+                                to={`/configuracion/esquemas/historial/${vacuna.id}`}
+                                state={{ volverA: search }}
+                                aria-label={`Historial de ${vacuna.codigo}`}
                               >
-                                Descartar
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      )}
+                                Historial
+                              </Link>
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -221,6 +248,16 @@ export default function PestanaEsquemas() {
           )}
         </CardContent>
       </Card>
+
+      {porPublicar && (
+        <DialogoPublicarEsquema
+          vacuna={porPublicar.vacuna}
+          borrador={porPublicar.borrador}
+          vigente={porPublicar.vigente}
+          alPublicar={alPublicar}
+          alCerrar={() => setPorPublicar(null)}
+        />
+      )}
 
       <AlertDialog
         open={porDescartar !== null}

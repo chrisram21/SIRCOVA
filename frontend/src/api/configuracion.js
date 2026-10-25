@@ -73,3 +73,16 @@ export function editarEsquema(id, datos) {
 export function descartarEsquema(id) {
   return solicitar(`/esquemas-captura/${encodeURIComponent(id)}`, { metodo: 'DELETE' })
 }
+
+// vigenciaDesde es el día 1 de un mes del calendario (AAAA-MM-01); el vigente anterior de la DDRISS pasa a histórico.
+export function publicarEsquema(id, { vigenciaDesde, motivoCambio }) {
+  return solicitar(`/esquemas-captura/${encodeURIComponent(id)}/publicar`, {
+    metodo: 'POST',
+    cuerpo: { vigenciaDesde, motivoCambio },
+  })
+}
+
+// Las versiones nacionales y de la DDRISS del usuario, de la más nueva a la más vieja, con sus reportes.
+export function historialEsquemas(vacunaId) {
+  return solicitar(`/esquemas-captura/historial?vacunaId=${encodeURIComponent(vacunaId)}`)
+}

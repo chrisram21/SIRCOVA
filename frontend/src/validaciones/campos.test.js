@@ -25,6 +25,7 @@ import {
   validarEtiquetaValorDimension,
   validarEdadMeses,
   validarTituloSeccion,
+  validarMotivoCambio,
 } from './campos.js'
 
 // La misma lista está en backend/tests/campos.test.js: si cambia una, se cambia la otra.
@@ -451,6 +452,19 @@ const CASOS = {
       ['a'.repeat(61), MENSAJES.tituloSeccion],
     ],
   },
+  validarMotivoCambio: {
+    validos: [
+      ['Se agrega la dimensión pueblo.', 'Se agrega la dimensión pueblo.'],
+      ['  Cambio del esquema nacional ', 'Cambio del esquema nacional'],
+      ['a'.repeat(300), 'a'.repeat(300)],
+    ],
+    invalidos: [
+      ['', MENSAJES.motivoCambio],
+      ['   ', MENSAJES.motivoCambio],
+      [null, MENSAJES.motivoCambio],
+      ['a'.repeat(301), MENSAJES.motivoCambio],
+    ],
+  },
 }
 
 const REGLAS = {
@@ -458,7 +472,7 @@ const REGLAS = {
   validarNombreDistrito, validarNombreEstablecimiento, validarDireccion, validarNombreContacto, validarCodigoVacuna,
   validarNombreVacuna, validarDescripcionVacuna, validarNombreDosis, validarCantidadPoblacion, validarFuentePoblacion,
   validarCodigoDimension, validarCodigoValorDimension, validarNombreDimension, validarDescripcionDimension,
-  validarEtiquetaValorDimension, validarEdadMeses, validarTituloSeccion,
+  validarEtiquetaValorDimension, validarEdadMeses, validarTituloSeccion, validarMotivoCambio,
 }
 
 describe.each(Object.entries(CASOS))('%s', (nombre, { validos, invalidos }) => {
@@ -498,5 +512,6 @@ describe('valores que no son texto', () => {
     expect(validarEtiquetaValorDimension(['M'])).toEqual({ error: MENSAJES.etiquetaValorDimension })
     expect(validarEdadMeses({})).toEqual({ error: MENSAJES.edadMeses })
     expect(validarTituloSeccion(5)).toEqual({ error: MENSAJES.tituloSeccion })
+    expect(validarMotivoCambio(5)).toEqual({ error: MENSAJES.motivoCambio })
   })
 })

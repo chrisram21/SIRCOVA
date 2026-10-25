@@ -105,6 +105,10 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('ESQUEMA_CREAR',             'CONFIGURACION_CATALOGOS', 'Crear borradores de esquemas de captura para la DDRISS'),
  ('ESQUEMA_EDITAR',            'CONFIGURACION_CATALOGOS', 'Editar y descartar borradores de esquemas de captura de la DDRISS');
 
+-- SPEC 20 (HU-17): publicación de los borradores de esquemas de la DDRISS (MongoDB)
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('ESQUEMA_PUBLICAR',          'CONFIGURACION_CATALOGOS', 'Publicar borradores de esquemas de captura de la DDRISS');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -179,6 +183,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo IN ('ADMINISTRADOR', 'REVISOR')
    AND p.codigo IN ('ESQUEMA_CONSULTAR', 'ESQUEMA_CREAR', 'ESQUEMA_EDITAR');
+
+-- SPEC 20 (HU-17): el Administrador y el Revisor publican los borradores de esquemas
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo IN ('ADMINISTRADOR', 'REVISOR')
+   AND p.codigo = 'ESQUEMA_PUBLICAR';
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

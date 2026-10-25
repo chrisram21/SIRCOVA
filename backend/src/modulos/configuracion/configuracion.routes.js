@@ -73,6 +73,13 @@ router.get(
   configuracionController.listarEsquemas,
 );
 router.post('/esquemas-captura', autenticar, requierePermiso('ESQUEMA_CREAR'), configuracionController.crearEsquema);
+// Antes de /:id, para que "historial" no se tome como un id.
+router.get(
+  '/esquemas-captura/historial',
+  autenticar,
+  requierePermiso('ESQUEMA_CONSULTAR'),
+  configuracionController.historialEsquemas,
+);
 router.get(
   '/esquemas-captura/:id',
   autenticar,
@@ -90,6 +97,12 @@ router.delete(
   autenticar,
   requierePermiso('ESQUEMA_EDITAR'),
   configuracionController.descartarEsquema,
+);
+router.post(
+  '/esquemas-captura/:id/publicar',
+  autenticar,
+  requierePermiso('ESQUEMA_PUBLICAR'),
+  configuracionController.publicarEsquema,
 );
 
 export default router;
