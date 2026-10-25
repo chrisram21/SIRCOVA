@@ -171,6 +171,7 @@ Ninguna de las dos páginas pide un permiso nuevo: ya exigen `ESQUEMA_EDITAR` y 
 
 ```
 frontend/src/
+├── index.css                                  ← color de advertencia (decidido al implementar)
 ├── componentes/formulario/
 │   ├── armarFormulario.js                     ← nuevo
 │   ├── armarFormulario.test.js                ← nuevo
@@ -285,6 +286,10 @@ Decididas al implementar:
 - **Sí:** `armarFormulario.js` define su propio `GRUPO_EDAD`, para que un componente compartido no dependa de `paginas/configuracion/coherenciaEsquema.js` (paso 1).
 - **Sí:** la API no devuelve la `etiqueta` de una desagregación, así que hoy la franja muestra siempre el `nombre` del catálogo; `armarFormulario` ya la usa si viene. Agregarla a `GET /esquemas-captura/{id}` va en el spec de HU-19, hecho y probado antes de HU-20 (nota en HU-19). **No:** cambiar el backend en este spec, que es solo de frontend (paso 1).
 - **Sí:** `FormularioCaptura.jsx` exporta además `CamposAdicionales`, para que la vista previa ponga los campos en su card «Datos adicionales» sin anidarla en la del formulario. Cada uno guarda sus valores en su propio estado (paso 2).
+- **Sí:** el aviso de problemas usa el color nuevo de advertencia del tema, `--advertencia` (#fff5dd) y `--advertencia-foreground` (#7a4a06) en `index.css`, tomados del recuadro de advertencias de `Registro.html` («advertencia en ámbar» del estilo general). El tema no tenía uno, y HU-20 lo reutiliza para las advertencias de validación. **No:** el tono `destructive` atenuado del editor, que confunde un aviso con un error (paso 3).
+- **Sí:** `VistaPreviaEsquema` recibe además `abierta` y `alCambiarAbierta`, y cada página la monta solo mientras está abierta, así que no recalcula el formulario en cada cambio del editor (pasos 3 y 4).
+- **Sí:** `EditorEsquema.jsx` agrega la prop `onVistaPrevia(contenido, problemas)` y dibuja «Vista previa» en su pie, junto a «Guardar borrador». No había otra forma de leer el contenido sin guardar: `onPublicar` solo lo entrega al publicar. Los problemas que pasa son los de la card «Problemas», que incluyen los errores de título de sección (paso 4).
+- **Sí:** en `/configuracion/esquemas/:id`, «Vista previa» va como `CardAction` en la card "Versión {n}" (paso 4).
 - **Sí:** una celda es un `Input` de texto con `inputMode="numeric"`, no `type="number"`, para conservar lo que se escribe (`2.5`, letras) y marcarlo con `aria-invalid` (paso 2).
 
 ## Riesgos

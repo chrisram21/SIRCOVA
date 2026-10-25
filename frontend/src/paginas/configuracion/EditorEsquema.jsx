@@ -73,7 +73,7 @@ function Marca({ id, etiqueta, nombre, marcada, alCambiar, deshabilitada, extra 
 // El editor común de los borradores (SPEC 19). Recibe el contenido inicial en la forma del cuerpo del POST, y
 // onGuardar recibe el contenido editado; un error de onGuardar se muestra aquí y conserva lo editado.
 // onPublicar (SPEC 20) recibe el contenido si hay cambios sin guardar, o null. soloLectura muestra una versión sin
-// dejar cambiarla.
+// dejar cambiarla. onVistaPrevia (SPEC 21) recibe el contenido actual, sin guardar, y sus problemas.
 export default function EditorEsquema({
   vacuna,
   origen,
@@ -83,6 +83,7 @@ export default function EditorEsquema({
   inicial,
   onGuardar,
   onPublicar,
+  onVistaPrevia,
   volverA,
   soloLectura = false,
 }) {
@@ -623,6 +624,12 @@ export default function EditorEsquema({
             <Button asChild variant="outline">
               <Link to={volverA}>Cancelar</Link>
             </Button>
+            {/* Con problemas también: la vista previa los lista. */}
+            {onVistaPrevia && (
+              <Button type="button" variant="outline" onClick={() => onVistaPrevia(contenido, problemas)}>
+                Vista previa
+              </Button>
+            )}
             {onPublicar && (
               <Button type="button" variant="outline" disabled={problemas.length > 0 || guardando} onClick={publicar}>
                 {conCambios ? 'Guardar y publicar' : 'Publicar'}

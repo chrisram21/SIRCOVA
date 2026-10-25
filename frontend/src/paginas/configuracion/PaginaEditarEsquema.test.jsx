@@ -166,6 +166,50 @@ test('si falla la carga por otra razón lo dice', async () => {
   expect(screen.getByText('No se pudo cargar el esquema: No se pudo conectar con el servidor.')).toBeTruthy()
 })
 
+describe('vista previa desde el editor', () => {
+  test('muestra los cambios sin guardar y no guarda', async () => {
+    await abrir('b-1', PUBLICAR)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Título de la sección 1' }), {
+      target: { value: 'Menores de 1 año' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Vista previa' }))
+
+    const dialogo = await screen.findByRole('dialog')
+    expect(within(dialogo).getByRole('heading', { name: 'Vista previa · Vacuna de prueba, versión 3' })).toBeTruthy()
+    expect(within(dialogo).getByRole('columnheader', { name: 'Menores de 1 año' })).toBeTruthy()
+    // R1 tiene desagregación propia: va en su tabla, con su única sección encima.
+    expect(within(dialogo).getByText('Primer refuerzo · De 1 a < 6 años')).toBeTruthy()
+    expect(within(dialogo).getByLabelText('Primera dosis · Menores de 1 año').tagName).toBe('INPUT')
+    expect(within(dialogo).queryByRole('list', { name: 'Problemas del borrador' })).toBeNull()
+
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Cerrar' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(editarEsquema).not.toHaveBeenCalled()
+    expect(listarEsquemas).not.toHaveBeenCalled()
+    // Lo editado sigue sin guardar.
+    expect(screen.getByRole('textbox', { name: 'Título de la sección 1' }).value).toBe('Menores de 1 año')
+    expect(screen.getByRole('button', { name: 'Guardar y publicar' })).toBeTruthy()
+  })
+
+  test('con un problema de coherencia se abre igual y lo lista', async () => {
+    await abrir()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'R1 en la sección 2' }))
+    expect(screen.getByRole('button', { name: 'Guardar borrador' }).disabled).toBe(true)
+    const boton = screen.getByRole('button', { name: 'Vista previa' })
+    expect(boton.disabled).toBe(false)
+    fireEvent.click(boton)
+
+    const dialogo = await screen.findByRole('dialog')
+    expect(within(dialogo).getByText('Este borrador tiene 1 problema; el formulario puede verse incompleto.')).toBeTruthy()
+    const lista = within(dialogo).getByRole('list', { name: 'Problemas del borrador' })
+    expect(within(lista).getByText('La dosis R1 no aparece en ninguna sección.')).toBeTruthy()
+    // R1 ya no está en ninguna sección: no se arma su tabla.
+    expect(within(dialogo).queryByText(/Primer refuerzo/)).toBeNull()
+  })
+})
+
 describe('publicar desde el editor', () => {
   const FILA = {
     vacuna: { id: 2, codigo: 'ZVT', nombre: 'Vacuna de prueba', activa: true },
