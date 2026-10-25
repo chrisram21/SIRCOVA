@@ -19,13 +19,44 @@ const producto = (dimensiones) =>
     [{}],
   )
 
+// Las versiones anteriores a la v0.4 del modelo no tienen secciones (Hexavalente v1): se arma una por valor de
+// grupo_edad, en el orden del catálogo, con las dosis que lo admiten; sin grupo_edad, una sola con todas las dosis.
+function seccionesDeducidas(contenido, vacuna, catalogo) {
+  const efectiva = (d) => d.desagregacion ?? contenido.desagregacion
+  const edadesDe = (d) => efectiva(d).find((x) => x.dimension === GRUPO_EDAD)?.valores ?? []
+  if (!contenido.desagregacion.some((x) => x.dimension === GRUPO_EDAD)) {
+    return [{ titulo: vacuna.nombre, grupoEdad: null, dosis: contenido.dosis.map((d) => d.codigo) }]
+  }
+  const usados = new Set(contenido.dosis.flatMap(edadesDe))
+  return [...(catalogo.get(GRUPO_EDAD)?.valores ?? [])]
+    .filter((v) => usados.has(v.codigo))
+    .sort((a, b) => a.orden - b.orden)
+    .map((v) => ({
+      titulo: v.etiqueta,
+      grupoEdad: v.codigo,
+      dosis: contenido.dosis.filter((d) => edadesDe(d).includes(v.codigo)).map((d) => d.codigo),
+    }))
+}
+
 // contenido: la forma de contenidoDe (EditorEsquema.jsx). vacuna: GET /vacunas/{id}, con sus dosis.
-// dimensiones: GET /dimensiones. camposAdicionales y reglas: los del esquema cargado.
-export function armarFormulario({ contenido, vacuna, dimensiones, camposAdicionales = [], reglas = [] }) {
+// dimensiones: GET /dimensiones. camposAdicionales y reglas: los del esquema cargado. deducirSecciones: solo para una
+// versión publicada; en un borrador, no tener secciones es un problema de coherencia.
+export function armarFormulario({
+  contenido,
+  vacuna,
+  dimensiones,
+  camposAdicionales = [],
+  reglas = [],
+  deducirSecciones = false,
+}) {
   const catalogo = new Map(dimensiones.map((d, posicion) => [d.codigo, { ...d, posicion }]))
   const dosisVacuna = new Map(vacuna.dosis.map((d) => [d.codigo, d]))
 
-  const secciones = contenido.secciones
+  const originales =
+    deducirSecciones && contenido.secciones.length === 0
+      ? seccionesDeducidas(contenido, vacuna, catalogo)
+      : contenido.secciones
+  const secciones = originales
     .map((s) => ({ ...s, dosis: s.dosis.filter((codigo) => dosisVacuna.has(codigo)) }))
     .filter((s) => s.dosis.length > 0)
   const dosis = contenido.dosis

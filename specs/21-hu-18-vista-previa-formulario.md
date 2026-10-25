@@ -1,6 +1,6 @@
 # SPEC 21 — Vista previa del formulario de un esquema de captura
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-18
 > **Depende de:** SPEC 06, SPEC 18, SPEC 19, SPEC 20
 > **Fecha:** 2026-10-25
@@ -290,6 +290,8 @@ Decididas al implementar:
 - **Sí:** `VistaPreviaEsquema` recibe además `abierta` y `alCambiarAbierta`, y cada página la monta solo mientras está abierta, así que no recalcula el formulario en cada cambio del editor (pasos 3 y 4).
 - **Sí:** `EditorEsquema.jsx` agrega la prop `onVistaPrevia(contenido, problemas)` y dibuja «Vista previa» en su pie, junto a «Guardar borrador». No había otra forma de leer el contenido sin guardar: `onPublicar` solo lo entrega al publicar. Los problemas que pasa son los de la card «Problemas», que incluyen los errores de título de sección (paso 4).
 - **Sí:** en `/configuracion/esquemas/:id`, «Vista previa» va como `CardAction` en la card "Versión {n}" (paso 4).
+- **Sí:** una versión publicada sin `secciones` (anterior a la v0.4 del modelo, como Hexavalente v1 del 02, la de los reportes de la semilla) las deduce: una por valor de `grupo_edad` en el orden del catálogo, con las dosis que lo admiten, o una sola con el nombre de la vacuna si no se desagrega por edad. Va en `armarFormulario` con `deducirSecciones`, que la vista previa activa fuera de un `BORRADOR`; en un borrador, no tener secciones sigue siendo un problema de coherencia (decidido en la verificación manual, paso 5). **No:** dejar «El esquema todavía no arma ninguna celda.» en una versión publicada; **no:** un mensaje que diga que no se puede previsualizar.
+- **Sí:** las celdas y los totales de columna van centrados, debajo de su encabezado; el total de cada fila va a la derecha (ajustado en la verificación manual, paso 5).
 - **Sí:** una celda es un `Input` de texto con `inputMode="numeric"`, no `type="number"`, para conservar lo que se escribe (`2.5`, letras) y marcarlo con `aria-invalid` (paso 2).
 
 ## Riesgos

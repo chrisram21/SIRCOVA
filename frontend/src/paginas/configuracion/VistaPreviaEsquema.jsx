@@ -29,6 +29,7 @@ export default function VistaPreviaEsquema({ abierta, alCambiarAbierta, esquema,
         dimensiones,
         camposAdicionales: esquema.camposAdicionales,
         reglas: esquema.reglas,
+        deducirSecciones: esquema.estado !== 'BORRADOR',
       }),
     [contenido, vacuna, dimensiones, esquema],
   )

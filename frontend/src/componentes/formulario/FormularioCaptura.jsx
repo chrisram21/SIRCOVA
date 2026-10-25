@@ -78,14 +78,14 @@ function TablaCaptura({ tabla, cantidades, alCambiar }) {
                 const clave = `${fila.dosis}|${celda.claveCombinacion}`
                 const texto = cantidades[clave] ?? ''
                 return (
-                  <TableCell key={j}>
+                  <TableCell key={j} className="text-center">
                     <Input
                       aria-label={nombre}
                       inputMode="numeric"
                       value={texto}
                       aria-invalid={!leerCantidad(texto).valida || undefined}
                       onChange={(e) => alCambiar(clave, e.target.value)}
-                      className="mx-auto w-20 text-right font-mono"
+                      className="w-20 text-right font-mono"
                     />
                   </TableCell>
                 )
@@ -104,7 +104,7 @@ function TablaCaptura({ tabla, cantidades, alCambiar }) {
               return (
                 <TableCell
                   key={j}
-                  className="text-right font-mono"
+                  className="text-center font-mono"
                   aria-label={columna ? `Total de ${columna}` : 'Total de la columna'}
                 >
                   {formatoCantidad.format(totalColumna(j))}

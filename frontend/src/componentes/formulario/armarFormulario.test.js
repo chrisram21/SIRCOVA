@@ -161,6 +161,44 @@ it('un esquema sin secciones no arma ninguna tabla', () => {
   expect(armar(contenido).tablas).toEqual([])
 })
 
+describe('versión publicada sin secciones (anterior a la v0.4, como Hexavalente v1)', () => {
+  const sinSecciones = (c) => ({ ...c, secciones: [] })
+  const armarPublicada = (contenido, codigos = ['D1', 'D2', 'D3']) =>
+    armarFormulario({ contenido, vacuna: vacuna(...codigos), dimensiones, deducirSecciones: true })
+
+  it('arma una sección por valor de grupo_edad, en el orden del catálogo, con las dosis que lo admiten', () => {
+    const contenido = sinSecciones(hexavalente())
+    contenido.desagregacion = [{ dimension: 'grupo_edad', valores: ['1_A_5', 'MENOR_1'] }]
+    contenido.dosis.push({ codigo: 'R1', desagregacion: [{ dimension: 'grupo_edad', valores: ['1_A_5'] }] })
+    const { tablas } = armarPublicada(contenido, ['D1', 'D2', 'D3', 'R1'])
+    expect(tablas[0].encabezados).toEqual([
+      [{ etiqueta: '< 1 año', columnas: 1 }, { etiqueta: 'De 1 a < 6 años', columnas: 1 }],
+    ])
+    expect(claves(tablas[0].filas[0])).toEqual(['grupo_edad=MENOR_1', 'grupo_edad=1_A_5'])
+    expect(tablas[1].clave).toBe('dosis-R1')
+    expect(tablas[1].seccion).toBe('De 1 a < 6 años')
+  })
+
+  it('con un solo grupo de edad, su etiqueta va encima de la tabla', () => {
+    const contenido = sinSecciones(hexavalente())
+    contenido.desagregacion = [{ dimension: 'grupo_edad', valores: ['MENOR_1'] }]
+    const [tabla] = armarPublicada(contenido).tablas
+    expect(tabla.seccion).toBe('< 1 año')
+    expect(tabla.filas.map((f) => f.dosis)).toEqual(['D1', 'D2', 'D3'])
+    expect(claves(tabla.filas[0])).toEqual(['grupo_edad=MENOR_1'])
+  })
+
+  it('sin grupo de edad arma una sola sección con el nombre de la vacuna', () => {
+    const [tabla] = armarPublicada(sinSecciones(vph())).tablas
+    expect(tabla.seccion).toBe('Vacuna')
+    expect(claves(tabla.filas[0])).toEqual(['sexo=M', 'sexo=F'])
+  })
+
+  it('sin deducirSecciones (un borrador) no las inventa', () => {
+    expect(armar(sinSecciones(hexavalente())).tablas).toEqual([])
+  })
+})
+
 it('la etiqueta de una desagregación del esquema reemplaza el nombre de la dimensión', () => {
   const contenido = vph()
   contenido.desagregacion[0].etiqueta = 'Sexo biológico'

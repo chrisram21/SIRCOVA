@@ -430,12 +430,28 @@ Verificado contra la API real el 2026-10-24:
 **Cómo se hará:** Reutiliza el componente de formulario dinámico en modo de solo lectura con el esquema en borrador.
 
 **Criterios de aceptación:**
-- [ ] La vista previa muestra secciones, dosis y dimensiones tal como las verá el establecimiento.
-- [ ] La vista previa no guarda datos.
+- [x] La vista previa muestra secciones, dosis y dimensiones tal como las verá el establecimiento.
+- [x] La vista previa no guarda datos.
 
 **Nota (2026-10-24, spec 19):** La vista previa parte de `GET /esquemas-captura/{id}` (SPEC 19) y puede ir como botón en el editor de borradores.
 
 **Nota (2026-10-24, spec 20):** `EditorEsquema` tiene la prop `soloLectura` y `/configuracion/esquemas/:id` (SPEC 20) muestra una versión sin editar; la vista previa del formulario es otra cosa: reproduce lo que verá el establecimiento.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 21 a `main`. Solo frontend, en `specs/21-hu-18-vista-previa-formulario.md`: no hay endpoint nuevo ni cambia el backend. Como el formulario dinámico de HU-20 todavía no existía, este spec lo crea en `frontend/src/componentes/formulario/`: `armarFormulario` convierte el esquema en tablas (con la `claveCombinacion` de cada celda) y `FormularioCaptura` las dibuja con sus totales. Diferencias con la historia, decididas por el equipo:
+
+- El Revisor también la ve, como los demás permisos de esquemas.
+- «Modo de solo lectura»: los campos se pueden llenar (enteros ≥ 0) y los totales por fila, por columna y el general se calculan en pantalla, pero nada sale del navegador y todo se pierde al cerrar.
+- Se abre con «Vista previa» desde el editor del borrador, con los cambios sin guardar, y desde `/configuracion/esquemas/:id`, para cualquier versión. Con problemas de coherencia, se abre igual y los lista en un aviso ámbar (color nuevo `--advertencia` del tema).
+- De la procedencia solo describe el modo; la tarjeta B es de HU-21. Lista las reglas del esquema (código y versión) sin ejecutarlas, y dibuja los campos adicionales.
+- Una versión publicada sin `secciones` (anterior a la v0.4, como Hexavalente v1) las deduce de los valores de `grupo_edad`.
+
+Verificado contra la API real el 2026-10-25:
+
+- **Como Administrador:**
+  - Hexavalente v2: columnas «< 1 año» y «De 1 a < 6 años», 1.ª a 3.ª dosis, el campo adicional y las 5 reglas; con 78, 4 y 71 los totales dieron 82, 71, 149, 4 y 153, y `2.5` quedó marcado sin sumar. Al cerrar y reabrir, las cantidades estaban vacías y la página no hizo ninguna petición nueva a la API;
+  - VPH por sexo (Masculino primero, como el catálogo), Polio con cuatro secciones por presentación (los refuerzos solo en las suyas) y Td con la tabla aparte de su refuerzo;
+  - en el borrador Hexavalente v3, quitar D3 de las dos secciones sin guardar dejó «Guardar borrador» deshabilitado y la vista previa avisó «La dosis D3 no aparece en ninguna sección.»; no hubo ningún `PUT` y el borrador siguió igual en la base.
+- **Como Revisor:** BCG (una columna «Cantidad») y Hexavalente v1 histórica, con su sección deducida «< 1 año» y la procedencia «juntas, como en el 5C».
 
 #### HU-19. Crear el reporte mensual
 
@@ -483,6 +499,8 @@ Verificado contra la API real el 2026-10-24:
 
 **Nota (2026-10-24, spec 20):** El esquema de un periodo es el de la DDRISS del establecimiento (`VIGENTE` o `HISTORICO`) cuya vigencia cubre el día 1 del mes; si no hay, el nacional que la cubra. Un `VIGENTE` puede tener `desde` futuro (SPEC 20), así que no basta con buscar el `VIGENTE`. Esto corrige la nota del spec 19. También queda por decidir qué pasa con un reporte en borrador de un mes cuya versión cambió.
 
+**Nota (2026-10-25, spec 21):** El formulario se arma con `armarFormulario` y se dibuja con `FormularioCaptura` (`componentes/formulario/`, SPEC 21), que ya calculan la `claveCombinacion` de cada celda y los totales; la captura agrega guardar, cargar las cantidades del reporte y las validaciones. El backend debe armar la `clave_combinacion` con la misma regla (dimensiones ordenadas por código, `codigo=valor` unidas con `|`). Para una versión publicada sin `secciones` (como Hexavalente v1, la de los reportes de la semilla) se pasa `deducirSecciones: true`. Antes de HU-20 debe estar la `etiqueta` de cada desagregación en `GET /esquemas-captura/{id}` (nota en HU-19).
+
 #### HU-21. Registrar el municipio de procedencia
 
 > **Como** personal del establecimiento, **quiero** indicar las dosis aplicadas a personas de otros municipios, separadas del municipio propio, **para** que la dosis se atribuya al municipio correcto al calcular cobertura.
@@ -497,6 +515,8 @@ Verificado contra la API real el 2026-10-24:
 - [ ] Por defecto, la procedencia es el municipio del establecimiento.
 - [ ] Puedo agregar filas para otros municipios de San Marcos o para Migrantes (fuera de San Marcos o procedencia desconocida).
 - [ ] No se permite repetir la misma combinación de vacuna, dosis, dimensiones y procedencia.
+
+**Nota (2026-10-25, spec 21):** La vista previa (SPEC 21) solo describe el modo de procedencia; la tarjeta B se agrega a `FormularioCaptura`.
 
 #### HU-22. Guardar el borrador y continuar después
 

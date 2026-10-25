@@ -117,6 +117,16 @@ it('con problemas muestra cuántos son y cada mensaje; sin problemas no aparece 
   expect(within(hoja()).queryByRole('list', { name: 'Problemas del borrador' })).toBeNull()
 })
 
+it('una versión publicada sin secciones las deduce; un borrador sin secciones no arma celdas', () => {
+  const sinSecciones = { ...contenido(), secciones: [] }
+  const { unmount } = montar({ c: sinSecciones })
+  within(hoja()).getByText('VPH')
+  within(hoja()).getByRole('textbox', { name: '1.ª dosis · Masculino' })
+  unmount()
+  montar({ esquema: BORRADOR, c: sinSecciones })
+  within(hoja()).getByText('El esquema todavía no arma ninguna celda.')
+})
+
 function ConBoton() {
   const [abierta, setAbierta] = useState(false)
   return (
