@@ -2,6 +2,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import PestanaDimensiones from './PestanaDimensiones.jsx'
+import PestanaEsquemas from './PestanaEsquemas.jsx'
 import PestanaEstablecimientos from './PestanaEstablecimientos.jsx'
 import PestanaPeriodos from './PestanaPeriodos.jsx'
 import PestanaPoblacion from './PestanaPoblacion.jsx'
@@ -33,6 +34,13 @@ const PESTANAS = [
     titulo: 'Dimensiones',
     permisos: ['DIMENSION_CONSULTAR'],
     Contenido: PestanaDimensiones,
+  },
+  {
+    valor: 'esquemas',
+    titulo: 'Esquemas',
+    // El editor de borradores lee las dosis de la vacuna y el catálogo de dimensiones.
+    permisos: ['ESQUEMA_CONSULTAR', 'VACUNA_CONSULTAR', 'DIMENSION_CONSULTAR'],
+    Contenido: PestanaEsquemas,
   },
   {
     valor: 'periodos',

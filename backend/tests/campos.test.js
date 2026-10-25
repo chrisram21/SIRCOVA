@@ -25,6 +25,7 @@ import {
   validarDescripcionDimension,
   validarEtiquetaValorDimension,
   validarEdadMeses,
+  validarTituloSeccion,
 } from '../src/validaciones/campos.js';
 
 // La misma lista está en frontend/src/validaciones/campos.test.js: si cambia una, se cambia la otra.
@@ -438,6 +439,19 @@ const CASOS = {
       [null, MENSAJES.edadMeses],
     ],
   },
+  validarTituloSeccion: {
+    validos: [
+      ['< 1 año', '< 1 año'],
+      ['  Mujer de 15 a 49 años ', 'Mujer de 15 a 49 años'],
+      ['a'.repeat(60), 'a'.repeat(60)],
+    ],
+    invalidos: [
+      ['', MENSAJES.tituloSeccion],
+      ['   ', MENSAJES.tituloSeccion],
+      [null, MENSAJES.tituloSeccion],
+      ['a'.repeat(61), MENSAJES.tituloSeccion],
+    ],
+  },
 };
 
 const REGLAS = {
@@ -445,7 +459,7 @@ const REGLAS = {
   validarNombreDistrito, validarNombreEstablecimiento, validarDireccion, validarNombreContacto, validarCodigoVacuna,
   validarNombreVacuna, validarDescripcionVacuna, validarNombreDosis, validarCantidadPoblacion, validarFuentePoblacion,
   validarCodigoDimension, validarCodigoValorDimension, validarNombreDimension, validarDescripcionDimension,
-  validarEtiquetaValorDimension, validarEdadMeses,
+  validarEtiquetaValorDimension, validarEdadMeses, validarTituloSeccion,
 };
 
 describe.each(Object.entries(CASOS))('%s', (nombre, { validos, invalidos }) => {
@@ -484,6 +498,7 @@ describe('valores que no son texto', () => {
     expect(validarDescripcionDimension(5)).toEqual({ error: MENSAJES.descripcionDimension });
     expect(validarEtiquetaValorDimension(['M'])).toEqual({ error: MENSAJES.etiquetaValorDimension });
     expect(validarEdadMeses({})).toEqual({ error: MENSAJES.edadMeses });
+    expect(validarTituloSeccion(5)).toEqual({ error: MENSAJES.tituloSeccion });
   });
 });
 

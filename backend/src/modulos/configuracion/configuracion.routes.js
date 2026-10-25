@@ -66,5 +66,30 @@ router.post(
   requierePermiso('DIMENSION_EDITAR'),
   configuracionController.reactivarValor,
 );
+router.get(
+  '/esquemas-captura',
+  autenticar,
+  requierePermiso('ESQUEMA_CONSULTAR'),
+  configuracionController.listarEsquemas,
+);
+router.post('/esquemas-captura', autenticar, requierePermiso('ESQUEMA_CREAR'), configuracionController.crearEsquema);
+router.get(
+  '/esquemas-captura/:id',
+  autenticar,
+  requierePermiso('ESQUEMA_CONSULTAR'),
+  configuracionController.obtenerEsquema,
+);
+router.put(
+  '/esquemas-captura/:id',
+  autenticar,
+  requierePermiso('ESQUEMA_EDITAR'),
+  configuracionController.editarEsquema,
+);
+router.delete(
+  '/esquemas-captura/:id',
+  autenticar,
+  requierePermiso('ESQUEMA_EDITAR'),
+  configuracionController.descartarEsquema,
+);
 
 export default router;
