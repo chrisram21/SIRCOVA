@@ -172,7 +172,7 @@ Como siempre, se agregan de forma idempotente en `05_permisos_mysql.sql` y aplic
 `dosis` y `dimensiones` salen del esquema guardado en `reporte_vacuna` (`esquema_mongo_id`), no del vigente, para que un reporte viejo siga mostrando sus etiquetas:
 
 - **`dosis`:** las que nombra el esquema (`dosis[].codigo`), con `nombre`, `orden` y `activa` de la tabla `dosis` de la vacuna, ordenadas por `orden`. Van **también las inactivas**, con `activa: false`, para que HU-20 aplique su regla (ocultarlas salvo que el reporte tenga cantidades). Un código del esquema que no está en `dosis` se omite.
-- **`dimensiones`:** cada dimensión que usa el esquema (la desagregación general, la de cada dosis y `secciones[].grupoEdad`), sin repetir, en el orden de `catalogo_dimensiones`. Cada una trae su `codigo` y su `nombre` del catálogo, la `etiqueta` de la desagregación en el esquema (`null` si no tiene; si dos desagregaciones la definen distinta, gana la general) y los **valores que el esquema usa**, con su `etiqueta`, `orden` y `activo` del catálogo, ordenados por `orden`. Los valores inactivos también van, porque una versión `HISTORICO` puede usarlos (spec 21). Un valor o una dimensión que no están en el catálogo se omiten.
+- **`dimensiones`:** cada dimensión que usa el esquema (la desagregación general, la de cada dosis y `secciones[].grupoEdad`), sin repetir. Van como en `armarFormulario`: `grupo_edad` primero y las demás en el orden del catálogo, que `catalogo_dimensiones` no guarda y `GET /dimensiones` da por nombre. Cada una trae su `codigo` y su `nombre` del catálogo, la `etiqueta` de la desagregación en el esquema (`null` si no tiene; si dos desagregaciones la definen distinta, gana la general) y los **valores que el esquema usa**, con su `etiqueta`, `orden` y `activo` del catálogo, ordenados por `orden`. Los valores inactivos también van, porque una versión `HISTORICO` puede usarlos (spec 21). Un valor o una dimensión que no están en el catálogo se omiten.
 - Una vacuna cuyo esquema desagrega solo por dosis tiene `dimensiones: []`.
 - Se lee cada esquema y el catálogo una sola vez por petición (`find` con `_id: { $in }` y las dimensiones usadas), no una consulta por vacuna.
 
@@ -202,7 +202,7 @@ Mensajes, en español y sin datos internos: «Su establecimiento está desactiva
 1. Fuera de la transacción: leer el establecimiento y la DDRISS de la cuenta, y resolver los esquemas en MongoDB con `esquemasDelPeriodo` (sobre las vacunas activas).
 2. Dentro de `enTransaccion`, la **primera** consulta es `SELECT … FROM cierre_periodo … FOR SHARE` del mes y la DDRISS (nota del 2026-10-23 sobre REPEATABLE READ). Si el mes no está `ABIERTO`, se responde 409.
 3. `INSERT` en `reporte_produccion` (un `ER_DUP_ENTRY` → 409 `REPORTE_EXISTENTE`), en `reporte_vacuna` (una fila por vacuna resuelta) y en `historial_estado_reporte`.
-4. `registrarBitacora(conexion, { …contextoAuditoria(req), modulo: MODULOS.PRODUCCION, accion: ACCIONES.CREAR, entidad: 'reporte_produccion', … })` con el reporte completo, y se confirma.
+4. `registrarBitacora(conexion, { …contextoAuditoria(req), modulo: MODULOS.PRODUCCION, accion: ACCIONES.CREAR, entidad: 'reporte_produccion', … })` con el reporte completo, y se confirma. La fila lleva las vacunas con su esquema, pero no sus etiquetas: son del catálogo, no del reporte, y leerlas iría a MongoDB dentro de la transacción.
 
 ### Pantalla `/registro`
 

@@ -1,4 +1,6 @@
+import { ObjectId } from 'mongodb';
 import pool, { enTransaccion } from '../../config/mysql.js';
+import { obtenerDb } from '../../config/mongodb.js';
 import { ErrorApi } from '../../middlewares/errores.js';
 import { filtroAlcance, verificarAlcance } from '../auth/alcance.service.js';
 import { registrarBitacora, MODULOS, ACCIONES } from '../auditoria/auditoria.service.js';
@@ -53,11 +55,79 @@ async function vacunasDelReporte(ejecutor, reporteId) {
   }));
 }
 
-async function buscarReporte(ejecutor, id, usuario) {
+const GRUPO_EDAD = 'grupo_edad';
+
+// Las dimensiones que usa un esquema (general, por dosis y secciones), con los valores que usa de cada una y la
+// etiqueta que les da; si dos desagregaciones dan etiquetas distintas, gana la general.
+function dimensionesDelEsquema(doc) {
+  const usadas = new Map();
+  const anotar = (dimension, valores, etiqueta) => {
+    const actual = usadas.get(dimension) ?? { valores: new Set(), etiqueta: null };
+    for (const valor of valores) actual.valores.add(valor);
+    actual.etiqueta ??= etiqueta ?? null;
+    usadas.set(dimension, actual);
+  };
+  for (const d of doc.dimensiones.desagregacion) anotar(d.dimension, d.valores, d.etiqueta);
+  for (const dosis of doc.dimensiones.dosis) {
+    for (const d of dosis.desagregacion ?? []) anotar(d.dimension, d.valores, d.etiqueta);
+  }
+  for (const seccion of doc.secciones ?? []) if (seccion.grupo_edad) anotar(GRUPO_EDAD, [seccion.grupo_edad]);
+  return usadas;
+}
+
+// Las etiquetas salen de la versión fijada en el reporte, con las dosis y los valores inactivos incluidos: el
+// formulario (HU-20) decide qué ocultar. Así el Personal no necesita los permisos del catálogo de configuración.
+async function conEtiquetas(vacunas) {
+  if (vacunas.length === 0) return vacunas;
+  const db = await obtenerDb();
+  const ids = vacunas.map((v) => v.esquema.id).filter((id) => /^[0-9a-f]{24}$/i.test(id)).map((id) => new ObjectId(id));
+  const [documentos, [dosis]] = await Promise.all([
+    db.collection('esquemas_captura').find({ _id: { $in: ids } }, { projection: { dimensiones: 1, secciones: 1 } }).toArray(),
+    pool.query('SELECT vacuna_id, codigo, nombre, orden, activa FROM dosis WHERE vacuna_id IN (?) ORDER BY orden', [
+      vacunas.map((v) => v.vacuna.id),
+    ]),
+  ]);
+  const usadasPorEsquema = new Map(documentos.map((doc) => [doc._id.toString(), { doc, usadas: dimensionesDelEsquema(doc) }]));
+  const codigos = [...new Set([...usadasPorEsquema.values()].flatMap(({ usadas }) => [...usadas.keys()]))];
+  const catalogo = new Map(
+    (await db.collection('catalogo_dimensiones').find({ codigo: { $in: codigos } }).toArray()).map((d) => [d.codigo, d]),
+  );
+
+  return vacunas.map((v) => {
+    const esquema = usadasPorEsquema.get(v.esquema.id);
+    if (!esquema) return { ...v, dosis: [], dimensiones: [] };
+    const delEsquema = new Set(esquema.doc.dimensiones.dosis.map((d) => d.codigo));
+    const dimensiones = [...esquema.usadas]
+      .filter(([codigo]) => catalogo.has(codigo))
+      .map(([codigo, { valores, etiqueta }]) => {
+        const dimension = catalogo.get(codigo);
+        return {
+          codigo,
+          nombre: dimension.nombre,
+          etiqueta,
+          valores: dimension.valores
+            .filter((valor) => valores.has(valor.codigo))
+            .sort((a, b) => a.orden - b.orden)
+            .map((valor) => ({ codigo: valor.codigo, etiqueta: valor.etiqueta, orden: valor.orden, activo: valor.activo })),
+        };
+      })
+      // Como en el formulario: el grupo de edad primero y las demás en el orden del catálogo (por nombre).
+      .sort((a, b) => (b.codigo === GRUPO_EDAD) - (a.codigo === GRUPO_EDAD) || a.nombre.localeCompare(b.nombre, 'es'));
+    return {
+      ...v,
+      dosis: dosis
+        .filter((d) => d.vacuna_id === v.vacuna.id && delEsquema.has(d.codigo))
+        .map((d) => ({ codigo: d.codigo, nombre: d.nombre, orden: d.orden, activa: Boolean(d.activa) })),
+      dimensiones,
+    };
+  });
+}
+
+async function buscarReporte(ejecutor, id, usuario, { etiquetas = true } = {}) {
   const [[fila]] = await ejecutor.query(`${SELECT_REPORTE} WHERE r.id = ?`, [aId(id)]);
   if (!fila) throw errores.noEncontrado();
   verificarAlcance(usuario, { establecimientoId: fila.establecimiento_id, ddrissId: fila.ddriss_id });
-  return {
+  const reporte = {
     id: fila.id,
     establecimiento: { id: fila.establecimiento_id, codigo: fila.establecimiento_codigo, nombre: fila.establecimiento_nombre },
     periodo: {
@@ -72,8 +142,9 @@ async function buscarReporte(ejecutor, id, usuario) {
     versionFila: fila.version_fila,
     creadoEn: aFechaIso(fila.creado_en),
     actualizadoEn: aFechaIso(fila.actualizado_en),
-    vacunas: await vacunasDelReporte(ejecutor, fila.id),
   };
+  const vacunas = await vacunasDelReporte(ejecutor, fila.id);
+  return { ...reporte, vacunas: etiquetas ? await conEtiquetas(vacunas) : vacunas };
 }
 
 export async function obtenerReporte(id, usuario) {
@@ -226,7 +297,8 @@ export async function crearReporte(cuerpo, usuario, contexto) {
         accion: ACCIONES.CREAR,
         entidad: 'reporte_produccion',
         entidadId: id,
-        valoresNuevos: await buscarReporte(conexion, id, usuario),
+        // Sin las etiquetas: son del catálogo, no del reporte, y leerlas iría a MongoDB dentro de la transacción.
+        valoresNuevos: await buscarReporte(conexion, id, usuario, { etiquetas: false }),
       });
       return id;
     });

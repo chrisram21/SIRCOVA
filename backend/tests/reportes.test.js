@@ -463,6 +463,8 @@ describe('GET /reportes y GET /reportes/{id}', () => {
         id: expect.any(Number),
         vacuna: { id: vacunaIds[VACUNA], codigo: VACUNA, nombre: `vitest-hu19 ${VACUNA}` },
         esquema: { id: ids.nacionalV1.toString(), version: 1 },
+        dosis: expect.any(Array),
+        dimensiones: expect.any(Array),
       },
     ]);
   });
@@ -476,5 +478,99 @@ describe('GET /reportes y GET /reportes/{id}', () => {
     expect(revisor.permisos).not.toContain('REPORTE_CONSULTAR');
     expect((await consultar('/reportes', revisor.token)).status).toBe(403);
     expect((await consultar(`/reportes/${reporteId}`, revisor.token)).status).toBe(403);
+  });
+});
+
+describe('etiquetas de GET /reportes/{id}', () => {
+  let reporteId;
+  const vacunaDelReporte = async () => {
+    const res = await consultar(`/reportes/${reporteId}`);
+    expect(res.status).toBe(200);
+    return res.body.vacunas.find((v) => v.vacuna.codigo === VACUNA);
+  };
+
+  beforeAll(async () => {
+    [{ id: reporteId }] = await reportesDelMes(2);
+  });
+
+  it('trae las dosis del esquema y sus dimensiones con las etiquetas, una sola vez cada una', async () => {
+    const vacuna = await vacunaDelReporte();
+    expect(vacuna.dosis).toEqual([
+      { codigo: 'D1', nombre: 'Primera dosis', orden: 1, activa: true },
+      { codigo: 'D2', nombre: 'Segunda dosis', orden: 2, activa: true },
+      { codigo: 'R1', nombre: 'Primer refuerzo', orden: 3, activa: true },
+    ]);
+    expect(vacuna.dimensiones.map((d) => [d.codigo, d.etiqueta])).toEqual([
+      ['grupo_edad', null],
+      ['sexo', null],
+      [DIMENSION, 'Condición ZVT'],
+    ]);
+    // Solo los valores que usa el esquema, en el orden del catálogo.
+    const valores = Object.fromEntries(vacuna.dimensiones.map((d) => [d.codigo, d.valores.map((v) => v.codigo)]));
+    expect(valores).toEqual({ grupo_edad: ['MENOR_1', '1_A_5'], sexo: ['M', 'F'], [DIMENSION]: ['A'] });
+    const zvt = vacuna.dimensiones.find((d) => d.codigo === DIMENSION);
+    expect(zvt).toEqual({
+      codigo: DIMENSION,
+      nombre: 'ZVT HU-19',
+      etiqueta: 'Condición ZVT',
+      valores: [{ codigo: 'A', etiqueta: 'Valor A', orden: 1, activo: true }],
+    });
+    expect(vacuna.dimensiones.find((d) => d.codigo === 'sexo').valores.map((v) => v.etiqueta)).toEqual([
+      'Masculino',
+      'Femenino',
+    ]);
+  });
+
+  it('una dosis o un valor desactivados después de crear el reporte siguen apareciendo con su marca', async () => {
+    const db = await obtenerDb();
+    try {
+      await pool.query("UPDATE dosis SET activa = FALSE WHERE vacuna_id = ? AND codigo = 'R1'", [vacunaIds[VACUNA]]);
+      await db
+        .collection('catalogo_dimensiones')
+        .updateOne({ codigo: DIMENSION, 'valores.codigo': 'A' }, { $set: { 'valores.$.activo': false } });
+      const vacuna = await vacunaDelReporte();
+      expect(vacuna.dosis.find((d) => d.codigo === 'R1')).toEqual({ codigo: 'R1', nombre: 'Primer refuerzo', orden: 3, activa: false });
+      expect(vacuna.dimensiones.find((d) => d.codigo === DIMENSION).valores).toEqual([
+        { codigo: 'A', etiqueta: 'Valor A', orden: 1, activo: false },
+      ]);
+    } finally {
+      await pool.query("UPDATE dosis SET activa = TRUE WHERE vacuna_id = ? AND codigo = 'R1'", [vacunaIds[VACUNA]]);
+      await db
+        .collection('catalogo_dimensiones')
+        .updateOne({ codigo: DIMENSION, 'valores.codigo': 'A' }, { $set: { 'valores.$.activo': true } });
+    }
+  });
+
+  it('salen de la versión fijada en el reporte, no de la vigente', async () => {
+    const db = await obtenerDb();
+    // Solo para la prueba: la v2 vigente usa otra etiqueta y el valor B; el reporte de febrero quedó con la v1.
+    await db.collection('esquemas_captura').updateOne(
+      { _id: ids.nacionalV2 },
+      { $set: { 'dimensiones.desagregacion.1': { dimension: DIMENSION, valores: ['A', 'B'], etiqueta: 'Otra etiqueta' } } },
+    );
+    const vacuna = await vacunaDelReporte();
+    expect(vacuna.esquema).toEqual({ id: ids.nacionalV1.toString(), version: 1 });
+    expect(vacuna.dimensiones.find((d) => d.codigo === DIMENSION)).toMatchObject({
+      etiqueta: 'Condición ZVT',
+      valores: [{ codigo: 'A' }],
+    });
+  });
+
+  it('el Personal las obtiene sin los permisos del catálogo de configuración', () => {
+    for (const permiso of ['DIMENSION_CONSULTAR', 'VACUNA_CONSULTAR', 'ESQUEMA_CONSULTAR']) {
+      expect(personal.permisos).not.toContain(permiso);
+    }
+  });
+
+  it('un esquema que ya no está en MongoDB deja la vacuna sin dosis ni dimensiones, sin fallar', async () => {
+    const [[fila]] = await pool.query('SELECT id, esquema_mongo_id FROM reporte_vacuna WHERE reporte_id = ?', [reporteId]);
+    const ausente = new ObjectId().toString();
+    try {
+      await pool.query('UPDATE reporte_vacuna SET esquema_mongo_id = ? WHERE id = ?', [ausente, fila.id]);
+      const vacuna = await vacunaDelReporte();
+      expect(vacuna).toMatchObject({ esquema: { id: ausente }, dosis: [], dimensiones: [] });
+    } finally {
+      await pool.query('UPDATE reporte_vacuna SET esquema_mongo_id = ? WHERE id = ?', [fila.esquema_mongo_id, fila.id]);
+    }
   });
 });
