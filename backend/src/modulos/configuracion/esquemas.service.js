@@ -194,6 +194,35 @@ export async function listarEsquemas(query, usuario) {
     .sort((a, b) => a.vacuna.nombre.localeCompare(b.vacuna.nombre, 'es'));
 }
 
+// El esquema publicado que cubre la fecha (día 1 del mes, en UTC como las vigencias): el de la DDRISS o, si no hay,
+// el nacional. Se elige por fecha y no por estado, porque un VIGENTE puede empezar en un mes futuro (SPEC 20).
+// Las vacunas sin esquema para esa fecha no aparecen en el Map.
+export async function esquemasDelPeriodo(codigosVacuna, ddrissCodigo, fecha) {
+  if (codigosVacuna.length === 0) return new Map();
+  const territorios = [{ 'territorio.nivel': NACIONAL }];
+  if (ddrissCodigo) territorios.push({ 'territorio.ddriss_codigo': ddrissCodigo });
+  const documentos = await (await coleccion())
+    .find(
+      {
+        'vacuna.codigo': { $in: codigosVacuna },
+        estado: { $in: ['VIGENTE', 'HISTORICO'] },
+        'vigencia.desde': { $lte: fecha },
+        $and: [{ $or: [{ 'vigencia.hasta': null }, { 'vigencia.hasta': { $gte: fecha } }] }, { $or: territorios }],
+      },
+      { projection: { vacuna: 1, version: 1, territorio: 1 } },
+    )
+    .toArray();
+  const nacionales = new Map();
+  const deLaDdriss = new Map();
+  for (const doc of documentos) {
+    (doc.territorio.nivel === NACIONAL ? nacionales : deLaDdriss).set(doc.vacuna.codigo, {
+      id: doc._id.toString(),
+      version: doc.version,
+    });
+  }
+  return new Map([...nacionales, ...deLaDdriss]);
+}
+
 // Un id que no es un ObjectId, o un esquema de otra DDRISS, responde igual que uno inexistente.
 async function buscarVisible(id, usuario) {
   if (!/^[0-9a-f]{24}$/i.test(String(id))) throw errores.noEncontrado();
