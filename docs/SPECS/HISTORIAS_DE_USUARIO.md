@@ -247,10 +247,12 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [x] Puedo registrar un establecimiento con tipo, municipio, distrito, dirección, teléfono, correo y contacto.
 - [x] Puedo marcar qué establecimientos envían el 5C (31: el que centraliza cada municipio y el Hospital de San Marcos).
 - [x] Puedo marcar un establecimiento cuya producción solo cuenta para cobertura (Hospital de San Marcos) y uno externo (por ejemplo, el de Coatepeque).
-- [ ] Un establecimiento desactivado no puede crear reportes nuevos. (Pasa a HU-19; ver el avance.)
+- [x] Un establecimiento desactivado no puede crear reportes nuevos. (Se cumplió en HU-19, spec 22.)
 - [x] Puedo filtrar el listado por municipio y tipo.
 
 **Avance:** criterios cumplidos, salvo el de los reportes nuevos, que pasa a HU-19; queda terminada al integrar el spec 14 a `main`. Backend y frontend en `specs/14-hu-09-establecimientos.md`. Hay cuatro diferencias con la historia, porque mandan `AGENTS.md` y el modelo. Primera: "un establecimiento desactivado no puede crear reportes nuevos" depende de `POST /reportes`, que todavía no existe; el criterio pasa a HU-19, y este spec garantiza que el establecimiento quede inactivo y no aparezca en los formularios que piden `activo=true`. Segunda: editar es solo cambiar el nombre, la dirección, el teléfono, el correo, el contacto y las marcas; el código no se renombra (regla 6), y el tipo, el municipio y el distrito no cambian (para eso se desactiva y se registra otro). Tercera: desactivar y reactivar van en `POST /establecimientos/{id}/desactivar` y `/reactivar`, no en el `PATCH`. Cuarta: `es_externo` no es una casilla: lo deduce el backend del departamento del municipio. Endpoints: `GET /establecimientos` (más campos, filtro `tipoEstablecimientoId`), `GET`/`PATCH /establecimientos/{id}`, `POST /establecimientos`, `GET /tipos-establecimiento` y `GET /municipios?alcance=todos`, con los permisos `ESTABLECIMIENTO_CREAR`, `ESTABLECIMIENTO_EDITAR` y `TIPO_ESTABLECIMIENTO_CONSULTAR`. El backend genera el código `{TIPO}-{INE}-{NN}`. Un nombre repetido en el municipio responde 409, igual que desactivar un establecimiento con cuentas activas; `reporta5c` o `soloCobertura` sin `reportaProduccion` responden 422. La pantalla es la pestaña «Establecimientos» de `/configuracion`, con subrutas para registrar y editar. Verificado contra la API real el 2026-10-23: la pestaña mostró los 40 establecimientos de la semilla y "Envían el 5C: 31"; se registraron `PS-1209-36` en Tajumulco y `CS-0920-01` en Coatepeque (externo, sin distrito); se editó el contacto del externo y se desactivó y reactivó, con sus filas en la bitácora; "Desactivar" quedó deshabilitado en `CS-1201`, que tiene cuentas; y el desactivado no apareció en `/usuarios/nuevo`. Los dos establecimientos de prueba quedaron desactivados.
+
+**Nota (2026-10-25, spec 22):** el criterio de los reportes nuevos se cumplió en HU-19: `POST /reportes` responde 409 `ESTABLECIMIENTO_INACTIVO` si el establecimiento de la cuenta está desactivado, y 422 `ESTABLECIMIENTO_NO_REPORTA` si no tiene `reporta_5c`.
 
 **Nota (2026-10-21, spec 07):** `GET /establecimientos` ya existe en versión mínima, de solo lectura (`backend/src/modulos/catalogos/`, permiso `ESTABLECIMIENTO_CONSULTAR`, hoy solo del Administrador), porque lo necesita el formulario de HU-04. Devuelve los campos del contrato, filtrados por ámbito con `filtroAlcance`, y acepta `municipioId` y `activo`. Esta historia lo amplía (filtro por tipo, alta y edición) en lugar de crearlo de nuevo.
 
@@ -268,9 +270,11 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 - [x] Puedo agregar una vacuna nueva sin cambiar el código del sistema.
 - [x] Cada dosis tiene un orden y un tipo (primera, segunda, refuerzo, etc.).
 - [x] Puedo marcar qué dosis completa el esquema (la última dosis sin contar refuerzos). (La calcula el sistema; ver el avance.)
-- [ ] Una vacuna desactivada ya no aparece en reportes nuevos, pero sí en los históricos. (Pasa a HU-19 y HU-20; ver el avance.)
+- [x] Una vacuna desactivada ya no aparece en reportes nuevos, pero sí en los históricos. (Se cumplió en HU-19, spec 22.)
 
 **Avance:** criterios cumplidos, salvo el de los reportes nuevos, que pasa a HU-19 y HU-20; queda terminada al integrar el spec 15 a `main`. Backend y frontend en `specs/15-hu-10-vacunas-y-dosis.md`. Hay cinco diferencias con la historia, porque mandan `AGENTS.md` y el modelo. Primera: `dosis` no tiene columna `tipo` y el modelo no cambia; el tipo sale del código, que genera el backend: `UNICA`, `D{n}` (dosis) o `R{n}` (refuerzo), y el `orden` es el siguiente de la vacuna; un código no se reutiliza. Segunda: `completa_esquema` no se marca a mano: lo calcula el backend en cada cambio de las dosis activas (la activa `UNICA` o `DOSIS` de mayor orden o, si no hay, el último refuerzo activo, como en DPT), y la regla reproduce las marcas de las 21 vacunas de la semilla. Tercera: "una vacuna desactivada ya no aparece en reportes nuevos" depende de `POST /reportes` y del formulario, que todavía no existen; el criterio pasa a HU-19 y HU-20, y este spec garantiza que la vacuna quede inactiva sin borrar nada y no aparezca en `GET /vacunas?activa=true`. Cuarta: además de `GET/POST /vacunas` hay `GET`/`PATCH /vacunas/{id}`, `/desactivar`, `/reactivar` y rutas propias para agregar, editar, desactivar y reactivar dosis. Quinta: el Revisor (estadígrafa) tiene los mismos permisos que el Administrador (`VACUNA_CONSULTAR`, `VACUNA_CREAR`, `VACUNA_EDITAR`, y `CONFIGURACION_CONSULTAR` para ver el menú). El catálogo es nacional: no se filtra por DDRISS. Una secuencia inválida (dos `UNICA`, `UNICA` con `DOSIS` o un refuerzo antes de una dosis) responde 422; un código o nombre de vacuna repetido, o un nombre de dosis repetido en la vacuna, 409; desactivar la última dosis activa, 409. La pantalla es la pestaña «Vacunas» de `/configuracion`, con subrutas para registrar y editar. Verificado contra la API real el 2026-10-23: la pestaña mostró las 21 vacunas de la semilla con su marca; como Administrador se registró `PRUEBA_HU10` con D1, D2 y R1 (marca en D2), se le agregó D3 (la marca pasó a D3), se desactivó D3 (volvió a D2), se editó el nombre y se desactivó y reactivó la vacuna, con los filtros puestos al volver; como Revisor, Configuración mostró solo «Vacunas» y se editó la descripción. La bitácora tiene una fila por operación, más las `ACTUALIZAR` de D2 por la marca. La vacuna de prueba quedó desactivada.
+
+**Nota (2026-10-25, spec 22):** el criterio de los reportes nuevos se cumplió en HU-19 para las vacunas: el reporte fija al crearse sus vacunas activas con la versión de esquema de ese mes (`reporte_vacuna`), así que una vacuna desactivada después sigue en los reportes anteriores y no entra en los nuevos. Las dosis inactivas pasan a HU-20: se ocultan en el formulario salvo que el reporte ya tenga cantidades de esa dosis.
 
 #### HU-11. Navegación y pantalla inicial según el rol
 
@@ -304,9 +308,11 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 **Criterios de aceptación:**
 - [x] Puedo crear los 12 periodos de un año.
 - [x] Puedo definir la fecha límite de envío de cada periodo.
-- [ ] Un periodo cerrado no admite reportes nuevos. (Pasa a HU-19; ver el avance.)
+- [x] Un periodo cerrado no admite reportes nuevos. (Se cumplió en HU-19, spec 22.)
 
 **Avance:** criterios cumplidos, salvo el de los reportes nuevos, que pasa a HU-19; queda terminada al integrar el spec 16 a `main`. Backend y frontend en `specs/16-hu-12-periodos-de-reporte.md`. Hay cuatro diferencias con la historia, porque mandan `AGENTS.md` y el modelo. Primera: `cierre_periodo` no tiene un estado «programado», así que crear su fila es abrir el mes; por eso «crear los 12 periodos» (`POST /periodos { anio }`) solo agrega al calendario común (`periodo`) los meses que falten del año, sin abrir ninguno, y cada mes se abre aparte para la DDRISS del usuario con `POST /periodos/{id}/abrir { fechaLimiteEnvio }`. Los años van de 2020 al siguiente al actual (fecha de Guatemala); un año con sus 12 meses responde 409 y uno incompleto se completa. Segunda: al abrir se crea solo la fila de la DDRISS del usuario, no una por DDRISS activa como dice el comentario del script 01, que no se tocó. Tercera: la fecha límite se cambia con `PATCH /periodos/{id}` en un mes `ABIERTO` o `EN_CIERRE` (no en uno sin abrir o `CERRADO`, 409), y debe ser posterior al fin del mes (422); en `EN_CIERRE`, una fecha de hoy o posterior lo devuelve a `ABIERTO`. Cuarta: «un periodo cerrado no admite reportes nuevos» depende de `POST /reportes`, que todavía no existe; el criterio pasa a HU-19, y `GET /periodos` ya devuelve cada mes con el estado y la fecha límite de la DDRISS del usuario (`null` si no está abierto) y filtra por `anio` y `estado`. El Administrador y el Revisor tienen `PERIODO_CONSULTAR`, `PERIODO_CREAR` y `PERIODO_EDITAR`. La pantalla es la pestaña «Periodos» de `/configuracion`, con el año en `?anio=`. Verificado contra la API real el 2026-10-23: como Administrador, la pestaña mostró 2026 con el estado de la semilla; se creó 2025 (12 meses "Sin abrir", 12 filas `CREAR`); se abrió diciembre de 2025 con la fecha sugerida 10/01/2026 y se cambió a 20/01/2026; y al recargar, 2025 siguió elegido. Como Revisor, Configuración mostró «Vacunas» y «Periodos», y se cambió la fecha límite de octubre de 2026 y se devolvió a 10/11/2026, con sus filas `ACTUALIZAR`. El año 2025 quedó en el calendario.
+
+**Nota (2026-10-25, spec 22):** el criterio de los reportes nuevos se cumplió en HU-19: `POST /reportes` solo crea en un mes `ABIERTO` en `cierre_periodo` de la DDRISS del establecimiento; uno sin abrir, `EN_CIERRE` o `CERRADO` responde 409 `PERIODO_NO_ABIERTO`. El Personal de establecimiento ya tiene `PERIODO_CONSULTAR`.
 
 #### HU-13. Registrar la población objetivo
 
@@ -464,13 +470,47 @@ Verificado contra la API real el 2026-10-25:
 **Cómo se hará:** Endpoint `POST /reportes`; tabla `reporte_produccion` en estado Borrador; el establecimiento se toma del usuario y debe tener `reporta_5c`.
 
 **Criterios de aceptación:**
-- [ ] Solo puedo elegir periodos abiertos.
-- [ ] Solo los establecimientos que envían el 5C (uno por municipio y el Hospital de San Marcos) pueden crear reportes.
-- [ ] No puedo crear dos reportes del mismo establecimiento para el mismo periodo.
-- [ ] Un establecimiento desactivado no puede crear reportes nuevos (viene de HU-09).
-- [ ] Una vacuna inactiva, o una dosis inactiva, no aparece en reportes nuevos; los reportes anteriores la conservan (viene de HU-10).
-- [ ] Solo se crean reportes en un mes `ABIERTO` en la DDRISS del establecimiento; uno sin abrir, en cierre o cerrado no admite reportes nuevos (viene de HU-12).
-- [ ] El reporte nace en estado Borrador.
+- [x] Solo puedo elegir periodos abiertos.
+- [x] Solo los establecimientos que envían el 5C (uno por municipio y el Hospital de San Marcos) pueden crear reportes.
+- [x] No puedo crear dos reportes del mismo establecimiento para el mismo periodo.
+- [x] Un establecimiento desactivado no puede crear reportes nuevos (viene de HU-09).
+- [ ] Una vacuna inactiva, o una dosis inactiva, no aparece en reportes nuevos; los reportes anteriores la conservan (viene de HU-10). (Cumplido para las vacunas; las dosis pasan a HU-20. Ver el avance.)
+- [x] Solo se crean reportes en un mes `ABIERTO` en la DDRISS del establecimiento; uno sin abrir, en cierre o cerrado no admite reportes nuevos (viene de HU-12).
+- [x] El reporte nace en estado Borrador.
+
+**Avance:** criterios cumplidos, salvo la parte de las dosis inactivas, que pasa a HU-20; queda terminada al integrar el spec 22 a `main`. Backend y frontend en `specs/22-hu-19-crear-reporte-mensual.md`. Diferencias con la historia, porque mandan `AGENTS.md`, el modelo y lo que decidió el equipo:
+
+- El reporte **fija sus vacunas al crearse**. `POST /reportes { periodoId }` crea, en una transacción, una fila de `reporte_vacuna` por cada vacuna activa con un esquema publicado que cubra el día 1 del mes. El esquema es el de la DDRISS del establecimiento (`VIGENTE` o `HISTORICO`) o, si no hay, el nacional, y lo resuelve `esquemasDelPeriodo`. Desactivar una vacuna o publicar otra versión después no cambia el reporte. Una vacuna sin esquema para el mes se omite, y si no queda ninguna responde 422 `SIN_ESQUEMAS`.
+- Las **dosis inactivas** pasan a HU-20: el reporte no guarda qué dosis lleva, y la versión publicada no se edita. El formulario las oculta salvo que el reporte ya tenga cantidades de esa dosis.
+- El establecimiento sale de la cuenta: el cuerpo es solo `{ periodoId }`, y `establecimientoId` responde 400. Solo crea el Personal de establecimiento.
+- La creación deja una fila en `historial_estado_reporte` (`NULL` → `BORRADOR`) y una `CREAR` en la bitácora.
+
+Errores: 403 `SIN_ESTABLECIMIENTO`, 409 `ESTABLECIMIENTO_INACTIVO`, 422 `ESTABLECIMIENTO_NO_REPORTA`, 404 si el periodo no existe, 409 `PERIODO_NO_ABIERTO`, 409 `REPORTE_EXISTENTE` (también con dos altas en paralelo) y 422 `SIN_ESQUEMAS`.
+
+Endpoints:
+
+- `POST /reportes`;
+- `GET /reportes`, paginado por alcance, con `periodoId` y `estado`;
+- `GET /reportes/{id}`, con el estado y la fecha límite del mes en la DDRISS, y las vacunas con su versión. Cada vacuna trae, de esa versión, sus dosis (con `activa`) y las dimensiones que usa con sus etiquetas, para que el Personal no necesite los permisos del catálogo.
+
+Permisos nuevos: `REPORTE_CREAR` y `REPORTE_CONSULTAR`, solo para el Personal de establecimiento, que además recibe `PERIODO_CONSULTAR`. La opción «Reportes» del menú pasó al código provisional `REPORTE_LISTAR`.
+
+Pendientes que quedaron hechos antes de HU-20:
+
+- `GET /esquemas-captura/{id}` devuelve la `etiqueta` de cada desagregación, y el `POST` y el `PUT` la aceptan y la guardan, para que el editor no la pierda al guardar ni al copiar;
+- se quitó del contrato `GET /vacunas/{codigo}/esquema-vigente`.
+
+La pantalla es «Registro de producción» (`/registro`): elige un mes abierto (`?periodo=`; sin él, el más antiguo sin reporte o en Borrador), crea el reporte y muestra los pasos de estado y una pestaña por vacuna con su versión, sus dimensiones y sus etiquetas, todavía sin formulario.
+
+Verificado contra la API real el 2026-10-25:
+
+- Con `cs1201` (C/S San Marcos), el menú mostró solo «Inicio» y «Registro de producción», y `/registro` abrió en octubre de 2026 (septiembre estaba `APROBADO`) con la fecha límite 10/11/2026.
+- Se creó el reporte 287, que quedó en `BORRADOR` con su historial `NULL → BORRADOR`, su `CREAR` en la bitácora y 8 vacunas: BCG, Polio, Hexavalente v2, Rotavirus, Neumococo, SPR, VPH y Td.
+- Las pestañas mostraron «Dosis · Grupo de edad» con «< 1 año» y «De 1 a < 6 años» en Hexavalente, «Dosis · Sexo» con «Masculino» y «Femenino» en VPH, y «Dosis · Grupo de edad · Estado de embarazo» en Td.
+- Al recargar, el reporte siguió y el botón ya no apareció. Septiembre mostró el paso «Aprobado» con las 5 vacunas de la semilla.
+- Con el Revisor, el menú no mostró «Registro de producción», y `/registro` llevó a `/inicio`.
+
+El reporte 287 queda en Borrador y sirve para HU-20.
 
 **Nota (2026-10-23, spec 16):** `GET /periodos?estado=ABIERTO` devuelve los meses abiertos en la DDRISS del usuario. Hoy solo el Administrador y el Revisor tienen `PERIODO_CONSULTAR`: el spec de HU-19 se lo asigna al Personal de establecimiento en `05_permisos_mysql.sql`.
 
@@ -500,6 +540,13 @@ Verificado contra la API real el 2026-10-25:
 **Nota (2026-10-24, spec 20):** El esquema de un periodo es el de la DDRISS del establecimiento (`VIGENTE` o `HISTORICO`) cuya vigencia cubre el día 1 del mes; si no hay, el nacional que la cubra. Un `VIGENTE` puede tener `desde` futuro (SPEC 20), así que no basta con buscar el `VIGENTE`. Esto corrige la nota del spec 19. También queda por decidir qué pasa con un reporte en borrador de un mes cuya versión cambió.
 
 **Nota (2026-10-25, spec 21):** El formulario se arma con `armarFormulario` y se dibuja con `FormularioCaptura` (`componentes/formulario/`, SPEC 21), que ya calculan la `claveCombinacion` de cada celda y los totales; la captura agrega guardar, cargar las cantidades del reporte y las validaciones. El backend debe armar la `clave_combinacion` con la misma regla (dimensiones ordenadas por código, `codigo=valor` unidas con `|`). Para una versión publicada sin `secciones` (como Hexavalente v1, la de los reportes de la semilla) se pasa `deducirSecciones: true`. Antes de HU-20 debe estar la `etiqueta` de cada desagregación en `GET /esquemas-captura/{id}` (nota en HU-19).
+
+**Nota (2026-10-25, spec 22):**
+- Las vacunas y la versión del esquema de cada una se fijan al crear el reporte (`reporte_vacuna`, SPEC 22). El formulario usa esa versión aunque se publique otra: eso resuelve la duda de la nota del spec 20 sobre un borrador de un mes cuya versión cambió.
+- Las dosis inactivas se ocultan, salvo que el reporte ya tenga cantidades de esa dosis.
+- `GET /reportes/{id}` ya trae, de la versión del reporte, los nombres de las dosis (con `activa`) y las etiquetas de las dimensiones de cada vacuna (`vacunas[].dosis` y `vacunas[].dimensiones`), porque el Personal no tiene `DIMENSION_CONSULTAR` ni `VACUNA_CONSULTAR`. Esto responde la nota del spec 18.
+- `GET /reportes/{id}/formulario` agrega el contenido del esquema y las cantidades guardadas.
+- `esquemasDelPeriodo` (`esquemas.service.js`) resuelve el esquema por fecha, y la `etiqueta` de cada desagregación ya está en `GET /esquemas-captura/{id}`.
 
 #### HU-21. Registrar el municipio de procedencia
 
