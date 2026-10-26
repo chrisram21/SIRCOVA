@@ -1,9 +1,13 @@
 import pool, { enTransaccion } from '../../config/mysql.js';
 import { ErrorApi } from '../../middlewares/errores.js';
-import { verificarAlcance } from '../auth/alcance.service.js';
+import { filtroAlcance, verificarAlcance } from '../auth/alcance.service.js';
 import { registrarBitacora, MODULOS, ACCIONES } from '../auditoria/auditoria.service.js';
-import { entradaInvalida, revisarCampos } from '../catalogos/catalogos.service.js';
+import { entradaInvalida, revisarCampos, revisarParametros } from '../catalogos/catalogos.service.js';
 import { esquemasDelPeriodo } from '../configuracion/esquemas.service.js';
+
+const ESTADOS_REPORTE = [
+  'BORRADOR', 'ENVIADO', 'EN_REVISION', 'CORRECCION_SOLICITADA', 'APROBADO', 'CERRADO', 'RECTIFICACION',
+];
 
 const errores = {
   noEncontrado: () => new ErrorApi(404, 'NO_ENCONTRADO', 'El recurso solicitado no existe.'),
@@ -74,6 +78,79 @@ async function buscarReporte(ejecutor, id, usuario) {
 
 export async function obtenerReporte(id, usuario) {
   return buscarReporte(pool, id, usuario);
+}
+
+function leerEntero(valor, { minimo, maximo = Number.MAX_SAFE_INTEGER }) {
+  if (!/^\d+$/.test(valor)) return null;
+  const numero = Number(valor);
+  return numero >= minimo && numero <= maximo ? numero : null;
+}
+
+function leerFiltros(query) {
+  revisarParametros(query, ['periodoId', 'estado', 'pagina', 'porPagina']);
+  const filtros = { pagina: 1, porPagina: 20 };
+  if (query.periodoId !== undefined) {
+    filtros.periodoId = leerEntero(query.periodoId, { minimo: 1 });
+    if (filtros.periodoId === null) throw entradaInvalida('periodoId debe ser un número entero positivo.');
+  }
+  if (query.estado !== undefined) {
+    if (!ESTADOS_REPORTE.includes(query.estado)) {
+      throw entradaInvalida(`estado debe ser ${ESTADOS_REPORTE.slice(0, -1).join(', ')} o ${ESTADOS_REPORTE.at(-1)}.`);
+    }
+    filtros.estado = query.estado;
+  }
+  if (query.pagina !== undefined) {
+    filtros.pagina = leerEntero(query.pagina, { minimo: 1 });
+    if (filtros.pagina === null) throw entradaInvalida('pagina debe ser un número entero mayor o igual a 1.');
+  }
+  if (query.porPagina !== undefined) {
+    filtros.porPagina = leerEntero(query.porPagina, { minimo: 1, maximo: 100 });
+    if (filtros.porPagina === null) throw entradaInvalida('porPagina debe ser un número entero entre 1 y 100.');
+  }
+  return filtros;
+}
+
+// El mismo WHERE sirve para el COUNT y para la página, así total y elementos no se separan.
+export async function listarReportes(usuario, query = {}) {
+  const filtros = leerFiltros(query);
+  const alcance = filtroAlcance(usuario, { establecimiento: 'r.establecimiento_id', ddriss: 'e.ddriss_id' });
+  const condiciones = [alcance.condicion];
+  const parametros = [...alcance.parametros];
+  if (filtros.periodoId) {
+    condiciones.push('r.periodo_id = ?');
+    parametros.push(filtros.periodoId);
+  }
+  if (filtros.estado) {
+    condiciones.push('r.estado = ?');
+    parametros.push(filtros.estado);
+  }
+  const desde = `FROM reporte_produccion r
+    JOIN establecimiento e ON e.id = r.establecimiento_id
+    JOIN periodo p ON p.id = r.periodo_id
+   WHERE ${condiciones.join(' AND ')}`;
+
+  const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total ${desde}`, parametros);
+  const [filas] = await pool.query(
+    `SELECT r.id, r.estado, UNIX_TIMESTAMP(r.actualizado_en) AS actualizado_en,
+            e.id AS establecimiento_id, e.codigo AS establecimiento_codigo, e.nombre AS establecimiento_nombre,
+            p.id AS periodo_id, p.anio, p.mes
+       ${desde}
+      ORDER BY p.anio DESC, p.mes DESC, e.nombre, r.id
+      LIMIT ? OFFSET ?`,
+    [...parametros, filtros.porPagina, (filtros.pagina - 1) * filtros.porPagina],
+  );
+  return {
+    elementos: filas.map((f) => ({
+      id: f.id,
+      establecimiento: { id: f.establecimiento_id, codigo: f.establecimiento_codigo, nombre: f.establecimiento_nombre },
+      periodo: { id: f.periodo_id, anio: f.anio, mes: f.mes },
+      estado: f.estado,
+      actualizadoEn: aFechaIso(f.actualizado_en),
+    })),
+    total: Number(total),
+    pagina: filtros.pagina,
+    porPagina: filtros.porPagina,
+  };
 }
 
 function leerReporteNuevo(cuerpo) {

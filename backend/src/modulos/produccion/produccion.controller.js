@@ -1,6 +1,10 @@
 import * as reportesService from './reportes.service.js';
 import { contextoAuditoria } from '../auditoria/auditoria.service.js';
 
+export async function listarReportes(req, res) {
+  res.json(await reportesService.listarReportes(req.usuario, req.query));
+}
+
 export async function crearReporte(req, res) {
   res.status(201).json(await reportesService.crearReporte(req.body, req.usuario, contextoAuditoria(req)));
 }

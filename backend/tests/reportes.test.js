@@ -379,3 +379,102 @@ describe('POST /reportes', () => {
     }
   });
 });
+
+describe('GET /reportes y GET /reportes/{id}', () => {
+  let otro;
+  let reporteId;
+
+  beforeAll(async () => {
+    otro = await tokenDe('u.nombre_usuario', 'cs1202');
+    [{ id: reporteId }] = await reportesDelMes(2);
+  });
+
+  it('la lista filtrada por periodoId trae el reporte del establecimiento con la forma paginada', async () => {
+    const res = await consultar(`/reportes?periodoId=${periodoIds[2]}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      elementos: [
+        {
+          id: reporteId,
+          establecimiento: { id: expect.any(Number), codigo: ESTABLECIMIENTO, nombre: expect.any(String) },
+          periodo: { id: periodoIds[2], anio: ANIO, mes: 2 },
+          estado: 'BORRADOR',
+          actualizadoEn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z$/),
+        },
+      ],
+      total: 1,
+      pagina: 1,
+      porPagina: 20,
+    });
+  });
+
+  it('sin filtros solo trae reportes del establecimiento, del mes más reciente al más antiguo', async () => {
+    const res = await consultar('/reportes?porPagina=100');
+    expect(res.status).toBe(200);
+    expect(res.body.elementos.every((r) => r.establecimiento.codigo === ESTABLECIMIENTO)).toBe(true);
+    const claves = res.body.elementos.map((r) => r.periodo.anio * 100 + r.periodo.mes);
+    expect(claves).toEqual([...claves].sort((a, b) => b - a));
+    const borradores = await consultar(`/reportes?estado=BORRADOR&periodoId=${periodoIds[4]}`);
+    expect(borradores.body.total).toBe(1);
+  });
+
+  it('una página fuera de rango responde 200 sin elementos y con el total real', async () => {
+    const res = await consultar(`/reportes?periodoId=${periodoIds[2]}&pagina=5`);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ elementos: [], total: 1, pagina: 5 });
+  });
+
+  it.each([
+    ['estado=ENVIADA', 'estado debe ser BORRADOR, ENVIADO, EN_REVISION, CORRECCION_SOLICITADA, APROBADO, CERRADO o RECTIFICACION.'],
+    ['establecimientoId=2', 'Parámetro no permitido: establecimientoId.'],
+    ['periodoId=abc', 'periodoId debe ser un número entero positivo.'],
+    ['estado=BORRADOR&estado=ENVIADO', 'estado no se puede repetir.'],
+    ['porPagina=101', 'porPagina debe ser un número entero entre 1 y 100.'],
+  ])('%s responde 400', async (consulta, mensaje) => {
+    const res = await consultar(`/reportes?${consulta}`);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toEqual({ codigo: 'ENTRADA_INVALIDA', mensaje });
+  });
+
+  it('otro establecimiento no ve el reporte en la lista y recibe 404 en el detalle', async () => {
+    const lista = await consultar(`/reportes?periodoId=${periodoIds[2]}`, otro.token);
+    expect(lista.status).toBe(200);
+    expect(lista.body).toMatchObject({ elementos: [], total: 0 });
+    const detalle = await consultar(`/reportes/${reporteId}`, otro.token);
+    expect(detalle.status).toBe(404);
+    expect(detalle.body.error.codigo).toBe('NO_ENCONTRADO');
+  });
+
+  it('el detalle trae el periodo con su estado y fecha límite, y las vacunas con su versión', async () => {
+    const res = await consultar(`/reportes/${reporteId}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      id: reporteId,
+      establecimiento: { codigo: ESTABLECIMIENTO },
+      periodo: { id: periodoIds[2], anio: ANIO, mes: 2, estado: 'ABIERTO', fechaLimiteEnvio: `${ANIO}-03-10` },
+      estado: 'BORRADOR',
+      numeroRectificacion: 0,
+      versionFila: 1,
+      creadoEn: expect.any(String),
+      actualizadoEn: expect.any(String),
+    });
+    expect(res.body.vacunas).toEqual([
+      {
+        id: expect.any(Number),
+        vacuna: { id: vacunaIds[VACUNA], codigo: VACUNA, nombre: `vitest-hu19 ${VACUNA}` },
+        esquema: { id: ids.nacionalV1.toString(), version: 1 },
+      },
+    ]);
+  });
+
+  it.each([['inexistente', '999999999'], ['con un id que no es número', 'abc']])('un reporte %s responde 404', async (_, id) => {
+    const res = await consultar(`/reportes/${id}`);
+    expect(res.status).toBe(404);
+  });
+
+  it('sin REPORTE_CONSULTAR (el Revisor) la lista y el detalle responden 403', async () => {
+    expect(revisor.permisos).not.toContain('REPORTE_CONSULTAR');
+    expect((await consultar('/reportes', revisor.token)).status).toBe(403);
+    expect((await consultar(`/reportes/${reporteId}`, revisor.token)).status).toBe(403);
+  });
+});
