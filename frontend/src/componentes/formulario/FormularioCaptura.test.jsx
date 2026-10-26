@@ -105,3 +105,58 @@ it('dibuja los campos adicionales según su tipo, con "(obligatorio)" y su ayuda
   expect(jornada.getAttribute('aria-checked')).toBe('true')
   screen.getByRole('combobox', { name: 'Turno' })
 })
+
+describe('con cantidades del padre (la captura)', () => {
+  const formulario = armarFormulario({ contenido, vacuna, dimensiones })
+
+  it('muestra las cantidades recibidas con sus totales y avisa cada cambio con la llave {dosis}|{clave}', () => {
+    const alCambiar = vi.fn()
+    render(
+      <FormularioCaptura
+        formulario={formulario}
+        cantidades={{ 'D1|grupo_edad=MENOR_1|sexo=M': '78', 'D2|grupo_edad=MENOR_1|sexo=F': '0' }}
+        alCambiar={alCambiar}
+      />,
+    )
+    expect(screen.getByRole('textbox', { name: '1.ª dosis · < 1 año · Masculino' }).value).toBe('78')
+    expect(screen.getByRole('textbox', { name: '2.ª dosis · < 1 año · Femenino' }).value).toBe('0')
+    expect(screen.getByRole('textbox', { name: '1.ª dosis · < 1 año · Femenino' }).value).toBe('')
+    expect(total('Total general')).toBe('78')
+
+    escribir('1.ª dosis · De 1 a < 6 años · Femenino', '4')
+    expect(alCambiar).toHaveBeenCalledWith('D1|grupo_edad=1_A_5|sexo=F', '4')
+    // El padre no actualizó sus cantidades: el campo sigue con lo que recibió.
+    expect(screen.getByRole('textbox', { name: '1.ª dosis · De 1 a < 6 años · Femenino' }).value).toBe('')
+  })
+
+  it('en solo lectura los campos están deshabilitados y los totales se siguen viendo', () => {
+    render(<FormularioCaptura formulario={formulario} cantidades={{ 'D1|grupo_edad=MENOR_1|sexo=M': '5' }} soloLectura />)
+    for (const campo of screen.getAllByRole('textbox')) expect(campo.disabled).toBe(true)
+    expect(total('Total de 1.ª dosis')).toBe('5')
+  })
+
+  it('CamposAdicionales muestra los valores recibidos, avisa con alCambiar(clave, valor) y en solo lectura se deshabilita', () => {
+    const campos = [
+      { clave: 'frascos', etiqueta: 'Frascos', tipo: 'entero', requerido: false },
+      { clave: 'jornada', etiqueta: 'Hubo jornada', tipo: 'booleano', requerido: false },
+      { clave: 'turno', etiqueta: 'Turno', tipo: 'lista', requerido: false, opciones: ['Mañana', 'Tarde'] },
+    ]
+    const alCambiar = vi.fn()
+    const { unmount } = render(
+      <CamposAdicionales campos={campos} valores={{ frascos: '12', jornada: true }} alCambiar={alCambiar} />,
+    )
+    const frascos = screen.getByRole('spinbutton', { name: 'Frascos' })
+    expect(frascos.value).toBe('12')
+    expect(screen.getByRole('switch', { name: 'Hubo jornada' }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.change(frascos, { target: { value: '13' } })
+    expect(alCambiar).toHaveBeenCalledWith('frascos', '13')
+    fireEvent.click(screen.getByRole('switch', { name: 'Hubo jornada' }))
+    expect(alCambiar).toHaveBeenCalledWith('jornada', false)
+    unmount()
+
+    render(<CamposAdicionales campos={campos} valores={{ frascos: '12' }} soloLectura />)
+    expect(screen.getByRole('spinbutton', { name: 'Frascos' }).disabled).toBe(true)
+    expect(screen.getByRole('switch', { name: 'Hubo jornada' }).disabled).toBe(true)
+    expect(screen.getByRole('combobox', { name: 'Turno' }).disabled).toBe(true)
+  })
+})

@@ -1,4 +1,5 @@
 import * as reportesService from './reportes.service.js';
+import * as capturaService from './captura.service.js';
 import { contextoAuditoria } from '../auditoria/auditoria.service.js';
 
 export async function listarReportes(req, res) {
@@ -11,4 +12,14 @@ export async function crearReporte(req, res) {
 
 export async function obtenerReporte(req, res) {
   res.json(await reportesService.obtenerReporte(req.params.id, req.usuario));
+}
+
+export async function obtenerFormulario(req, res) {
+  res.json(await capturaService.obtenerFormulario(req.params.id, req.usuario));
+}
+
+export async function guardarVacuna(req, res) {
+  res.json(
+    await capturaService.guardarVacuna(req.params.id, req.params.vacunaId, req.body, req.usuario, contextoAuditoria(req)),
+  );
 }

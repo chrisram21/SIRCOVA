@@ -115,6 +115,10 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('REPORTE_CREAR',             'PRODUCCION',              'Crear el reporte mensual de su establecimiento'),
  ('REPORTE_CONSULTAR',         'PRODUCCION',              'Consultar los reportes mensuales de su ámbito');
 
+-- SPEC 23 (HU-20): captura de la producción en el formulario dinámico
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('REPORTE_EDITAR',            'PRODUCCION',              'Capturar y guardar las cantidades del reporte de su establecimiento en borrador');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -201,6 +205,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'ESTABLECIMIENTO'
    AND p.codigo IN ('REPORTE_CREAR', 'REPORTE_CONSULTAR', 'PERIODO_CONSULTAR');
+
+-- SPEC 23 (HU-20): el Personal de establecimiento captura las cantidades de sus reportes
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'ESTABLECIMIENTO'
+   AND p.codigo = 'REPORTE_EDITAR';
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

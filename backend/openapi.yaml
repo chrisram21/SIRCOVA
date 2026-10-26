@@ -2812,41 +2812,116 @@ paths:
   /reportes/{id}/formulario:
     get:
       tags: [Producción]
-      summary: Formulario dinámico del reporte (esquemas por vacuna y celdas ya guardadas)
+      summary: Formulario dinámico del reporte (esquema de cada vacuna y cantidades guardadas)
+      description: |
+        Por cada vacuna del reporte, en el orden de `GET /reportes/{id}`, trae la versión del esquema fijada al
+        crear el reporte, todas sus celdas guardadas (de cualquier procedencia), sus datos adicionales y su
+        total. Las etiquetas de las dosis y de las dimensiones no se repiten: salen de `GET /reportes/{id}`.
+
+        Una celda vacía no tiene fila, así que no aparece; una con 0 sí. `editable` es `true` solo si el
+        reporte está en `BORRADOR` y el mes está `ABIERTO` o `EN_CIERRE` en la DDRISS del establecimiento.
+        Uno que no existe o está fuera del alcance del usuario responde 404.
+      x-permiso: REPORTE_CONSULTAR
       parameters:
         - { $ref: "#/components/parameters/Id" }
       responses:
-        "200": { description: Esquemas aplicables y valores capturados }
+        "200":
+          description: El formulario del reporte
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FormularioReporte" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
 
   /reportes/{id}/vacunas/{vacunaId}:
     put:
       tags: [Producción]
-      summary: Guardar las cantidades de una vacuna del reporte
+      summary: Guardar las cantidades del municipio propio y los datos adicionales de una vacuna del reporte
       description: |
-        Solo si el reporte está en BORRADOR. Valida dosis, dimensiones y procedencia contra el
-        esquema de la vacuna y escribe detalle_produccion y detalle_dimension en una transacción.
+        Reemplaza las celdas del municipio del establecimiento de esa vacuna: las que no vienen se borran, las
+        que cambian se actualizan y las nuevas se insertan, con sus filas de `detalle_dimension`, en una
+        transacción de MySQL con su fila `ACTUALIZAR` en la bitácora. Las celdas de otras procedencias no se
+        tocan (las maneja HU-21). Una celda vacía no se manda; una con 0 sí, y queda guardada.
+
+        El backend calcula `clave_combinacion` a partir de `dimensiones` (ordenadas por código) y guarda en
+        `total_declarado` la suma de todas las cantidades de la vacuna (`null` si no tiene filas). Una dosis
+        inactiva solo se acepta si el reporte ya tenía filas de ella. Si nada cambió, no se escribe nada y
+        `versionFila` no sube.
+
+        Los errores se revisan en este orden: cuerpo, reporte y vacuna, estado del reporte, estado del mes,
+        `versionFila`, celdas y datos adicionales.
+      x-permiso: REPORTE_EDITAR
       parameters:
         - { $ref: "#/components/parameters/Id" }
-        - { name: vacunaId, in: path, required: true, schema: { type: integer } }
+        - { name: vacunaId, in: path, required: true, description: "`vacuna.id`", schema: { type: integer } }
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [versionFila, celdas]
-              properties:
-                versionFila:
-                  type: integer
-                  description: Versión del reporte que leyó el cliente (control de concurrencia)
-                totalDeclarado: { type: integer, minimum: 0 }
-                celdas:
-                  type: array
-                  items: { $ref: "#/components/schemas/Celda" }
+            schema: { $ref: "#/components/schemas/VacunaDeReporteGuardar" }
       responses:
-        "200": { description: Cantidades guardadas }
-        "409": { $ref: "#/components/responses/Conflicto" }
-        "422": { $ref: "#/components/responses/ReglaNegocio" }
+        "200":
+          description: Cantidades guardadas
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [versionFila, vacuna]
+                properties:
+                  versionFila: { type: integer, description: "La nueva, o la misma si nada cambió", example: 4 }
+                  vacuna: { $ref: "#/components/schemas/VacunaDeFormulario" }
+        "400":
+          description: El cuerpo no tiene la forma esperada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: totalDeclarado." }
+                cantidad:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "La cantidad de cada celda debe ser un número entero mayor o igual a 0." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404":
+          description: El reporte no existe o está fuera del alcance, o la vacuna no está en el reporte
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: NO_ENCONTRADO, mensaje: El recurso solicitado no existe. }
+        "409":
+          description: El reporte no está en borrador, el mes está cerrado o `versionFila` no es la del reporte
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                noEditable:
+                  value:
+                    error: { codigo: REPORTE_NO_EDITABLE, mensaje: El reporte ya no está en borrador y no se puede editar. }
+                periodoCerrado:
+                  value:
+                    error: { codigo: PERIODO_CERRADO, mensaje: El mes ya está cerrado. }
+                desactualizado:
+                  value:
+                    error: { codigo: REPORTE_DESACTUALIZADO, mensaje: El reporte cambió desde que lo abrió; recárguelo. }
+        "422":
+          description: Una celda o un dato adicional no corresponde al esquema de la vacuna
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                celdaInvalida:
+                  value:
+                    error: { codigo: CELDA_INVALIDA, mensaje: "La celda 3.ª dosis · < 1 año no es parte del formulario." }
+                celdaRepetida:
+                  value:
+                    error: { codigo: CELDA_REPETIDA, mensaje: "La celda 1.ª dosis · < 1 año está repetida." }
+                datoAdicional:
+                  value:
+                    error: { codigo: DATO_ADICIONAL_INVALIDO, mensaje: "El dato «Frascos abiertos» no es válido." }
 
   # ---------------------------------------------------------------- Revisión
   /reportes/{id}/validar:
@@ -4559,16 +4634,130 @@ components:
 
     Celda:
       type: object
-      description: Una cantidad del formulario. Las dimensiones dependen del esquema de la vacuna.
-      required: [dosisCodigo, municipioProcedenciaId, cantidad]
+      description: |
+        Una cantidad del formulario. Las dimensiones dependen del esquema de la vacuna: las de la desagregación
+        de la dosis (la propia o la general) sin `grupo_edad`, más `grupo_edad` si la sección tiene uno. Una
+        vacuna que no desagrega va con `dimensiones: {}`.
+      required: [dosisCodigo, municipioProcedenciaId, dimensiones, cantidad]
       properties:
         dosisCodigo: { type: string, example: D3 }
-        municipioProcedenciaId: { type: integer }
+        municipioProcedenciaId:
+          type: integer
+          description: "`municipio.id`; en este spec, siempre el municipio del establecimiento"
+          example: 1
         dimensiones:
           type: object
           additionalProperties: { type: string }
           example: { sexo: F, grupo_edad: MENOR_1 }
-        cantidad: { type: integer, minimum: 0, example: 40 }
+        claveCombinacion:
+          type: string
+          readOnly: true
+          description: La calcula el backend con las dimensiones ordenadas por código; `''` sin dimensiones
+          example: grupo_edad=MENOR_1|sexo=F
+        cantidad: { type: integer, minimum: 0, maximum: 4294967295, example: 40 }
+
+    EsquemaDeFormulario:
+      type: object
+      description: La forma de `EsquemaCaptura` sin los datos de creación y publicación
+      required: [id, vacuna, version, territorio, estado, vigencia, procedencia, dosis, desagregacion, secciones,
+        camposAdicionales, reglas]
+      properties:
+        id: { type: string, example: 6721a0c1a2b3c4d5e6f70901 }
+        vacuna: { $ref: "#/components/schemas/EsquemaCaptura/properties/vacuna" }
+        version: { type: integer, minimum: 1, example: 2 }
+        territorio: { $ref: "#/components/schemas/TerritorioEsquema" }
+        estado: { $ref: "#/components/schemas/EstadoEsquema" }
+        vigencia: { $ref: "#/components/schemas/EsquemaCaptura/properties/vigencia" }
+        versionAnteriorId: { type: string, nullable: true, example: null }
+        basadoEn: { $ref: "#/components/schemas/EsquemaCaptura/properties/basadoEn" }
+        procedencia: { $ref: "#/components/schemas/ProcedenciaEsquema" }
+        dosis: { $ref: "#/components/schemas/EsquemaCaptura/properties/dosis" }
+        desagregacion: { $ref: "#/components/schemas/EsquemaCaptura/properties/desagregacion" }
+        secciones:
+          allOf: [{ $ref: "#/components/schemas/EsquemaCaptura/properties/secciones" }]
+          description: "`[]` en una versión anterior a la v0.4 del modelo (Hexavalente v1): se deducen de `grupo_edad`"
+        camposAdicionales:
+          type: array
+          items:
+            type: object
+            required: [clave, etiqueta, tipo, requerido]
+            properties:
+              clave: { type: string, example: frascos_abiertos }
+              etiqueta: { type: string, example: Frascos abiertos en el mes }
+              tipo: { type: string, enum: [entero, decimal, texto, booleano, lista] }
+              requerido: { type: boolean, description: Solo se muestra; no impide guardar el borrador }
+              minimo: { type: number, nullable: true }
+              maximo: { type: number, nullable: true }
+              opciones: { type: array, items: { type: string } }
+              ayuda: { type: string }
+        reglas: { $ref: "#/components/schemas/EsquemaCaptura/properties/reglas" }
+        presentacion: { $ref: "#/components/schemas/EsquemaCaptura/properties/presentacion" }
+
+    VacunaDeFormulario:
+      type: object
+      required: [vacunaId, esquema, celdas, datosAdicionales, totalDeclarado]
+      properties:
+        vacunaId: { type: integer, description: "`vacuna.id`", example: 2 }
+        esquema:
+          allOf: [{ $ref: "#/components/schemas/EsquemaDeFormulario" }]
+          nullable: true
+          description: La versión fijada en el reporte; `null` si el documento ya no está en MongoDB
+        celdas:
+          type: array
+          description: Todas las filas de la vacuna, de cualquier procedencia, ordenadas por dosis y clave
+          items: { $ref: "#/components/schemas/Celda" }
+        datosAdicionales:
+          type: object
+          nullable: true
+          description: "`{ clave: valor }` de los campos adicionales con valor; `null` si no hay ninguno"
+          additionalProperties: true
+          example: { frascos_abiertos: 12 }
+        totalDeclarado:
+          type: integer
+          nullable: true
+          description: Suma de las cantidades de la vacuna, calculada por el backend; `null` si no tiene filas
+          example: 82
+
+    FormularioReporte:
+      type: object
+      required: [reporteId, versionFila, editable, municipioPropio, vacunas]
+      properties:
+        reporteId: { type: integer, example: 287 }
+        versionFila: { type: integer, description: La que se manda en cada `PUT`, example: 3 }
+        editable: { type: boolean, description: "`BORRADOR` con el mes `ABIERTO` o `EN_CIERRE`", example: true }
+        municipioPropio:
+          type: object
+          required: [id, nombre]
+          description: El municipio del establecimiento, procedencia de las celdas de la tarjeta A
+          properties:
+            id: { type: integer, example: 1 }
+            nombre: { type: string, example: San Marcos }
+        vacunas:
+          type: array
+          description: En el orden de `GET /reportes/{id}`
+          items: { $ref: "#/components/schemas/VacunaDeFormulario" }
+
+    VacunaDeReporteGuardar:
+      type: object
+      additionalProperties: false
+      required: [versionFila, celdas]
+      properties:
+        versionFila:
+          type: integer
+          description: La versión del reporte que leyó el cliente (control de concurrencia optimista)
+          example: 3
+        celdas:
+          type: array
+          description: Todas las celdas con valor del municipio propio; las que no vienen se borran
+          items: { $ref: "#/components/schemas/Celda" }
+        datosAdicionales:
+          type: object
+          nullable: true
+          description: |
+            Los campos adicionales del esquema como `{ clave: valor }`, validados por su tipo, mínimo, máximo y
+            opciones. Opcional: si falta o es `null`, se guarda `NULL`.
+          additionalProperties: true
+          example: { frascos_abiertos: 12 }
 
     ResultadoValidacion:
       type: object

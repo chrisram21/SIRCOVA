@@ -276,6 +276,8 @@ El reparto se hizo sprint por sprint: en cada uno, las historias se ordenaron de
 
 **Nota (2026-10-25, spec 22):** el criterio de los reportes nuevos se cumplió en HU-19 para las vacunas: el reporte fija al crearse sus vacunas activas con la versión de esquema de ese mes (`reporte_vacuna`), así que una vacuna desactivada después sigue en los reportes anteriores y no entra en los nuevos. Las dosis inactivas pasan a HU-20: se ocultan en el formulario salvo que el reporte ya tenga cantidades de esa dosis.
 
+**Nota (2026-10-25, spec 23):** la parte de las dosis se cumplió en HU-20: una dosis inactiva no aparece en el formulario de un reporte, y el `PUT` de captura la rechaza, salvo que ese reporte ya tenga filas de ella.
+
 #### HU-11. Navegación y pantalla inicial según el rol
 
 > **Como** usuario del sistema, **quiero** ver un menú y una pantalla inicial con solo las opciones de mi rol, **para** trabajar sin distracciones ni opciones que no puedo usar.
@@ -474,7 +476,7 @@ Verificado contra la API real el 2026-10-25:
 - [x] Solo los establecimientos que envían el 5C (uno por municipio y el Hospital de San Marcos) pueden crear reportes.
 - [x] No puedo crear dos reportes del mismo establecimiento para el mismo periodo.
 - [x] Un establecimiento desactivado no puede crear reportes nuevos (viene de HU-09).
-- [ ] Una vacuna inactiva, o una dosis inactiva, no aparece en reportes nuevos; los reportes anteriores la conservan (viene de HU-10). (Cumplido para las vacunas; las dosis pasan a HU-20. Ver el avance.)
+- [x] Una vacuna inactiva, o una dosis inactiva, no aparece en reportes nuevos; los reportes anteriores la conservan (viene de HU-10). (Las vacunas, en este spec; las dosis, en HU-20, spec 23.)
 - [x] Solo se crean reportes en un mes `ABIERTO` en la DDRISS del establecimiento; uno sin abrir, en cierre o cerrado no admite reportes nuevos (viene de HU-12).
 - [x] El reporte nace en estado Borrador.
 
@@ -516,6 +518,8 @@ El reporte 287 queda en Borrador y sirve para HU-20.
 
 **Nota (2026-10-25, spec 21):** `GET /esquemas-captura/{id}` no devuelve la `etiqueta` de cada desagregación (`aDesagregacion` en `esquemas.service.js` solo pasa `dimension` y `valores`), así que la vista previa siempre muestra el `nombre` del catálogo. El spec de HU-19 la agrega a la respuesta (general y por dosis), con su contrato y su prueba; debe quedar hecho y probado antes de HU-20, porque `armarFormulario` (SPEC 21) ya la usa si viene.
 
+**Nota (2026-10-25, spec 23):** la parte de las dosis inactivas se cumplió en HU-20: el formulario oculta una dosis inactiva salvo que el reporte ya tenga filas de ella, y `PUT /reportes/{id}/vacunas/{vacunaId}` la rechaza con 422 en el mismo caso.
+
 #### HU-20. Capturar la producción con el formulario dinámico
 
 > **Como** personal del establecimiento, **quiero** llenar la producción por vacuna, dosis y grupo de edad, y por sexo u otra dimensión solo en las vacunas que la usan, en un formulario generado desde el esquema vigente, **para** reemplazar el proceso físico de envio del formulario 5C físico y la digitación posterior en Excel.
@@ -527,11 +531,39 @@ El reporte 287 queda en Borrador y sirve para HU-20.
 **Cómo se hará:** Endpoint `GET /reportes/{id}/formulario` que arma el formulario desde MongoDB; componente React que lo dibuja por secciones; se guarda en `reporte_vacuna`, `detalle_produccion` y `detalle_dimension`.
 
 **Criterios de aceptación:**
-- [ ] El formulario muestra solo las dosis y dimensiones del esquema vigente de cada vacuna (por ejemplo, sexo solo en VPH y Tdap de 10 años, IPV u OPV en cada dosis de Polio).
-- [ ] Solo acepta cantidades enteras no negativas.
-- [ ] Los totales por fila y columna se calculan en pantalla.
-- [ ] No se guarda ningún dato personal de pacientes.
-- [ ] Una vacuna inactiva, o una dosis inactiva, no aparece en reportes nuevos; los reportes anteriores la conservan (viene de HU-10).
+- [x] El formulario muestra solo las dosis y dimensiones del esquema vigente de cada vacuna (por ejemplo, sexo solo en VPH y Tdap de 10 años, IPV u OPV en cada dosis de Polio).
+- [x] Solo acepta cantidades enteras no negativas.
+- [x] Los totales por fila y columna se calculan en pantalla.
+- [x] No se guarda ningún dato personal de pacientes.
+- [x] Una vacuna inactiva, o una dosis inactiva, no aparece en reportes nuevos; los reportes anteriores la conservan (viene de HU-10).
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 23 a `main`. Backend y frontend en `specs/23-hu-20-capturar-produccion.md`. Diferencias con la historia, porque mandan `AGENTS.md`, el modelo y lo que decidió el equipo:
+
+- Solo se capturan las dosis aplicadas a **residentes del municipio del establecimiento** (la tarjeta A). Las de otros municipios y Migrantes (la tarjeta B) son de HU-21.
+- **Guardar** entra aquí, aunque HU-22 nombra el endpoint: sin él no se comprueba la carga de cantidades ni la regla de las dosis inactivas. A HU-22 le queda el aviso de cambios sin guardar.
+- «Del esquema vigente»: el formulario usa la versión fijada en el reporte (SPEC 22), aunque después se publique otra.
+- **Vacía ≠ 0.** Una celda vacía no tiene fila en `detalle_produccion`; una con 0 sí. Vale igual en la tarjeta B, dentro de cada fila que agregue el Personal.
+- El **total** no lo escribe el Personal: el backend guarda en `reporte_vacuna.total_declarado` la suma de las cantidades de la vacuna (de todas las procedencias) en cada guardado.
+- Los **campos adicionales** del esquema se dibujan y se guardan en `datos_adicionales`, validados por tipo; «obligatorio» no impide guardar el borrador.
+
+Endpoints:
+
+- `GET /reportes/{id}/formulario` (`REPORTE_CONSULTAR`): por cada vacuna, su versión de esquema, todas sus celdas guardadas, sus datos adicionales y su total, más `editable` y el municipio propio;
+- `PUT /reportes/{id}/vacunas/{vacunaId}` (`REPORTE_EDITAR`, nuevo, solo para el Personal de establecimiento): reemplaza las celdas del municipio propio de la vacuna y no toca las de otras procedencias. Valida contra el esquema y escribe `detalle_produccion` y `detalle_dimension` en una transacción, con `versionFila` y una fila `ACTUALIZAR` en la bitácora; si nada cambió, no escribe nada.
+
+Solo se guarda en `BORRADOR` con el mes `ABIERTO` o `EN_CIERRE`. Errores: 400 `ENTRADA_INVALIDA`, 404, 409 `REPORTE_NO_EDITABLE`, `PERIODO_CERRADO` y `REPORTE_DESACTUALIZADO`, y 422 `CELDA_INVALIDA`, `CELDA_REPETIDA` y `DATO_ADICIONAL_INVALIDO`. Una dosis inactiva se oculta en el formulario y el `PUT` la rechaza, salvo que el reporte ya tenga filas de ella. Las celdas válidas las calcula `celdas.service.js` con la misma regla que `armarFormulario`, incluida la deducción de secciones de una versión sin `secciones` (Hexavalente v1).
+
+La pantalla es la captura de `/registro` (`CapturaReporte.jsx`): una pestaña por vacuna con la tarjeta «Dosis aplicadas a residentes de {municipio}» y sus datos adicionales, las cantidades de todas las pestañas en memoria, y un «Guardar borrador» que manda un `PUT` por vacuna con cambios. Un reporte que no se puede editar se ve en solo lectura.
+
+Verificado contra la API real el 2026-10-25, con `cs1201`:
+
+- en el reporte 287 (octubre de 2026) se escribieron cantidades en BCG, Hexavalente v2 (con el campo adicional), VPH y Td (con la tabla aparte de su refuerzo), con ceros y celdas vacías; `2.5` marcó la celda y deshabilitó «Guardar borrador»;
+- al guardar hubo 4 `PUT` en el orden del reporte y «Borrador guardado.». Al recargar, cada cantidad volvió a su celda, los ceros como «0» y las vacías vacías;
+- la base quedó con 14 filas del municipio propio, cada una con `detalle_dimension` igual a su clave, `total_declarado` 25, 215, 21 y 28, `version_fila = 5` y 4 filas `ACTUALIZAR` de `cs1201`;
+- septiembre (`APROBADO`) se vio en solo lectura con las cantidades de la semilla, sin las 6 celdas de Hexavalente de otros municipios;
+- el formulario del reporte 218 (agosto, `CERRADO`, Hexavalente v1 sin `secciones`) armó la sección deducida «< 1 año» con las claves de sus celdas guardadas.
+
+Las cantidades del reporte 287 quedan para HU-21, HU-22 y HU-25.
 
 **Nota (2026-10-24, spec 18):** Para mostrar las etiquetas, el formulario necesita leer el catálogo de dimensiones; el spec decide si da `DIMENSION_CONSULTAR` al personal de establecimiento o si `GET /reportes/{id}/formulario` trae las etiquetas.
 
@@ -565,6 +597,12 @@ El reporte 287 queda en Borrador y sirve para HU-20.
 
 **Nota (2026-10-25, spec 21):** La vista previa (SPEC 21) solo describe el modo de procedencia; la tarjeta B se agrega a `FormularioCaptura`.
 
+**Nota (2026-10-25, spec 23):**
+- `PUT /reportes/{id}/vacunas/{vacunaId}` (SPEC 23) solo acepta celdas del municipio del establecimiento (422 `CELDA_INVALIDA` con otro) y no toca las celdas de otras procedencias que ya existen, como las de la semilla. HU-21 lo extiende para reemplazar también las celdas que maneje la tarjeta B.
+- `GET /reportes/{id}/formulario` ya trae todas las celdas de la vacuna, de cualquier procedencia; la tarjeta A de `CapturaReporte.jsx` solo dibuja las del municipio propio.
+- La diferencia entre vacía y 0 también vale en la tarjeta B, dentro de cada fila que agrega el Personal. Una procedencia que no se agregó no tiene filas y no pide ceros.
+- `total_declarado` ya suma las cantidades de todas las procedencias.
+
 #### HU-22. Guardar el borrador y continuar después
 
 > **Como** personal del establecimiento, **quiero** guardar lo capturado sin enviarlo y retomarlo más tarde, **para** no perder trabajo si me interrumpen.
@@ -579,6 +617,8 @@ El reporte 287 queda en Borrador y sirve para HU-20.
 - [ ] Al volver a abrir el reporte veo los datos guardados.
 - [ ] Solo puedo editar el reporte mientras está en Borrador.
 - [ ] El sistema avisa si salgo con cambios sin guardar.
+
+**Nota (2026-10-25, spec 23):** guardar, retomar y «solo en Borrador» ya los cumple HU-20 (SPEC 23): `PUT /reportes/{id}/vacunas/{vacunaId}` guarda las cantidades de una vacuna, «Guardar borrador» de `/registro` manda un `PUT` por vacuna con cambios, y al recargar se ven los datos guardados. Solo se guarda en `BORRADOR` con el mes `ABIERTO` o `EN_CIERRE` (409 si no), y un reporte que no se puede editar se ve en solo lectura. Queda el aviso de cambios sin guardar: `CapturaReporte.jsx` ya sabe qué vacunas cambiaron (compara lo escrito con lo cargado o guardado).
 
 #### HU-23. Consultar mis reportes y su estado
 
@@ -626,6 +666,12 @@ El reporte 287 queda en Borrador y sirve para HU-20.
 - [ ] Se detectan campos obligatorios vacíos, cantidades negativas, totales que no cuadran y duplicados.
 - [ ] Cada resultado indica la vacuna, dosis y regla que lo generó.
 - [ ] Los errores y las advertencias se muestran con colores distintos.
+
+**Nota (2026-10-25, spec 23):**
+- **Vacía ≠ 0.** Una celda vacía no tiene fila en `detalle_produccion`; una con 0 sí (SPEC 23). `CAMPOS_COMPLETOS` (`cero_explicito: true` en el 02) revisa todas las celdas de la tarjeta A y, en la B, solo las de las filas que agregó el Personal, nunca combinaciones de municipios sin fila.
+- **Total.** `reporte_vacuna.total_declarado` lo calcula el backend: es la suma del detalle, no un dato que escribe el Personal. El campo adicional `total_dosis_declarado` de Hexavalente v2 sigue en esa versión publicada, que no se edita: quitarlo pide publicar otra.
+- **Obligatorio.** Un campo adicional con `requerido` no impide guardar el borrador; lo exige la validación.
+- **Ya garantizado por el `PUT`.** Las cantidades negativas, las celdas que no son del esquema y las repetidas ya no se pueden guardar (400 y 422).
 
 #### HU-26. Enviar el reporte
 

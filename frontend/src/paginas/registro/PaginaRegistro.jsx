@@ -7,10 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { listarPeriodos } from '@/api/catalogos.js'
 import { crearReporte, listarReportes, obtenerReporte } from '@/api/produccion.js'
+import CapturaReporte from './CapturaReporte.jsx'
 
 const MESES = [
   'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
@@ -64,65 +64,6 @@ function PasosDeEstado({ estado }) {
       </ol>
       {fuera && <Badge variant="outline">{fuera.titulo}</Badge>}
     </div>
-  )
-}
-
-function PestanaVacuna({ vacuna }) {
-  const dosis = vacuna.dosis.filter((d) => d.activa)
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{vacuna.vacuna.nombre}</CardTitle>
-        <CardDescription>
-          Formulario: {vacuna.vacuna.nombre}, versión {vacuna.esquema.version}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm text-accent-foreground">
-          <span>Dimensiones de este esquema:</span>
-          {['Dosis', ...vacuna.dimensiones.map((d) => d.etiqueta ?? d.nombre)].map((nombre) => (
-            <Badge key={nombre} variant="outline" className="bg-card font-semibold">
-              {nombre}
-            </Badge>
-          ))}
-        </div>
-
-        <dl className="grid gap-3 text-sm sm:grid-cols-2">
-          <div className="flex flex-col gap-1">
-            <dt className="font-semibold">Dosis</dt>
-            <dd className="text-muted-foreground">{dosis.map((d) => d.nombre).join(', ') || '—'}</dd>
-          </div>
-          {vacuna.dimensiones.map((dimension) => (
-            <div key={dimension.codigo} className="flex flex-col gap-1">
-              <dt className="font-semibold">{dimension.etiqueta ?? dimension.nombre}</dt>
-              <dd className="text-muted-foreground">{dimension.valores.map((v) => v.etiqueta).join(', ')}</dd>
-            </div>
-          ))}
-        </dl>
-
-        <p className="text-sm text-muted-foreground">La captura de esta vacuna se habilita con el formulario de registro.</p>
-      </CardContent>
-    </Card>
-  )
-}
-
-function DetalleReporte({ reporte }) {
-  if (reporte.vacunas.length === 0) return null
-  return (
-    <Tabs defaultValue={String(reporte.vacunas[0].id)}>
-      <TabsList aria-label="Vacunas" className="h-auto flex-wrap">
-        {reporte.vacunas.map((v) => (
-          <TabsTrigger key={v.id} value={String(v.id)}>
-            {v.vacuna.nombre}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-      {reporte.vacunas.map((v) => (
-        <TabsContent key={v.id} value={String(v.id)} className="pt-4">
-          <PestanaVacuna vacuna={v} />
-        </TabsContent>
-      ))}
-    </Tabs>
   )
 }
 
@@ -294,7 +235,7 @@ export default function PaginaRegistro() {
           )}
 
           {resumen && !detalle && !errorAccion && <Skeleton aria-label="Cargando reporte" className="h-40 w-full" />}
-          {detalle && <DetalleReporte reporte={detalle} />}
+          {detalle && <CapturaReporte key={detalle.id} reporte={detalle} />}
         </>
       )}
     </section>
