@@ -1,6 +1,6 @@
 # SPEC 22 — Crear el reporte mensual de un establecimiento
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-19
 > **Depende de:** SPEC 04, SPEC 05, SPEC 06, SPEC 14, SPEC 15, SPEC 16, SPEC 19, SPEC 20, SPEC 21
 > **Fecha:** 2026-10-25
