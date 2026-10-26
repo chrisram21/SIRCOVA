@@ -1,6 +1,6 @@
 # SPEC 23 — Capturar la producción con el formulario dinámico
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-20
 > **Depende de:** SPEC 04, SPEC 05, SPEC 06, SPEC 15, SPEC 18, SPEC 19, SPEC 20, SPEC 21, SPEC 22
 > **Fecha:** 2026-10-25
