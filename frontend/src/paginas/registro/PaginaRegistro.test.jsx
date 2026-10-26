@@ -2,11 +2,17 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { listarPeriodos } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
-import { crearReporte, listarReportes, obtenerReporte } from '@/api/produccion.js'
+import { crearReporte, listarReportes, obtenerFormulario, obtenerReporte } from '@/api/produccion.js'
 import PaginaRegistro from './PaginaRegistro.jsx'
 
 vi.mock('@/api/catalogos.js', () => ({ listarPeriodos: vi.fn() }))
-vi.mock('@/api/produccion.js', () => ({ listarReportes: vi.fn(), obtenerReporte: vi.fn(), crearReporte: vi.fn() }))
+vi.mock('@/api/produccion.js', () => ({
+  listarReportes: vi.fn(),
+  obtenerReporte: vi.fn(),
+  crearReporte: vi.fn(),
+  obtenerFormulario: vi.fn(),
+  guardarVacuna: vi.fn(),
+}))
 
 const SEPTIEMBRE = { id: 9, anio: 2026, mes: 9, estado: 'ABIERTO', fechaLimiteEnvio: '2026-10-10' }
 const OCTUBRE = { id: 10, anio: 2026, mes: 10, estado: 'ABIERTO', fechaLimiteEnvio: '2026-11-10' }
@@ -68,8 +74,18 @@ const detalle = (id, periodo, estado = 'BORRADOR') => ({
   vacunas: [HEXAVALENTE, TD],
 })
 
+// La captura se prueba en CapturaReporte.test.jsx; aquí basta con que el formulario cargue (sin esquemas).
+const formularioDe = (reporteId) => ({
+  reporteId,
+  versionFila: 1,
+  editable: true,
+  municipioPropio: { id: 1, nombre: 'San Marcos' },
+  vacunas: [3, 4].map((vacunaId) => ({ vacunaId, esquema: null, celdas: [], datosAdicionales: null, totalDeclarado: null })),
+})
+
 // reportesPorMes: periodoId → resumen del reporte de ese mes (sin clave: el mes no tiene reporte).
 function prepararApi({ periodos = [SEPTIEMBRE, OCTUBRE], reportesPorMes = {} } = {}) {
+  obtenerFormulario.mockImplementation(async (id) => formularioDe(id))
   listarPeriodos.mockResolvedValue(periodos)
   listarReportes.mockImplementation(async ({ periodoId }) =>
     reportesPorMes[periodoId] ? pagina(reportesPorMes[periodoId]) : pagina(),
@@ -167,33 +183,21 @@ test('«Crear reporte» lo crea con el mes y muestra el encabezado, los pasos y 
   const pasos = within(screen.getByRole('list', { name: 'Estado del reporte' })).getAllByRole('listitem')
   expect(pasos.map((p) => p.textContent)).toEqual(['Borrador', 'Enviado', 'En revisión', 'Aprobado', 'Cerrado'])
   expect(pasos[0].getAttribute('aria-current')).toBe('step')
-  expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Hexavalente', 'Td'])
+  expect((await screen.findAllByRole('tab')).map((t) => t.textContent)).toEqual(['Hexavalente', 'Td'])
+  expect(obtenerFormulario).toHaveBeenCalledWith(20)
   expect(screen.queryByRole('button', { name: /Crear reporte/ })).toBeNull()
   // El detalle llega con la respuesta del POST: no se vuelve a pedir.
   expect(obtenerReporte).not.toHaveBeenCalled()
 })
 
-test('la pestaña de una vacuna muestra su versión, sus dimensiones y sus dosis activas con sus etiquetas', async () => {
+test('con el reporte del mes, monta la captura: pide su formulario y muestra una pestaña por vacuna', async () => {
   prepararApi({ reportesPorMes: { 9: resumen(7, SEPTIEMBRE) } })
   await abrir()
 
-  const panel = await screen.findByRole('tabpanel')
-  expect(within(panel).getByText('Formulario: Hexavalente, versión 2')).toBeTruthy()
-  const franja = within(panel).getByText('Dimensiones de este esquema:').parentElement
-  expect(franja.textContent).toBe('Dimensiones de este esquema:DosisGrupo de edad')
-  expect(within(panel).getByText('1.ª dosis, 2.ª dosis')).toBeTruthy()
-  // R1 está inactiva: no aparece en la lista.
-  expect(within(panel).queryByText(/Refuerzo/)).toBeNull()
-  expect(within(panel).getByText('< 1 año, De 1 a < 6 años')).toBeTruthy()
-  expect(within(panel).getByText('La captura de esta vacuna se habilita con el formulario de registro.')).toBeTruthy()
-
-  fireEvent.mouseDown(screen.getByRole('tab', { name: 'Td' }))
-  const td = await screen.findByText('Formulario: Td, versión 5')
-  const panelTd = td.closest('[role="tabpanel"]')
-  expect(within(panelTd).getByText('Dimensiones de este esquema:').parentElement.textContent).toBe(
-    'Dimensiones de este esquema:DosisCondición: embarazada o no',
-  )
-  expect(within(panelTd).getByText('Embarazada, No embarazada')).toBeTruthy()
+  await waitFor(() => expect(obtenerFormulario).toHaveBeenCalledWith(7))
+  expect((await screen.findAllByRole('tab')).map((t) => t.textContent)).toEqual(['Hexavalente', 'Td'])
+  expect(screen.queryByText('La captura de esta vacuna se habilita con el formulario de registro.')).toBeNull()
+  expect(screen.getByRole('button', { name: 'Guardar borrador' })).toBeTruthy()
 })
 
 test('un 422 al crear muestra su mensaje', async () => {

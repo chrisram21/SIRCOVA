@@ -9,7 +9,7 @@ const formatoCantidad = new Intl.NumberFormat('es-GT')
 const ENTERO = /^\d+$/
 
 // Una cantidad vacía cuenta como 0; una que no es entero ≥ 0 se marca y no suma.
-const leerCantidad = (texto) => {
+export const leerCantidad = (texto) => {
   const limpio = texto.trim()
   if (limpio === '') return { valida: true, valor: 0 }
   return ENTERO.test(limpio) ? { valida: true, valor: Number(limpio) } : { valida: false, valor: 0 }
@@ -30,7 +30,7 @@ function etiquetaDeColumna(encabezados, indice) {
     .join(' · ')
 }
 
-function TablaCaptura({ tabla, cantidades, alCambiar }) {
+function TablaCaptura({ tabla, cantidades, alCambiar, soloLectura }) {
   const { encabezados, columnas, filas } = tabla
   const niveles = Math.max(encabezados.length, 1)
   const leer = (fila, celda) => leerCantidad(cantidades[`${fila.dosis}|${celda.claveCombinacion}`] ?? '')
@@ -83,6 +83,7 @@ function TablaCaptura({ tabla, cantidades, alCambiar }) {
                       aria-label={nombre}
                       inputMode="numeric"
                       value={texto}
+                      disabled={soloLectura}
                       aria-invalid={!leerCantidad(texto).valida || undefined}
                       onChange={(e) => alCambiar(clave, e.target.value)}
                       className="w-20 text-right font-mono"
@@ -121,10 +122,12 @@ function TablaCaptura({ tabla, cantidades, alCambiar }) {
   )
 }
 
-// formulario: lo que devuelve armarFormulario. Las cantidades viven aquí y nunca salen del componente.
-export default function FormularioCaptura({ formulario }) {
-  const [cantidades, setCantidades] = useState({})
-  const alCambiar = (clave, texto) => setCantidades((previas) => ({ ...previas, [clave]: texto }))
+// formulario: lo que devuelve armarFormulario. Sin cantidades ni alCambiar (la vista previa), las cantidades viven
+// aquí y nunca salen del componente; con ellas (la captura), las guarda el padre con la llave {dosis}|{clave}.
+export default function FormularioCaptura({ formulario, cantidades, alCambiar, soloLectura = false }) {
+  const [propias, setPropias] = useState({})
+  const controlado = cantidades !== undefined
+  const cambiar = controlado ? alCambiar : (clave, texto) => setPropias((previas) => ({ ...previas, [clave]: texto }))
 
   if (formulario.tablas.length === 0) {
     return <p className="text-sm text-muted-foreground">El esquema todavía no arma ninguna celda.</p>
@@ -132,7 +135,13 @@ export default function FormularioCaptura({ formulario }) {
   return (
     <div className="flex flex-col gap-6 overflow-x-auto">
       {formulario.tablas.map((tabla) => (
-        <TablaCaptura key={tabla.clave} tabla={tabla} cantidades={cantidades} alCambiar={alCambiar} />
+        <TablaCaptura
+          key={tabla.clave}
+          tabla={tabla}
+          cantidades={controlado ? cantidades : propias}
+          alCambiar={cambiar}
+          soloLectura={soloLectura}
+        />
       ))}
     </div>
   )
@@ -144,16 +153,18 @@ const aOpcion = (opcion) =>
     ? { valor: String(opcion.valor ?? opcion.codigo), etiqueta: opcion.etiqueta ?? String(opcion.valor ?? opcion.codigo) }
     : { valor: String(opcion), etiqueta: String(opcion) }
 
-function Campo({ campo, valor, alCambiar }) {
+function Campo({ campo, valor, alCambiar, soloLectura }) {
   const id = `campo-${campo.clave}`
   const etiqueta = `${campo.etiqueta}${campo.requerido ? ' (obligatorio)' : ''}`
   const ayuda = campo.ayuda ? `${id}-ayuda` : undefined
   let control
   if (campo.tipo === 'booleano') {
-    control = <Switch id={id} checked={valor === true} onCheckedChange={alCambiar} aria-describedby={ayuda} />
+    control = (
+      <Switch id={id} checked={valor === true} onCheckedChange={alCambiar} disabled={soloLectura} aria-describedby={ayuda} />
+    )
   } else if (campo.tipo === 'lista') {
     control = (
-      <Select value={valor ?? ''} onValueChange={alCambiar}>
+      <Select value={valor ?? ''} onValueChange={alCambiar} disabled={soloLectura}>
         <SelectTrigger id={id} className="w-full sm:w-72" aria-describedby={ayuda}>
           <SelectValue placeholder="Seleccione una opción" />
         </SelectTrigger>
@@ -177,6 +188,7 @@ function Campo({ campo, valor, alCambiar }) {
         max={numerico ? (campo.maximo ?? undefined) : undefined}
         value={valor ?? ''}
         onChange={(e) => alCambiar(e.target.value)}
+        disabled={soloLectura}
         aria-describedby={ayuda}
         className={numerico ? 'w-full font-mono sm:w-48' : 'w-full sm:w-96'}
       />
@@ -195,17 +207,22 @@ function Campo({ campo, valor, alCambiar }) {
   )
 }
 
-// Los campos adicionales del esquema, según su tipo; sus valores tampoco salen del componente.
-export function CamposAdicionales({ campos }) {
-  const [valores, setValores] = useState({})
+// Los campos adicionales del esquema, según su tipo. Igual que FormularioCaptura: sin valores ni alCambiar, sus
+// valores no salen del componente; con ellos, alCambiar(clave, valor) avisa al padre.
+export function CamposAdicionales({ campos, valores, alCambiar, soloLectura = false }) {
+  const [propios, setPropios] = useState({})
+  const controlado = valores !== undefined
+  const actuales = controlado ? valores : propios
+  const cambiar = controlado ? alCambiar : (clave, valor) => setPropios((previos) => ({ ...previos, [clave]: valor }))
   return (
     <div className="flex flex-col gap-4">
       {campos.map((campo) => (
         <Campo
           key={campo.clave}
           campo={campo}
-          valor={valores[campo.clave]}
-          alCambiar={(valor) => setValores((previos) => ({ ...previos, [campo.clave]: valor }))}
+          valor={actuales[campo.clave]}
+          alCambiar={(valor) => cambiar(campo.clave, valor)}
+          soloLectura={soloLectura}
         />
       ))}
     </div>

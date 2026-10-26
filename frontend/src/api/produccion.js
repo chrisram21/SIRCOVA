@@ -19,3 +19,13 @@ export function obtenerReporte(id) {
 export function crearReporte(periodoId) {
   return solicitar('/reportes', { metodo: 'POST', cuerpo: { periodoId } })
 }
+
+// El esquema de cada vacuna del reporte, con sus celdas guardadas (de cualquier procedencia) y sus datos adicionales.
+export function obtenerFormulario(id) {
+  return solicitar(`/reportes/${id}/formulario`)
+}
+
+// Reemplaza las celdas del municipio propio de una vacuna; cuerpo: { versionFila, celdas, datosAdicionales }.
+export function guardarVacuna(reporteId, vacunaId, cuerpo) {
+  return solicitar(`/reportes/${reporteId}/vacunas/${vacunaId}`, { metodo: 'PUT', cuerpo })
+}

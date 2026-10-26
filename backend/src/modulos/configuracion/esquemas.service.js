@@ -86,7 +86,7 @@ const aDesagregacion = (lista) =>
   lista.map(({ dimension, valores, etiqueta }) => ({ dimension, valores: [...valores], etiqueta: etiqueta ?? null }));
 
 // usuarios: id → nombre_usuario, para publicadoPor; sin él (bitácora) queda en null.
-function aEsquema(doc, usuarios = new Map()) {
+export function aEsquema(doc, usuarios = new Map()) {
   const { dimensiones } = doc;
   return {
     id: doc._id.toString(),
