@@ -139,6 +139,18 @@ test('carga el borrador, guarda con editarEsquema y vuelve a la pestaña con el 
   )
 })
 
+test('al guardar reenvía la etiqueta de la desagregación tal como la recibió', async () => {
+  const desagregacion = [{ dimension: 'grupo_edad', valores: ['MENOR_1', '1_A_5'], etiqueta: 'Edad del vacunado' }]
+  obtenerEsquema.mockResolvedValue({ ...BORRADOR, desagregacion })
+  await abrir()
+
+  fireEvent.change(screen.getByRole('textbox', { name: 'Título de la sección 1' }), { target: { value: 'Menores de 1 año' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Guardar borrador' }))
+
+  await waitFor(() => expect(editarEsquema).toHaveBeenCalledTimes(1))
+  expect(editarEsquema.mock.calls[0][1].desagregacion).toEqual(desagregacion)
+})
+
 test.each([
   ['vigente', { ...BORRADOR, estado: 'VIGENTE' }],
   ['nacional', { ...BORRADOR, territorio: { nivel: 'NACIONAL', ddrissCodigo: null } }],

@@ -17,6 +17,7 @@ const MODOS_PROCEDENCIA = ['MUNICIPIO_DETALLADO', 'PROPIO_Y_OTROS'];
 const SECCION_SIN_EDAD = 'GENERAL';
 // Largo de detalle_produccion.clave_combinacion en MySQL.
 const LARGO_COMBINACION = 255;
+const LARGO_ETIQUETA = 120;
 const REGLAS_BASICAS = ['CAMPOS_COMPLETOS', 'DIMENSIONES_VALIDAS', 'NO_NEGATIVO'];
 const ENTIDAD = 'esquemas_captura';
 
@@ -81,7 +82,8 @@ const esVisible = (doc, ddriss) =>
 
 const aTerritorio = (territorio) => ({ nivel: territorio.nivel, ddrissCodigo: territorio.ddriss_codigo ?? null });
 
-const aDesagregacion = (lista) => lista.map(({ dimension, valores }) => ({ dimension, valores: [...valores] }));
+const aDesagregacion = (lista) =>
+  lista.map(({ dimension, valores, etiqueta }) => ({ dimension, valores: [...valores], etiqueta: etiqueta ?? null }));
 
 // usuarios: id → nombre_usuario, para publicadoPor; sin él (bitácora) queda en null.
 function aEsquema(doc, usuarios = new Map()) {
@@ -293,7 +295,7 @@ function leerDesagregacion(valor, campo) {
   const vistas = new Set();
   return leerLista(valor, campo).map((item) => {
     leerObjeto(item, `Cada elemento de ${campo}`);
-    revisarCampos(item, ['dimension', 'valores']);
+    revisarCampos(item, ['dimension', 'valores', 'etiqueta']);
     if (!esTexto(item.dimension)) throw entradaInvalida(`Cada elemento de ${campo} necesita su dimensión.`);
     const dimension = item.dimension.trim();
     if (vistas.has(dimension)) throw entradaInvalida(`La dimensión ${dimension} está repetida.`);
@@ -304,8 +306,19 @@ function leerDesagregacion(valor, campo) {
       (v) => `El valor ${v} de ${dimension} está repetido.`,
     );
     if (valores.length === 0) throw entradaInvalida(`Indique al menos un valor de ${dimension}.`);
-    return { dimension, valores };
+    const etiqueta = leerEtiqueta(item.etiqueta, dimension);
+    return { dimension, valores, ...(etiqueta !== null && { etiqueta }) };
   });
+}
+
+// El editor no la cambia: solo la devuelve tal como la recibió, para que guardar no la pierda.
+function leerEtiqueta(valor, dimension) {
+  if (valor === undefined || valor === null) return null;
+  const limpia = typeof valor === 'string' ? valor.trim().replace(/\s+/g, ' ') : null;
+  if (limpia === null || limpia.length > LARGO_ETIQUETA) {
+    throw entradaInvalida(`La etiqueta de ${dimension} debe ser un texto de hasta ${LARGO_ETIQUETA} caracteres.`);
+  }
+  return limpia === '' ? null : limpia;
 }
 
 function leerSeccion(item) {
@@ -450,9 +463,13 @@ export function revisarCoherencia(contenido, { vacuna, dosis: dosisVacuna, dimen
   }
 
   const porOrdenDeDosis = (a, b) => dosisActivas.get(a).orden - dosisActivas.get(b).orden;
-  const ordenarValores = ({ dimension, valores }) => {
+  const ordenarValores = ({ dimension, valores, etiqueta }) => {
     const orden = new Map(dimensionesActivas.get(dimension).valores.map((v) => [v.codigo, v.orden]));
-    return { dimension, valores: [...valores].sort((a, b) => orden.get(a) - orden.get(b)) };
+    return {
+      dimension,
+      valores: [...valores].sort((a, b) => orden.get(a) - orden.get(b)),
+      ...(etiqueta !== undefined && { etiqueta }),
+    };
   };
 
   return {

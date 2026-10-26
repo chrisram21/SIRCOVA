@@ -4132,6 +4132,16 @@ components:
           description: Valores activos de la dimensión, sin repetir; se guardan en el orden del catálogo
           items: { type: string }
           example: [MENOR_1, 1_A_5]
+        etiqueta:
+          type: string
+          nullable: true
+          maxLength: 120
+          description: |
+            Opcional. Texto que reemplaza el nombre de la dimensión en el formulario. Se quitan los espacios de
+            los extremos y se reducen los dobles; vacía o `null` no se guarda. El editor no la cambia: la devuelve
+            tal como la recibió para que guardar no la pierda. Un valor que no es texto, o de más de 120
+            caracteres, responde 400.
+          example: "Condición: embarazada o no"
 
     DesagregacionEsquemaGuardada:
       allOf:
@@ -4142,9 +4152,7 @@ components:
             etiqueta:
               type: string
               nullable: true
-              description: |
-                Texto que reemplaza el nombre de la dimensión en el formulario, si el documento lo trae; `null`
-                si no. Solo se devuelve: el editor de borradores no la recibe.
+              description: La etiqueta guardada en el documento; `null` si no tiene
               example: "Condición: embarazada o no"
 
     ProcedenciaEsquema:

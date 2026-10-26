@@ -42,6 +42,7 @@ También quedan dos pendientes que deben estar listos antes de HU-20:
 - Permisos nuevos `REPORTE_CREAR` y `REPORTE_CONSULTAR` en `05_permisos_mysql.sql`, solo para `ESTABLECIMIENTO`, más `PERIODO_CONSULTAR` para ese rol. Es una zona protegida, autorizada en la fase de preguntas.
 - La opción «Registro de producción» de `opcionesMenu.js` pasa a pedir `REPORTE_CONSULTAR` (el código provisional `REPORTE_REGISTRAR` desaparece) y recibe su `pagina`.
 - `GET /esquemas-captura/{id}` devuelve la `etiqueta` de cada desagregación (general y por dosis), con su contrato y su prueba.
+- `POST` y `PUT /esquemas-captura` aceptan una `etiqueta` opcional en cada desagregación y la guardan tal cual (texto de hasta 120 caracteres; vacía o `null` no se guarda). Así el editor, que reenvía lo que recibió, no falla con 400 ni la pierde al guardar, y una copia del vigente la conserva (`contenidoDeCopia`). El editor no la muestra ni la cambia.
 - Se quita `GET /vacunas/{codigo}/esquema-vigente` de `openapi.yaml`.
 - Pantalla `/registro` (`PaginaRegistro`): elegir un mes abierto, ver si ya tiene reporte o crearlo, y ver los pasos de estado y las pestañas de las vacunas del reporte, sin formulario.
 - Pruebas de backend (`reportes.test.js`, casos nuevos en `esquemas.test.js`) y de frontend (`PaginaRegistro.test.jsx`).
@@ -54,7 +55,7 @@ También quedan dos pendientes que deben estar listos antes de HU-20:
 - Ocultar las dosis inactivas en el formulario (HU-20, con la regla de arriba).
 - El contenido del esquema (secciones, desagregación por dosis, procedencia, campos adicionales, reglas) y las cantidades guardadas, que necesita `armarFormulario`: los trae `GET /reportes/{id}/formulario` (HU-20), que reutiliza las etiquetas de este spec.
 - Dar `DIMENSION_CONSULTAR` o `VACUNA_CONSULTAR` al Personal: no hace falta, porque las etiquetas llegan con el reporte.
-- Editar la `etiqueta` de una desagregación en el editor de esquemas: solo se devuelve.
+- Mostrar o cambiar la `etiqueta` de una desagregación en el editor de esquemas: solo se conserva.
 - Enviar a revisión y cualquier transición (`POST /reportes/{id}/transiciones`, HU-22 y siguientes). `transicion_estado` no se toca.
 - Crear reportes desde la DDRISS (Revisor o Administrador) para otro establecimiento.
 - `REPORTE_CONSULTAR` para el Revisor y los demás roles, la bandeja y la opción «Reportes» del menú (sus propios specs).
@@ -164,6 +165,7 @@ Como siempre, se agregan de forma idempotente en `05_permisos_mysql.sql` y aplic
 
 - `periodo.estado` y `fechaLimiteEnvio` salen de `cierre_periodo` de la DDRISS del establecimiento (`null` si no tiene fila).
 - `vacunas` va ordenada como el catálogo (`orden_informe`, `nombre`). Las fechas se leen con `UNIX_TIMESTAMP` (nota del 2026-10-21) y las `DATE` con `DATE_FORMAT`.
+- El esquema `Reporte` del contrato se reemplaza por esta forma. Se agregan `ReporteResumen` y `PaginaReportes`.
 
 ### Etiquetas de cada vacuna
 
@@ -175,7 +177,6 @@ Como siempre, se agregan de forma idempotente en `05_permisos_mysql.sql` y aplic
 - Se lee cada esquema y el catálogo una sola vez por petición (`find` con `_id: { $in }` y las dimensiones usadas), no una consulta por vacuna.
 
 `armarFormulario` recibe hoy `vacuna` (con sus dosis) y `dimensiones` del catálogo. Esta forma alcanza para armar esas dos entradas en HU-20, y el resto del esquema llega con `GET /reportes/{id}/formulario`.
-- El esquema `Reporte` del contrato se reemplaza por esta forma. Se agregan `ReporteResumen` y `PaginaReportes`.
 
 `GET /esquemas-captura/{id}`: cada elemento de `desagregacion` (general y de cada dosis) pasa a ser `{ dimension, valores, etiqueta }`, con `etiqueta` nula si el documento no la trae.
 
@@ -234,13 +235,16 @@ backend/
 │   ├── produccion.routes.js                       ← nuevo
 │   ├── produccion.controller.js                   ← nuevo
 │   └── reportes.service.js                        ← nuevo
-├── src/modulos/configuracion/esquemas.service.js  ← esquemasDelPeriodo; etiqueta en aDesagregacion
+├── src/modulos/configuracion/esquemas.service.js  ← esquemasDelPeriodo; etiqueta en aDesagregacion y en leerDesagregacion
 └── tests/
     ├── reportes.test.js                           ← nuevo
     └── esquemas.test.js                           ← casos de la etiqueta
 frontend/src/
 ├── api/produccion.js                              ← nuevo: listarReportes, obtenerReporte, crearReporte
-├── componentes/layout/opcionesMenu.js             ← «Registro de producción»: REPORTE_CONSULTAR y su pagina
+├── componentes/layout/opcionesMenu.js             ← «Registro de producción»: REPORTE_CONSULTAR y su pagina;
+│                                                    «Reportes»: otro permiso provisional (decidido en el paso 1)
+├── paginas/configuracion/PaginaRegistrarEsquema.jsx ← contenidoDeCopia conserva la etiqueta
+├── paginas/configuracion/PaginaEditarEsquema.test.jsx, PaginaRegistrarEsquema.test.jsx ← casos de la etiqueta
 └── paginas/registro/
     ├── PaginaRegistro.jsx                         ← nuevo
     └── PaginaRegistro.test.jsx                    ← nuevo
@@ -253,8 +257,8 @@ CLAUDE.md                                          ← nota de reportes
 1. **Contrato y permisos.** En `openapi.yaml`: `POST`/`GET /reportes` y `GET /reportes/{id}` con sus respuestas, errores y `x-permiso`; la `etiqueta` en la desagregación; quitar `/vacunas/{codigo}/esquema-vigente`. En `05_permisos_mysql.sql`: los dos permisos nuevos y `PERIODO_CONSULTAR` para `ESTABLECIMIENTO`. Correr el 05 contra Aiven (idempotente) **con la aprobación de Chris**.
    Comprobación: `/api/docs` muestra los endpoints; `permisos.test.js` pasa.
 
-2. **Etiqueta de la desagregación.** `aDesagregacion` pasa `etiqueta ?? null`. Casos nuevos en `esquemas.test.js`: un esquema insertado en MongoDB con una `etiqueta` en la general y otra en una dosis las devuelve, y uno sin `etiqueta` devuelve `null`.
-   Comprobación: `esquemas.test.js` pasa.
+2. **Etiqueta de la desagregación.** `aDesagregacion` pasa `etiqueta ?? null`. Casos nuevos en `esquemas.test.js`: un esquema insertado en MongoDB con una `etiqueta` en la general y otra en una dosis las devuelve, y uno sin `etiqueta` devuelve `null`. Como el editor reenvía la desagregación que recibe, `leerDesagregacion` acepta la `etiqueta` opcional y la guarda (decidido al implementar este paso): un `PUT` la conserva, reenviar lo devuelto no cambia nada, vacía o `null` no se guarda, y un número o más de 120 caracteres dan 400. En el frontend, `contenidoDeCopia` la conserva, con pruebas en `PaginaEditarEsquema.test.jsx` y `PaginaRegistrarEsquema.test.jsx`.
+   Comprobación: `esquemas.test.js`, `esquemas-publicar.test.js` y las pruebas de `paginas/configuracion` pasan.
 
 3. **`esquemasDelPeriodo`.** La función y sus casos en `reportes.test.js`, con la vacuna ficticia `ZVT_HU19` (nacional v1 desde 2022-01-01 y `HISTORICO` hasta 2022-05-31, nacional v2 desde 2022-06-01) y un esquema de `DDRISS_SM` desde 2022-04-01:
    - febrero de 2022 da la nacional v1;
@@ -324,6 +328,7 @@ CLAUDE.md                                          ← nota de reportes
 - [ ] Desactivar una vacuna o publicar otra versión después de crear el reporte no cambia sus vacunas ni sus versiones.
 - [ ] `GET /reportes` y `GET /reportes/{id}` solo muestran reportes del establecimiento del Personal; uno ajeno responde 404.
 - [ ] `GET /esquemas-captura/{id}` devuelve la `etiqueta` de cada desagregación (o `null`), general y por dosis.
+- [ ] Guardar un borrador desde el editor sigue funcionando y conserva la `etiqueta` que traía; una copia del vigente también la conserva.
 - [ ] `GET /reportes/{id}` trae, por vacuna, las dosis del esquema con su nombre, orden y `activa`, y las dimensiones que usa con su nombre, la `etiqueta` del esquema y las etiquetas de los valores que usa, todo de la versión guardada en el reporte e incluidos los inactivos.
 - [ ] El Personal de establecimiento obtiene esas etiquetas sin tener `DIMENSION_CONSULTAR` ni `VACUNA_CONSULTAR`.
 - [ ] `GET /vacunas/{codigo}/esquema-vigente` ya no está en `openapi.yaml`.
@@ -345,6 +350,7 @@ CLAUDE.md                                          ← nota de reportes
 - **Sí:** los nombres de las dosis y las etiquetas de las dimensiones llegan al Personal en `GET /reportes/{id}`, dentro de este spec y sin permisos de configuración (decidido después de la fase de preguntas). HU-20 empieza con eso resuelto, y `/registro` ya puede mostrar las dimensiones de cada vacuna. **No:** dejarlo para `GET /reportes/{id}/formulario` de HU-20. **No:** dar `DIMENSION_CONSULTAR` y `VACUNA_CONSULTAR`, que abren todo el catálogo nacional y las pantallas de configuración al Personal.
 - **Sí:** las etiquetas salen de la versión del esquema guardada en el reporte e incluyen las dosis y los valores inactivos, con su marca. Así, un reporte viejo no pierde sus encabezados, y HU-20 decide qué ocultar. **No:** solo los activos, que rompería un reporte con una dosis desactivada después.
 - **Sí:** solo los valores que el esquema usa, no todo el catálogo de la dimensión. Es lo que dibuja el formulario.
+- **Sí:** `POST` y `PUT /esquemas-captura` aceptan y guardan la `etiqueta` de una desagregación (decidido al implementar el paso 2). El editor reenvía lo que recibe, y sin esto, guardar cualquier borrador habría respondido 400 «Campo no permitido: etiqueta.». Además, la etiqueta ya no se pierde al guardar ni al copiar. **No:** quitarla en el cliente antes del `PUT`, que la perdería al guardar.
 - **Sí:** el mes inicial es el abierto más antiguo pendiente (sin reporte o en `BORRADOR`), con `?periodo=` (decidido en la fase de preguntas). **No:** el más reciente, que esconde un mes atrasado.
 - **Sí:** la creación deja una fila en `historial_estado_reporte` (`NULL` → `BORRADOR`). El historial del reporte arranca completo y la columna `estado_anterior` admite `NULL` para esto. **No:** esperar a la primera transición.
 - **Sí:** las pruebas usan la cuenta `cs1201` de la semilla con token firmado a mano y el año 2022 (decidido en la fase de preguntas). **No:** una cuenta permanente creada por la prueba.
@@ -363,7 +369,7 @@ CLAUDE.md                                          ← nota de reportes
 | El 05 no se corre en Aiven antes de probar | La prueba de permisos falla; el paso 1 lo corre con aprobación. |
 | MongoDB no responde al pedir `GET /reportes/{id}` | El detalle necesita el esquema para las etiquetas: responde el error común del servidor, igual que los demás endpoints de MongoDB. La lista `GET /reportes` no lee MongoDB. |
 | El esquema guardado en `reporte_vacuna` ya no está en MongoDB | Las versiones publicadas no se borran (regla 5). Si falta, esa vacuna va con `dosis: []` y `dimensiones: []`, sin fallar el detalle. |
-| La `etiqueta` no se puede guardar desde el editor y se pierde al copiar un borrador | Hoy ningún esquema la usa. Editarla queda fuera de alcance. |
+| La `etiqueta` se pierde al guardar o copiar un borrador | El `POST` y el `PUT` la aceptan y la guardan, y `contenidoDeCopia` la conserva (paso 2). Mostrarla y cambiarla en el editor queda fuera de alcance. |
 
 ## Lo que **no** entra en este spec
 

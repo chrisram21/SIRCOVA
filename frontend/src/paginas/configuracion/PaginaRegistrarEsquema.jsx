@@ -31,7 +31,7 @@ function contenidoDeCopia(esquema, dosis, dimensiones) {
   const anotar = (texto) => !quitados.includes(texto) && quitados.push(texto)
   const dosisActivas = new Set(dosis.filter((d) => d.activa).map((d) => d.codigo))
   const filtrar = (desagregacion) =>
-    desagregacion.flatMap(({ dimension, valores }) => {
+    desagregacion.flatMap(({ dimension, valores, etiqueta }) => {
       const catalogo = dimensiones.find((d) => d.codigo === dimension && d.activa)
       if (!catalogo) {
         anotar(`la dimensión ${dimension}`)
@@ -39,7 +39,7 @@ function contenidoDeCopia(esquema, dosis, dimensiones) {
       }
       const activos = new Set(catalogo.valores.filter((v) => v.activo).map((v) => v.codigo))
       valores.filter((v) => !activos.has(v)).forEach((v) => anotar(`el valor ${v} de ${dimension}`))
-      return [{ dimension, valores: valores.filter((v) => activos.has(v)) }]
+      return [{ dimension, valores: valores.filter((v) => activos.has(v)), ...(etiqueta != null && { etiqueta }) }]
     })
 
   esquema.dosis.filter((d) => !dosisActivas.has(d.codigo)).forEach((d) => anotar(`la dosis ${d.codigo}`))
