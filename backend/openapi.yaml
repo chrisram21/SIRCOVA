@@ -2378,16 +2378,6 @@ paths:
               example:
                 error: { codigo: VALOR_YA_ACTIVO, mensaje: El valor ya está activo. }
 
-  /vacunas/{codigo}/esquema-vigente:
-    get:
-      tags: [Configuración]
-      summary: Esquema de captura VIGENTE de una vacuna (molde del formulario)
-      parameters:
-        - { name: codigo, in: path, required: true, schema: { type: string, example: PENTA } }
-      responses:
-        "200": { description: Documento de esquemas_captura }
-        "404": { $ref: "#/components/responses/NoEncontrado" }
-
   /esquemas-captura:
     get:
       tags: [Configuración]
@@ -2682,48 +2672,141 @@ paths:
   /reportes:
     get:
       tags: [Producción]
-      summary: Listar reportes (limitado al alcance del usuario)
+      summary: Listar los reportes mensuales del alcance del usuario
+      description: |
+        El Personal de establecimiento solo ve los de su establecimiento. Ordenados por año y mes descendentes,
+        con la forma paginada común. No lee MongoDB. Un parámetro inválido, desconocido o repetido responde
+        400 `ENTRADA_INVALIDA`; una página fuera de rango responde 200 con `elementos` vacío y el `total` real.
+      x-permiso: REPORTE_CONSULTAR
       parameters:
-        - { name: periodoId, in: query, schema: { type: integer } }
-        - { name: establecimientoId, in: query, schema: { type: integer } }
+        - { name: periodoId, in: query, schema: { type: integer, minimum: 1, example: 10 } }
         - { name: estado, in: query, schema: { $ref: "#/components/schemas/EstadoReporte" } }
         - { $ref: "#/components/parameters/Pagina" }
         - { $ref: "#/components/parameters/PorPagina" }
       responses:
-        "200": { description: Lista paginada de reportes }
+        "200":
+          description: Página de reportes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaginaReportes" }
+        "400":
+          description: Un parámetro inválido, desconocido o repetido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                estado:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "estado debe ser BORRADOR, ENVIADO, EN_REVISION, CORRECCION_SOLICITADA, APROBADO, CERRADO o RECTIFICACION." }
+                desconocido:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: establecimientoId." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
     post:
       tags: [Producción]
-      summary: Crear el reporte mensual de un establecimiento (inicia en BORRADOR)
+      summary: Crear el reporte mensual del establecimiento del usuario (nace en BORRADOR)
+      description: |
+        El establecimiento sale de la cuenta del usuario. El mes debe estar `ABIERTO` en `cierre_periodo` de la
+        DDRISS del establecimiento. Crea, en una transacción de MySQL, el reporte, una fila de `reporte_vacuna`
+        por cada vacuna activa con un esquema publicado que cubra el día 1 del mes (el de la DDRISS del
+        establecimiento, `VIGENTE` o `HISTORICO`, o si no hay, el nacional), una fila en
+        `historial_estado_reporte` (`null` → `BORRADOR`) y una `CREAR` en la bitácora. Las vacunas sin esquema
+        para ese mes se omiten. Las vacunas y sus versiones quedan fijas: desactivar una vacuna o publicar
+        otra versión después no cambia el reporte.
+
+        Los errores se revisan en este orden: cuerpo, establecimiento, periodo, reporte existente y esquemas.
+      x-permiso: REPORTE_CREAR
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [establecimientoId, periodoId]
-              properties:
-                establecimientoId: { type: integer }
-                periodoId: { type: integer }
+            schema: { $ref: "#/components/schemas/ReporteNuevo" }
       responses:
         "201":
           description: Reporte creado
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Reporte" }
-        "409": { $ref: "#/components/responses/Conflicto" }
+        "400":
+          description: El cuerpo no es `{ periodoId }` con un entero positivo, o trae otro campo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                periodo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: periodoId debe ser un número entero positivo. }
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: establecimientoId." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403":
+          description: Sin el permiso, o la cuenta no tiene establecimiento
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                sinPermiso:
+                  value:
+                    error: { codigo: SIN_PERMISO, mensaje: No tiene permiso para realizar esta acción. }
+                sinEstablecimiento:
+                  value:
+                    error: { codigo: SIN_ESTABLECIMIENTO, mensaje: Su cuenta no tiene un establecimiento asignado. }
+        "404":
+          description: El periodo no existe
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: NO_ENCONTRADO, mensaje: El periodo no existe. }
+        "409":
+          description: El establecimiento está inactivo, el mes no está abierto o ya existe el reporte del mes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                establecimientoInactivo:
+                  value:
+                    error: { codigo: ESTABLECIMIENTO_INACTIVO, mensaje: Su establecimiento está desactivado y no puede crear reportes. }
+                periodoNoAbierto:
+                  value:
+                    error: { codigo: PERIODO_NO_ABIERTO, mensaje: El mes no está abierto para reportes. }
+                reporteExistente:
+                  value:
+                    error: { codigo: REPORTE_EXISTENTE, mensaje: Ya existe el reporte de este mes. }
+        "422":
+          description: El establecimiento no envía el 5C, o ninguna vacuna activa tiene esquema para el mes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                noReporta:
+                  value:
+                    error: { codigo: ESTABLECIMIENTO_NO_REPORTA, mensaje: Su establecimiento no envía el formulario 5C. }
+                sinEsquemas:
+                  value:
+                    error: { codigo: SIN_ESQUEMAS, mensaje: No hay formularios de captura publicados para este mes. }
 
   /reportes/{id}:
     get:
       tags: [Producción]
-      summary: Detalle de un reporte
+      summary: Detalle de un reporte con sus vacunas y las etiquetas de su esquema
+      description: |
+        Uno que no existe o está fuera del alcance del usuario (para el Personal, de otro establecimiento)
+        responde 404. Cada vacuna trae la versión del esquema fijada al crear el reporte y, de esa versión, las
+        dosis que nombra y las dimensiones que usa con sus etiquetas, incluidas las inactivas.
+      x-permiso: REPORTE_CONSULTAR
       parameters:
         - { $ref: "#/components/parameters/Id" }
       responses:
         "200":
-          description: Reporte
+          description: El reporte
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Reporte" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
         "404": { $ref: "#/components/responses/NoEncontrado" }
 
   /reportes/{id}/formulario:
@@ -4050,6 +4133,20 @@ components:
           items: { type: string }
           example: [MENOR_1, 1_A_5]
 
+    DesagregacionEsquemaGuardada:
+      allOf:
+        - { $ref: "#/components/schemas/DesagregacionEsquema" }
+        - type: object
+          required: [etiqueta]
+          properties:
+            etiqueta:
+              type: string
+              nullable: true
+              description: |
+                Texto que reemplaza el nombre de la dimensión en el formulario, si el documento lo trae; `null`
+                si no. Solo se devuelve: el editor de borradores no la recibe.
+              example: "Condición: embarazada o no"
+
     ProcedenciaEsquema:
       type: object
       required: [modo]
@@ -4191,10 +4288,10 @@ components:
                 type: array
                 nullable: true
                 description: null si la dosis usa la desagregación general; `[]` si no se desagrega
-                items: { $ref: "#/components/schemas/DesagregacionEsquema" }
+                items: { $ref: "#/components/schemas/DesagregacionEsquemaGuardada" }
         desagregacion:
           type: array
-          items: { $ref: "#/components/schemas/DesagregacionEsquema" }
+          items: { $ref: "#/components/schemas/DesagregacionEsquemaGuardada" }
         secciones:
           type: array
           items:
@@ -4319,16 +4416,138 @@ components:
             motivoCambio: null
             reportes: 6
 
+    ReporteNuevo:
+      type: object
+      additionalProperties: false
+      required: [periodoId]
+      description: 'El establecimiento sale de la cuenta; cualquier otro campo responde 400 ("Campo no permitido: {nombre}.").'
+      properties:
+        periodoId: { type: integer, minimum: 1, example: 10 }
+
+    EstablecimientoDeReporte:
+      type: object
+      required: [id, codigo, nombre]
+      properties:
+        id: { type: integer, example: 1 }
+        codigo: { type: string, example: CS-1201 }
+        nombre: { type: string, example: Centro de Salud San Marcos }
+
+    ReporteResumen:
+      type: object
+      required: [id, establecimiento, periodo, estado, actualizadoEn]
+      properties:
+        id: { type: integer, example: 412 }
+        establecimiento: { $ref: "#/components/schemas/EstablecimientoDeReporte" }
+        periodo:
+          type: object
+          required: [id, anio, mes]
+          properties:
+            id: { type: integer, example: 10 }
+            anio: { type: integer, example: 2026 }
+            mes: { type: integer, minimum: 1, maximum: 12, example: 10 }
+        estado: { $ref: "#/components/schemas/EstadoReporte" }
+        actualizadoEn: { type: string, format: date-time, example: "2026-10-25T15:04:00.000Z" }
+
+    PaginaReportes:
+      description: Página de reportes, con la forma paginada común (ver `PaginaUsuarios`)
+      type: object
+      required: [elementos, total, pagina, porPagina]
+      properties:
+        elementos:
+          type: array
+          items: { $ref: "#/components/schemas/ReporteResumen" }
+        total: { type: integer, minimum: 0, example: 1 }
+        pagina: { type: integer, minimum: 1, example: 1 }
+        porPagina: { type: integer, minimum: 1, maximum: 100, example: 20 }
+
+    DosisDeReporte:
+      type: object
+      required: [codigo, nombre, orden, activa]
+      description: Una dosis que nombra el esquema del reporte, con los datos de la tabla `dosis`
+      properties:
+        codigo: { type: string, example: D1 }
+        nombre: { type: string, example: 1.ª dosis }
+        orden: { type: integer, example: 1 }
+        activa: { type: boolean, description: "`false` si se desactivó; qué hacer con ella lo decide el formulario (HU-20)", example: true }
+
+    DimensionDeReporte:
+      type: object
+      required: [codigo, nombre, etiqueta, valores]
+      description: Una dimensión que usa el esquema del reporte, con los valores que usa, en el orden del catálogo
+      properties:
+        codigo: { type: string, example: grupo_edad }
+        nombre: { type: string, example: Grupo de edad }
+        etiqueta:
+          type: string
+          nullable: true
+          description: La `etiqueta` de la desagregación en el esquema; `null` si no tiene
+          example: null
+        valores:
+          type: array
+          items:
+            type: object
+            required: [codigo, etiqueta, orden, activo]
+            properties:
+              codigo: { type: string, example: MENOR_1 }
+              etiqueta: { type: string, example: "< 1 año" }
+              orden: { type: integer, example: 1 }
+              activo: { type: boolean, example: true }
+
+    VacunaDeReporte:
+      type: object
+      required: [id, vacuna, esquema, dosis, dimensiones]
+      properties:
+        id: { type: integer, description: "`reporte_vacuna.id`", example: 2051 }
+        vacuna:
+          type: object
+          required: [id, codigo, nombre]
+          properties:
+            id: { type: integer, example: 3 }
+            codigo: { type: string, example: HEXA }
+            nombre: { type: string, example: Hexavalente }
+        esquema:
+          type: object
+          required: [id, version]
+          description: La versión fijada al crear el reporte
+          properties:
+            id: { type: string, example: 66f8a1c2e4b0a1b2c3d4e5f6 }
+            version: { type: integer, example: 2 }
+        dosis:
+          type: array
+          description: Ordenadas por `orden`; `[]` si el esquema ya no está en MongoDB
+          items: { $ref: "#/components/schemas/DosisDeReporte" }
+        dimensiones:
+          type: array
+          description: "`[]` si el esquema solo desagrega por dosis o ya no está en MongoDB"
+          items: { $ref: "#/components/schemas/DimensionDeReporte" }
+
     Reporte:
       type: object
+      required: [id, establecimiento, periodo, estado, numeroRectificacion, versionFila, creadoEn, actualizadoEn, vacunas]
       properties:
-        id: { type: integer }
-        establecimientoId: { type: integer }
-        periodoId: { type: integer }
+        id: { type: integer, example: 412 }
+        establecimiento: { $ref: "#/components/schemas/EstablecimientoDeReporte" }
+        periodo:
+          type: object
+          required: [id, anio, mes, estado, fechaLimiteEnvio]
+          properties:
+            id: { type: integer, example: 10 }
+            anio: { type: integer, example: 2026 }
+            mes: { type: integer, minimum: 1, maximum: 12, example: 10 }
+            estado:
+              allOf: [{ $ref: "#/components/schemas/EstadoPeriodo" }]
+              nullable: true
+              description: Estado del mes en la DDRISS del establecimiento; `null` si no está abierto en ella
+            fechaLimiteEnvio: { type: string, format: date, nullable: true, example: "2026-11-10" }
         estado: { $ref: "#/components/schemas/EstadoReporte" }
-        revisorId: { type: integer, nullable: true }
-        numeroRectificacion: { type: integer }
-        versionFila: { type: integer }
+        numeroRectificacion: { type: integer, example: 0 }
+        versionFila: { type: integer, example: 1 }
+        creadoEn: { type: string, format: date-time, example: "2026-10-25T15:04:00.000Z" }
+        actualizadoEn: { type: string, format: date-time, example: "2026-10-25T15:04:00.000Z" }
+        vacunas:
+          type: array
+          description: Ordenadas como el catálogo (`orden_informe`, `nombre`)
+          items: { $ref: "#/components/schemas/VacunaDeReporte" }
 
     Celda:
       type: object
