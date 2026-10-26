@@ -25,6 +25,7 @@
 --      de cada módulo lo fija el primer spec que crea un permiso en él:
 --        CONFIGURACION_CATALOGOS  (POBLACION_REGISTRAR, modelo v0.6)
 --        USUARIOS                 (SPEC 07, HU-04)
+--        PRODUCCION               (SPEC 22, HU-19)
 --    - Un código no se borra ni se renombra (regla 6 de AGENTS.md).
 --    - Asignaciones y retiros siempre por códigos, nunca por ids.
 --
@@ -109,6 +110,11 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
 INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('ESQUEMA_PUBLICAR',          'CONFIGURACION_CATALOGOS', 'Publicar borradores de esquemas de captura de la DDRISS');
 
+-- SPEC 22 (HU-19): reporte mensual de producción del establecimiento
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('REPORTE_CREAR',             'PRODUCCION',              'Crear el reporte mensual de su establecimiento'),
+ ('REPORTE_CONSULTAR',         'PRODUCCION',              'Consultar los reportes mensuales de su ámbito');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -189,6 +195,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo IN ('ADMINISTRADOR', 'REVISOR')
    AND p.codigo = 'ESQUEMA_PUBLICAR';
+
+-- SPEC 22 (HU-19): el Personal de establecimiento crea y consulta sus reportes y ve los meses abiertos
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'ESTABLECIMIENTO'
+   AND p.codigo IN ('REPORTE_CREAR', 'REPORTE_CONSULTAR', 'PERIODO_CONSULTAR');
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

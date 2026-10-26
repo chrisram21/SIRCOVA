@@ -137,6 +137,21 @@ test('con origen=copia precarga el vigente sin lo inactivo, lo avisa y guarda co
   )
 })
 
+test('una copia conserva la etiqueta de la desagregación', async () => {
+  obtenerEsquema.mockResolvedValue({
+    ...VIGENTE,
+    desagregacion: [{ dimension: 'grupo_edad', valores: ['MENOR_1'], etiqueta: 'Edad del vacunado' }],
+  })
+  await abrir('?vacuna=2&origen=copia')
+
+  fireEvent.click(screen.getByRole('button', { name: 'Guardar borrador' }))
+
+  await waitFor(() => expect(crearEsquema).toHaveBeenCalledTimes(1))
+  expect(crearEsquema.mock.calls[0][0].desagregacion).toEqual([
+    { dimension: 'grupo_edad', valores: ['MENOR_1'], etiqueta: 'Edad del vacunado' },
+  ])
+})
+
 test('con origen=vacio empieza con las dosis activas marcadas y una sección vacía, y guarda sin copiaDe', async () => {
   await abrir('?vacuna=2&origen=vacio')
 

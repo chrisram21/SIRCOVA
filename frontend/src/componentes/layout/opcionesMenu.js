@@ -27,14 +27,21 @@ import PaginaInicio from '@/paginas/inicio/PaginaInicio.jsx'
 import PaginaEditarUsuario from '@/paginas/usuarios/PaginaEditarUsuario.jsx'
 import PaginaRegistrarPersonal from '@/paginas/usuarios/PaginaRegistrarPersonal.jsx'
 import PaginaUsuarios from '@/paginas/usuarios/PaginaUsuarios.jsx'
+import PaginaRegistro from '@/paginas/registro/PaginaRegistro.jsx'
 
 // Los permisos son provisionales: el spec que construye cada pantalla confirma su código al crearlo en
 // backend/db/05_permisos_mysql.sql y pone su componente en `pagina` (sin `pagina`, se ve "En construcción").
 // `subrutas` son pantallas con permiso propio que no aparecen en el menú; su opción queda activa en ellas.
 const opcionesMenu = [
   { titulo: 'Inicio', ruta: '/inicio', permiso: null, icono: House, pagina: PaginaInicio },
-  { titulo: 'Registro de producción', ruta: '/registro', permiso: 'REPORTE_REGISTRAR', icono: ClipboardPen },
-  { titulo: 'Reportes', ruta: '/reportes', permiso: 'REPORTE_CONSULTAR', icono: FileText },
+  {
+    titulo: 'Registro de producción',
+    ruta: '/registro',
+    permiso: 'REPORTE_CONSULTAR',
+    icono: ClipboardPen,
+    pagina: PaginaRegistro,
+  },
+  { titulo: 'Reportes', ruta: '/reportes', permiso: 'REPORTE_LISTAR', icono: FileText },
   { titulo: 'Revisión y cierre', ruta: '/revision', permiso: 'REPORTE_REVISAR', icono: ClipboardCheck },
   { titulo: 'Indicadores', ruta: '/indicadores', permiso: 'INDICADOR_CONSULTAR', icono: ChartLine },
   { titulo: 'Mapa territorial', ruta: '/mapa', permiso: 'MAPA_CONSULTAR', icono: MapIcon },

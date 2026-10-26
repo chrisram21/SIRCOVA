@@ -322,19 +322,51 @@ describe('GET /esquemas-captura/{id}', () => {
       versionAnteriorId: null,
       basadoEn: null,
       procedencia: { modo: 'MUNICIPIO_DETALLADO', permiteNoEspecificado: true },
-      desagregacion: [{ dimension: 'grupo_edad', valores: ['MENOR_1', '1_A_5'] }],
+      desagregacion: [{ dimension: 'grupo_edad', valores: ['MENOR_1', '1_A_5'], etiqueta: null }],
       reglas: [{ codigo: 'CAMPOS_COMPLETOS', version: 1, severidadOverride: null }],
       presentacion: { filas: 'dosis', columnas: ['seccion'], subtablaPor: 'procedencia' },
       creadoPor: 1,
     });
     expect(res.body.dosis).toEqual([
       { codigo: 'D1', etiqueta: 'Primera dosis', desagregacion: null },
-      { codigo: 'R1', etiqueta: 'Primer refuerzo', desagregacion: [{ dimension: 'grupo_edad', valores: ['1_A_5'] }] },
+      {
+        codigo: 'R1',
+        etiqueta: 'Primer refuerzo',
+        desagregacion: [{ dimension: 'grupo_edad', valores: ['1_A_5'], etiqueta: null }],
+      },
     ]);
     expect(res.body.secciones[1]).toEqual({
       codigo: '1_A_5', titulo: 'De 1 a < 6 años', orden: 2, grupoEdad: '1_A_5', dosis: ['D1', 'R1'],
     });
     expect(res.body.camposAdicionales[0]).toMatchObject({ clave: 'total_dosis_declarado', tipo: 'entero', minimo: 0 });
+  });
+
+  it('trae la etiqueta de la desagregación general y de una dosis cuando el documento la tiene', async () => {
+    const id = new ObjectId();
+    const doc = esquemaDePrueba({
+      _id: id,
+      version: 3,
+      territorio: { nivel: 'NACIONAL', ddriss_codigo: null },
+      estado: 'HISTORICO',
+      vigencia: { desde: new Date('2026-01-01'), hasta: new Date('2026-09-30') },
+    });
+    doc.dimensiones.desagregacion[0].etiqueta = 'Edad del vacunado';
+    doc.dimensiones.dosis[1].desagregacion[0].etiqueta = 'Edad del refuerzo';
+    const db = await obtenerDb();
+    await db.collection('esquemas_captura').insertOne(doc);
+    try {
+      const res = await consultar(`/esquemas-captura/${id}`);
+      expect(res.status).toBe(200);
+      expect(res.body.desagregacion).toEqual([
+        { dimension: 'grupo_edad', valores: ['MENOR_1', '1_A_5'], etiqueta: 'Edad del vacunado' },
+      ]);
+      expect(res.body.dosis[0].desagregacion).toBeNull();
+      expect(res.body.dosis[1].desagregacion).toEqual([
+        { dimension: 'grupo_edad', valores: ['1_A_5'], etiqueta: 'Edad del refuerzo' },
+      ]);
+    } finally {
+      await db.collection('esquemas_captura').deleteOne({ _id: id });
+    }
   });
 
   it('un borrador de la DDRISS trae vigencia null', async () => {
@@ -618,6 +650,61 @@ describe('PUT y DELETE /esquemas-captura/{id}', () => {
     const res = await enviar('put', `/esquemas-captura/${id}`, contenido());
     expect(res.status).toBe(200);
     expect((await filasBitacora(id)).map((f) => f.accion)).toEqual(['CREAR']);
+  });
+
+  it('un PUT conserva la etiqueta de una desagregación, y null o vacía no se guarda', async () => {
+    const id = await crear();
+    const conEtiqueta = contenido({
+      desagregacion: [
+        { dimension: DIMENSION, valores: ['A'], etiqueta: '  Condición   especial ' },
+        { dimension: 'grupo_edad', valores: ['1_A_5', 'MENOR_1'], etiqueta: null },
+      ],
+    });
+    const res = await enviar('put', `/esquemas-captura/${id}`, conEtiqueta);
+    expect(res.status).toBe(200);
+    expect(res.body.desagregacion).toEqual([
+      { dimension: DIMENSION, valores: ['A'], etiqueta: 'Condición especial' },
+      { dimension: 'grupo_edad', valores: ['MENOR_1', '1_A_5'], etiqueta: null },
+    ]);
+    const crudo = await documentoCrudo(id);
+    expect(crudo.dimensiones.desagregacion[0].etiqueta).toBe('Condición especial');
+    expect('etiqueta' in crudo.dimensiones.desagregacion[1]).toBe(false);
+
+    // Reenviar lo que devolvió la API (como hace el editor) no cambia nada.
+    const reenvio = await enviar('put', `/esquemas-captura/${id}`, {
+      procedencia: res.body.procedencia,
+      dosis: res.body.dosis.map(({ codigo, desagregacion }) => ({ codigo, desagregacion })),
+      desagregacion: res.body.desagregacion,
+      secciones: res.body.secciones.map(({ titulo, grupoEdad, dosis }) => ({ titulo, grupoEdad, dosis })),
+    });
+    expect(reenvio.status).toBe(200);
+    expect((await filasBitacora(id)).map((f) => f.accion)).toEqual(['CREAR', 'ACTUALIZAR']);
+
+    const vacia = contenido({
+      desagregacion: [
+        { dimension: DIMENSION, valores: ['A'], etiqueta: '   ' },
+        { dimension: 'grupo_edad', valores: ['1_A_5', 'MENOR_1'] },
+      ],
+    });
+    const sinEtiqueta = await enviar('put', `/esquemas-captura/${id}`, vacia);
+    expect(sinEtiqueta.body.desagregacion[0].etiqueta).toBeNull();
+  });
+
+  it.each([
+    ['no es texto', 5],
+    ['tiene más de 120 caracteres', 'x'.repeat(121)],
+  ])('un PUT con una etiqueta que %s responde 400', async (_, etiqueta) => {
+    const id = await crear();
+    const res = await enviar(
+      'put',
+      `/esquemas-captura/${id}`,
+      contenido({ desagregacion: [{ dimension: 'grupo_edad', valores: ['MENOR_1', '1_A_5'], etiqueta }] }),
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.error).toEqual({
+      codigo: 'ENTRADA_INVALIDA',
+      mensaje: 'La etiqueta de grupo_edad debe ser un texto de hasta 120 caracteres.',
+    });
   });
 
   it('un PUT que agrega una dimensión recalcula la presentación', async () => {

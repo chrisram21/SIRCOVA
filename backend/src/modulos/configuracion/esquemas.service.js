@@ -17,6 +17,7 @@ const MODOS_PROCEDENCIA = ['MUNICIPIO_DETALLADO', 'PROPIO_Y_OTROS'];
 const SECCION_SIN_EDAD = 'GENERAL';
 // Largo de detalle_produccion.clave_combinacion en MySQL.
 const LARGO_COMBINACION = 255;
+const LARGO_ETIQUETA = 120;
 const REGLAS_BASICAS = ['CAMPOS_COMPLETOS', 'DIMENSIONES_VALIDAS', 'NO_NEGATIVO'];
 const ENTIDAD = 'esquemas_captura';
 
@@ -81,7 +82,8 @@ const esVisible = (doc, ddriss) =>
 
 const aTerritorio = (territorio) => ({ nivel: territorio.nivel, ddrissCodigo: territorio.ddriss_codigo ?? null });
 
-const aDesagregacion = (lista) => lista.map(({ dimension, valores }) => ({ dimension, valores: [...valores] }));
+const aDesagregacion = (lista) =>
+  lista.map(({ dimension, valores, etiqueta }) => ({ dimension, valores: [...valores], etiqueta: etiqueta ?? null }));
 
 // usuarios: id → nombre_usuario, para publicadoPor; sin él (bitácora) queda en null.
 function aEsquema(doc, usuarios = new Map()) {
@@ -192,6 +194,35 @@ export async function listarEsquemas(query, usuario) {
     .sort((a, b) => a.vacuna.nombre.localeCompare(b.vacuna.nombre, 'es'));
 }
 
+// El esquema publicado que cubre la fecha (día 1 del mes, en UTC como las vigencias): el de la DDRISS o, si no hay,
+// el nacional. Se elige por fecha y no por estado, porque un VIGENTE puede empezar en un mes futuro (SPEC 20).
+// Las vacunas sin esquema para esa fecha no aparecen en el Map.
+export async function esquemasDelPeriodo(codigosVacuna, ddrissCodigo, fecha) {
+  if (codigosVacuna.length === 0) return new Map();
+  const territorios = [{ 'territorio.nivel': NACIONAL }];
+  if (ddrissCodigo) territorios.push({ 'territorio.ddriss_codigo': ddrissCodigo });
+  const documentos = await (await coleccion())
+    .find(
+      {
+        'vacuna.codigo': { $in: codigosVacuna },
+        estado: { $in: ['VIGENTE', 'HISTORICO'] },
+        'vigencia.desde': { $lte: fecha },
+        $and: [{ $or: [{ 'vigencia.hasta': null }, { 'vigencia.hasta': { $gte: fecha } }] }, { $or: territorios }],
+      },
+      { projection: { vacuna: 1, version: 1, territorio: 1 } },
+    )
+    .toArray();
+  const nacionales = new Map();
+  const deLaDdriss = new Map();
+  for (const doc of documentos) {
+    (doc.territorio.nivel === NACIONAL ? nacionales : deLaDdriss).set(doc.vacuna.codigo, {
+      id: doc._id.toString(),
+      version: doc.version,
+    });
+  }
+  return new Map([...nacionales, ...deLaDdriss]);
+}
+
 // Un id que no es un ObjectId, o un esquema de otra DDRISS, responde igual que uno inexistente.
 async function buscarVisible(id, usuario) {
   if (!/^[0-9a-f]{24}$/i.test(String(id))) throw errores.noEncontrado();
@@ -293,7 +324,7 @@ function leerDesagregacion(valor, campo) {
   const vistas = new Set();
   return leerLista(valor, campo).map((item) => {
     leerObjeto(item, `Cada elemento de ${campo}`);
-    revisarCampos(item, ['dimension', 'valores']);
+    revisarCampos(item, ['dimension', 'valores', 'etiqueta']);
     if (!esTexto(item.dimension)) throw entradaInvalida(`Cada elemento de ${campo} necesita su dimensión.`);
     const dimension = item.dimension.trim();
     if (vistas.has(dimension)) throw entradaInvalida(`La dimensión ${dimension} está repetida.`);
@@ -304,8 +335,19 @@ function leerDesagregacion(valor, campo) {
       (v) => `El valor ${v} de ${dimension} está repetido.`,
     );
     if (valores.length === 0) throw entradaInvalida(`Indique al menos un valor de ${dimension}.`);
-    return { dimension, valores };
+    const etiqueta = leerEtiqueta(item.etiqueta, dimension);
+    return { dimension, valores, ...(etiqueta !== null && { etiqueta }) };
   });
+}
+
+// El editor no la cambia: solo la devuelve tal como la recibió, para que guardar no la pierda.
+function leerEtiqueta(valor, dimension) {
+  if (valor === undefined || valor === null) return null;
+  const limpia = typeof valor === 'string' ? valor.trim().replace(/\s+/g, ' ') : null;
+  if (limpia === null || limpia.length > LARGO_ETIQUETA) {
+    throw entradaInvalida(`La etiqueta de ${dimension} debe ser un texto de hasta ${LARGO_ETIQUETA} caracteres.`);
+  }
+  return limpia === '' ? null : limpia;
 }
 
 function leerSeccion(item) {
@@ -450,9 +492,13 @@ export function revisarCoherencia(contenido, { vacuna, dosis: dosisVacuna, dimen
   }
 
   const porOrdenDeDosis = (a, b) => dosisActivas.get(a).orden - dosisActivas.get(b).orden;
-  const ordenarValores = ({ dimension, valores }) => {
+  const ordenarValores = ({ dimension, valores, etiqueta }) => {
     const orden = new Map(dimensionesActivas.get(dimension).valores.map((v) => [v.codigo, v.orden]));
-    return { dimension, valores: [...valores].sort((a, b) => orden.get(a) - orden.get(b)) };
+    return {
+      dimension,
+      valores: [...valores].sort((a, b) => orden.get(a) - orden.get(b)),
+      ...(etiqueta !== undefined && { etiqueta }),
+    };
   };
 
   return {
