@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { listarPeriodos } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
 import { crearReporte, listarReportes, obtenerFormulario, obtenerReporte } from '@/api/produccion.js'
@@ -97,14 +97,10 @@ function prepararApi({ periodos = [SEPTIEMBRE, OCTUBRE], reportesPorMes = {} } =
   })
 }
 
+// La captura usa useBlocker, que necesita un data router.
 function montar(ruta = '/registro') {
-  render(
-    <MemoryRouter initialEntries={[ruta]}>
-      <Routes>
-        <Route path="/registro" element={<PaginaRegistro />} />
-      </Routes>
-    </MemoryRouter>,
-  )
+  const router = createMemoryRouter([{ path: '/registro', element: <PaginaRegistro /> }], { initialEntries: [ruta] })
+  render(<RouterProvider router={router} />)
 }
 
 async function abrir(ruta) {
@@ -246,4 +242,67 @@ test('si falla la carga lo dice y permite reintentar', async () => {
   expect(await screen.findByText('No se pudieron cargar los meses abiertos: No se pudo conectar con el servidor.')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
   expect(await screen.findByText(/No hay meses abiertos para reportar/)).toBeTruthy()
+})
+
+describe('cambiar de mes con cambios sin guardar', () => {
+  // Hexavalente con una sola celda para escribir; Td sin esquema.
+  const formularioConHexa = (reporteId) => ({
+    ...formularioDe(reporteId),
+    municipios: [],
+    vacunas: [
+      {
+        vacunaId: 3,
+        esquema: {
+          id: 'e-hexa',
+          version: 2,
+          estado: 'VIGENTE',
+          vigencia: { desde: '2026-09-01', hasta: null },
+          procedencia: { modo: 'MUNICIPIO_DETALLADO', permiteNoEspecificado: true },
+          dosis: [{ codigo: 'D1', etiqueta: null, desagregacion: null }],
+          desagregacion: [{ dimension: 'grupo_edad', valores: ['MENOR_1'], etiqueta: null }],
+          secciones: [{ codigo: 'MENOR_1', titulo: '< 1 año', orden: 1, grupoEdad: 'MENOR_1', dosis: ['D1'] }],
+          camposAdicionales: [],
+          reglas: [],
+        },
+        procedenciasPermitidas: [],
+        celdas: [],
+        datosAdicionales: null,
+        totalDeclarado: null,
+      },
+      { vacunaId: 4, esquema: null, celdas: [], datosAdicionales: null, totalDeclarado: null },
+    ],
+  })
+
+  const mesVisible = () => document.querySelector('[aria-label="Mes"]').textContent
+
+  async function escribirEnSeptiembre() {
+    prepararApi({ reportesPorMes: { 9: resumen(7, SEPTIEMBRE) } })
+    obtenerFormulario.mockImplementation(async (id) => formularioConHexa(id))
+    await abrir('/registro?periodo=9')
+    const celda = await screen.findByRole('textbox', { name: '1.ª dosis' })
+    fireEvent.change(celda, { target: { value: '4' } })
+    fireEvent.change(document.querySelector('select[name="periodo"]'), { target: { value: '10' } })
+    return screen.findByRole('alertdialog')
+  }
+
+  test('«Seguir editando» conserva el mes y lo escrito', async () => {
+    const dialogo = await escribirEnSeptiembre()
+    // Con el diálogo abierto, el resto de la página queda aria-hidden. El <select> nativo conserva el valor que le
+    // puso la prueba; el mes que se ve es el texto del Select, que sale de la URL.
+    expect(mesVisible()).toBe('septiembre de 2026')
+
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Seguir editando' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(titulo()).toBe('Reporte mensual de septiembre de 2026')
+    expect(mesVisible()).toBe('septiembre de 2026')
+    expect(screen.getByRole('textbox', { name: '1.ª dosis' }).value).toBe('4')
+  })
+
+  test('«Salir sin guardar» cambia de mes', async () => {
+    const dialogo = await escribirEnSeptiembre()
+
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Salir sin guardar' }))
+    await waitFor(() => expect(titulo()).toBe('Reporte mensual de octubre de 2026'))
+    expect(screen.getByRole('button', { name: 'Crear reporte de octubre de 2026' })).toBeTruthy()
+  })
 })

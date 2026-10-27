@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { ErrorApi } from '@/api/cliente.js'
 import { guardarVacuna, obtenerFormulario } from '@/api/produccion.js'
 import CapturaReporte from './CapturaReporte.jsx'
@@ -28,7 +29,7 @@ const VPH = {
     { codigo: 'sexo', nombre: 'Sexo', etiqueta: 'Sexo biológico', valores: [valor('M', 'Masculino', 1), valor('F', 'Femenino', 2)] },
   ],
 }
-const REPORTE = { id: 7, vacunas: [HEXAVALENTE, VPH] }
+const REPORTE = { id: 7, actualizadoEn: '2026-10-25T15:04:00.000Z', vacunas: [HEXAVALENTE, VPH] }
 
 const PROCEDENCIA = { modo: 'MUNICIPIO_DETALLADO', permiteNoEspecificado: true }
 const esquemaHexa = {
@@ -107,10 +108,24 @@ const formulario = (cambios = {}) => ({
   ...cambios,
 })
 
+// useBlocker necesita un data router.
+function dibujar() {
+  const router = createMemoryRouter(
+    [
+      { path: '/registro', element: <CapturaReporte reporte={REPORTE} /> },
+      { path: '/inicio', element: <p>Pantalla de inicio</p> },
+    ],
+    { initialEntries: ['/registro'] },
+  )
+  render(<RouterProvider router={router} />)
+  return router
+}
+
 async function montar(recibido = formulario()) {
   obtenerFormulario.mockResolvedValue(recibido)
-  render(<CapturaReporte reporte={REPORTE} />)
+  const router = dibujar()
   await waitFor(() => expect(screen.queryByLabelText('Cargando formulario')).toBeNull())
+  return router
 }
 
 const campo = (nombre) => screen.getByRole('textbox', { name: nombre })
@@ -399,10 +414,98 @@ describe('tarjeta B: otros municipios', () => {
 
 test('si falla la carga lo dice y permite reintentar', async () => {
   obtenerFormulario.mockRejectedValueOnce(new ErrorApi(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.'))
-  render(<CapturaReporte reporte={REPORTE} />)
+  dibujar()
 
   expect(await screen.findByText('No se pudo cargar el formulario: No se pudo conectar con el servidor.')).toBeTruthy()
   obtenerFormulario.mockResolvedValue(formulario())
   fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
   expect(await screen.findByText('Dosis aplicadas a residentes de San Marcos')).toBeTruthy()
+})
+
+describe('cambios sin guardar', () => {
+  const MARCA = '(cambios sin guardar)'
+  const marcada = (nombre) => screen.getByRole('tab', { name: nombre }).getAttribute('aria-describedby') !== null
+  const insignia = (texto) => screen.queryByText(texto)
+  const ultimoCambio = () => {
+    const fecha = new Date(REPORTE.actualizadoEn)
+    const dos = (n) => String(n).padStart(2, '0')
+    return `Último cambio: ${dos(fecha.getDate())}/${dos(fecha.getMonth() + 1)}/${fecha.getFullYear()} ${dos(fecha.getHours())}:${dos(fecha.getMinutes())}`
+  }
+
+  test('al cargar se ve el último cambio del reporte, sin marcas en las pestañas', async () => {
+    await montar()
+    expect(insignia(ultimoCambio())).toBeTruthy()
+    expect(marcada('Hexavalente')).toBe(false)
+    expect(marcada('VPH')).toBe(false)
+  })
+
+  test('al escribir se ve «Cambios sin guardar» y la pestaña de esa vacuna tiene la marca', async () => {
+    await montar()
+    escribir('1.ª dosis · < 1 año', '80')
+
+    expect(insignia('Cambios sin guardar')).toBeTruthy()
+    expect(insignia(ultimoCambio())).toBeNull()
+    expect(screen.getByRole('tab', { name: 'Hexavalente', description: MARCA })).toBeTruthy()
+    expect(marcada('VPH')).toBe(false)
+  })
+
+  test('al guardar se ve «Guardado a las …» y la marca desaparece', async () => {
+    await montar()
+    guardarVacuna.mockResolvedValueOnce({ versionFila: 4, vacuna: capturaHexa({ celdas: [celda('D1', { grupo_edad: 'MENOR_1' }, 80)] }) })
+
+    escribir('1.ª dosis · < 1 año', '80')
+    fireEvent.click(botonGuardar())
+
+    await screen.findByText('Borrador guardado.')
+    expect(screen.getByText(/^Guardado a las \d{2}:\d{2}$/)).toBeTruthy()
+    expect(insignia('Cambios sin guardar')).toBeNull()
+    expect(marcada('Hexavalente')).toBe(false)
+  })
+
+  test('si falla la segunda vacuna, la primera pierde la marca y la segunda la conserva', async () => {
+    await montar()
+    guardarVacuna
+      .mockResolvedValueOnce({ versionFila: 4, vacuna: capturaHexa({ celdas: [celda('D1', { grupo_edad: 'MENOR_1' }, 80)] }) })
+      .mockRejectedValueOnce(new ErrorApi(422, 'CELDA_INVALIDA', 'La celda 1.ª dosis · Femenino no es parte del formulario.'))
+
+    escribir('1.ª dosis · < 1 año', '80')
+    await abrirPestana('VPH')
+    escribir('1.ª dosis · Femenino', '1')
+    fireEvent.click(botonGuardar())
+
+    await screen.findByText(/No se guardó VPH/)
+    expect(marcada('Hexavalente')).toBe(false)
+    expect(marcada('VPH')).toBe(true)
+    expect(insignia('Cambios sin guardar')).toBeTruthy()
+  })
+
+  test('con cambios, navegar a otra ruta abre el diálogo que nombra la vacuna con cambios', async () => {
+    const router = await montar()
+    await abrirPestana('VPH')
+    escribir('1.ª dosis · Masculino', '3')
+
+    router.navigate('/inicio')
+    const dialogo = await screen.findByRole('alertdialog')
+    expect(within(dialogo).getByText('Hay cambios sin guardar')).toBeTruthy()
+    expect(dialogo.textContent).toContain(
+      'Si sale ahora, se pierden los cambios de VPH. Para conservarlos, quédese y use «Guardar borrador».',
+    )
+    expect(router.state.location.pathname).toBe('/registro')
+
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Salir sin guardar' }))
+    expect(await screen.findByText('Pantalla de inicio')).toBeTruthy()
+  })
+
+  test('sin cambios, navegar a otra ruta no abre el diálogo', async () => {
+    const router = await montar()
+    router.navigate('/inicio')
+    expect(await screen.findByText('Pantalla de inicio')).toBeTruthy()
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+  })
+
+  test('en solo lectura no hay insignia', async () => {
+    await montar(formulario({ editable: false }))
+    expect(insignia(ultimoCambio())).toBeNull()
+    expect(insignia('Cambios sin guardar')).toBeNull()
+  })
 })

@@ -1,9 +1,13 @@
+import { useState } from 'react'
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { createMemoryRouter, MemoryRouter, Outlet, RouterProvider } from 'react-router-dom'
 import App from '@/App.jsx'
 import { cerrarSesion } from '@/api/auth.js'
 import { guardarSesion } from '@/api/sesion.js'
+import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
+import RutaProtegida from '@/componentes/RutaProtegida.jsx'
+import Layout from './Layout.jsx'
 import opcionesMenu from './opcionesMenu.js'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
@@ -142,6 +146,87 @@ test('"Cerrar sesión" avisa al servidor con MANUAL, borra sircova.sesion y llev
   expect(screen.getByRole('heading', { name: 'Iniciar sesión' })).toBeTruthy()
   expect(screen.queryByRole('status')).toBeNull()
   expect(screen.queryByRole('alert')).toBeNull()
+})
+
+describe('«Cerrar sesión» con cambios sin guardar', () => {
+  // Una pantalla con el aviso, como la captura de /registro, montada en el Layout real.
+  function PantallaConCambios() {
+    const [hayCambios, setHayCambios] = useState(false)
+    const bloqueo = useAvisoCambiosSinGuardar(hayCambios)
+    return (
+      <>
+        <button onClick={() => setHayCambios(true)}>Escribir</button>
+        <AvisoCambiosSinGuardar bloqueo={bloqueo} descripcion="Se pierden los cambios." />
+      </>
+    )
+  }
+
+  function abrirConPantalla() {
+    guardarSesion(crearSesion())
+    const router = createMemoryRouter(
+      [
+        {
+          element: (
+            <ProveedorSesion>
+              <Outlet />
+            </ProveedorSesion>
+          ),
+          children: [
+            { path: '/login', element: <h1>Iniciar sesión</h1> },
+            {
+              element: (
+                <RutaProtegida>
+                  <Layout />
+                </RutaProtegida>
+              ),
+              children: [{ path: '/captura', element: <PantallaConCambios /> }],
+            },
+          ],
+        },
+      ],
+      { initialEntries: ['/captura'] },
+    )
+    render(<RouterProvider router={router} />)
+    return router
+  }
+
+  const cerrar = () => fireEvent.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Cerrar sesión' }))
+
+  test('sin cambios, cierra como siempre, sin diálogo', async () => {
+    const router = abrirConPantalla()
+    cerrar()
+    expect(await screen.findByRole('heading', { name: 'Iniciar sesión' })).toBeTruthy()
+    expect(cerrarSesion).toHaveBeenCalledWith('MANUAL')
+    expect(router.state.location.pathname).toBe('/login')
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+  })
+
+  test('con cambios, pide confirmación; «Seguir editando» no cierra la sesión', async () => {
+    const router = abrirConPantalla()
+    fireEvent.click(screen.getByRole('button', { name: 'Escribir' }))
+    cerrar()
+    const dialogo = await screen.findByRole('alertdialog')
+    expect(dialogo.textContent).toContain('Si cierra sesión ahora, se pierden los cambios sin guardar del reporte.')
+
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Seguir editando' }))
+    await vi.waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(cerrarSesion).not.toHaveBeenCalled()
+    expect(sessionStorage.getItem('sircova.sesion')).not.toBeNull()
+    expect(router.state.location.pathname).toBe('/captura')
+  })
+
+  test('con cambios, «Cerrar sesión sin guardar» cierra y llega a /login sin el otro diálogo', async () => {
+    const router = abrirConPantalla()
+    fireEvent.click(screen.getByRole('button', { name: 'Escribir' }))
+    cerrar()
+    fireEvent.click(await screen.findByRole('button', { name: 'Cerrar sesión sin guardar' }))
+
+    expect(await screen.findByRole('heading', { name: 'Iniciar sesión' })).toBeTruthy()
+    expect(cerrarSesion).toHaveBeenCalledWith('MANUAL')
+    expect(sessionStorage.getItem('sircova.sesion')).toBeNull()
+    expect(router.state.location.pathname).toBe('/login')
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+  })
 })
 
 test('si POST /auth/logout falla, la sesión se cierra igual', async () => {

@@ -1,16 +1,24 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import './index.css'
 import App from './App.jsx'
 import { ProveedorSesion } from './componentes/ProveedorSesion.jsx'
 
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <BrowserRouter>
+// Un data router, para que funcione useBlocker; la ruta comodín deja las <Routes> de App como estaban.
+const router = createBrowserRouter([
+  {
+    path: '*',
+    element: (
       <ProveedorSesion>
         <App />
       </ProveedorSesion>
-    </BrowserRouter>
+    ),
+  },
+])
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <RouterProvider router={router} />
   </StrictMode>,
 )
