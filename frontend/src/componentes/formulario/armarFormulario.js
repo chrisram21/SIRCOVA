@@ -124,6 +124,8 @@ export function armarFormulario({
       titulo,
       // Con una sola sección no hay nivel de secciones: su título va encima de la tabla.
       seccion: seccionesTabla.length === 1 ? seccionesTabla[0].titulo : null,
+      // columnas[].seccion es la posición en esta lista; la tarjeta B la usa para el grupo de edad de cada fila.
+      secciones: seccionesTabla.map((s) => ({ titulo: s.titulo, grupoEdad: s.grupoEdad ?? null })),
       encabezados,
       columnas,
       filas,

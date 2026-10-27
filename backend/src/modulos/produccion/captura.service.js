@@ -7,6 +7,7 @@ import { registrarBitacora, diferencias, MODULOS, ACCIONES } from '../auditoria/
 import { entradaInvalida, revisarCampos } from '../catalogos/catalogos.service.js';
 import { aEsquema } from '../configuracion/esquemas.service.js';
 import { celdasDelEsquema, claveCombinacion } from './celdas.service.js';
+import { leerProcedencias, procedenciasPermitidas } from './procedencias.service.js';
 
 const MESES_EDITABLES = ['ABIERTO', 'EN_CIERRE'];
 const GRUPO_EDAD = 'grupo_edad';
@@ -48,9 +49,12 @@ async function leerReporte(ejecutor, id, usuario) {
     estado: fila.estado,
     versionFila: fila.version_fila,
     estadoMes: fila.estado_mes ?? null,
+    ddrissId: fila.ddriss_id,
     municipioPropio: { id: fila.municipio_id, nombre: fila.municipio_nombre },
   };
 }
+
+const delReporte = (reporte) => ({ ddrissId: reporte.ddrissId, municipioPropioId: reporte.municipioPropio.id });
 
 // En el orden de GET /reportes/{id} (orden_informe, nombre).
 async function vacunasDelReporte(ejecutor, reporteId) {
@@ -119,10 +123,12 @@ const aCelda = ({ dosisCodigo, municipioProcedenciaId, dimensiones, claveCombina
   cantidad,
 });
 
-function aVacunaDeFormulario(fila, esquemas, celdas) {
+function aVacunaDeFormulario(fila, esquemas, celdas, procedencias) {
+  const esquema = esquemas.get(fila.esquema_mongo_id) ?? null;
   return {
     vacunaId: fila.vacuna_id,
-    esquema: esquemas.get(fila.esquema_mongo_id) ?? null,
+    esquema,
+    procedenciasPermitidas: procedenciasPermitidas(esquema, procedencias),
     celdas: celdas.filter((c) => c.reporteVacunaId === fila.id).map(aCelda),
     datosAdicionales: fila.datos_adicionales ?? null,
     totalDeclarado: fila.total_declarado ?? null,
@@ -136,12 +142,15 @@ export async function obtenerFormulario(id, usuario) {
     celdasGuardadas(pool, vacunas.map((v) => v.id)),
     esquemasDe(vacunas.map((v) => v.esquema_mongo_id)),
   ]);
+  const guardadas = [...new Set(celdas.map((c) => c.municipioProcedenciaId))];
+  const procedencias = await leerProcedencias(pool, delReporte(reporte), guardadas);
   return {
     reporteId: reporte.id,
     versionFila: reporte.versionFila,
     editable: esEditable(reporte),
     municipioPropio: reporte.municipioPropio,
-    vacunas: vacunas.map((fila) => aVacunaDeFormulario(fila, esquemas, celdas)),
+    municipios: procedencias.municipios,
+    vacunas: vacunas.map((fila) => aVacunaDeFormulario(fila, esquemas, celdas, procedencias)),
   };
 }
 
@@ -220,25 +229,33 @@ async function catalogoDe(esquema) {
   return db.collection('catalogo_dimensiones').find({ codigo: { $in: [...codigos] } }).toArray();
 }
 
-// La regla de las dosis inactivas necesita las filas actuales: se revisa dentro de la transacción.
-function revisarCeldas(celdas, { validas, dosis, catalogo, municipioPropio }) {
+// La llave de uq_detalle dentro de una vacuna.
+const llaveDeCelda = (c) => `${c.dosisCodigo}|${c.municipioProcedenciaId}|${c.claveCombinacion}`;
+
+const procedenciaInvalida = (celda, dosis, catalogo) =>
+  errores.celdaInvalida(
+    `La celda ${nombreDeCelda(celda, dosis, catalogo)} tiene una procedencia que no se puede usar en esta vacuna.`,
+  );
+
+// Las reglas de las dosis inactivas y de las procedencias heredadas necesitan las filas actuales: se revisan dentro
+// de la transacción. Aquí se devuelven las celdas cuya procedencia no es la propia ni una permitida.
+function revisarCeldas(celdas, { validas, dosis, catalogo, municipioPropio, permitidas }) {
   const conClave = celdas.map((celda) => ({ ...celda, claveCombinacion: claveCombinacion(celda.dimensiones) }));
   for (const celda of conClave) {
-    const nombre = nombreDeCelda(celda, dosis, catalogo);
-    if (celda.municipioProcedenciaId !== municipioPropio) {
-      throw errores.celdaInvalida(`La celda ${nombre} no es del municipio del establecimiento.`);
-    }
     if (!validas.has(`${celda.dosisCodigo}|${celda.claveCombinacion}`)) {
-      throw errores.celdaInvalida(`La celda ${nombre} no es parte del formulario.`);
+      throw errores.celdaInvalida(`La celda ${nombreDeCelda(celda, dosis, catalogo)} no es parte del formulario.`);
     }
   }
   const vistas = new Set();
   for (const celda of conClave) {
-    const llave = `${celda.dosisCodigo}|${celda.claveCombinacion}`;
+    const llave = llaveDeCelda(celda);
     if (vistas.has(llave)) throw errores.celdaRepetida(nombreDeCelda(celda, dosis, catalogo));
     vistas.add(llave);
   }
-  return conClave;
+  const heredadas = conClave.filter(
+    (c) => c.municipioProcedenciaId !== municipioPropio && !permitidas.includes(c.municipioProcedenciaId),
+  );
+  return { pedidas: conClave, heredadas };
 }
 
 // Plano, porque diferencias compara solo el primer nivel: una clave por celda, más los datos y el total.
@@ -250,12 +267,10 @@ const estadoParaBitacora = (celdas, datosAdicionales, totalDeclarado) => ({
   totalDeclarado,
 });
 
-const llaveDeCelda = (c) => `${c.dosisCodigo}|${c.claveCombinacion}`;
-
-async function escribirCeldas(conexion, { repVacId, propias, pedidas, dosis, municipioPropio, usuarioId }) {
-  const porLlave = new Map(propias.map((c) => [llaveDeCelda(c), c]));
+async function escribirCeldas(conexion, { repVacId, actuales, pedidas, dosis, usuarioId }) {
+  const porLlave = new Map(actuales.map((c) => [llaveDeCelda(c), c]));
   const llavesPedidas = new Set(pedidas.map(llaveDeCelda));
-  const borradas = propias.filter((c) => !llavesPedidas.has(llaveDeCelda(c))).map((c) => c.id);
+  const borradas = actuales.filter((c) => !llavesPedidas.has(llaveDeCelda(c))).map((c) => c.id);
   if (borradas.length > 0) await conexion.query('DELETE FROM detalle_produccion WHERE id IN (?)', [borradas]);
 
   for (const celda of pedidas) {
@@ -274,7 +289,14 @@ async function escribirCeldas(conexion, { repVacId, propias, pedidas, dosis, mun
       `INSERT INTO detalle_produccion
          (reporte_vacuna_id, dosis_id, municipio_procedencia_id, clave_combinacion, cantidad, actualizado_por)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [repVacId, dosis.get(celda.dosisCodigo).id, municipioPropio, celda.claveCombinacion, celda.cantidad, usuarioId],
+      [
+        repVacId,
+        dosis.get(celda.dosisCodigo).id,
+        celda.municipioProcedenciaId,
+        celda.claveCombinacion,
+        celda.cantidad,
+        usuarioId,
+      ],
     );
     // detalle_dimension repite exactamente las dimensiones de la clave (regla de CONTEXTO BD.md).
     const dimensiones = Object.entries(celda.dimensiones);
@@ -286,7 +308,7 @@ async function escribirCeldas(conexion, { repVacId, propias, pedidas, dosis, mun
   }
 }
 
-// Reemplaza las celdas del municipio propio de la vacuna; las de otras procedencias son de HU-21 y no se tocan.
+// Reemplaza todas las celdas de la vacuna, de cualquier procedencia (las tarjetas A y B).
 export async function guardarVacuna(id, vacunaId, cuerpo, usuario, contexto) {
   const pedido = leerGuardado(cuerpo);
   const reporte = await leerReporte(pool, id, usuario);
@@ -307,7 +329,14 @@ export async function guardarVacuna(id, vacunaId, cuerpo, usuario, contexto) {
   const catalogo = new Map(dimensiones.map((d) => [d.codigo, d]));
   const validas = celdasDelEsquema({ contenido: esquema, codigosDosis: [...dosis.keys()], dimensiones, deducirSecciones: true });
   const municipioPropio = reporte.municipioPropio.id;
-  const pedidas = revisarCeldas(pedido.celdas, { validas, dosis, catalogo, municipioPropio });
+  const procedencias = await leerProcedencias(pool, delReporte(reporte));
+  const { pedidas, heredadas } = revisarCeldas(pedido.celdas, {
+    validas,
+    dosis,
+    catalogo,
+    municipioPropio,
+    permitidas: procedenciasPermitidas(esquema, procedencias),
+  });
   const datosAdicionales = leerDatosAdicionales(pedido.datosAdicionales, esquema.camposAdicionales);
 
   return enTransaccion(async (conexion) => {
@@ -330,26 +359,26 @@ export async function guardarVacuna(id, vacunaId, cuerpo, usuario, contexto) {
     const conFilas = new Set(actuales.map((c) => c.dosisCodigo));
     const inactiva = pedidas.find((c) => !dosis.get(c.dosisCodigo).activa && !conFilas.has(c.dosisCodigo));
     if (inactiva) throw errores.celdaInvalida(`La dosis ${dosis.get(inactiva.dosisCodigo).nombre} está desactivada.`);
+    // Una procedencia que ya no se ofrece (o un id que no existe) solo se acepta si la vacuna ya tenía filas de ella.
+    const conProcedencia = new Set(actuales.map((c) => c.municipioProcedenciaId));
+    const sinFilas = heredadas.find((c) => !conProcedencia.has(c.municipioProcedenciaId));
+    if (sinFilas) throw procedenciaInvalida(sinFilas, dosis, catalogo);
 
-    const propias = actuales.filter((c) => c.municipioProcedenciaId === municipioPropio);
-    const otras = actuales.filter((c) => c.municipioProcedenciaId !== municipioPropio);
-    const despues = [...otras, ...pedidas];
-    const totalDeclarado = despues.length === 0 ? null : despues.reduce((suma, c) => suma + c.cantidad, 0);
+    const totalDeclarado = pedidas.length === 0 ? null : pedidas.reduce((suma, c) => suma + c.cantidad, 0);
     const [[antes]] = await conexion.query('SELECT datos_adicionales, total_declarado FROM reporte_vacuna WHERE id = ?', [
       repVac.id,
     ]);
     const cambios = diferencias(
-      estadoParaBitacora(propias, conClavesOrdenadas(antes.datos_adicionales ?? null), antes.total_declarado ?? null),
+      estadoParaBitacora(actuales, conClavesOrdenadas(antes.datos_adicionales ?? null), antes.total_declarado ?? null),
       estadoParaBitacora(pedidas, datosAdicionales, totalDeclarado),
     );
 
     if (cambios) {
       await escribirCeldas(conexion, {
         repVacId: repVac.id,
-        propias,
+        actuales,
         pedidas,
         dosis,
-        municipioPropio,
         usuarioId: contexto.usuarioId,
       });
       await conexion.query('UPDATE reporte_vacuna SET datos_adicionales = ?, total_declarado = ? WHERE id = ?', [
@@ -375,7 +404,12 @@ export async function guardarVacuna(id, vacunaId, cuerpo, usuario, contexto) {
     );
     return {
       versionFila: cambios ? bloqueado.version_fila + 1 : bloqueado.version_fila,
-      vacuna: aVacunaDeFormulario(guardada, new Map([[repVac.esquema_mongo_id, esquema]]), await celdasGuardadas(conexion, [repVac.id])),
+      vacuna: aVacunaDeFormulario(
+        guardada,
+        new Map([[repVac.esquema_mongo_id, esquema]]),
+        await celdasGuardadas(conexion, [repVac.id]),
+        procedencias,
+      ),
     };
   });
 }

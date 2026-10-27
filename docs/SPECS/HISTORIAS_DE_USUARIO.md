@@ -591,9 +591,33 @@ Las cantidades del reporte 287 quedan para HU-21, HU-22 y HU-25.
 **Cómo se hará:** Filas por municipio de procedencia en el formulario (municipio propio, "otros municipios" y Migrantes); campo `municipio_procedencia_id` en `detalle_produccion`.
 
 **Criterios de aceptación:**
-- [ ] Por defecto, la procedencia es el municipio del establecimiento.
-- [ ] Puedo agregar filas para otros municipios de San Marcos o para Migrantes (fuera de San Marcos o procedencia desconocida).
-- [ ] No se permite repetir la misma combinación de vacuna, dosis, dimensiones y procedencia.
+- [x] Por defecto, la procedencia es el municipio del establecimiento.
+- [x] Puedo agregar filas para otros municipios de San Marcos o para Migrantes (fuera de San Marcos o procedencia desconocida).
+- [x] No se permite repetir la misma combinación de vacuna, dosis, dimensiones y procedencia.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 24 a `main`. Backend y frontend en `specs/24-hu-21-municipio-de-procedencia.md`. Diferencias con la historia, porque mandan `AGENTS.md`, el modelo y lo que decidió el equipo:
+
+- «Otros municipios de San Marcos» son los municipios activos del **departamento sede de la DDRISS del establecimiento** (sale de `ddriss`, sin fijar San Marcos), sin el propio. Un municipio de otro departamento, como Coatepeque, no se elige: va como `9999`.
+- **El modo de procedencia del esquema** decide qué se ofrece: con `MUNICIPIO_DETALLADO`, el territorio y el `9999` (solo si `permiteNoEspecificado` es `true`); con `PROPIO_Y_OTROS` (el 5C, como Hexavalente v1), solo el `9999`, porque el 5C no identifica el municipio y esas dosis no se atribuyen a ninguno.
+- Las filas de la tarjeta B son **municipio + dosis + grupo de edad** (o sección), con las demás dimensiones como columnas, como el mockup. Solo existen en la pantalla: la base guarda celdas, y al cargar se agrupan. Una fila con todas sus celdas vacías no se guarda.
+- «No se permite repetir»: el Dialog deshabilita la combinación que ya existe, y el backend sigue respondiendo 422 `CELDA_REPETIDA`.
+
+Cambios a los endpoints del SPEC 23 (mismos permisos):
+
+- `GET /reportes/{id}/formulario` agrega `municipios` (los nombres del territorio, el `9999` y los municipios de las celdas guardadas, sin el propio) y, en cada vacuna, `procedenciasPermitidas`, calculadas en el backend (`procedencias.service.js`).
+- `PUT /reportes/{id}/vacunas/{vacunaId}` acepta cualquier procedencia permitida y reemplaza **todas** las celdas de la vacuna, de cualquier procedencia. Una procedencia que ya no se ofrece (un municipio desactivado, el `9999` sin `permiteNoEspecificado`, otro departamento) es **heredada**: se acepta solo si la vacuna ya tenía filas de ella, como las dosis inactivas. Si no, 422 `CELDA_INVALIDA` («…tiene una procedencia que no se puede usar en esta vacuna.»).
+
+La pantalla es la tarjeta «Dosis aplicadas a personas de otros municipios» de cada pestaña de `/registro` (`TarjetaProcedencias.jsx`): una tabla por cada tabla de la tarjeta A (el refuerzo de Td aparte), el total por fila, «+ Agregar municipio de procedencia» con un Dialog de tres Select y «Quitar fila». «Guardar borrador» manda en el mismo `PUT` las celdas de las dos tarjetas. En solo lectura no hay «Agregar» ni «Quitar fila».
+
+Verificado contra la API real el 2026-10-26, con `cs1201`, en el reporte 287 (octubre de 2026):
+
+- el Dialog ofreció los 29 municipios de San Marcos sin el propio y Migrantes al final, sin Coatepeque; al repetir Sibinal con la Primera dosis, «< 1 año» apareció deshabilitado;
+- en Hexavalente se agregaron Sibinal · Primera dosis (< 1 año: 3; De 1 a < 6 años: 0), Migrantes · Tercera dosis · < 1 año (1) y San Pedro Sacatepéquez · Segunda dosis, vacía; en Td, Tacaná · Primer refuerzo · Mujer de 15 a 49 años (2), en la tabla aparte del refuerzo; `2.5` marcó la celda y deshabilitó «Guardar borrador»;
+- al guardar hubo 2 `PUT` (Hexavalente y Td): la base quedó con 4 filas de otras procedencias, cada una con su `municipio_procedencia_id` y `detalle_dimension` igual a su clave, sin la fila vacía; `total_declarado` 219 y 30, `version_fila = 7` y 2 filas `ACTUALIZAR` con la procedencia en cada clave;
+- al recargar, las filas volvieron en orden (Migrantes al final), con el 0 como «0» y sin la fila vacía; al quitar la fila de Sibinal De 1 a < 6 años y guardar, su celda se borró (`ACTUALIZAR` con `null`);
+- septiembre (`APROBADO`) mostró en solo lectura las 6 celdas de la semilla de San Pedro Sacatepéquez y Migrantes agrupadas en filas.
+
+El modo `PROPIO_Y_OTROS` no se probó a mano porque ningún reporte editable lo usa; lo cubren `procedencia.test.js` y `TarjetaProcedencias.test.jsx`. Las cantidades del reporte 287 quedan para HU-22 y HU-25.
 
 **Nota (2026-10-25, spec 21):** La vista previa (SPEC 21) solo describe el modo de procedencia; la tarjeta B se agrega a `FormularioCaptura`.
 
@@ -672,6 +696,10 @@ Las cantidades del reporte 287 quedan para HU-21, HU-22 y HU-25.
 - **Total.** `reporte_vacuna.total_declarado` lo calcula el backend: es la suma del detalle, no un dato que escribe el Personal. El campo adicional `total_dosis_declarado` de Hexavalente v2 sigue en esa versión publicada, que no se edita: quitarlo pide publicar otra.
 - **Obligatorio.** Un campo adicional con `requerido` no impide guardar el borrador; lo exige la validación.
 - **Ya garantizado por el `PUT`.** Las cantidades negativas, las celdas que no son del esquema y las repetidas ya no se pueden guardar (400 y 422).
+
+**Nota (2026-10-26, spec 24):**
+- Las filas de la tarjeta B solo existen en la pantalla. Para el backend, una fila es (procedencia, dosis, sección) con al menos una celda guardada, y sus celdas que faltan son vacías. Así debe revisar `CAMPOS_COMPLETOS` la tarjeta B, nunca combinaciones de municipios sin filas. La sección de una celda se deduce de su `grupo_edad` (o es la única sección).
+- `PROCEDENCIA_VALIDA` puede reutilizar `procedencias.service.js` (`leerProcedencias` y `procedenciasPermitidas`). Las procedencias heredadas (un municipio desactivado, el `9999` sin `permiteNoEspecificado`) ya se aceptan al guardar si la vacuna tenía filas de ellas: la regla decide si las marca como advertencia.
 
 #### HU-26. Enviar el reporte
 

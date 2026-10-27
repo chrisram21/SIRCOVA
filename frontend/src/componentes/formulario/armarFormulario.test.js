@@ -97,6 +97,53 @@ it('una dosis con desagregación propia va en su propia tabla', () => {
   expect(tablas[0].filas.map((f) => f.dosis)).toEqual(['D1', 'D2', 'D3'])
 })
 
+describe('secciones de cada tabla', () => {
+  it('Hexavalente v2: la general tiene «< 1 año» y «De 1 a < 6 años», en el orden de sus columnas', () => {
+    const [tabla] = armar(hexavalente()).tablas
+    expect(tabla.secciones).toEqual([
+      { titulo: '< 1 año', grupoEdad: 'MENOR_1' },
+      { titulo: 'De 1 a < 6 años', grupoEdad: '1_A_5' },
+    ])
+    expect(tabla.columnas.map((c) => tabla.secciones[c.seccion].grupoEdad)).toEqual(['MENOR_1', '1_A_5'])
+  })
+
+  it('BCG: una sola sección sin grupoEdad', () => {
+    const contenido = {
+      procedencia,
+      dosis: [general('UNICA')],
+      desagregacion: [],
+      secciones: [{ titulo: '< 1 año', grupoEdad: null, dosis: ['UNICA'] }],
+    }
+    expect(armar(contenido, ['UNICA']).tablas[0].secciones).toEqual([{ titulo: '< 1 año', grupoEdad: null }])
+  })
+
+  it('Td: la tabla del refuerzo solo tiene las secciones que lo incluyen', () => {
+    const contenido = {
+      procedencia,
+      dosis: [
+        general('D1'),
+        {
+          codigo: 'R1',
+          desagregacion: [
+            { dimension: 'grupo_edad', valores: ['1_A_5'] },
+            { dimension: 'embarazo', valores: ['EMBARAZADA', 'NO_EMBARAZADA'] },
+          ],
+        },
+      ],
+      desagregacion: [{ dimension: 'grupo_edad', valores: ['MENOR_1', '1_A_5'] }],
+      secciones: [
+        { titulo: '< 1 año', grupoEdad: 'MENOR_1', dosis: ['D1'] },
+        { titulo: 'De 1 a < 6 años', grupoEdad: '1_A_5', dosis: ['D1', 'R1'] },
+      ],
+    }
+    const [comun, refuerzo] = armar(contenido, ['D1', 'R1']).tablas
+    expect(comun.secciones.map((s) => s.grupoEdad)).toEqual(['MENOR_1', '1_A_5'])
+    expect(refuerzo.clave).toBe('dosis-R1')
+    expect(refuerzo.secciones).toEqual([{ titulo: 'De 1 a < 6 años', grupoEdad: '1_A_5' }])
+    expect(refuerzo.columnas.every((c) => c.seccion === 0)).toBe(true)
+  })
+})
+
 it('una dosis que no está en una sección tiene celda null en sus columnas', () => {
   const contenido = hexavalente()
   contenido.secciones[1].dosis = ['D1', 'D2']
