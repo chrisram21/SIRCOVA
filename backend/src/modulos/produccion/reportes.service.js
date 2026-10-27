@@ -158,11 +158,15 @@ function leerEntero(valor, { minimo, maximo = Number.MAX_SAFE_INTEGER }) {
 }
 
 function leerFiltros(query) {
-  revisarParametros(query, ['periodoId', 'estado', 'pagina', 'porPagina']);
+  revisarParametros(query, ['periodoId', 'anio', 'estado', 'pagina', 'porPagina']);
   const filtros = { pagina: 1, porPagina: 20 };
   if (query.periodoId !== undefined) {
     filtros.periodoId = leerEntero(query.periodoId, { minimo: 1 });
     if (filtros.periodoId === null) throw entradaInvalida('periodoId debe ser un número entero positivo.');
+  }
+  if (query.anio !== undefined) {
+    filtros.anio = leerEntero(query.anio, { minimo: 2000, maximo: 2100 });
+    if (filtros.anio === null) throw entradaInvalida('anio debe ser un número entero entre 2000 y 2100.');
   }
   if (query.estado !== undefined) {
     if (!ESTADOS_REPORTE.includes(query.estado)) {
@@ -181,6 +185,24 @@ function leerFiltros(query) {
   return filtros;
 }
 
+// La corrección vigente es la fila más reciente que pasó el reporte a CORRECCION_SOLICITADA.
+async function correccionesDe(reporteIds) {
+  const correcciones = new Map();
+  if (reporteIds.length === 0) return correcciones;
+  const [filas] = await pool.query(
+    `SELECT reporte_id, comentario, UNIX_TIMESTAMP(fecha) AS fecha FROM historial_estado_reporte
+      WHERE reporte_id IN (?) AND estado_nuevo = 'CORRECCION_SOLICITADA'
+      ORDER BY fecha DESC, id DESC`,
+    [reporteIds],
+  );
+  for (const f of filas) {
+    if (!correcciones.has(f.reporte_id)) {
+      correcciones.set(f.reporte_id, { comentario: f.comentario, fecha: aFechaIso(f.fecha) });
+    }
+  }
+  return correcciones;
+}
+
 // El mismo WHERE sirve para el COUNT y para la página, así total y elementos no se separan.
 export async function listarReportes(usuario, query = {}) {
   const filtros = leerFiltros(query);
@@ -190,6 +212,10 @@ export async function listarReportes(usuario, query = {}) {
   if (filtros.periodoId) {
     condiciones.push('r.periodo_id = ?');
     parametros.push(filtros.periodoId);
+  }
+  if (filtros.anio) {
+    condiciones.push('p.anio = ?');
+    parametros.push(filtros.anio);
   }
   if (filtros.estado) {
     condiciones.push('r.estado = ?');
@@ -204,19 +230,26 @@ export async function listarReportes(usuario, query = {}) {
   const [filas] = await pool.query(
     `SELECT r.id, r.estado, UNIX_TIMESTAMP(r.actualizado_en) AS actualizado_en,
             e.id AS establecimiento_id, e.codigo AS establecimiento_codigo, e.nombre AS establecimiento_nombre,
-            p.id AS periodo_id, p.anio, p.mes
+            p.id AS periodo_id, p.anio, p.mes,
+            (SELECT cp.estado FROM cierre_periodo cp WHERE cp.periodo_id = p.id AND cp.ddriss_id = e.ddriss_id)
+              AS periodo_estado,
+            (SELECT UNIX_TIMESTAMP(MAX(h.fecha)) FROM historial_estado_reporte h WHERE h.reporte_id = r.id)
+              AS estado_desde
        ${desde}
       ORDER BY p.anio DESC, p.mes DESC, e.nombre, r.id
       LIMIT ? OFFSET ?`,
     [...parametros, filtros.porPagina, (filtros.pagina - 1) * filtros.porPagina],
   );
+  const correcciones = await correccionesDe(filas.filter((f) => f.estado === 'CORRECCION_SOLICITADA').map((f) => f.id));
   return {
     elementos: filas.map((f) => ({
       id: f.id,
       establecimiento: { id: f.establecimiento_id, codigo: f.establecimiento_codigo, nombre: f.establecimiento_nombre },
-      periodo: { id: f.periodo_id, anio: f.anio, mes: f.mes },
+      periodo: { id: f.periodo_id, anio: f.anio, mes: f.mes, estado: f.periodo_estado ?? null },
       estado: f.estado,
       actualizadoEn: aFechaIso(f.actualizado_en),
+      estadoDesde: aFechaIso(f.estado_desde ?? f.actualizado_en),
+      correccion: correcciones.get(f.id) ?? null,
     })),
     total: Number(total),
     pagina: filtros.pagina,

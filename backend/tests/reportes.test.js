@@ -397,9 +397,11 @@ describe('GET /reportes y GET /reportes/{id}', () => {
         {
           id: reporteId,
           establecimiento: { id: expect.any(Number), codigo: ESTABLECIMIENTO, nombre: expect.any(String) },
-          periodo: { id: periodoIds[2], anio: ANIO, mes: 2 },
+          periodo: { id: periodoIds[2], anio: ANIO, mes: 2, estado: 'ABIERTO' },
           estado: 'BORRADOR',
           actualizadoEn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z$/),
+          estadoDesde: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z$/),
+          correccion: null,
         },
       ],
       total: 1,
@@ -418,6 +420,19 @@ describe('GET /reportes y GET /reportes/{id}', () => {
     expect(borradores.body.total).toBe(1);
   });
 
+  it('con anio solo trae los reportes de ese año, y se combina con estado', async () => {
+    const res = await consultar(`/reportes?anio=${ANIO}&porPagina=100`);
+    expect(res.status).toBe(200);
+    expect(res.body.elementos.map((r) => r.periodo.mes)).toEqual([4, 2]);
+    expect(res.body.total).toBe(2);
+    expect(res.body.elementos.every((r) => r.periodo.anio === ANIO)).toBe(true);
+
+    const borradores = await consultar(`/reportes?anio=${ANIO}&estado=BORRADOR`);
+    expect(borradores.body.total).toBe(2);
+    const aprobados = await consultar(`/reportes?anio=${ANIO}&estado=APROBADO`);
+    expect(aprobados.body).toMatchObject({ elementos: [], total: 0 });
+  });
+
   it('una página fuera de rango responde 200 sin elementos y con el total real', async () => {
     const res = await consultar(`/reportes?periodoId=${periodoIds[2]}&pagina=5`);
     expect(res.status).toBe(200);
@@ -430,6 +445,10 @@ describe('GET /reportes y GET /reportes/{id}', () => {
     ['periodoId=abc', 'periodoId debe ser un número entero positivo.'],
     ['estado=BORRADOR&estado=ENVIADO', 'estado no se puede repetir.'],
     ['porPagina=101', 'porPagina debe ser un número entero entre 1 y 100.'],
+    ['anio=abc', 'anio debe ser un número entero entre 2000 y 2100.'],
+    ['anio=1999', 'anio debe ser un número entero entre 2000 y 2100.'],
+    ['anio=2026.5', 'anio debe ser un número entero entre 2000 y 2100.'],
+    ['anio=2022&anio=2023', 'anio no se puede repetir.'],
   ])('%s responde 400', async (consulta, mensaje) => {
     const res = await consultar(`/reportes?${consulta}`);
     expect(res.status).toBe(400);
@@ -478,6 +497,88 @@ describe('GET /reportes y GET /reportes/{id}', () => {
     expect(revisor.permisos).not.toContain('REPORTE_CONSULTAR');
     expect((await consultar('/reportes', revisor.token)).status).toBe(403);
     expect((await consultar(`/reportes/${reporteId}`, revisor.token)).status).toBe(403);
+  });
+});
+
+describe('estado del mes, último cambio y corrección en GET /reportes', () => {
+  const fechaIso = async (sql, parametros) => {
+    const [[{ segundos }]] = await pool.query(sql, parametros);
+    return new Date(Number(segundos) * 1000).toISOString();
+  };
+  const elementoDe = async (reporteId) => {
+    const res = await consultar(`/reportes?anio=${ANIO}&porPagina=100`);
+    expect(res.status).toBe(200);
+    return res.body.elementos.find((r) => r.id === reporteId);
+  };
+
+  it('un reporte recién creado: estadoDesde es la fecha de su historial, sin corrección y con el mes abierto', async () => {
+    const [{ id }] = await reportesDelMes(2);
+    const creado = await fechaIso(
+      'SELECT UNIX_TIMESTAMP(MAX(fecha)) AS segundos FROM historial_estado_reporte WHERE reporte_id = ?',
+      [id],
+    );
+    expect(await elementoDe(id)).toMatchObject({
+      periodo: { estado: 'ABIERTO' },
+      estadoDesde: creado,
+      correccion: null,
+    });
+  });
+
+  it('en CORRECCION_SOLICITADA trae el comentario y la fecha de la corrección más reciente', async () => {
+    const [{ id }] = await reportesDelMes(4);
+    // Cada fila, minutos después de la creación del reporte (que lleva la fecha de hoy).
+    const historial = [
+      ['BORRADOR', 'ENVIADO', personal.usuarioId, null],
+      ['ENVIADO', 'EN_REVISION', revisor.usuarioId, null],
+      ['EN_REVISION', 'CORRECCION_SOLICITADA', revisor.usuarioId, 'vitest-hu23 primera'],
+      ['CORRECCION_SOLICITADA', 'BORRADOR', personal.usuarioId, null],
+      ['BORRADOR', 'ENVIADO', personal.usuarioId, null],
+      ['ENVIADO', 'EN_REVISION', revisor.usuarioId, null],
+      ['EN_REVISION', 'CORRECCION_SOLICITADA', revisor.usuarioId, 'vitest-hu23 segunda'],
+    ];
+    try {
+      for (const [minutos, fila] of historial.entries()) {
+        await pool.query(
+          `INSERT INTO historial_estado_reporte (reporte_id, estado_anterior, estado_nuevo, usuario_id, comentario, fecha)
+           VALUES (?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE))`,
+          [id, ...fila, minutos + 1],
+        );
+      }
+      await pool.query("UPDATE reporte_produccion SET estado = 'CORRECCION_SOLICITADA' WHERE id = ?", [id]);
+      const devuelto = await fechaIso(
+        "SELECT UNIX_TIMESTAMP(fecha) AS segundos FROM historial_estado_reporte WHERE reporte_id = ? AND comentario = 'vitest-hu23 segunda'",
+        [id],
+      );
+
+      expect(await elementoDe(id)).toMatchObject({
+        estado: 'CORRECCION_SOLICITADA',
+        estadoDesde: devuelto,
+        correccion: { comentario: 'vitest-hu23 segunda', fecha: devuelto },
+      });
+      const filtrados = await consultar(`/reportes?anio=${ANIO}&estado=CORRECCION_SOLICITADA`);
+      expect(filtrados.body.elementos.map((r) => r.id)).toEqual([id]);
+    } finally {
+      await pool.query("UPDATE reporte_produccion SET estado = 'BORRADOR' WHERE id = ?", [id]);
+      await pool.query("DELETE FROM historial_estado_reporte WHERE reporte_id = ? AND estado_anterior IS NOT NULL", [id]);
+    }
+    expect((await elementoDe(id)).correccion).toBeNull();
+  });
+
+  it('un mes sin fila en cierre_periodo de la DDRISS trae periodo.estado null; sin historial, estadoDesde es actualizadoEn', async () => {
+    const [[{ establecimientoId }]] = await pool.query('SELECT id AS establecimientoId FROM establecimiento WHERE codigo = ?', [
+      ESTABLECIMIENTO,
+    ]);
+    const [insertado] = await pool.query(
+      'INSERT INTO reporte_produccion (establecimiento_id, periodo_id, creado_por) VALUES (?, ?, ?)',
+      [establecimientoId, periodoIds[6], personal.usuarioId],
+    );
+    const elemento = await elementoDe(insertado.insertId);
+    expect(elemento).toMatchObject({ periodo: { mes: 6, estado: null }, correccion: null });
+    expect(elemento.estadoDesde).toBe(elemento.actualizadoEn);
+
+    const res = await consultar(`/reportes?anio=${ANIO}&porPagina=100`);
+    expect(res.body.total).toBe(3);
+    expect(res.body.elementos.map((r) => r.periodo.mes)).toEqual([6, 4, 2]);
   });
 });
 

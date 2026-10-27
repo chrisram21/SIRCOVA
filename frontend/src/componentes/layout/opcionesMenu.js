@@ -28,6 +28,7 @@ import PaginaEditarUsuario from '@/paginas/usuarios/PaginaEditarUsuario.jsx'
 import PaginaRegistrarPersonal from '@/paginas/usuarios/PaginaRegistrarPersonal.jsx'
 import PaginaUsuarios from '@/paginas/usuarios/PaginaUsuarios.jsx'
 import PaginaRegistro from '@/paginas/registro/PaginaRegistro.jsx'
+import PaginaMisReportes from '@/paginas/reportes/PaginaMisReportes.jsx'
 
 // Los permisos son provisionales: el spec que construye cada pantalla confirma su código al crearlo en
 // backend/db/05_permisos_mysql.sql y pone su componente en `pagina` (sin `pagina`, se ve "En construcción").
@@ -41,7 +42,13 @@ const opcionesMenu = [
     icono: ClipboardPen,
     pagina: PaginaRegistro,
   },
-  { titulo: 'Reportes', ruta: '/reportes', permiso: 'REPORTE_LISTAR', icono: FileText },
+  {
+    titulo: 'Mis reportes',
+    ruta: '/reportes',
+    permiso: 'REPORTE_CONSULTAR',
+    icono: FileText,
+    pagina: PaginaMisReportes,
+  },
   { titulo: 'Revisión y cierre', ruta: '/revision', permiso: 'REPORTE_REVISAR', icono: ClipboardCheck },
   { titulo: 'Indicadores', ruta: '/indicadores', permiso: 'INDICADOR_CONSULTAR', icono: ChartLine },
   { titulo: 'Mapa territorial', ruta: '/mapa', permiso: 'MAPA_CONSULTAR', icono: MapIcon },

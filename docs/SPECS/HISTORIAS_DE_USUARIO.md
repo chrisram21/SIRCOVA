@@ -674,9 +674,16 @@ Verificado contra la API real el 2026-10-26, con `cs1201`, en el reporte 287 (oc
 **Cómo se hará:** Endpoint `GET /reportes` filtrado por el establecimiento del usuario; tabla en React con etiquetas de estado.
 
 **Criterios de aceptación:**
-- [ ] Veo cada reporte con su periodo, estado y fecha de último cambio.
-- [ ] Puedo filtrar por año y estado.
-- [ ] Los reportes devueltos para corrección se destacan.
+- [x] Veo cada reporte con su periodo, estado y fecha de último cambio.
+- [x] Puedo filtrar por año y estado.
+- [x] Los reportes devueltos para corrección se destacan.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 26 a `main`. Backend y frontend, en `specs/26-hu-23-mis-reportes.md`: la pantalla «Mis reportes» (`/reportes`) con el permiso `REPORTE_CONSULTAR`. Diferencias con la historia, porque mandan `AGENTS.md` y lo que decidió el equipo:
+
+- El `GET /reportes` del «Cómo se hará» ya existía (SPEC 22): este spec le agrega el filtro `anio` y, en cada reporte, `estadoDesde`, `correccion` y `periodo.estado`.
+- La «fecha de último cambio» es la del último cambio de **estado** (`historial_estado_reporte`), no la del último guardado de cantidades.
+- Se destacan, con el comentario del revisor, los reportes en `CORRECCION_SOLICITADA`; al retomarlos (pasan a Borrador, HU-26) dejan de destacarse.
+- «Abrir» lleva a `/registro?periodo=` solo en los meses `ABIERTO`, porque `/registro` solo carga esos. No se listan los meses abiertos sin reporte: eso se ve en `/registro`.
 
 ### Sprint 3 (14/10 – 23/10): Validación, revisión y cierre
 
