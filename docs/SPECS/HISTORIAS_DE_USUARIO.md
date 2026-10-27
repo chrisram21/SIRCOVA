@@ -638,9 +638,28 @@ El modo `PROPIO_Y_OTROS` no se probó a mano porque ningún reporte editable lo 
 **Cómo se hará:** Endpoint `PUT /reportes/{id}/vacunas/{vacuna}` que guarda parcialmente; el reporte sigue en Borrador.
 
 **Criterios de aceptación:**
-- [ ] Al volver a abrir el reporte veo los datos guardados.
-- [ ] Solo puedo editar el reporte mientras está en Borrador.
-- [ ] El sistema avisa si salgo con cambios sin guardar.
+- [x] Al volver a abrir el reporte veo los datos guardados.
+- [x] Solo puedo editar el reporte mientras está en Borrador.
+- [x] El sistema avisa si salgo con cambios sin guardar.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 25 a `main`. Solo frontend, en `specs/25-hu-22-guardar-borrador-y-continuar.md`. Los dos primeros criterios los cumplió el spec 23 (ver la nota de abajo), y el aviso, el spec 25. Diferencias con la historia, porque mandan `AGENTS.md` y lo que decidió el equipo:
+
+- El `PUT /reportes/{id}/vacunas/{vacunaId}` del «Cómo se hará» ya existía (SPEC 23 y SPEC 24): este spec no cambia el backend ni el contrato.
+- «Salir» es ir a otra pantalla de la app (el menú, «Cambiar contraseña», el botón Atrás del navegador), cambiar de mes en `/registro`, cerrar sesión y cerrar o recargar la pestaña. No avisan «Recargar reporte» después de un 409 (lo escrito ya no se puede guardar) ni el cierre automático de la sesión (un 401).
+- El aviso tiene «Seguir editando» y «Salir sin guardar», sin «Guardar y salir». Para el navegador es su diálogo nativo (`beforeunload`).
+- «Cambios sin guardar» es la misma regla que habilita «Guardar borrador»: agregar una fila vacía en la tarjeta B no cuenta, y sigue contando mientras se guarda o si un guardado falló a la mitad.
+
+La app pasó a un data router (`createBrowserRouter` con una ruta comodín en `main.jsx`) para usar `useBlocker`. El aviso es `useAvisoCambiosSinGuardar(hayCambios)` (`componentes/AvisoCambiosSinGuardar.jsx`), que anota los cambios en `ProveedorCambiosPendientes` (en el `Layout`). Con ese proveedor, «Cerrar sesión» pide su propia confirmación. En `/registro`, junto a «Guardar borrador», una insignia dice «Cambios sin guardar», «Guardado a las HH:MM» o «Último cambio: DD/MM/AAAA HH:MM» (`actualizadoEn` del reporte), y cada pestaña con cambios lleva un punto. En solo lectura no hay insignia, marcas ni aviso.
+
+Verificado contra la API real el 2026-10-26, con `cs1201`, en el reporte 287 (octubre de 2026):
+
+- al abrir, la insignia decía «Último cambio: 26/10/2026 18:40»; al escribir un 5 en Hexavalente aparecieron «Cambios sin guardar» y el punto en su pestaña;
+- con ese cambio, «Inicio» en el menú, elegir septiembre en el Select y el botón Atrás abrieron el diálogo, que nombró Hexavalente, y «Seguir editando» dejó la ruta, el mes y el 5; «Cerrar sesión» abrió el suyo y la sesión siguió abierta; recargar la pestaña mostró el diálogo nativo, y al cancelarlo el 5 seguía;
+- «Guardar borrador» mostró «Guardado a las 19:34», quitó el punto, y después el menú navegó sin diálogo. La base quedó con la celda en 5, `version_fila = 9` y una fila `ACTUALIZAR` (4 → 5);
+- al volver a `/registro`, el 5 seguía y la insignia decía «Último cambio: 26/10/2026 19:34». Otro cambio descartado con el botón Atrás y «Salir sin guardar» llevó a `/inicio` y no llegó a la base;
+- septiembre (`APROBADO`) se vio en solo lectura, sin insignia, marcas ni «Guardar borrador», y se llegó a él sin diálogo. «Cambiar contraseña» y el botón Atrás navegaron como antes con el data router.
+
+«Cerrar sesión sin guardar» no se probó a mano para no cerrar la sesión de la prueba; lo cubre `Layout.test.jsx`.
 
 **Nota (2026-10-25, spec 23):** guardar, retomar y «solo en Borrador» ya los cumple HU-20 (SPEC 23): `PUT /reportes/{id}/vacunas/{vacunaId}` guarda las cantidades de una vacuna, «Guardar borrador» de `/registro` manda un `PUT` por vacuna con cambios, y al recargar se ven los datos guardados. Solo se guarda en `BORRADOR` con el mes `ABIERTO` o `EN_CIERRE` (409 si no), y un reporte que no se puede editar se ve en solo lectura. Queda el aviso de cambios sin guardar: `CapturaReporte.jsx` ya sabe qué vacunas cambiaron (compara lo escrito con lo cargado o guardado).
 
@@ -715,6 +734,8 @@ El modo `PROPIO_Y_OTROS` no se probó a mano porque ningún reporte editable lo 
 - [ ] Solo puedo enviar si no hay errores de validación.
 - [ ] Puedo enviar con advertencias, pero quedan visibles para el revisor.
 - [ ] Al enviar, el reporte pasa a Enviado y ya no puedo editarlo.
+
+**Nota (2026-10-26, spec 25):** «Enviar a revisión» no debe enviar con cambios sin guardar: la validación y el envío leen lo guardado, no lo que se ve. `CapturaReporte.jsx` ya los calcula (`conCambios`, la misma regla que habilita «Guardar borrador» y el aviso al salir). El botón puede deshabilitarse con ellos o guardar antes de enviar.
 
 #### HU-27. Bandeja de revisión y asignación de revisor
 

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
 import { armarFormulario } from '@/componentes/formulario/armarFormulario.js'
 import FormularioCaptura, { CamposAdicionales, leerCantidad } from '@/componentes/formulario/FormularioCaptura.jsx'
 import TarjetaProcedencias, {
@@ -20,6 +21,12 @@ import { guardarVacuna, obtenerFormulario } from '@/api/produccion.js'
 const ERRORES_DE_RECARGA = ['REPORTE_DESACTUALIZADO', 'REPORTE_NO_EDITABLE']
 
 const aDiaMesAnio = (fecha) => (fecha ? fecha.split('-').reverse().join('/') : null)
+
+const dosCifras = (numero) => String(numero).padStart(2, '0')
+const aHoraMinuto = (fecha) => `${dosCifras(fecha.getHours())}:${dosCifras(fecha.getMinutes())}`
+// En la hora local del navegador.
+const aFechaHora = (fecha) =>
+  `${dosCifras(fecha.getDate())}/${dosCifras(fecha.getMonth() + 1)}/${fecha.getFullYear()} ${aHoraMinuto(fecha)}`
 
 // 'grupo_edad=MENOR_1|sexo=F' → { grupo_edad: 'MENOR_1', sexo: 'F' }; '' → {}.
 const dimensionesDeClave = (clave) => (clave === '' ? {} : Object.fromEntries(clave.split('|').map((par) => par.split('='))))
@@ -182,6 +189,8 @@ export default function CapturaReporte({ reporte }) {
   const [firmas, setFirmas] = useState({})
   const [guardando, setGuardando] = useState(false)
   const [aviso, setAviso] = useState(null)
+  // La hora del último PUT exitoso de esta visita; antes de guardar, la insignia usa actualizadoEn del reporte.
+  const [guardadoEn, setGuardadoEn] = useState(null)
   const cargaActual = useRef(0)
 
   // Las vacunas en el orden del reporte, cada una con lo que trae el formulario.
@@ -190,6 +199,19 @@ export default function CapturaReporte({ reporte }) {
         .map((vacuna) => ({ vacuna, captura: formulario.vacunas.find((c) => c.vacunaId === vacuna.vacuna.id) }))
         .filter(({ captura }) => captura)
     : []
+
+  const camposDe = (captura) => captura.esquema?.camposAdicionales ?? []
+  const otrasDe = (vacunaId) => otras[vacunaId] ?? { filas: [], cantidades: {} }
+  const cambio = ({ captura }) =>
+    firmaDe(
+      cantidades[captura.vacunaId] ?? {},
+      otrasDe(captura.vacunaId).cantidades,
+      datos[captura.vacunaId] ?? {},
+      camposDe(captura),
+    ) !== firmas[captura.vacunaId]
+  const conCambios = formulario?.editable ? vacunas.filter(cambio) : []
+  // Sigue activo mientras se guarda y después de un guardado que falló a la mitad.
+  const bloqueo = useAvisoCambiosSinGuardar(conCambios.length > 0)
 
   // Las filas de la tarjeta B se arman de nuevo con lo guardado: las que quedaron vacías desaparecen.
   function tomarVacuna(captura, municipioId, municipios) {
@@ -255,16 +277,6 @@ export default function CapturaReporte({ reporte }) {
   if (vacunas.length === 0) return null
 
   const municipioId = formulario.municipioPropio.id
-  const camposDe = (captura) => captura.esquema?.camposAdicionales ?? []
-  const otrasDe = (vacunaId) => otras[vacunaId] ?? { filas: [], cantidades: {} }
-  const cambio = ({ captura }) =>
-    firmaDe(
-      cantidades[captura.vacunaId] ?? {},
-      otrasDe(captura.vacunaId).cantidades,
-      datos[captura.vacunaId] ?? {},
-      camposDe(captura),
-    ) !== firmas[captura.vacunaId]
-  const conCambios = vacunas.filter(cambio)
   const invalidas = vacunas.some(
     ({ captura }) =>
       hayInvalidas(cantidades[captura.vacunaId] ?? {}) || hayInvalidas(otrasDe(captura.vacunaId).cantidades),
@@ -294,6 +306,7 @@ export default function CapturaReporte({ reporte }) {
           vacunas: actual.vacunas.map((c) => (c.vacunaId === guardada.vacunaId ? guardada : c)),
         }))
         tomarVacuna(guardada, municipioId, formulario.municipios)
+        setGuardadoEn(new Date())
       } catch (err) {
         setAviso({
           tipo: 'error',
@@ -309,13 +322,31 @@ export default function CapturaReporte({ reporte }) {
   }
 
   const soloLectura = !formulario.editable
+  const idsConCambios = new Set(conCambios.map(({ vacuna }) => vacuna.id))
+  let insignia = null
+  if (conCambios.length > 0) insignia = 'Cambios sin guardar'
+  else if (guardadoEn) insignia = `Guardado a las ${aHoraMinuto(guardadoEn)}`
+  else if (reporte.actualizadoEn) insignia = `Último cambio: ${aFechaHora(new Date(reporte.actualizadoEn))}`
   return (
     <div className="flex flex-col gap-4">
       <Tabs defaultValue={String(vacunas[0].vacuna.id)}>
         <TabsList aria-label="Vacunas" className="h-auto flex-wrap">
           {vacunas.map(({ vacuna }) => (
-            <TabsTrigger key={vacuna.id} value={String(vacuna.id)}>
+            <TabsTrigger
+              key={vacuna.id}
+              value={String(vacuna.id)}
+              aria-describedby={idsConCambios.has(vacuna.id) ? `cambios-${vacuna.id}` : undefined}
+            >
               {vacuna.vacuna.nombre}
+              {/* La marca va en la descripción, no en el nombre: la pestaña se sigue llamando como la vacuna. */}
+              {idsConCambios.has(vacuna.id) && (
+                <>
+                  <span aria-hidden="true" className="size-2 rounded-full bg-advertencia-foreground" />
+                  <span id={`cambios-${vacuna.id}`} hidden>
+                    (cambios sin guardar)
+                  </span>
+                </>
+              )}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -388,12 +419,31 @@ export default function CapturaReporte({ reporte }) {
       ) : (
         <div className="flex flex-wrap items-center justify-end gap-3">
           {invalidas && <p className="text-sm text-destructive">Corrija las cantidades marcadas para guardar.</p>}
+          {insignia && (
+            <Badge
+              variant="outline"
+              className={
+                conCambios.length > 0
+                  ? 'border-advertencia-foreground/20 bg-advertencia text-advertencia-foreground'
+                  : 'bg-accent text-accent-foreground'
+              }
+            >
+              {insignia}
+            </Badge>
+          )}
           <Button onClick={guardar} disabled={guardando || invalidas || conCambios.length === 0}>
             <Save />
             {guardando ? 'Guardando…' : 'Guardar borrador'}
           </Button>
         </div>
       )}
+
+      <AvisoCambiosSinGuardar
+        bloqueo={bloqueo}
+        descripcion={`Si sale ahora, se pierden los cambios de ${conCambios
+          .map(({ vacuna }) => vacuna.vacuna.nombre)
+          .join(', ')}. Para conservarlos, quédese y use «Guardar borrador».`}
+      />
     </div>
   )
 }

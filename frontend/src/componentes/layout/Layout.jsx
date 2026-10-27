@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
+import { ProveedorCambiosPendientes } from '@/componentes/ProveedorCambiosPendientes.jsx'
 import Encabezado from './Encabezado.jsx'
 import MenuLateral from './MenuLateral.jsx'
 
@@ -8,14 +9,16 @@ const ANCHO_MENU = { '--sidebar-width': '15rem' }
 
 export default function Layout() {
   return (
-    <SidebarProvider style={ANCHO_MENU}>
-      <MenuLateral />
-      <SidebarInset>
-        <Encabezado />
-        <div className="flex-1">
-          <Outlet />
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
+    <ProveedorCambiosPendientes>
+      <SidebarProvider style={ANCHO_MENU}>
+        <MenuLateral />
+        <SidebarInset>
+          <Encabezado />
+          <div className="flex-1">
+            <Outlet />
+          </div>
+        </SidebarInset>
+      </SidebarProvider>
+    </ProveedorCambiosPendientes>
   )
 }
