@@ -1,9 +1,9 @@
 import { solicitar } from './cliente.js'
 
 // El Personal de establecimiento solo ve los reportes de su establecimiento; la API los filtra.
-export function listarReportes({ periodoId, estado, pagina, porPagina } = {}) {
+export function listarReportes({ periodoId, anio, estado, pagina, porPagina } = {}) {
   const consulta = new URLSearchParams()
-  for (const [nombre, valor] of Object.entries({ periodoId, estado, pagina, porPagina })) {
+  for (const [nombre, valor] of Object.entries({ periodoId, anio, estado, pagina, porPagina })) {
     if (valor !== undefined && valor !== null && valor !== '') consulta.set(nombre, String(valor))
   }
   const texto = consulta.toString()

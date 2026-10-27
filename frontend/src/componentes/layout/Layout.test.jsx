@@ -70,7 +70,7 @@ test('con los 11 permisos ve las 12 opciones en el orden de la tabla', () => {
   expect(opcionesVisibles()).toEqual([
     'Inicio',
     'Registro de producción',
-    'Reportes',
+    'Mis reportes',
     'Revisión y cierre',
     'Indicadores',
     'Mapa territorial',

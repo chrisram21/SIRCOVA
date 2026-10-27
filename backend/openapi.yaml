@@ -2677,9 +2677,15 @@ paths:
         El Personal de establecimiento solo ve los de su establecimiento. Ordenados por año y mes descendentes,
         con la forma paginada común. No lee MongoDB. Un parámetro inválido, desconocido o repetido responde
         400 `ENTRADA_INVALIDA`; una página fuera de rango responde 200 con `elementos` vacío y el `total` real.
+
+        Cada elemento trae `periodo.estado` (el estado del mes en `cierre_periodo` de la DDRISS del
+        establecimiento), `estadoDesde` (la fecha de la fila más reciente de `historial_estado_reporte`) y, si
+        el reporte está en `CORRECCION_SOLICITADA`, `correccion` con el comentario y la fecha de la fila más
+        reciente que lo pasó a ese estado.
       x-permiso: REPORTE_CONSULTAR
       parameters:
         - { name: periodoId, in: query, schema: { type: integer, minimum: 1, example: 10 } }
+        - { name: anio, in: query, schema: { type: integer, minimum: 2000, maximum: 2100, example: 2026 } }
         - { name: estado, in: query, schema: { $ref: "#/components/schemas/EstadoReporte" } }
         - { $ref: "#/components/parameters/Pagina" }
         - { $ref: "#/components/parameters/PorPagina" }
@@ -2698,6 +2704,9 @@ paths:
                 estado:
                   value:
                     error: { codigo: ENTRADA_INVALIDA, mensaje: "estado debe ser BORRADOR, ENVIADO, EN_REVISION, CORRECCION_SOLICITADA, APROBADO, CERRADO o RECTIFICACION." }
+                anio:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: anio debe ser un número entero entre 2000 y 2100. }
                 desconocido:
                   value:
                     error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: establecimientoId." }
@@ -4528,19 +4537,36 @@ components:
 
     ReporteResumen:
       type: object
-      required: [id, establecimiento, periodo, estado, actualizadoEn]
+      required: [id, establecimiento, periodo, estado, actualizadoEn, estadoDesde, correccion]
       properties:
         id: { type: integer, example: 412 }
         establecimiento: { $ref: "#/components/schemas/EstablecimientoDeReporte" }
         periodo:
           type: object
-          required: [id, anio, mes]
+          required: [id, anio, mes, estado]
           properties:
             id: { type: integer, example: 10 }
             anio: { type: integer, example: 2026 }
             mes: { type: integer, minimum: 1, maximum: 12, example: 10 }
+            estado:
+              allOf: [{ $ref: "#/components/schemas/EstadoPeriodo" }]
+              nullable: true
+              description: Estado del mes en la DDRISS del establecimiento; `null` si no tiene fila en `cierre_periodo`
         estado: { $ref: "#/components/schemas/EstadoReporte" }
         actualizadoEn: { type: string, format: date-time, example: "2026-10-25T15:04:00.000Z" }
+        estadoDesde:
+          type: string
+          format: date-time
+          description: Fecha del último cambio de estado (la fila más reciente de `historial_estado_reporte`)
+          example: "2026-10-12T20:00:00.000Z"
+        correccion:
+          type: object
+          nullable: true
+          description: Solo si el reporte está en `CORRECCION_SOLICITADA`; si no, `null`
+          required: [comentario, fecha]
+          properties:
+            comentario: { type: string, nullable: true, example: Revisar Hexavalente D1 en menores de 1 año. }
+            fecha: { type: string, format: date-time, example: "2026-10-12T20:00:00.000Z" }
 
     PaginaReportes:
       description: Página de reportes, con la forma paginada común (ver `PaginaUsuarios`)
