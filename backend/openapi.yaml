@@ -2821,6 +2821,9 @@ paths:
         Una celda vacía no tiene fila, así que no aparece; una con 0 sí. `editable` es `true` solo si el
         reporte está en `BORRADOR` y el mes está `ABIERTO` o `EN_CIERRE` en la DDRISS del establecimiento.
         Uno que no existe o está fuera del alcance del usuario responde 404.
+
+        Cada vacuna trae sus `procedenciasPermitidas`, según el modo de procedencia de su esquema, y
+        `municipios` trae el nombre de cada una y de las procedencias de las celdas guardadas.
       x-permiso: REPORTE_CONSULTAR
       parameters:
         - { $ref: "#/components/parameters/Id" }
@@ -2837,12 +2840,17 @@ paths:
   /reportes/{id}/vacunas/{vacunaId}:
     put:
       tags: [Producción]
-      summary: Guardar las cantidades del municipio propio y los datos adicionales de una vacuna del reporte
+      summary: Guardar las cantidades de todas las procedencias y los datos adicionales de una vacuna del reporte
       description: |
-        Reemplaza las celdas del municipio del establecimiento de esa vacuna: las que no vienen se borran, las
-        que cambian se actualizan y las nuevas se insertan, con sus filas de `detalle_dimension`, en una
-        transacción de MySQL con su fila `ACTUALIZAR` en la bitácora. Las celdas de otras procedencias no se
-        tocan (las maneja HU-21). Una celda vacía no se manda; una con 0 sí, y queda guardada.
+        Reemplaza todas las celdas de esa vacuna, de cualquier procedencia (la tarjeta A y la B): las que no
+        vienen se borran, las que cambian se actualizan y las nuevas se insertan, con sus filas de
+        `detalle_dimension`, en una transacción de MySQL con su fila `ACTUALIZAR` en la bitácora. Una celda
+        vacía no se manda; una con 0 sí, y queda guardada.
+
+        La procedencia de cada celda debe ser el municipio del establecimiento o una de las
+        `procedenciasPermitidas` de la vacuna (`GET /reportes/{id}/formulario`). Otra procedencia solo se
+        acepta si la vacuna ya tenía filas de ella antes del guardado (una procedencia heredada, como un
+        municipio desactivado).
 
         El backend calcula `clave_combinacion` a partir de `dimensiones` (ordenadas por código) y guarda en
         `total_declarado` la suma de todas las cantidades de la vacuna (`null` si no tiene filas). Una dosis
@@ -2916,6 +2924,9 @@ paths:
                 celdaInvalida:
                   value:
                     error: { codigo: CELDA_INVALIDA, mensaje: "La celda 3.ª dosis · < 1 año no es parte del formulario." }
+                procedencia:
+                  value:
+                    error: { codigo: CELDA_INVALIDA, mensaje: "La celda 1.ª dosis · < 1 año tiene una procedencia que no se puede usar en esta vacuna." }
                 celdaRepetida:
                   value:
                     error: { codigo: CELDA_REPETIDA, mensaje: "La celda 1.ª dosis · < 1 año está repetida." }
@@ -4643,7 +4654,7 @@ components:
         dosisCodigo: { type: string, example: D3 }
         municipioProcedenciaId:
           type: integer
-          description: "`municipio.id`; en este spec, siempre el municipio del establecimiento"
+          description: "`municipio.id`: el del establecimiento (tarjeta A) o una procedencia de la tarjeta B"
           example: 1
         dimensiones:
           type: object
@@ -4695,13 +4706,25 @@ components:
 
     VacunaDeFormulario:
       type: object
-      required: [vacunaId, esquema, celdas, datosAdicionales, totalDeclarado]
+      required: [vacunaId, esquema, procedenciasPermitidas, celdas, datosAdicionales, totalDeclarado]
       properties:
         vacunaId: { type: integer, description: "`vacuna.id`", example: 2 }
         esquema:
           allOf: [{ $ref: "#/components/schemas/EsquemaDeFormulario" }]
           nullable: true
           description: La versión fijada en el reporte; `null` si el documento ya no está en MongoDB
+        procedenciasPermitidas:
+          type: array
+          description: |
+            Los `municipio.id` que se pueden elegir en la tarjeta B, en el orden de `municipios`. Según el modo
+            de procedencia del esquema:
+            - `MUNICIPIO_DETALLADO`: los municipios activos del departamento sede de la DDRISS del
+              establecimiento, sin el propio ni el `9999`, más el `9999` si `permiteNoEspecificado` es `true`;
+            - `PROPIO_Y_OTROS`: solo el `9999`, como en el 5C.
+
+            Nunca trae el municipio propio. `[]` si `esquema` es `null`.
+          items: { type: integer }
+          example: [2, 3, 31]
         celdas:
           type: array
           description: Todas las filas de la vacuna, de cualquier procedencia, ordenadas por dosis y clave
@@ -4720,7 +4743,7 @@ components:
 
     FormularioReporte:
       type: object
-      required: [reporteId, versionFila, editable, municipioPropio, vacunas]
+      required: [reporteId, versionFila, editable, municipioPropio, municipios, vacunas]
       properties:
         reporteId: { type: integer, example: 287 }
         versionFila: { type: integer, description: La que se manda en cada `PUT`, example: 3 }
@@ -4732,6 +4755,19 @@ components:
           properties:
             id: { type: integer, example: 1 }
             nombre: { type: string, example: San Marcos }
+        municipios:
+          type: array
+          description: |
+            Las procedencias de la tarjeta B con su nombre: el territorio de la DDRISS del establecimiento, el
+            `9999` y todo municipio que aparezca en las celdas de alguna vacuna (también uno desactivado o de
+            otro departamento), sin el propio. Ordenados por nombre, con el `9999` al final.
+          items:
+            type: object
+            required: [id, codigoIne, nombre]
+            properties:
+              id: { type: integer, example: 2 }
+              codigoIne: { type: string, example: "1202" }
+              nombre: { type: string, example: San Pedro Sacatepéquez }
         vacunas:
           type: array
           description: En el orden de `GET /reportes/{id}`
@@ -4748,7 +4784,7 @@ components:
           example: 3
         celdas:
           type: array
-          description: Todas las celdas con valor del municipio propio; las que no vienen se borran
+          description: Todas las celdas con valor de la vacuna, de cualquier procedencia; las que no vienen se borran
           items: { $ref: "#/components/schemas/Celda" }
         datosAdicionales:
           type: object

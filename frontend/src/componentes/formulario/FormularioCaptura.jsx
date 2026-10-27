@@ -16,7 +16,7 @@ export const leerCantidad = (texto) => {
 }
 
 // La etiqueta de una columna, de arriba abajo por los niveles del encabezado: "< 1 año · Masculino".
-function etiquetaDeColumna(encabezados, indice) {
+export function etiquetaDeColumna(encabezados, indice) {
   return encabezados
     .map((nivel) => {
       let inicio = 0

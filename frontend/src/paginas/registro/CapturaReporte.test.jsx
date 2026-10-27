@@ -65,9 +65,19 @@ const celda = (dosisCodigo, dimensiones, cantidad, municipioProcedenciaId = 1) =
   claveCombinacion: Object.keys(dimensiones).sort().map((d) => `${d}=${dimensiones[d]}`).join('|'),
   cantidad,
 })
+const SAN_PEDRO = 2
+const SIBINAL = 13
+const MIGRANTES = 31
+const MUNICIPIOS = [
+  { id: SAN_PEDRO, codigoIne: '1202', nombre: 'San Pedro Sacatepéquez' },
+  { id: SIBINAL, codigoIne: '1213', nombre: 'Sibinal' },
+  { id: MIGRANTES, codigoIne: '9999', nombre: 'Migrantes / fuera de San Marcos' },
+]
+const PERMITIDAS = [SAN_PEDRO, SIBINAL, MIGRANTES]
 const capturaHexa = (cambios = {}) => ({
   vacunaId: 3,
   esquema: esquemaHexa,
+  procedenciasPermitidas: PERMITIDAS,
   celdas: [
     celda('D1', { grupo_edad: 'MENOR_1' }, 78),
     celda('D2', { grupo_edad: 'MENOR_1' }, 0),
@@ -78,12 +88,21 @@ const capturaHexa = (cambios = {}) => ({
   totalDeclarado: 83,
   ...cambios,
 })
-const capturaVph = (cambios = {}) => ({ vacunaId: 5, esquema: esquemaVph, celdas: [], datosAdicionales: null, totalDeclarado: null, ...cambios })
+const capturaVph = (cambios = {}) => ({
+  vacunaId: 5,
+  esquema: esquemaVph,
+  procedenciasPermitidas: PERMITIDAS,
+  celdas: [],
+  datosAdicionales: null,
+  totalDeclarado: null,
+  ...cambios,
+})
 const formulario = (cambios = {}) => ({
   reporteId: 7,
   versionFila: 3,
   editable: true,
   municipioPropio: { id: 1, nombre: 'San Marcos' },
+  municipios: MUNICIPIOS,
   vacunas: [capturaHexa(), capturaVph()],
   ...cambios,
 })
@@ -184,11 +203,13 @@ test('guarda solo las vacunas con cambios, en orden, con la versionFila encadena
 
   expect(await screen.findByText('Borrador guardado.')).toBeTruthy()
   expect(guardarVacuna).toHaveBeenCalledTimes(2)
+  // La celda de otro municipio (la tarjeta B) también se manda: el PUT reemplaza todas las procedencias.
   expect(guardarVacuna).toHaveBeenNthCalledWith(1, 7, 3, {
     versionFila: 3,
     celdas: [
       { dosisCodigo: 'D1', municipioProcedenciaId: 1, dimensiones: { grupo_edad: 'MENOR_1' }, cantidad: 80 },
       { dosisCodigo: 'D2', municipioProcedenciaId: 1, dimensiones: { grupo_edad: 'MENOR_1' }, cantidad: 0 },
+      { dosisCodigo: 'D1', municipioProcedenciaId: SAN_PEDRO, dimensiones: { grupo_edad: 'MENOR_1' }, cantidad: 5 },
     ],
     datosAdicionales: { frascos: 12 },
   })
@@ -279,6 +300,101 @@ test('un reporte que no se puede editar se ve en solo lectura, sin «Guardar bor
 test('una vacuna cuyo esquema ya no está avisa en su pestaña', async () => {
   await montar(formulario({ vacunas: [capturaHexa({ esquema: null }), capturaVph()] }))
   expect(screen.getByText('No se encontró el formulario de esta vacuna.')).toBeTruthy()
+})
+
+describe('tarjeta B: otros municipios', () => {
+  // Hexavalente solo desagrega por edad: cada fila de la tarjeta B tiene una sola celda, nombrada como la fila.
+  const conOtras = () =>
+    capturaHexa({
+      celdas: [
+        celda('D1', { grupo_edad: 'MENOR_1' }, 78),
+        celda('D1', { grupo_edad: 'MENOR_1' }, 1, MIGRANTES),
+        celda('D2', { grupo_edad: '1_A_5' }, 0, SIBINAL),
+        celda('D1', { grupo_edad: 'MENOR_1' }, 5, SAN_PEDRO),
+      ],
+    })
+  const filasDeB = () =>
+    [...screen.getByRole('table', { name: 'Otros municipios' }).querySelectorAll('tbody tr')].map((tr) =>
+      [...tr.querySelectorAll('td')].slice(0, 3).map((td) => td.textContent),
+    )
+  const select = (nombre) => document.querySelector(`select[name="${nombre}"]`)
+  async function agregarFila(municipioId, dosis, seccion) {
+    fireEvent.click(screen.getByRole('button', { name: /Agregar municipio de procedencia/ }))
+    fireEvent.change(select('municipio'), { target: { value: String(municipioId) } })
+    fireEvent.change(select('dosis'), { target: { value: dosis } })
+    fireEvent.change(select('seccion'), { target: { value: String(seccion) } })
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  }
+
+  test('las celdas guardadas de otras procedencias se agrupan en filas por municipio, dosis y grupo de edad', async () => {
+    await montar(formulario({ vacunas: [conOtras(), capturaVph()] }))
+
+    expect(filasDeB()).toEqual([
+      ['San Pedro Sacatepéquez', '1.ª dosis', '< 1 año'],
+      ['Sibinal', '2.ª dosis', 'De 1 a < 6 años'],
+      ['Migrantes / fuera de San Marcos', '1.ª dosis', '< 1 año'],
+    ])
+    expect(campo('San Pedro Sacatepéquez · 1.ª dosis · < 1 año').value).toBe('5')
+    expect(campo('Sibinal · 2.ª dosis · De 1 a < 6 años').value).toBe('0')
+    // La tarjeta A sigue sumando solo el municipio propio.
+    expect(screen.getByLabelText('Total general').textContent).toBe('78')
+  })
+
+  test('el PUT lleva las celdas de las dos tarjetas, cada una con su municipio y sin las vacías', async () => {
+    await montar(formulario({ vacunas: [conOtras(), capturaVph()] }))
+    guardarVacuna.mockResolvedValueOnce({ versionFila: 4, vacuna: conOtras() })
+
+    await agregarFila(SIBINAL, 'D1', 1)
+    escribir('Sibinal · 1.ª dosis · De 1 a < 6 años', '4')
+    // Agregada y dejada vacía: no se manda.
+    await agregarFila(MIGRANTES, 'D2', 0)
+    fireEvent.click(botonGuardar())
+
+    await screen.findByText('Borrador guardado.')
+    expect(guardarVacuna.mock.calls[0][2].celdas).toEqual([
+      { dosisCodigo: 'D1', municipioProcedenciaId: 1, dimensiones: { grupo_edad: 'MENOR_1' }, cantidad: 78 },
+      { dosisCodigo: 'D1', municipioProcedenciaId: MIGRANTES, dimensiones: { grupo_edad: 'MENOR_1' }, cantidad: 1 },
+      { dosisCodigo: 'D2', municipioProcedenciaId: SIBINAL, dimensiones: { grupo_edad: '1_A_5' }, cantidad: 0 },
+      { dosisCodigo: 'D1', municipioProcedenciaId: SAN_PEDRO, dimensiones: { grupo_edad: 'MENOR_1' }, cantidad: 5 },
+      { dosisCodigo: 'D1', municipioProcedenciaId: SIBINAL, dimensiones: { grupo_edad: '1_A_5' }, cantidad: 4 },
+    ])
+  })
+
+  test('una fila quitada no manda sus celdas', async () => {
+    await montar(formulario({ vacunas: [conOtras(), capturaVph()] }))
+    guardarVacuna.mockResolvedValueOnce({ versionFila: 4, vacuna: conOtras() })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar fila San Pedro Sacatepéquez · 1.ª dosis · < 1 año' }))
+    expect(botonGuardar().disabled).toBe(false)
+    fireEvent.click(botonGuardar())
+
+    await screen.findByText('Borrador guardado.')
+    expect(guardarVacuna.mock.calls[0][2].celdas.map((c) => c.municipioProcedenciaId)).not.toContain(SAN_PEDRO)
+  })
+
+  test('una fila vacía agregada no es un cambio y desaparece después de guardar', async () => {
+    await montar(formulario({ vacunas: [conOtras(), capturaVph()] }))
+
+    await agregarFila(SIBINAL, 'D1', 0)
+    expect(filasDeB()).toContainEqual(['Sibinal', '1.ª dosis', '< 1 año'])
+    expect(botonGuardar().disabled).toBe(true)
+
+    // Con otro cambio sí se guarda, y la tarjeta B se arma de nuevo con lo guardado.
+    guardarVacuna.mockResolvedValueOnce({ versionFila: 4, vacuna: conOtras() })
+    escribir('1.ª dosis · De 1 a < 6 años', '2')
+    fireEvent.click(botonGuardar())
+    await screen.findByText('Borrador guardado.')
+    expect(filasDeB()).not.toContainEqual(['Sibinal', '1.ª dosis', '< 1 año'])
+  })
+
+  test('un valor inválido en la tarjeta B deshabilita «Guardar borrador»', async () => {
+    await montar(formulario({ vacunas: [conOtras(), capturaVph()] }))
+
+    escribir('San Pedro Sacatepéquez · 1.ª dosis · < 1 año', '-1')
+    expect(botonGuardar().disabled).toBe(true)
+    expect(screen.getByText('Corrija las cantidades marcadas para guardar.')).toBeTruthy()
+  })
 })
 
 test('si falla la carga lo dice y permite reintentar', async () => {

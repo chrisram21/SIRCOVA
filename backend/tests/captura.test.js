@@ -438,13 +438,14 @@ describe('PUT /reportes/{id}/vacunas/{vacunaId}: guardar', () => {
     });
   });
 
-  it('sin la celda de 0 la borra y una cantidad distinta actualiza la misma fila; la de otra procedencia no se toca y suma al total', async () => {
+  it('sin la celda de 0 la borra y una cantidad distinta actualiza la misma fila; la de otra procedencia, si viene, se conserva y suma al total, y si no viene se borra', async () => {
     const otra = await insertarCelda(repVac, { dosis: 'D1', procedencia: 2, dimensiones: { grupo_edad: 'MENOR_1' }, cantidad: 5 });
     const [antes] = await filasDeDetalle(repVac);
+    const propias = [celda('D1', { grupo_edad: 'MENOR_1' }, 80), celda('R1', { grupo_edad: '1_A_5', sexo: 'F' }, 4)];
 
     const res = await guardar(reporteId, VACUNA, {
       versionFila,
-      celdas: [celda('D1', { grupo_edad: 'MENOR_1' }, 80), celda('R1', { grupo_edad: '1_A_5', sexo: 'F' }, 4)],
+      celdas: [...propias, { ...celda('D1', { grupo_edad: 'MENOR_1' }, 5), municipioProcedenciaId: 2 }],
     });
 
     expect(res.status).toBe(200);
@@ -466,6 +467,16 @@ describe('PUT /reportes/{id}/vacunas/{vacunaId}: guardar', () => {
       [`celda:D2|${municipioPropio.id}|grupo_edad=MENOR_1`]: null,
       totalDeclarado: 89,
     });
+
+    const sinOtra = await guardar(reporteId, VACUNA, { versionFila, celdas: propias });
+
+    expect(sinOtra.status).toBe(200);
+    versionFila = sinOtra.body.versionFila;
+    expect((await filasDeDetalle(repVac)).map((f) => [f.dosis, f.procedencia, f.cantidad])).toEqual([
+      ['D1', municipioPropio.id, 80],
+      ['R1', municipioPropio.id, 4],
+    ]);
+    expect(sinOtra.body.vacuna.totalDeclarado).toBe(84);
   });
 
   it('guarda en datos_adicionales solo los campos con valor, con las claves ordenadas', async () => {
@@ -611,14 +622,18 @@ describe('PUT /reportes/{id}/vacunas/{vacunaId}: errores y dosis inactivas', () 
     expect(await version()).toBe(versionFila + 1);
   });
 
-  it('422 CELDA_INVALIDA con una dosis, una combinación o una dimensión que no son del esquema, o de otro municipio', async () => {
+  it('422 CELDA_INVALIDA con una dosis, una combinación o una dimensión que no son del esquema, o de un municipio no permitido', async () => {
     const versionFila = await version();
+    const [[coatepeque]] = await pool.query("SELECT id FROM municipio WHERE codigo_ine = '0920'");
     const casos = [
       [celda('D9', { grupo_edad: 'MENOR_1' }, 1), 'La celda D9 · < 1 año no es parte del formulario.'],
       [celda('R1', { grupo_edad: 'MENOR_1', sexo: 'F' }, 1), 'La celda Dosis R1 · < 1 año · Femenino no es parte del formulario.'],
       [celda('D1', { grupo_edad: 'MENOR_1', sexo: 'F' }, 1), 'La celda Dosis D1 · < 1 año · Femenino no es parte del formulario.'],
       [celda('R1', { grupo_edad: '1_A_5' }, 1), 'La celda Dosis R1 · De 1 a < 6 años no es parte del formulario.'],
-      [{ ...D1(), municipioProcedenciaId: 2 }, 'La celda Dosis D1 · < 1 año no es del municipio del establecimiento.'],
+      [
+        { ...D1(), municipioProcedenciaId: coatepeque.id },
+        'La celda Dosis D1 · < 1 año tiene una procedencia que no se puede usar en esta vacuna.',
+      ],
     ];
     for (const [celdaPedida, mensaje] of casos) {
       const res = await guardar(reporteId, VACUNA, { versionFila, celdas: [D1(), celdaPedida] });
