@@ -18,7 +18,9 @@ const documentoOpenapi = YAML.parse(fs.readFileSync(entorno.rutaOpenapi, 'utf8')
 app.use(cors({ origin: entorno.corsOrigen }));
 app.use(express.json());
 
-app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(documentoOpenapi));
+// Swagger UI carga el contrato por URL: incrustado, un `$` seguido de comilla invertida en una descripción rompe su script.
+app.get('/api/docs/openapi.json', (req, res) => res.json(documentoOpenapi));
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(null, { swaggerOptions: { url: '/api/docs/openapi.json' } }));
 app.use('/api/v1', sistemaRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1', usuariosRoutes);
