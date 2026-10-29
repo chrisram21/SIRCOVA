@@ -1,6 +1,6 @@
 # SPEC 27 — Sesiones en el servidor (backend)
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-02 (ajuste del sprint 3: deja de aceptarse el riesgo del token no revocable)
 > **Depende de:** SPEC 01, SPEC 03, SPEC 08, SPEC 09, SPEC 10
 > **Fecha:** 2026-10-28
