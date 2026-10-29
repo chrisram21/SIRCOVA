@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom'
 import App from '@/App.jsx'
 import { iniciarSesion } from '@/api/auth.js'
 import { ErrorApi, solicitar } from '@/api/cliente.js'
-import { guardarSesion } from '@/api/sesion.js'
+import { guardarSesion, leerSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn(async () => null) }))
@@ -25,7 +25,8 @@ function crearRespuestaLogin() {
   }
 }
 
-function abrirLogin() {
+// Sin sesión en memoria, el proveedor intenta recuperarla con la cookie; el fetch de las pruebas responde que no hay.
+async function abrirLogin() {
   render(
     <MemoryRouter initialEntries={['/login']}>
       <ProveedorSesion>
@@ -33,6 +34,7 @@ function abrirLogin() {
       </ProveedorSesion>
     </MemoryRouter>,
   )
+  await screen.findByRole('heading', { name: 'Iniciar sesión' })
 }
 
 const campoUsuario = () => screen.getByLabelText('Usuario')
@@ -50,8 +52,8 @@ beforeEach(() => {
   iniciarSesion.mockReset()
 })
 
-test('"Ingresar" está habilitado; si falta el usuario o la contraseña, lo dice, enfoca el campo y no envía', () => {
-  abrirLogin()
+test('"Ingresar" está habilitado; si falta el usuario o la contraseña, lo dice, enfoca el campo y no envía', async () => {
+  await abrirLogin()
   expect(botonIngresar().disabled).toBe(false)
 
   fireEvent.click(botonIngresar())
@@ -72,8 +74,8 @@ test('"Ingresar" está habilitado; si falta el usuario o la contraseña, lo dice
   expect(iniciarSesion).not.toHaveBeenCalled()
 })
 
-test('el h1 de la página es «Iniciar sesión» y el logo está sobre el formulario en pantallas angostas', () => {
-  abrirLogin()
+test('el h1 de la página es «Iniciar sesión» y el logo está sobre el formulario en pantallas angostas', async () => {
+  await abrirLogin()
 
   expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Iniciar sesión')
   const formulario = campoUsuario().closest('form')
@@ -81,10 +83,10 @@ test('el h1 de la página es «Iniciar sesión» y el logo está sobre el formul
   expect(logo.closest('.lg\\:hidden')).toBeTruthy()
 })
 
-test('«¿Olvidó su contraseña?» despliega la ayuda sin enviar el formulario', () => {
+test('«¿Olvidó su contraseña?» despliega la ayuda sin enviar el formulario', async () => {
   const AYUDA =
     'Pida al administrador del sistema de su DDRISS que restablezca su contraseña; le dará una contraseña temporal.'
-  abrirLogin()
+  await abrirLogin()
   const boton = screen.getByRole('button', { name: '¿Olvidó su contraseña?' })
   expect(boton.getAttribute('aria-expanded')).toBe('false')
   expect(screen.getByText(AYUDA).hidden).toBe(true)
@@ -105,19 +107,19 @@ test('«¿Olvidó su contraseña?» despliega la ayuda sin enviar el formulario'
 test('con una respuesta correcta se guarda la sesión y se muestra /inicio', async () => {
   const respuesta = crearRespuestaLogin()
   iniciarSesion.mockResolvedValue(respuesta)
-  abrirLogin()
+  await abrirLogin()
 
   llenarYEnviar()
 
   expect(await screen.findByText('Usuarios activos')).toBeTruthy()
   expect(iniciarSesion).toHaveBeenCalledWith('jperez', 'secreta123')
-  expect(JSON.parse(sessionStorage.getItem('sircova.sesion'))).toEqual(respuesta)
-  expect(sessionStorage.getItem('sircova.sesion')).not.toContain('secreta123')
+  expect(leerSesion()).toEqual(respuesta)
+  expect(JSON.stringify(leerSesion())).not.toContain('secreta123')
 })
 
 test('con un 401 se muestra su mensaje y se puede volver a enviar', async () => {
   iniciarSesion.mockRejectedValueOnce(new ErrorApi(401, 'CREDENCIALES_INVALIDAS', MENSAJE_CREDENCIALES))
-  abrirLogin()
+  await abrirLogin()
 
   llenarYEnviar('jperez', 'incorrecta')
 
@@ -142,7 +144,7 @@ test('con un 401 se muestra su mensaje y se puede volver a enviar', async () => 
 test('con un 403 se muestra su mensaje', async () => {
   const mensaje = 'Su cuenta está desactivada; contacte al administrador.'
   iniciarSesion.mockRejectedValueOnce(new ErrorApi(403, 'CUENTA_DESACTIVADA', mensaje))
-  abrirLogin()
+  await abrirLogin()
 
   llenarYEnviar()
 
@@ -155,7 +157,7 @@ describe('cuenta bloqueada', () => {
 
   test('un 423 abre el diálogo con el mensaje del backend y no muestra la alerta de error', async () => {
     iniciarSesion.mockRejectedValueOnce(new ErrorApi(423, 'CUENTA_BLOQUEADA', MENSAJE_BLOQUEO))
-    abrirLogin()
+    await abrirLogin()
 
     llenarYEnviar()
 
@@ -168,7 +170,7 @@ describe('cuenta bloqueada', () => {
 
   test('"Entendido" cierra el diálogo y deja el usuario con la contraseña vacía', async () => {
     iniciarSesion.mockRejectedValueOnce(new ErrorApi(423, 'CUENTA_BLOQUEADA', MENSAJE_BLOQUEO))
-    abrirLogin()
+    await abrirLogin()
 
     llenarYEnviar('jperez', 'secreta123')
     fireEvent.click(await screen.findByRole('button', { name: 'Entendido' }))
@@ -179,8 +181,8 @@ describe('cuenta bloqueada', () => {
   })
 })
 
-test('el campo de contraseña tiene el botón para ver lo escrito', () => {
-  abrirLogin()
+test('el campo de contraseña tiene el botón para ver lo escrito', async () => {
+  await abrirLogin()
   const boton = screen.getByRole('button', { name: 'Mantener presionado para ver la contraseña' })
 
   fireEvent.change(campoContrasena(), { target: { value: 'secreta123' } })
@@ -194,7 +196,7 @@ test('el campo de contraseña tiene el botón para ver lo escrito', () => {
 test('sin conexión se muestra el texto de falta de conexión', async () => {
   const mensaje = 'No se pudo conectar con el servidor. Revise su conexión e intente de nuevo.'
   iniciarSesion.mockRejectedValueOnce(new ErrorApi(0, 'SIN_CONEXION', mensaje))
-  abrirLogin()
+  await abrirLogin()
 
   llenarYEnviar()
 
@@ -204,7 +206,7 @@ test('sin conexión se muestra el texto de falta de conexión', async () => {
 test('mientras la petición está en curso el botón dice "Ingresando…" y está deshabilitado', async () => {
   let resolver
   iniciarSesion.mockReturnValueOnce(new Promise((resolve) => (resolver = resolve)))
-  abrirLogin()
+  await abrirLogin()
 
   llenarYEnviar()
 
@@ -246,8 +248,8 @@ describe('aviso de sesión cerrada', () => {
     vi.unstubAllGlobals()
   })
 
-  test('sin aviso no se muestra la alerta informativa', () => {
-    abrirLogin()
+  test('sin aviso no se muestra la alerta informativa', async () => {
+    await abrirLogin()
     expect(screen.queryByRole('status')).toBeNull()
   })
 
@@ -271,14 +273,14 @@ describe('aviso de sesión cerrada', () => {
     expect(screen.getByRole('status').textContent).toContain(
       'Su contraseña fue restablecida. Inicie sesión con la contraseña temporal que le dé su administrador.',
     )
-    expect(sessionStorage.getItem('sircova.sesion')).toBeNull()
+    expect(leerSesion()).toBeNull()
   })
 
   test('un 403 SIN_PERMISO no cierra la sesión', async () => {
     await responderEnInicio(403, { codigo: 'SIN_PERMISO', mensaje: 'No tiene permiso para realizar esta acción.' })
 
     expect(screen.queryByRole('heading', { name: 'Iniciar sesión' })).toBeNull()
-    expect(sessionStorage.getItem('sircova.sesion')).not.toBeNull()
+    expect(leerSesion()).not.toBeNull()
   })
 
   test('el aviso desaparece al enviar el formulario', async () => {
@@ -289,15 +291,15 @@ describe('aviso de sesión cerrada', () => {
 
     expect((await screen.findByRole('alert')).textContent).toContain(MENSAJE_CREDENCIALES)
     expect(screen.queryByRole('status')).toBeNull()
-    expect(sessionStorage.getItem('sircova.sesion')).toBeNull()
+    expect(leerSesion()).toBeNull()
   })
 })
 
 describe('acceso rápido (solo en desarrollo)', () => {
   afterEach(() => vi.unstubAllEnvs())
 
-  test('sin las variables de .env.local, los botones están deshabilitados y se explica qué falta', () => {
-    abrirLogin()
+  test('sin las variables de .env.local, los botones están deshabilitados y se explica qué falta', async () => {
+    await abrirLogin()
 
     expect(screen.getByRole('heading', { name: 'Acceso rápido · solo en desarrollo' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Administrador' }).disabled).toBe(true)
@@ -305,9 +307,9 @@ describe('acceso rápido (solo en desarrollo)', () => {
     expect(screen.getByText(/no tienen usuario o contraseña en/)).toBeTruthy()
   })
 
-  test('un botón sin contraseña configurada queda deshabilitado', () => {
+  test('un botón sin contraseña configurada queda deshabilitado', async () => {
     vi.stubEnv('VITE_ACCESO_RAPIDO_ESTABLECIMIENTO_USUARIO', 'cs1201')
-    abrirLogin()
+    await abrirLogin()
 
     expect(screen.getByRole('button', { name: 'Personal del establecimiento' }).disabled).toBe(true)
   })
@@ -316,7 +318,7 @@ describe('acceso rápido (solo en desarrollo)', () => {
     vi.stubEnv('VITE_ACCESO_RAPIDO_ADMIN_USUARIO', 'admin.prueba')
     vi.stubEnv('VITE_ACCESO_RAPIDO_ADMIN_CONTRASENA', 'clave-de-prueba')
     iniciarSesion.mockResolvedValue(crearRespuestaLogin())
-    abrirLogin()
+    await abrirLogin()
 
     expect(screen.getByRole('button', { name: 'Personal del establecimiento' }).disabled).toBe(true)
     fireEvent.click(screen.getByRole('button', { name: 'Administrador' }))

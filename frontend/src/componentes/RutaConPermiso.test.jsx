@@ -89,10 +89,10 @@ test('con USUARIO_EDITAR, la subruta /usuarios/5/editar muestra su página', asy
   expect(await screen.findByRole('heading', { name: 'Editar usuario' })).toBeTruthy()
 })
 
-test('sin sesión, /indicadores lleva a /login', () => {
+test('sin sesión, /indicadores lleva a /login', async () => {
   abrir('/indicadores')
 
-  expect(screen.getByRole('heading', { name: 'Iniciar sesión' })).toBeTruthy()
+  expect(await screen.findByRole('heading', { name: 'Iniciar sesión' })).toBeTruthy()
 })
 
 test('una ruta inexistente lleva a /inicio', () => {

@@ -1,5 +1,6 @@
 import { lazy, useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import PantallaCargaSesion from '@/componentes/PantallaCargaSesion.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import RutaConPermiso from '@/componentes/RutaConPermiso.jsx'
 import RutaProtegida, { RUTA_CAMBIO_CONTRASENA, RUTA_PERFIL } from '@/componentes/RutaProtegida.jsx'
@@ -29,8 +30,10 @@ function useCambioDePantalla() {
 }
 
 export default function App() {
-  const { sesion } = useSesion()
+  const { sesion, cargando } = useSesion()
   useCambioDePantalla()
+  // Sin rutas mientras se recupera la sesión: ninguna redirige y se conserva la dirección pedida.
+  if (cargando) return <PantallaCargaSesion />
   // Con el cambio obligatorio la pantalla va sola, sin menú; si no, dentro del Layout.
   const debeCambiar = sesion?.usuario?.debeCambiarContrasena === true
 

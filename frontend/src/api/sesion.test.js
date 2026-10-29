@@ -1,6 +1,4 @@
-import { borrarSesion, guardarSesion, leerSesion, leerVencimiento } from './sesion.js'
-
-const CLAVE = 'sircova.sesion'
+import { borrarSesion, guardarSesion, leerSesion, leerSid, leerTokenGuardado, leerVencimiento } from './sesion.js'
 
 function crearToken(payload) {
   const codificar = (objeto) =>
@@ -21,42 +19,54 @@ function crearSesion(expEnSegundos) {
   }
 }
 
-beforeEach(() => {
-  sessionStorage.clear()
-})
-
 test('guardar y leer devuelven el mismo objeto', () => {
   const sesion = crearSesion(3600)
   guardarSesion(sesion)
   expect(leerSesion()).toEqual(sesion)
+  expect(leerTokenGuardado()).toBe(sesion.token)
 })
 
 test('sin sesión guardada devuelve null', () => {
   expect(leerSesion()).toBeNull()
+  expect(leerTokenGuardado()).toBeNull()
 })
 
-test('un token con exp en el pasado da null y borra la clave', () => {
-  guardarSesion(crearSesion(-60))
-  expect(leerSesion()).toBeNull()
-  expect(sessionStorage.getItem(CLAVE)).toBeNull()
+test('un token vencido no se descarta: se renueva con la API', () => {
+  const sesion = crearSesion(-60)
+  guardarSesion(sesion)
+  expect(leerSesion()).toEqual(sesion)
 })
 
-test('un token mal formado da null y borra la clave', () => {
-  guardarSesion({ ...crearSesion(3600), token: 'no-es-un-jwt' })
-  expect(leerSesion()).toBeNull()
-  expect(sessionStorage.getItem(CLAVE)).toBeNull()
+test('la sesión no queda en sessionStorage', () => {
+  guardarSesion(crearSesion(3600))
+  expect(sessionStorage.length).toBe(0)
 })
 
-test('un JSON mal formado da null y borra la clave', () => {
-  sessionStorage.setItem(CLAVE, '{no es json')
-  expect(leerSesion()).toBeNull()
-  expect(sessionStorage.getItem(CLAVE)).toBeNull()
-})
-
-test('borrarSesion elimina la clave', () => {
+test('borrarSesion la elimina', () => {
   guardarSesion(crearSesion(3600))
   borrarSesion()
-  expect(sessionStorage.getItem(CLAVE)).toBeNull()
+  expect(leerSesion()).toBeNull()
+})
+
+test('leerSid devuelve el sid del token guardado', () => {
+  guardarSesion({ ...crearSesion(3600), token: crearToken({ sub: '7', sid: 42, exp: 9999999999 }) })
+  expect(leerSid()).toBe(42)
+})
+
+test('leerSid da null sin sesión, sin sid o con un token mal formado', () => {
+  expect(leerSid()).toBeNull()
+  guardarSesion(crearSesion(3600))
+  expect(leerSid()).toBeNull()
+  guardarSesion({ ...crearSesion(3600), token: 'no-es-un-jwt' })
+  expect(leerSid()).toBeNull()
+})
+
+test('al cargar el módulo borra la sesión que dejó la versión anterior en sessionStorage', async () => {
+  sessionStorage.setItem('sircova.sesion', JSON.stringify(crearSesion(3600)))
+  vi.resetModules()
+  const modulo = await import('./sesion.js')
+  expect(sessionStorage.getItem('sircova.sesion')).toBeNull()
+  expect(modulo.leerSesion()).toBeNull()
 })
 
 test('leerVencimiento devuelve el exp del token en milisegundos', () => {

@@ -3,7 +3,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { createMemoryRouter, MemoryRouter, Outlet, RouterProvider } from 'react-router-dom'
 import App from '@/App.jsx'
 import { cerrarSesion } from '@/api/auth.js'
-import { guardarSesion } from '@/api/sesion.js'
+import { guardarSesion, leerSesion } from '@/api/sesion.js'
 import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 import RutaProtegida from '@/componentes/RutaProtegida.jsx'
@@ -176,14 +176,14 @@ test('el título de la pestaña del navegador sigue a la pantalla', async () => 
   expect(document.title).toBe('Inicio · SIRCOVA')
 })
 
-test('"Cerrar sesión" avisa al servidor con MANUAL, borra sircova.sesion y lleva a /login sin aviso', async () => {
+test('"Cerrar sesión" avisa al servidor con MANUAL, borra la sesión y lleva a /login sin aviso', async () => {
   abrir('/inicio')
 
   fireEvent.click(await opcionDeCuenta('Cerrar sesión'))
 
   expect(cerrarSesion).toHaveBeenCalledTimes(1)
   expect(cerrarSesion).toHaveBeenCalledWith('MANUAL')
-  expect(sessionStorage.getItem('sircova.sesion')).toBeNull()
+  expect(leerSesion()).toBeNull()
   expect(screen.getByRole('heading', { name: 'Iniciar sesión' })).toBeTruthy()
   expect(screen.queryByRole('status')).toBeNull()
   expect(screen.queryByRole('alert')).toBeNull()
@@ -252,7 +252,7 @@ describe('«Cerrar sesión» con cambios sin guardar', () => {
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Seguir editando' }))
     await vi.waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(cerrarSesion).not.toHaveBeenCalled()
-    expect(sessionStorage.getItem('sircova.sesion')).not.toBeNull()
+    expect(leerSesion()).not.toBeNull()
     expect(router.state.location.pathname).toBe('/captura')
   })
 
@@ -264,7 +264,7 @@ describe('«Cerrar sesión» con cambios sin guardar', () => {
 
     expect(await screen.findByRole('heading', { name: 'Iniciar sesión' })).toBeTruthy()
     expect(cerrarSesion).toHaveBeenCalledWith('MANUAL')
-    expect(sessionStorage.getItem('sircova.sesion')).toBeNull()
+    expect(leerSesion()).toBeNull()
     expect(router.state.location.pathname).toBe('/login')
     expect(screen.queryByRole('alertdialog')).toBeNull()
   })
@@ -276,7 +276,7 @@ test('si POST /auth/logout falla, la sesión se cierra igual', async () => {
 
   fireEvent.click(await opcionDeCuenta('Cerrar sesión'))
 
-  expect(sessionStorage.getItem('sircova.sesion')).toBeNull()
+  expect(leerSesion()).toBeNull()
   expect(await screen.findByRole('heading', { name: 'Iniciar sesión' })).toBeTruthy()
   expect(screen.queryByRole('alert')).toBeNull()
 })

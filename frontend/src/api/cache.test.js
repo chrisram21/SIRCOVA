@@ -4,11 +4,10 @@ import { guardarSesion } from './sesion.js'
 
 vi.mock('./cliente.js', () => ({ solicitar: vi.fn() }))
 
-function crearSesion(sub) {
+function crearSesion(sub, sid = Number(sub) * 10, exp = Math.floor(Date.now() / 1000) + 3600) {
   const codificar = (objeto) => btoa(JSON.stringify(objeto)).replace(/=+$/, '')
-  const exp = Math.floor(Date.now() / 1000) + 3600
   return {
-    token: `${codificar({ alg: 'HS256', typ: 'JWT' })}.${codificar({ sub, exp })}.firma`,
+    token: `${codificar({ alg: 'HS256', typ: 'JWT' })}.${codificar({ sub, sid, exp })}.firma`,
     usuario: { id: Number(sub), nombreUsuario: `u${sub}`, rol: 'ADMINISTRADOR', permisos: [], empleado: {} },
   }
 }
@@ -38,11 +37,25 @@ test('cada llamada recibe su copia: cambiarla no altera lo guardado', async () =
   expect(await consultarConCache('/roles')).toEqual([{ ruta: '/roles' }])
 })
 
-test('con otra sesión se vuelve a pedir', async () => {
+test('con otra sesión (otro sid) se vuelve a pedir', async () => {
   await consultarConCache('/establecimientos')
   guardarSesion(crearSesion('8'))
   await consultarConCache('/establecimientos')
   expect(solicitar).toHaveBeenCalledTimes(2)
+})
+
+test('con otra sesión de la misma cuenta (otro login) se vuelve a pedir', async () => {
+  await consultarConCache('/establecimientos')
+  guardarSesion(crearSesion('7', 71))
+  await consultarConCache('/establecimientos')
+  expect(solicitar).toHaveBeenCalledTimes(2)
+})
+
+test('renovar el token (mismo sid, otro token) conserva la caché', async () => {
+  await consultarConCache('/establecimientos')
+  guardarSesion(crearSesion('7', 70, Math.floor(Date.now() / 1000) + 7200))
+  await consultarConCache('/establecimientos')
+  expect(solicitar).toHaveBeenCalledTimes(1)
 })
 
 test('un error no queda guardado', async () => {
