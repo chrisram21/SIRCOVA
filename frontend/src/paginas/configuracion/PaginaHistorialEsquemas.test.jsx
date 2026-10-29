@@ -116,3 +116,11 @@ test('si falla la carga muestra el aviso, y "Reintentar" vuelve a pedir', async 
   await waitFor(() => expect(filas()).toHaveLength(3))
   expect(historialEsquemas).toHaveBeenCalledTimes(2)
 })
+
+test('"Volver" regresa a la pestaña de la que se llegó', async () => {
+  await abrir()
+
+  fireEvent.click(screen.getByRole('link', { name: 'Volver' }))
+
+  await waitFor(() => expect(screen.getByTestId('ubicacion').textContent).toBe('/configuracion?pestana=esquemas|'))
+})

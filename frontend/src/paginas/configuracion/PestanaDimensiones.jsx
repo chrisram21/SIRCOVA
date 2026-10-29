@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
-import { CircleAlert, CircleCheck, Plus } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Plus } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,6 +20,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { desactivarDimension, listarDimensiones, reactivarDimension } from '@/api/configuracion.js'
+import { mensajeDeError } from '@/api/cliente.js'
+import { AvisoError } from '@/componentes/Avisos.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 
 // Radix Select no acepta '' como valor de una opción; "todas" equivale a no filtrar.
@@ -52,14 +54,13 @@ export default function PestanaDimensiones() {
   const { tienePermiso } = useSesion()
   const puedeCrear = tienePermiso('DIMENSION_CREAR')
   const puedeEditar = tienePermiso('DIMENSION_EDITAR')
-  const { search, state } = useLocation()
+  const { search } = useLocation()
   const [parametros, setParametros] = useSearchParams()
   // Un estado de la URL que no está entre las opciones (p. ej. escrito a mano) equivale a no filtrar.
   const filtroEstado = ESTADOS.some((e) => e.valor === parametros.get('activa')) ? parametros.get('activa') : TODAS
   const [dimensiones, setDimensiones] = useState(null)
   const [errorCarga, setErrorCarga] = useState(null)
-  // Empieza con el que trae el formulario en el state de la navegación.
-  const [aviso, setAviso] = useState(() => (state?.aviso ? { tipo: 'exito', mensaje: state.aviso } : null))
+  const [errorAccion, setErrorAccion] = useState(null)
   // null o { dimension, activar } mientras el AlertDialog de confirmación está abierto.
   const [porCambiar, setPorCambiar] = useState(null)
   const [cambiando, setCambiando] = useState(false)
@@ -75,7 +76,7 @@ export default function PestanaDimensiones() {
         if (carga === cargaActual.current) setDimensiones(lista)
       })
       .catch((err) => {
-        if (carga === cargaActual.current) setErrorCarga(err.mensaje)
+        if (carga === cargaActual.current) setErrorCarga(mensajeDeError(err))
       })
   }
 
@@ -104,16 +105,16 @@ export default function PestanaDimensiones() {
     evento.preventDefault()
     const { dimension, activar } = porCambiar
     setCambiando(true)
-    setAviso(null)
+    setErrorAccion(null)
     try {
       const actualizada = activar
         ? await reactivarDimension(dimension.codigo)
         : await desactivarDimension(dimension.codigo)
       // La fila se reemplaza con la respuesta, sin volver a pedir la lista.
       setDimensiones((actuales) => actuales.map((d) => (d.codigo === actualizada.codigo ? actualizada : d)))
-      setAviso({ tipo: 'exito', mensaje: `Dimensión ${actualizada.nombre} ${activar ? 'reactivada' : 'desactivada'}.` })
+      toast.success(`Dimensión ${actualizada.nombre} ${activar ? 'reactivada' : 'desactivada'}.`)
     } catch (err) {
-      setAviso({ tipo: 'error', mensaje: err.mensaje })
+      setErrorAccion(mensajeDeError(err))
     } finally {
       setCambiando(false)
       setPorCambiar(null)
@@ -121,33 +122,12 @@ export default function PestanaDimensiones() {
   }
 
   if (errorCarga) {
-    return (
-      <div className="flex flex-col items-start gap-3">
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>No se pudieron cargar las dimensiones: {errorCarga}</AlertDescription>
-        </Alert>
-        <Button variant="outline" onClick={cargar}>
-          Reintentar
-        </Button>
-      </div>
-    )
+    return <AvisoError onReintentar={cargar}>No se pudieron cargar las dimensiones: {errorCarga}</AvisoError>
   }
 
   return (
     <div className="flex flex-col gap-6">
-      {aviso?.tipo === 'exito' && (
-        <Alert role="status" className="border-ring/40 bg-accent text-accent-foreground">
-          <CircleCheck />
-          <AlertDescription className="text-accent-foreground">{aviso.mensaje}</AlertDescription>
-        </Alert>
-      )}
-      {aviso?.tipo === 'error' && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>{aviso.mensaje}</AlertDescription>
-        </Alert>
-      )}
+      {errorAccion && <AvisoError>{errorAccion}</AvisoError>}
       <Card>
         <CardHeader>
           <CardTitle>Dimensiones de desagregación</CardTitle>

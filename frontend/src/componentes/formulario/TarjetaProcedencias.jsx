@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, X } from 'lucide-react'
+import { MapPinned, Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -14,7 +14,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { etiquetaDeColumna, leerCantidad } from './FormularioCaptura.jsx'
+import { cn } from '@/lib/utils'
+import {
+  etiquetaDeColumna,
+  leerCantidad,
+  LetraTarjeta,
+  moverEntreCasillas,
+  seleccionarAlEntrar,
+} from './FormularioCaptura.jsx'
 
 const formatoCantidad = new Intl.NumberFormat('es-GT')
 
@@ -99,11 +106,17 @@ function TablaProcedencias({ tabla, filas, dondeEsta, nombreMunicipio, cantidade
 
   return (
     <div className="flex flex-col gap-2">
-      {tabla.titulo && <p className="text-sm font-medium">{tabla.titulo}</p>}
+      {tabla.titulo && (
+        <p className="flex items-center gap-2 text-sm font-semibold">
+          <span aria-hidden="true" className="size-1.5 rounded-full bg-ring" />
+          {tabla.titulo}
+        </p>
+      )}
+      <div className="overflow-hidden rounded-lg border bg-card">
       <Table aria-label={tabla.titulo ? `Otros municipios · ${tabla.titulo}` : 'Otros municipios'}>
         <TableHeader>
           {(encabezados.length > 0 ? encabezados : [[{ etiqueta: 'Cantidad', columnas: 1 }]]).map((nivel, n) => (
-            <TableRow key={n}>
+            <TableRow key={n} className="hover:bg-transparent">
               {n === 0 && (
                 <>
                   <TableHead rowSpan={niveles}>Municipio de procedencia</TableHead>
@@ -112,13 +125,22 @@ function TablaProcedencias({ tabla, filas, dondeEsta, nombreMunicipio, cantidade
                 </>
               )}
               {nivel.map(({ etiqueta, columnas: abarca }, i) => (
-                <TableHead key={i} colSpan={abarca} className="text-center">
+                <TableHead
+                  key={i}
+                  colSpan={abarca}
+                  className={cn(
+                    'h-auto py-2 text-center',
+                    encabezados.length > 1 && n === encabezados.length - 1
+                      ? 'text-xs leading-tight font-medium whitespace-normal text-muted-foreground'
+                      : 'bg-accent/40 font-semibold text-accent-foreground',
+                  )}
+                >
                   {etiqueta}
                 </TableHead>
               ))}
               {n === 0 && (
                 <>
-                  <TableHead rowSpan={niveles} className="text-right">
+                  <TableHead rowSpan={niveles} className="border-l bg-muted/60 text-right">
                     Total
                   </TableHead>
                   {!soloLectura && (
@@ -132,7 +154,7 @@ function TablaProcedencias({ tabla, filas, dondeEsta, nombreMunicipio, cantidade
           ))}
         </TableHeader>
         <TableBody>
-          {filas.map((fila) => {
+          {filas.map((fila, i) => {
             const ubicacion = dondeEsta.get(fila.dosis)
             const seccion = tabla.secciones[fila.seccion]
             const nombreFila = [
@@ -152,20 +174,28 @@ function TablaProcedencias({ tabla, filas, dondeEsta, nombreMunicipio, cantidade
                   const columna = etiquetaDeColumna(encabezados, k)
                   const texto = cantidades[llave] ?? ''
                   return (
-                    <TableCell key={llave} className="text-center">
+                    <TableCell key={llave} className="px-1.5 text-center">
                       <Input
                         aria-label={columna ? `${nombreFila} · ${columna}` : nombreFila}
                         inputMode="numeric"
+                        autoComplete="off"
+                        data-fila={i}
+                        data-col={k}
                         value={texto}
                         disabled={soloLectura}
                         aria-invalid={!leerCantidad(texto).valida || undefined}
                         onChange={(e) => alCambiar(llave, e.target.value)}
-                        className="w-20 text-right font-mono"
+                        onFocus={seleccionarAlEntrar}
+                        onKeyDown={moverEntreCasillas}
+                        className={cn(
+                          'mx-auto h-9 w-full max-w-24 min-w-14 bg-card text-center font-mono transition-colors',
+                          leerCantidad(texto).valida && texto.trim() !== '' && 'border-ring/50 bg-accent font-semibold text-accent-foreground',
+                        )}
                       />
                     </TableCell>
                   )
                 })}
-                <TableCell className="text-right font-mono" aria-label={`Total de ${nombreFila}`}>
+                <TableCell className="border-l bg-muted/40 text-right font-mono font-semibold" aria-label={`Total de ${nombreFila}`}>
                   {formatoCantidad.format(total)}
                 </TableCell>
                 {!soloLectura && (
@@ -186,6 +216,7 @@ function TablaProcedencias({ tabla, filas, dondeEsta, nombreMunicipio, cantidade
           })}
         </TableBody>
       </Table>
+      </div>
     </div>
   )
 }
@@ -349,10 +380,15 @@ export default function TarjetaProcedencias({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Dosis aplicadas a personas de otros municipios</CardTitle>
-        <CardDescription>
-          Se atribuyen al municipio de procedencia al calcular la cobertura. Solo cantidades, sin datos personales.
-        </CardDescription>
+        <div className="flex items-start gap-3">
+          <LetraTarjeta>B</LetraTarjeta>
+          <div className="flex flex-col gap-1.5">
+            <CardTitle className="text-base">Dosis aplicadas a personas de otros municipios</CardTitle>
+            <CardDescription>
+              Se atribuyen al municipio de procedencia al calcular la cobertura. Solo cantidades, sin datos personales.
+            </CardDescription>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {modo === 'PROPIO_Y_OTROS' && (
@@ -361,7 +397,10 @@ export default function TarjetaProcedencias({
           </p>
         )}
         {tablas.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No hay dosis de otros municipios.</p>
+          <div className="flex items-center gap-3 rounded-lg border border-dashed px-4 py-5 text-sm text-muted-foreground">
+            <MapPinned className="size-5 shrink-0 text-ring" aria-hidden="true" />
+            <p>No hay dosis de otros municipios.</p>
+          </div>
         ) : (
           <div className="flex flex-col gap-6 overflow-x-auto">
             {tablas.map(({ tabla, filas: deLaTabla }) => (

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { toast } from 'sonner'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { desactivarDimension, listarDimensiones, reactivarDimension } from '@/api/configuracion.js'
 import { ErrorApi } from '@/api/cliente.js'
@@ -205,7 +206,7 @@ describe('acciones', () => {
     expect(within(dialogo).getByText('¿Desactivar la dimensión Vía de aplicación?')).toBeTruthy()
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Desactivar' }))
 
-    expect(await screen.findByText('Dimensión Vía de aplicación desactivada.')).toBeTruthy()
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Dimensión Vía de aplicación desactivada.'))
     expect(desactivarDimension).toHaveBeenCalledWith('via')
     expect(insignias(celdasDe('via')[4])).toEqual(['Inactiva'])
     expect(screen.getByRole('button', { name: 'Reactivar via' })).toBeTruthy()
@@ -220,7 +221,7 @@ describe('acciones', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reactivar pueblo' }))
     fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Reactivar' }))
 
-    expect(await screen.findByText('Dimensión Pueblo de pertenencia reactivada.')).toBeTruthy()
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Dimensión Pueblo de pertenencia reactivada.'))
     expect(reactivarDimension).toHaveBeenCalledWith('pueblo')
     expect(insignias(celdasDe('pueblo')[4])).toEqual(['Activa'])
   })

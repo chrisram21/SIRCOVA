@@ -1,6 +1,4 @@
 import { useState } from 'react'
-import { CircleAlert } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -14,6 +12,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { crearDistrito, renombrarDistrito } from '@/api/catalogos.js'
+import { mensajeDeError } from '@/api/cliente.js'
+import { AvisoError } from '@/componentes/Avisos.jsx'
 import { LARGOS, validarNombreDistrito } from '@/validaciones/campos.js'
 
 const MENSAJE_MUNICIPIO = 'Elija el municipio del distrito.'
@@ -47,7 +47,7 @@ export default function DialogoDistrito({ distrito, municipios, alGuardar, alCer
       alGuardar(guardado)
     } catch (err) {
       // El Dialog sigue abierto para corregir y volver a intentar.
-      setErrorApi(err.mensaje)
+      setErrorApi(mensajeDeError(err))
       setGuardando(false)
     }
   }
@@ -65,12 +65,7 @@ export default function DialogoDistrito({ distrito, municipios, alGuardar, alCer
             </DialogDescription>
           </DialogHeader>
 
-          {errorApi && (
-            <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-              <CircleAlert />
-              <AlertDescription>{errorApi}</AlertDescription>
-            </Alert>
-          )}
+          {errorApi && <AvisoError>{errorApi}</AvisoError>}
 
           {renombrando ? (
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">

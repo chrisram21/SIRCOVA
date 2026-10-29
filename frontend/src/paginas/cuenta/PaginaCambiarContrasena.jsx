@@ -1,21 +1,27 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CircleAlert } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { cambiarContrasena } from '@/api/auth.js'
-import { ErrorApi } from '@/api/cliente.js'
+import { mensajeDeError } from '@/api/cliente.js'
+import { AvisoError } from '@/componentes/Avisos.jsx'
+import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import CampoContrasena from '@/componentes/contrasena/CampoContrasena.jsx'
 import MedidorContrasena from '@/componentes/contrasena/MedidorContrasena.jsx'
 import { cargarEvaluador } from '@/componentes/contrasena/politicaContrasena.js'
 
-const MENSAJE_INESPERADO = 'Ocurrió un error inesperado. Intente de nuevo.'
 const MOTIVO_IGUAL = 'Debe ser distinta de la actual.'
 
-const mensajeDe = (error) => (error instanceof ErrorApi ? error.mensaje : MENSAJE_INESPERADO)
+function MensajeError({ id, children }) {
+  if (!children) return null
+  return (
+    <p id={id} className="text-xs text-destructive">
+      {children}
+    </p>
+  )
+}
 
 // obligatoria: la cuenta tiene la contraseña temporal pendiente; se muestra sola, sin menú.
 export default function PaginaCambiarContrasena({ obligatoria = false }) {
@@ -26,8 +32,12 @@ export default function PaginaCambiarContrasena({ obligatoria = false }) {
   const [confirmacion, setConfirmacion] = useState('')
   const [evaluador, setEvaluador] = useState(null)
   const [errorCarga, setErrorCarga] = useState(false)
+  const [intentoCarga, setIntentoCarga] = useState(0)
   const [error, setError] = useState(null)
   const [enviando, setEnviando] = useState(false)
+  const [tocados, setTocados] = useState({})
+  // Después de intentar enviar, se ven los errores de todos los campos.
+  const [intentado, setIntentado] = useState(false)
 
   const { nombreUsuario, empleado } = sesion.usuario
   const necesitaEvaluador = nueva !== '' && evaluador === null
@@ -41,7 +51,12 @@ export default function PaginaCambiarContrasena({ obligatoria = false }) {
     return () => {
       vigente = false
     }
-  }, [necesitaEvaluador])
+  }, [necesitaEvaluador, intentoCarga])
+
+  function reintentarCarga() {
+    setErrorCarga(false)
+    setIntentoCarga((intento) => intento + 1)
+  }
 
   const resultado = useMemo(() => {
     if (!evaluador || nueva === '') return null
@@ -49,17 +64,36 @@ export default function PaginaCambiarContrasena({ obligatoria = false }) {
     return { puntaje, motivos: nueva === actual ? [...motivos, MOTIVO_IGUAL] : motivos }
   }, [evaluador, nueva, actual, nombreUsuario, empleado.nombres, empleado.apellidos])
 
-  const noCoincide = confirmacion !== '' && confirmacion !== nueva
-  const valido = actual !== '' && resultado !== null && resultado.motivos.length === 0 && confirmacion === nueva
+  // El medidor muestra los motivos de la nueva; aquí solo se marca como inválida.
+  const nuevaInvalida = nueva === '' || resultado === null || resultado.motivos.length > 0
+  const verError = (campo) => tocados[campo] || intentado
+  const errorActual = verError('actual') && actual === '' ? 'Escriba su contraseña actual.' : null
+  const errorNueva = verError('nueva') && nueva === '' ? 'Escriba la contraseña nueva.' : null
+  let errorConfirmacion = null
+  if (confirmacion !== '' && confirmacion !== nueva) errorConfirmacion = 'Las contraseñas no coinciden.'
+  else if (verError('confirmacion') && confirmacion === '') errorConfirmacion = 'Confirme la contraseña nueva.'
 
   const cambiar = (asignar) => (evento) => {
     asignar(evento.target.value)
     setError(null)
   }
+  const tocar = (campo) => () => setTocados((previos) => (previos[campo] ? previos : { ...previos, [campo]: true }))
 
   async function enviar(evento) {
     evento.preventDefault()
-    if (!valido || enviando) return
+    if (enviando) return
+
+    const invalidos = [
+      actual === '' && 'contrasena-actual',
+      nuevaInvalida && 'contrasena-nueva',
+      (confirmacion === '' || confirmacion !== nueva) && 'contrasena-confirmacion',
+    ].filter(Boolean)
+    if (invalidos.length > 0) {
+      setIntentado(true)
+      document.getElementById(invalidos[0])?.focus()
+      return
+    }
+
     setEnviando(true)
     setError(null)
     try {
@@ -67,7 +101,7 @@ export default function PaginaCambiarContrasena({ obligatoria = false }) {
       terminarTrasCambioContrasena()
       navegar('/login', { replace: true })
     } catch (err) {
-      setError(mensajeDe(err))
+      setError(mensajeDeError(err))
       setEnviando(false)
     }
   }
@@ -81,24 +115,26 @@ export default function PaginaCambiarContrasena({ obligatoria = false }) {
     }
   }
 
+  const describeNueva = ['medidor-contrasena', errorNueva && 'nueva-error'].filter(Boolean).join(' ')
+
   const formulario = (
     <form onSubmit={enviar} noValidate className="flex flex-col gap-5">
-      {error && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
       {errorCarga && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>No se pudo cargar el medidor de contraseñas. Recargue la página.</AlertDescription>
-        </Alert>
+        <AvisoError onReintentar={reintentarCarga}>No se pudo cargar el medidor de contraseñas.</AvisoError>
       )}
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="contrasena-actual">Contraseña actual</Label>
-        <CampoContrasena id="contrasena-actual" autoComplete="current-password" value={actual} onChange={cambiar(setActual)} />
+        <CampoContrasena
+          id="contrasena-actual"
+          autoComplete="current-password"
+          value={actual}
+          onChange={cambiar(setActual)}
+          onBlur={tocar('actual')}
+          aria-describedby={errorActual ? 'actual-error' : undefined}
+          aria-invalid={errorActual ? true : undefined}
+        />
+        <MensajeError id="actual-error">{errorActual}</MensajeError>
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -108,9 +144,11 @@ export default function PaginaCambiarContrasena({ obligatoria = false }) {
           autoComplete="new-password"
           value={nueva}
           onChange={cambiar(setNueva)}
-          aria-describedby="medidor-contrasena"
-          aria-invalid={resultado && resultado.motivos.length > 0 ? true : undefined}
+          onBlur={tocar('nueva')}
+          aria-describedby={describeNueva}
+          aria-invalid={errorNueva || (resultado && resultado.motivos.length > 0) ? true : undefined}
         />
+        <MensajeError id="nueva-error">{errorNueva}</MensajeError>
         <MedidorContrasena id="medidor-contrasena" contrasena={nueva} resultado={errorCarga ? null : resultado} />
         <p className="text-xs text-muted-foreground">
           Al menos 12 caracteres. Una frase de varias palabras es más fácil de recordar y difícil de adivinar.
@@ -124,18 +162,17 @@ export default function PaginaCambiarContrasena({ obligatoria = false }) {
           autoComplete="new-password"
           value={confirmacion}
           onChange={cambiar(setConfirmacion)}
-          aria-describedby={noCoincide ? 'confirmacion-error' : undefined}
-          aria-invalid={noCoincide ? true : undefined}
+          onBlur={tocar('confirmacion')}
+          aria-describedby={errorConfirmacion ? 'confirmacion-error' : undefined}
+          aria-invalid={errorConfirmacion ? true : undefined}
         />
-        {noCoincide && (
-          <p id="confirmacion-error" className="text-xs text-destructive">
-            Las contraseñas no coinciden.
-          </p>
-        )}
+        <MensajeError id="confirmacion-error">{errorConfirmacion}</MensajeError>
       </div>
 
+      {error && <AvisoError>{error}</AvisoError>}
+
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={!valido || enviando}>
+        <Button type="submit" disabled={enviando}>
           {enviando ? 'Cambiando…' : 'Cambiar contraseña'}
         </Button>
         <Button type="button" variant="outline" onClick={salir}>
@@ -163,7 +200,10 @@ export default function PaginaCambiarContrasena({ obligatoria = false }) {
 
   return (
     <section className="flex max-w-xl flex-col gap-6 p-6">
-      <h1 className="text-2xl font-semibold">Cambiar contraseña</h1>
+      <EncabezadoPagina
+        titulo="Cambiar contraseña"
+        descripcion="Después del cambio, deberá iniciar sesión con la contraseña nueva."
+      />
       <Card>
         <CardContent>{formulario}</CardContent>
       </Card>

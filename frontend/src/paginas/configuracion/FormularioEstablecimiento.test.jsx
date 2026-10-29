@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-router-dom'
+import { toast } from 'sonner'
 import {
   crearEstablecimiento,
   editarEstablecimiento,
@@ -79,20 +80,28 @@ function Ubicacion() {
 }
 const ubicacion = () => screen.getByTestId('ubicacion').textContent
 
+// El aviso de cambios sin guardar (useBlocker) necesita un data router.
 function montar(ruta, permisos = PERMISOS) {
   guardarSesion(crearSesion(permisos))
-  render(
-    <MemoryRouter initialEntries={[ruta]}>
-      <ProveedorSesion>
-        <Routes>
-          <Route path="/configuracion" element={<PaginaConfiguracion />} />
-          <Route path="/configuracion/establecimientos/nuevo" element={<PaginaRegistrarEstablecimiento />} />
-          <Route path="/configuracion/establecimientos/:id/editar" element={<PaginaEditarEstablecimiento />} />
-        </Routes>
-        <Ubicacion />
-      </ProveedorSesion>
-    </MemoryRouter>,
+  const router = createMemoryRouter(
+    [
+      {
+        element: (
+          <ProveedorSesion>
+            <Outlet />
+            <Ubicacion />
+          </ProveedorSesion>
+        ),
+        children: [
+          { path: '/configuracion', element: <PaginaConfiguracion /> },
+          { path: '/configuracion/establecimientos/nuevo', element: <PaginaRegistrarEstablecimiento /> },
+          { path: '/configuracion/establecimientos/:id/editar', element: <PaginaEditarEstablecimiento /> },
+        ],
+      },
+    ],
+    { initialEntries: [ruta] },
   )
+  render(<RouterProvider router={router} />)
 }
 
 async function abrirFormulario() {
@@ -189,7 +198,7 @@ test('sin tipo, municipio ni distrito avisa qué falta y no llama a la API', asy
   expect(crearEstablecimiento).not.toHaveBeenCalled()
 })
 
-test('registra uno de la sede con su distrito y vuelve a la pestaña con el aviso', async () => {
+test('registra uno de la sede con su distrito y vuelve a la pestaña con el aviso, sin pedir confirmación', async () => {
   crearEstablecimiento.mockResolvedValue({ id: 41, codigo: 'PS-1209-02' })
   await abrirFormulario()
   llenarPuesto()
@@ -211,7 +220,8 @@ test('registra uno de la sede con su distrito y vuelve a la pestaña con el avis
     reporta5c: false,
     soloCobertura: false,
   })
-  expect(await screen.findByText('Establecimiento PS-1209-02 registrado.')).toBeTruthy()
+  expect(toast.success).toHaveBeenCalledWith('Establecimiento PS-1209-02 registrado.')
+  expect(screen.queryByRole('alertdialog')).toBeNull()
 })
 
 test('un externo se envía sin distritoSaludId', async () => {
@@ -226,10 +236,10 @@ test('un externo se envía sin distritoSaludId', async () => {
   await waitFor(() => expect(crearEstablecimiento).toHaveBeenCalledTimes(1))
   expect(crearEstablecimiento.mock.calls[0][0]).not.toHaveProperty('distritoSaludId')
   expect(crearEstablecimiento.mock.calls[0][0]).toMatchObject({ municipioId: 32, reportaProduccion: true })
-  expect(await screen.findByText('Establecimiento CS-0920-01 registrado.')).toBeTruthy()
+  await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Establecimiento CS-0920-01 registrado.'))
 })
 
-test('un 409 de la API se muestra arriba y el formulario conserva lo escrito', async () => {
+test('un 409 de la API se muestra junto a los botones y el formulario conserva lo escrito', async () => {
   crearEstablecimiento.mockRejectedValue(
     new ErrorApi(409, 'ESTABLECIMIENTO_DUPLICADO', 'Ya hay un establecimiento con ese nombre en el municipio.'),
   )
@@ -238,24 +248,70 @@ test('un 409 de la API se muestra arriba y el formulario conserva lo escrito', a
 
   guardar()
 
-  expect(await screen.findByText('Ya hay un establecimiento con ese nombre en el municipio.')).toBeTruthy()
+  const aviso = (await screen.findByText('Ya hay un establecimiento con ese nombre en el municipio.')).closest('[role="alert"]')
+  // Va dentro del formulario, justo antes de la fila de botones.
+  expect(aviso.parentElement.nextElementSibling.contains(screen.getByRole('button', { name: 'Registrar establecimiento' }))).toBe(true)
   expect(screen.getByLabelText(/^Nombre\b/).value).toBe('Puesto de Salud Aldea Tochab')
   expect(ubicacion()).toBe('/configuracion/establecimientos/nuevo')
 })
 
-test('si falla la carga de los catálogos no se puede guardar', async () => {
-  listarTiposEstablecimiento.mockRejectedValue(new ErrorApi(500, 'ERROR_INESPERADO', 'Ocurrió un error inesperado.'))
+test('si falla la carga de los catálogos no se puede guardar, y "Reintentar" los vuelve a pedir', async () => {
+  listarTiposEstablecimiento.mockRejectedValueOnce(new ErrorApi(500, 'ERROR_INESPERADO', 'Ocurrió un error inesperado.'))
   montar('/configuracion/establecimientos/nuevo')
 
   expect(
     await screen.findByText('No se pudieron cargar los datos del formulario: Ocurrió un error inesperado.'),
   ).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Registrar establecimiento' }).disabled).toBe(true)
+
+  fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Registrar establecimiento' }).disabled).toBe(false))
+  expect(listarTiposEstablecimiento).toHaveBeenCalledTimes(2)
+  expect(screen.queryByText(/No se pudieron cargar los datos del formulario/)).toBeNull()
+})
+
+test('al guardar con errores, el foco va al primer campo inválido', async () => {
+  await abrirFormulario()
+  escribir(/^Nombre\b/, 'PS')
+
+  guardar()
+
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('combobox', { name: /^Tipo/ })))
+  expect(screen.getByRole('button', { name: 'Registrar establecimiento' }).disabled).toBe(false)
+})
+
+describe('cambios sin guardar', () => {
+  test('con algo escrito, "Cancelar" pide confirmación y "Seguir editando" se queda en el formulario', async () => {
+    await abrirFormulario()
+    escribir(/^Nombre\b/, 'Puesto de Salud Aldea Tochab')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+
+    const dialogo = await screen.findByRole('alertdialog')
+    expect(dialogo.textContent).toContain('Si sale ahora, se pierden los cambios del establecimiento.')
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Seguir editando' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(ubicacion()).toBe('/configuracion/establecimientos/nuevo')
+    expect(screen.getByLabelText(/^Nombre\b/).value).toBe('Puesto de Salud Aldea Tochab')
+  })
+
+  test('"Salir sin guardar" vuelve a la pestaña sin guardar', async () => {
+    await abrirFormulario()
+    elegir('tipo', 4)
+
+    fireEvent.click(screen.getByRole('link', { name: 'Volver' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Salir sin guardar' }))
+
+    await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=establecimientos'))
+    expect(crearEstablecimiento).not.toHaveBeenCalled()
+  })
 })
 
 test('el botón de la pestaña lleva al formulario, y "Cancelar" vuelve con los mismos filtros', async () => {
   montar('/configuracion?pestana=establecimientos&estado=activos')
-  fireEvent.click(await screen.findByRole('link', { name: 'Registrar establecimiento' }))
+  // Con la lista vacía, el enlace también aparece junto al mensaje: cualquiera de los dos sirve.
+  fireEvent.click((await screen.findAllByRole('link', { name: 'Registrar establecimiento' }))[0])
   await waitFor(() => expect(screen.getByLabelText(/^Nombre\b/).disabled).toBe(false))
 
   fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
@@ -322,10 +378,29 @@ describe('editar', () => {
     expect(casilla('Envía el 5C a la DDRISS').getAttribute('aria-checked')).toBe('true')
   })
 
-  test('sin cambios no se puede guardar', async () => {
+  test('sin cambios, "Guardar cambios" avisa que no hay nada que guardar y no llama a la API', async () => {
     await abrirEdicion()
 
-    expect(screen.getByRole('button', { name: 'Guardar cambios' }).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+
+    expect(toast.info).toHaveBeenCalledWith('No hay cambios que guardar.')
+    expect(editarEstablecimiento).not.toHaveBeenCalled()
+  })
+
+  test('sin cambios "Cancelar" vuelve sin preguntar; con un cambio pide confirmación', async () => {
+    await abrirEdicion()
+    escribir(/^Teléfono/, '5550 3010')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(await screen.findByRole('alertdialog')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Seguir editando' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+
+    // Al dejarlo como estaba ya no hay cambios.
+    escribir(/^Teléfono/, '1234')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=establecimientos'))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 
   test('envía solo lo que cambió y vuelve a la pestaña con el aviso', async () => {
@@ -343,7 +418,8 @@ describe('editar', () => {
       nombreContacto: null,
       soloCobertura: true,
     })
-    expect(await screen.findByText('Establecimiento PS-1201-33 actualizado.')).toBeTruthy()
+    expect(toast.success).toHaveBeenCalledWith('Establecimiento PS-1201-33 actualizado.')
+    expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 
   test('un campo que cambió con un valor inválido muestra el error y no llama a la API', async () => {

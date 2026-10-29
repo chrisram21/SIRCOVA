@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { CircleAlert, Search } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { listarEstablecimientos } from '@/api/catalogos.js'
+import { mensajeDeError } from '@/api/cliente.js'
 import { listarRoles } from '@/api/usuarios.js'
+import { AvisoError } from '@/componentes/Avisos.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 
 const ESPERA_BUSQUEDA = 300
@@ -50,6 +51,7 @@ export default function FiltrosUsuarios({ filtros, hayFiltros, alCambiar, alLimp
   const [establecimientos, setEstablecimientos] = useState([])
   const [fallaron, setFallaron] = useState({ roles: false, establecimientos: false })
   const [errorCatalogos, setErrorCatalogos] = useState(null)
+  const [intentoCarga, setIntentoCarga] = useState(0)
 
   const [texto, setTexto] = useState(filtros.busqueda ?? '')
   // La última búsqueda que este componente escribió en la URL; sirve para no pisar lo que se sigue escribiendo.
@@ -60,7 +62,7 @@ export default function FiltrosUsuarios({ filtros, hayFiltros, alCambiar, alLimp
     const fallo = (catalogo) => (err) => {
       if (!vigente) return
       setFallaron((actual) => ({ ...actual, [catalogo]: true }))
-      setErrorCatalogos(err.mensaje)
+      setErrorCatalogos(mensajeDeError(err))
     }
     if (verRoles) {
       listarRoles()
@@ -75,7 +77,13 @@ export default function FiltrosUsuarios({ filtros, hayFiltros, alCambiar, alLimp
     return () => {
       vigente = false
     }
-  }, [verRoles, verEstablecimientos])
+  }, [verRoles, verEstablecimientos, intentoCarga])
+
+  function reintentarCarga() {
+    setFallaron({ roles: false, establecimientos: false })
+    setErrorCatalogos(null)
+    setIntentoCarga((intento) => intento + 1)
+  }
 
   useEffect(() => {
     const busqueda = limpiar(texto)
@@ -162,10 +170,7 @@ export default function FiltrosUsuarios({ filtros, hayFiltros, alCambiar, alLimp
       </form>
 
       {errorCatalogos && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>No se pudieron cargar los filtros: {errorCatalogos}</AlertDescription>
-        </Alert>
+        <AvisoError onReintentar={reintentarCarga}>No se pudieron cargar los filtros: {errorCatalogos}</AvisoError>
       )}
     </div>
   )

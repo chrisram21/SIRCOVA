@@ -286,13 +286,17 @@ paths:
   /auth/yo:
     get:
       tags: [Autenticación]
-      summary: Datos de la sesión actual (usuario, empleado, rol y permisos)
+      summary: Datos de la cuenta y del empleado de la sesión actual (pantalla «Mi perfil»)
+      description: |
+        Siempre de la propia cuenta y sin permiso propio; también responde si la cuenta debe cambiar su
+        contraseña. Los permisos son los del token (los cambios aplican desde el siguiente inicio de sesión).
+        Nunca trae el CUI ni su huella, la contraseña, los intentos fallidos ni la fecha del bloqueo.
       responses:
         "200":
-          description: Sesión actual
+          description: La cuenta de la sesión actual
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/UsuarioSesion" }
+              schema: { $ref: "#/components/schemas/Perfil" }
         "401": { $ref: "#/components/responses/NoAutenticado" }
 
   # ---------------------------------------------------------------- Usuarios
@@ -3526,6 +3530,31 @@ components:
             ddrissId: { type: integer, nullable: true, description: NULL solo para AUTORIDAD de nivel nacional }
             establecimientoId: { type: integer, nullable: true }
             municipioId: { type: integer, nullable: true }
+
+    Perfil:
+      description: La sesión actual con los datos de su cuenta y de su empleado
+      allOf:
+        - { $ref: "#/components/schemas/UsuarioSesion" }
+        - type: object
+          properties:
+            ultimoAcceso:
+              type: string
+              format: date-time
+              nullable: true
+              description: El último inicio de sesión correcto (el de la sesión actual)
+            creadoEn: { type: string, format: date-time, description: Cuándo se creó la cuenta }
+            empleado:
+              type: object
+              properties:
+                id: { type: integer }
+                cuiRegistrado: { type: boolean, description: true si tiene un CUI registrado; el CUI nunca se devuelve }
+                cargo: { type: string, nullable: true }
+                correo: { type: string, nullable: true }
+                telefono: { type: string, nullable: true }
+                ddrissNombre: { type: string, nullable: true, description: NULL solo para AUTORIDAD de nivel nacional }
+                establecimientoCodigo: { type: string, nullable: true }
+                establecimientoNombre: { type: string, nullable: true }
+                municipioNombre: { type: string, nullable: true }
 
     CambioContrasenaEntrada:
       type: object

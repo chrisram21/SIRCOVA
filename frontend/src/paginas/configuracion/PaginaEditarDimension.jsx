@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
-import { ArrowDown, ArrowUp, CircleAlert, CircleCheck, Plus } from 'lucide-react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { useEffect, useRef, useState } from 'react'
+import { ArrowDown, ArrowUp, Plus } from 'lucide-react'
+import { Link, useLocation, useParams } from 'react-router-dom'
+import { toast } from 'sonner'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,7 +35,10 @@ import {
   ordenarValoresDimension,
   reactivarValorDimension,
 } from '@/api/configuracion.js'
-import { ErrorApi } from '@/api/cliente.js'
+import { ErrorApi, mensajeDeError } from '@/api/cliente.js'
+import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
+import { AvisoError } from '@/componentes/Avisos.jsx'
+import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import {
   LARGOS,
   validarDescripcionDimension,
@@ -45,13 +48,10 @@ import {
 import { Campo, CampoTexto } from '../usuarios/CamposEmpleado.jsx'
 import DialogoValorDimension from './DialogoValorDimension.jsx'
 
-const MENSAJE_INESPERADO = 'Ocurrió un error inesperado. Intente de nuevo.'
 // Ruta de la pestaña si se llegó a la página sin pasar por ella (p. ej. con la dirección escrita a mano).
 const PESTANA = '?pestana=dimensiones'
 const TIPOS = { CATEGORICA: 'Categórica', RANGO_EDAD: 'Rango de edad' }
 const SIN_GRUPOS = 'Todos los grupos de la clasificación de población ya están en esta dimensión.'
-
-const mensajeDe = (error) => (error instanceof ErrorApi ? error.mensaje : MENSAJE_INESPERADO)
 
 const REGLAS = { nombre: validarNombreDimension, descripcion: validarDescripcionDimension }
 
@@ -94,12 +94,22 @@ function DialogoEtiqueta({ dimension, valor, alGuardar, alCerrar }) {
   const [error, setError] = useState(null)
   const [errorApi, setErrorApi] = useState(null)
   const [guardando, setGuardando] = useState(false)
+  // Cada intento con error sube este número; un efecto lleva el foco al campo.
+  const [revisar, setRevisar] = useState(0)
+  const campo = useRef(null)
+
+  useEffect(() => {
+    if (revisar > 0) campo.current?.focus()
+  }, [revisar])
 
   async function guardar(evento) {
     evento.preventDefault()
     const validacion = validarEtiquetaValorDimension(etiqueta)
     setError(validacion.error ?? null)
-    if (validacion.error) return
+    if (validacion.error) {
+      setRevisar((n) => n + 1)
+      return
+    }
     if (validacion.valor === valor.etiqueta) return alCerrar()
     setGuardando(true)
     setErrorApi(null)
@@ -107,7 +117,7 @@ function DialogoEtiqueta({ dimension, valor, alGuardar, alCerrar }) {
       const actualizada = await editarValorDimension(dimension.codigo, valor.codigo, { etiqueta: validacion.valor })
       alGuardar(actualizada, `Etiqueta de ${valor.codigo} actualizada.`)
     } catch (err) {
-      setErrorApi(mensajeDe(err))
+      setErrorApi(mensajeDeError(err))
       setGuardando(false)
     }
   }
@@ -120,13 +130,9 @@ function DialogoEtiqueta({ dimension, valor, alGuardar, alCerrar }) {
             <DialogTitle>Editar la etiqueta de {valor.codigo}</DialogTitle>
             <DialogDescription>El código, el orden y el rango de edad no cambian.</DialogDescription>
           </DialogHeader>
-          {errorApi && (
-            <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-              <CircleAlert />
-              <AlertDescription>{errorApi}</AlertDescription>
-            </Alert>
-          )}
+          {errorApi && <AvisoError>{errorApi}</AvisoError>}
           <CampoTexto
+            ref={campo}
             id="etiqueta-valor"
             etiqueta="Etiqueta"
             obligatorio
@@ -263,7 +269,6 @@ function TablaValores({ dimension, ocupado, alMover, alEditar, alCambiarEstado }
 
 export default function PaginaEditarDimension() {
   const { codigo } = useParams()
-  const navigate = useNavigate()
   const { state } = useLocation()
   // La pestaña manda su filtro al abrir la página, para volver a ella con el mismo.
   const volverA = `/configuracion${state?.volverA || PESTANA}`
@@ -276,13 +281,19 @@ export default function PaginaEditarDimension() {
   const [intentado, setIntentado] = useState(false)
   const [errorGuardar, setErrorGuardar] = useState(null)
   const [guardando, setGuardando] = useState(false)
-  const [avisoDatos, setAvisoDatos] = useState(null)
-  const [aviso, setAviso] = useState(null)
+  // Cada intento de envío con errores sube este número; un efecto lleva el foco al primer campo inválido.
+  const [revisar, setRevisar] = useState(0)
+  // Cada «Reintentar» sube este número y vuelve a cargar.
+  const [intentoCarga, setIntentoCarga] = useState(0)
+  // El error de una acción sobre los valores; los éxitos van en un toast.
+  const [errorValores, setErrorValores] = useState(null)
   // null, { tipo: 'agregar' } o { tipo: 'etiqueta', valor } mientras un Dialog está abierto.
   const [dialogo, setDialogo] = useState(null)
   // null o { valor, activar } mientras el AlertDialog de confirmación está abierto.
   const [porCambiar, setPorCambiar] = useState(null)
   const [ocupado, setOcupado] = useState(false)
+  const formulario = useRef(null)
+  const avisoError = useRef(null)
 
   useEffect(() => {
     let vigente = true
@@ -295,15 +306,26 @@ export default function PaginaEditarDimension() {
       .catch((err) => {
         if (!vigente) return
         if (err instanceof ErrorApi && err.status === 404) setNoExiste(true)
-        else setErrorCarga(mensajeDe(err))
+        else setErrorCarga(mensajeDeError(err))
       })
     return () => {
       vigente = false
     }
-  }, [codigo])
+  }, [codigo, intentoCarga])
 
   const cambios = dimension ? cambiosDe(aDatos(dimension), datos) : {}
   const hayCambios = Object.keys(cambios).length > 0
+  // Solo los datos de la dimensión: las acciones sobre los valores se guardan al confirmarlas.
+  const bloqueo = useAvisoCambiosSinGuardar(hayCambios)
+
+  useEffect(() => {
+    if (revisar > 0) formulario.current?.querySelector('[aria-invalid="true"]')?.focus()
+  }, [revisar])
+
+  useEffect(() => {
+    if (errorGuardar) avisoError.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [errorGuardar])
+
   // Solo se validan los campos que cambian, como el backend.
   const errores = {}
   for (const campo of Object.keys(cambios)) {
@@ -316,38 +338,51 @@ export default function PaginaEditarDimension() {
   async function guardarDatos(evento) {
     evento.preventDefault()
     setIntentado(true)
-    if (guardando || !hayCambios || Object.keys(errores).length > 0) return
+    if (guardando) return
+    if (Object.keys(errores).length > 0) {
+      setRevisar((n) => n + 1)
+      return
+    }
+    if (!hayCambios) {
+      toast.info('No hay cambios que guardar.')
+      return
+    }
     setGuardando(true)
     setErrorGuardar(null)
-    setAvisoDatos(null)
     try {
       const actualizada = await editarDimension(dimension.codigo, cambios)
       setDimension(actualizada)
       setDatos(aDatos(actualizada))
       setIntentado(false)
-      setAvisoDatos(`Dimensión ${actualizada.nombre} actualizada.`)
+      toast.success(`Dimensión ${actualizada.nombre} actualizada.`)
     } catch (err) {
-      setErrorGuardar(mensajeDe(err))
+      setErrorGuardar(mensajeDeError(err))
     } finally {
       setGuardando(false)
     }
   }
 
+  function reintentarCarga() {
+    setErrorCarga(null)
+    setIntentoCarga((n) => n + 1)
+  }
+
   function alGuardarValor(actualizada, mensaje) {
     setDimension(actualizada)
     setDialogo(null)
-    setAviso({ tipo: 'exito', mensaje })
+    setErrorValores(null)
+    toast.success(mensaje)
   }
 
   // Ejecuta una acción sobre los valores y reemplaza la dimensión con la respuesta.
   async function accionDeValores(accion, mensaje) {
     setOcupado(true)
-    setAviso(null)
+    setErrorValores(null)
     try {
       setDimension(await accion())
-      setAviso({ tipo: 'exito', mensaje })
+      toast.success(mensaje)
     } catch (err) {
-      setAviso({ tipo: 'error', mensaje: mensajeDe(err) })
+      setErrorValores(mensajeDeError(err))
     } finally {
       setOcupado(false)
     }
@@ -378,32 +413,21 @@ export default function PaginaEditarDimension() {
 
   return (
     <section className="flex max-w-5xl flex-col gap-6 p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Editar dimensión</h1>
-        <Button type="button" variant="outline" onClick={() => navigate(volverA)} disabled={guardando}>
-          Volver
-        </Button>
-      </div>
+      <EncabezadoPagina antetitulo="Configuración" titulo="Editar dimensión" volverA={volverA} />
 
       {noExiste && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>
-            <span>
-              La dimensión no existe.{' '}
-              <Link to={volverA} className="underline">
-                Volver a las dimensiones
-              </Link>
-            </span>
-          </AlertDescription>
-        </Alert>
+        <AvisoError>
+          <span>
+            La dimensión no existe.{' '}
+            <Link to={volverA} className="underline">
+              Volver a las dimensiones
+            </Link>
+          </span>
+        </AvisoError>
       )}
 
       {errorCarga && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>No se pudo cargar la dimensión: {errorCarga}</AlertDescription>
-        </Alert>
+        <AvisoError onReintentar={reintentarCarga}>No se pudo cargar la dimensión: {errorCarga}</AvisoError>
       )}
 
       {!dimension && !noExiste && !errorCarga && (
@@ -418,25 +442,13 @@ export default function PaginaEditarDimension() {
 
       {dimension && (
         <>
-          <form onSubmit={guardarDatos} noValidate>
+          <form ref={formulario} onSubmit={guardarDatos} noValidate>
             <Card>
               <CardHeader>
                 <CardTitle>Datos de la dimensión</CardTitle>
                 <CardDescription>Catálogo nacional: los cambios aplican a todas las DDRISS.</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
-                {errorGuardar && (
-                  <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-                    <CircleAlert />
-                    <AlertDescription>{errorGuardar}</AlertDescription>
-                  </Alert>
-                )}
-                {avisoDatos && (
-                  <Alert role="status" className="border-ring/40 bg-accent text-accent-foreground">
-                    <CircleCheck />
-                    <AlertDescription className="text-accent-foreground">{avisoDatos}</AlertDescription>
-                  </Alert>
-                )}
                 <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">
                   <dt className="text-muted-foreground">Código</dt>
                   <dd className="font-medium">{dimension.codigo}</dd>
@@ -471,8 +483,13 @@ export default function PaginaEditarDimension() {
                   />
                   <MensajeError id="descripcion-error" mensaje={errorDe('descripcion')} />
                 </Campo>
+                {errorGuardar && (
+                  <div ref={avisoError}>
+                    <AvisoError>{errorGuardar}</AvisoError>
+                  </div>
+                )}
                 <div>
-                  <Button type="submit" disabled={guardando || !hayCambios}>
+                  <Button type="submit" disabled={guardando}>
                     {guardando ? 'Guardando…' : 'Guardar cambios'}
                   </Button>
                 </div>
@@ -495,18 +512,7 @@ export default function PaginaEditarDimension() {
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               {sinGrupos && <p className="text-sm text-muted-foreground">{SIN_GRUPOS}</p>}
-              {aviso?.tipo === 'exito' && (
-                <Alert role="status" className="border-ring/40 bg-accent text-accent-foreground">
-                  <CircleCheck />
-                  <AlertDescription className="text-accent-foreground">{aviso.mensaje}</AlertDescription>
-                </Alert>
-              )}
-              {aviso?.tipo === 'error' && (
-                <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-                  <CircleAlert />
-                  <AlertDescription>{aviso.mensaje}</AlertDescription>
-                </Alert>
-              )}
+              {errorValores && <AvisoError>{errorValores}</AvisoError>}
               <TablaValores
                 dimension={dimension}
                 ocupado={ocupado}
@@ -556,6 +562,8 @@ export default function PaginaEditarDimension() {
           </AlertDialog>
         </>
       )}
+
+      <AvisoCambiosSinGuardar bloqueo={bloqueo} descripcion="Si sale ahora, se pierden los cambios de la dimensión." />
     </section>
   )
 }

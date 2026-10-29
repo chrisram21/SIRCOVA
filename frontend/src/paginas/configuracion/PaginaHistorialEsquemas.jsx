@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { CircleAlert } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { historialEsquemas } from '@/api/configuracion.js'
-import { ErrorApi } from '@/api/cliente.js'
+import { ErrorApi, mensajeDeError } from '@/api/cliente.js'
+import { AvisoError } from '@/componentes/Avisos.jsx'
+import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { aDiaMesAnio } from './DialogoPublicarEsquema.jsx'
 import { PESTANA_ESQUEMAS } from './EditorEsquema.jsx'
 import { territorioDe } from './PestanaEsquemas.jsx'
@@ -39,7 +39,6 @@ export function textoPublicacion({ publicadoEn, publicadoPor }) {
 
 export default function PaginaHistorialEsquemas() {
   const { vacunaId } = useParams()
-  const navigate = useNavigate()
   const { state } = useLocation()
   const pestana = state?.volverA || PESTANA_ESQUEMAS
   const volverA = `/configuracion${pestana}`
@@ -58,7 +57,7 @@ export default function PaginaHistorialEsquemas() {
       })
       .catch((err) => {
         if (carga !== cargaActual.current) return
-        setError(err instanceof ErrorApi && err.status === 404 ? NO_EXISTE : err.mensaje)
+        setError(err instanceof ErrorApi && err.status === 404 ? NO_EXISTE : mensajeDeError(err))
       })
   }
 
@@ -71,41 +70,25 @@ export default function PaginaHistorialEsquemas() {
 
   return (
     <section className="flex max-w-6xl flex-col gap-6 p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-semibold">
-            {historial ? `Historial de ${historial.vacuna.nombre}` : 'Historial del esquema'}
-          </h1>
-          {historial && !historial.vacuna.activa && <Badge variant="outline">Inactiva</Badge>}
-        </div>
-        <Button type="button" variant="outline" onClick={() => navigate(volverA)}>
-          Volver
-        </Button>
-      </div>
+      <EncabezadoPagina
+        antetitulo="Configuración"
+        titulo={historial ? `Historial de ${historial.vacuna.nombre}` : 'Historial del esquema'}
+        descripcion={historial && !historial.vacuna.activa && <Badge variant="outline">Inactiva</Badge>}
+        volverA={volverA}
+      />
 
       {error === NO_EXISTE && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>
-            <span>
-              La vacuna no existe.{' '}
-              <Link to={volverA} className="underline">
-                Volver a los esquemas
-              </Link>
-            </span>
-          </AlertDescription>
-        </Alert>
+        <AvisoError>
+          <span>
+            La vacuna no existe.{' '}
+            <Link to={volverA} className="underline">
+              Volver a los esquemas
+            </Link>
+          </span>
+        </AvisoError>
       )}
       {error && error !== NO_EXISTE && (
-        <div className="flex flex-col items-start gap-3">
-          <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-            <CircleAlert />
-            <AlertDescription>No se pudo cargar el historial: {error}</AlertDescription>
-          </Alert>
-          <Button variant="outline" onClick={cargar}>
-            Reintentar
-          </Button>
-        </div>
+        <AvisoError onReintentar={cargar}>No se pudo cargar el historial: {error}</AvisoError>
       )}
 
       {!error && (

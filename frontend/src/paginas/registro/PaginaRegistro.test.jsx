@@ -244,6 +244,45 @@ test('si falla la carga lo dice y permite reintentar', async () => {
   expect(await screen.findByText(/No hay meses abiertos para reportar/)).toBeTruthy()
 })
 
+test('pide el formulario a la vez que el detalle del reporte, sin esperarlo, y lo pide una sola vez', async () => {
+  prepararApi({ reportesPorMes: { 9: resumen(7, SEPTIEMBRE) } })
+  let entregarDetalle
+  obtenerReporte.mockImplementation(() => new Promise((resolver) => (entregarDetalle = resolver)))
+  montar('/registro?periodo=9')
+
+  await waitFor(() => expect(obtenerReporte).toHaveBeenCalledWith(7))
+  expect(obtenerFormulario).toHaveBeenCalledWith(7)
+
+  entregarDetalle(detalle(7, SEPTIEMBRE))
+  await waitFor(() => expect(screen.queryByLabelText('Cargando formulario')).toBeNull())
+  expect(obtenerFormulario).toHaveBeenCalledTimes(1)
+})
+
+test('si falla el detalle del reporte, «Reintentar» lo vuelve a pedir', async () => {
+  prepararApi({ reportesPorMes: { 9: resumen(7, SEPTIEMBRE) } })
+  obtenerReporte.mockRejectedValueOnce(new ErrorApi(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.'))
+  await abrir('/registro?periodo=9')
+
+  expect(await screen.findByText('No se pudo conectar con el servidor.')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+  await waitFor(() => expect(obtenerReporte).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(screen.queryByText('No se pudo conectar con el servidor.')).toBeNull())
+})
+
+test('la fecha límite dice cuánto falta mientras el reporte no se envía, y se marca si ya venció', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  try {
+    vi.setSystemTime(new Date(2026, 9, 28, 10, 0, 0))
+    prepararApi({ reportesPorMes: { 9: resumen(7, SEPTIEMBRE) } })
+    await abrir('/registro?periodo=9')
+    const plazo = screen.getByText(/Fecha límite de envío/)
+    expect(plazo.textContent).toBe('Fecha límite de envío: 10/10/2026 (venció hace 18 días)')
+    expect(plazo.className).toContain('text-destructive')
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
 describe('cambiar de mes con cambios sin guardar', () => {
   // Hexavalente con una sola celda para escribir; Td sin esquema.
   const formularioConHexa = (reporteId) => ({

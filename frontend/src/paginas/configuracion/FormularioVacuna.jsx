@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, CircleAlert, CircleCheck, Plus, Trash2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ArrowDown, ArrowUp, CircleCheck, Plus, Trash2 } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -11,7 +11,10 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { crearVacuna } from '@/api/catalogos.js'
-import { ErrorApi } from '@/api/cliente.js'
+import { mensajeDeError } from '@/api/cliente.js'
+import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
+import { AvisoError } from '@/componentes/Avisos.jsx'
+import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import {
   LARGOS,
   validarCodigoVacuna,
@@ -22,13 +25,10 @@ import {
 import { Campo, CampoTexto } from '../usuarios/CamposEmpleado.jsx'
 import { codigosDeLista, errorDeSecuencia, nombreSugerido, queCompleta, TIPOS_DOSIS } from './secuenciaDosis.js'
 
-const MENSAJE_INESPERADO = 'Ocurrió un error inesperado. Intente de nuevo.'
 // Ruta de la pestaña si se llegó al formulario sin pasar por ella (p. ej. con la dirección escrita a mano).
 const PESTANA = '?pestana=vacunas'
 export const ORDEN_INFORME_MAXIMO = 65535
 export const MENSAJE_ORDEN = `El orden en el informe debe ser un número entero entre 0 y ${ORDEN_INFORME_MAXIMO}.`
-
-const mensajeDe = (error) => (error instanceof ErrorApi ? error.mensaje : MENSAJE_INESPERADO)
 
 // Vacío es válido: al registrar, el backend pone la vacuna al final del informe.
 export function validarOrdenInforme(valor) {
@@ -195,11 +195,41 @@ export default function FormularioVacuna() {
   const [intentado, setIntentado] = useState(false)
   const [error, setError] = useState(null)
   const [enviando, setEnviando] = useState(false)
+  // Tras guardar se sale en un efecto, cuando el aviso de cambios sin guardar ya no bloquea.
+  const [guardado, setGuardado] = useState(false)
+  // Cada intento de envío con errores sube este número; un efecto lleva el foco al primer campo inválido.
+  const [revisar, setRevisar] = useState(0)
+  const formulario = useRef(null)
+  const avisoSecuencia = useRef(null)
+  const avisoError = useRef(null)
 
   const codigos = codigosDeLista(filas.map((f) => f.tipo))
   const completa = queCompleta(codigos)
   const errorSecuencia = errorDeSecuencia(filas.map((f) => f.tipo))
   const errores = erroresDe(datos, filas)
+  const hayCambios =
+    Object.values(datos).some((valor) => valor !== '') ||
+    filas.length !== 1 ||
+    filas[0].tipo !== '' ||
+    filas[0].nombre !== '' ||
+    filas[0].esTrazadora
+  const bloqueo = useAvisoCambiosSinGuardar(hayCambios && !guardado)
+
+  useEffect(() => {
+    if (guardado) navigate(volverA)
+  }, [guardado, navigate, volverA])
+
+  // El error de secuencia no es de un campo: si es el único, se lleva a la vista.
+  useEffect(() => {
+    if (revisar === 0) return
+    const campo = formulario.current?.querySelector('[aria-invalid="true"]')
+    if (campo) campo.focus()
+    else avisoSecuencia.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [revisar])
+
+  useEffect(() => {
+    if (error) avisoError.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [error])
   const errorDe = (campo) => (intentado || tocados[campo] ? errores[campo] : undefined)
 
   const tocar = (campo) => () => setTocados((actual) => (actual[campo] ? actual : { ...actual, [campo]: true }))
@@ -235,34 +265,28 @@ export default function FormularioVacuna() {
   async function enviar(evento) {
     evento.preventDefault()
     setIntentado(true)
-    if (enviando || errorSecuencia || Object.keys(errores).length > 0) return
+    if (enviando) return
+    if (errorSecuencia || Object.keys(errores).length > 0) {
+      setRevisar((n) => n + 1)
+      return
+    }
     setEnviando(true)
     setError(null)
     try {
       const vacuna = await crearVacuna(armarCuerpo(datos, filas))
-      navigate(volverA, {
-        state: {
-          aviso: `Vacuna ${vacuna.codigo} registrada. Falta crear su esquema de captura para que aparezca en el formulario.`,
-        },
-      })
+      toast.success(`Vacuna ${vacuna.codigo} registrada. Falta crear su esquema de captura para que aparezca en el formulario.`)
+      setGuardado(true)
     } catch (err) {
-      setError(mensajeDe(err))
+      setError(mensajeDeError(err))
       setEnviando(false)
     }
   }
 
   return (
     <section className="flex max-w-3xl flex-col gap-6 p-6">
-      <h1 className="text-2xl font-semibold">Registrar vacuna</h1>
+      <EncabezadoPagina antetitulo="Configuración" titulo="Registrar vacuna" volverA={volverA} />
 
-      {error && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      <form onSubmit={enviar} noValidate className="flex flex-col gap-6">
+      <form ref={formulario} onSubmit={enviar} noValidate className="flex flex-col gap-6">
         <Card>
           <CardHeader>
             <CardTitle>Datos de la vacuna</CardTitle>
@@ -326,10 +350,9 @@ export default function FormularioVacuna() {
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             {errorSecuencia && (
-              <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-                <CircleAlert />
-                <AlertDescription>{errorSecuencia}</AlertDescription>
-              </Alert>
+              <div ref={avisoSecuencia}>
+                <AvisoError>{errorSecuencia}</AvisoError>
+              </div>
             )}
             <ol className="flex flex-col gap-3" aria-label="Dosis de la vacuna">
               {filas.map((fila, i) => (
@@ -370,6 +393,12 @@ export default function FormularioVacuna() {
           </CardContent>
         </Card>
 
+        {error && (
+          <div ref={avisoError}>
+            <AvisoError>{error}</AvisoError>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-3">
           <Button type="submit" disabled={enviando}>
             {enviando ? 'Guardando…' : 'Registrar vacuna'}
@@ -379,6 +408,8 @@ export default function FormularioVacuna() {
           </Button>
         </div>
       </form>
+
+      <AvisoCambiosSinGuardar bloqueo={bloqueo} descripcion="Si sale ahora, se pierden los datos de la vacuna." />
     </section>
   )
 }

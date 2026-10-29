@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react'
-import { CircleAlert } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -24,7 +23,10 @@ import {
   listarTiposEstablecimiento,
   obtenerEstablecimiento,
 } from '@/api/catalogos.js'
-import { ErrorApi } from '@/api/cliente.js'
+import { mensajeDeError } from '@/api/cliente.js'
+import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
+import { AvisoError } from '@/componentes/Avisos.jsx'
+import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import {
   LARGOS,
   validarCorreo,
@@ -35,7 +37,6 @@ import {
 } from '@/validaciones/campos.js'
 import { Campo, CampoTexto } from '../usuarios/CamposEmpleado.jsx'
 
-const MENSAJE_INESPERADO = 'Ocurrió un error inesperado. Intente de nuevo.'
 const MIGRANTES = '9999'
 // Ruta de la pestaña si se llegó al formulario sin pasar por ella (p. ej. con la dirección escrita a mano).
 const PESTANA = '?pestana=establecimientos'
@@ -56,8 +57,6 @@ const VACIO = {
   reporta5c: false,
   soloCobertura: false,
 }
-
-const mensajeDe = (error) => (error instanceof ErrorApi ? error.mensaje : MENSAJE_INESPERADO)
 
 // En un establecimiento el correo es opcional; con texto, sigue la regla del correo.
 const correoOpcional = (valor) => (valor.trim() === '' ? { valor: null } : validarCorreo(valor))
@@ -197,11 +196,19 @@ export default function FormularioEstablecimiento({ id }) {
   const [intentado, setIntentado] = useState(false)
   const [error, setError] = useState(null)
   const [enviando, setEnviando] = useState(false)
+  // Tras guardar se sale en un efecto, cuando el aviso de cambios sin guardar ya no bloquea.
+  const [guardado, setGuardado] = useState(false)
+  // Cada intento de envío con errores sube este número; un efecto lleva el foco al primer campo inválido.
+  const [revisar, setRevisar] = useState(0)
+  // Cada «Reintentar» sube este número y vuelve a cargar.
+  const [intentoCarga, setIntentoCarga] = useState(0)
+  const formulario = useRef(null)
+  const avisoError = useRef(null)
 
   useEffect(() => {
     let vigente = true
     const fallo = (err) => {
-      if (vigente) setErrorCarga(mensajeDe(err))
+      if (vigente) setErrorCarga(mensajeDeError(err))
     }
     if (editando) {
       obtenerEstablecimiento(id)
@@ -226,7 +233,7 @@ export default function FormularioEstablecimiento({ id }) {
     return () => {
       vigente = false
     }
-  }, [editando, id])
+  }, [editando, id, intentoCarga])
 
   const departamentosSede = new Set((catalogos?.ddriss ?? []).map((d) => d.departamentoId))
   const municipios = (catalogos?.municipios ?? []).filter((m) => m.codigoIne !== MIGRANTES)
@@ -237,7 +244,10 @@ export default function FormularioEstablecimiento({ id }) {
   const distritos = (catalogos?.distritos ?? []).filter((d) => String(d.municipioId) === datos.municipioId)
 
   const cambios = base ? cambiosDe(aDatos(base), datos) : {}
-  const hayCambios = Object.keys(cambios).length > 0
+  const hayCambios = editando
+    ? Object.keys(cambios).length > 0
+    : Object.keys(VACIO).some((campo) => datos[campo] !== VACIO[campo])
+  const bloqueo = useAvisoCambiosSinGuardar(hayCambios && !guardado)
   const errores = erroresDe(datos, { externo, editando, campos: editando ? Object.keys(cambios) : TEXTOS })
   const errorDe = (campo) => (intentado || tocados[campo] ? errores[campo] : undefined)
   const cargado = editando ? base !== null : catalogos !== null
@@ -263,20 +273,45 @@ export default function FormularioEstablecimiento({ id }) {
       ...(marcado ? {} : { reporta5c: false, soloCobertura: false }),
     }))
 
+  useEffect(() => {
+    if (guardado) navigate(volverA)
+  }, [guardado, navigate, volverA])
+
+  useEffect(() => {
+    if (revisar > 0) formulario.current?.querySelector('[aria-invalid="true"]')?.focus()
+  }, [revisar])
+
+  useEffect(() => {
+    if (error) avisoError.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [error])
+
+  function reintentarCarga() {
+    setErrorCarga(null)
+    setIntentoCarga((n) => n + 1)
+  }
+
   async function enviar(evento) {
     evento.preventDefault()
     setIntentado(true)
-    if (deshabilitado || (editando && !hayCambios) || Object.keys(errores).length > 0) return
+    if (deshabilitado) return
+    if (Object.keys(errores).length > 0) {
+      setRevisar((n) => n + 1)
+      return
+    }
+    if (editando && !hayCambios) {
+      toast.info('No hay cambios que guardar.')
+      return
+    }
     setEnviando(true)
     setError(null)
     try {
-      const guardado = editando
+      const respuesta = editando
         ? await editarEstablecimiento(id, cambios)
         : await crearEstablecimiento(armarCuerpo(datos, externo))
-      const accion = editando ? 'actualizado' : 'registrado'
-      navigate(volverA, { state: { aviso: `Establecimiento ${guardado.codigo} ${accion}.` } })
+      toast.success(`Establecimiento ${respuesta.codigo} ${editando ? 'actualizado' : 'registrado'}.`)
+      setGuardado(true)
     } catch (err) {
-      setError(mensajeDe(err))
+      setError(mensajeDeError(err))
       setEnviando(false)
     }
   }
@@ -285,23 +320,15 @@ export default function FormularioEstablecimiento({ id }) {
 
   return (
     <section className="flex max-w-3xl flex-col gap-6 p-6">
-      <h1 className="text-2xl font-semibold">{titulo}</h1>
+      <EncabezadoPagina antetitulo="Configuración" titulo={titulo} volverA={volverA} />
 
       {errorCarga && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>No se pudieron cargar los datos del formulario: {errorCarga}</AlertDescription>
-        </Alert>
+        <AvisoError onReintentar={reintentarCarga}>
+          No se pudieron cargar los datos del formulario: {errorCarga}
+        </AvisoError>
       )}
 
-      {error && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      <form onSubmit={enviar} noValidate className="flex flex-col gap-6">
+      <form ref={formulario} onSubmit={enviar} noValidate className="flex flex-col gap-6">
         <Card>
           <CardHeader>
             <CardTitle>Ubicación y tipo</CardTitle>
@@ -446,8 +473,14 @@ export default function FormularioEstablecimiento({ id }) {
           </CardContent>
         </Card>
 
+        {error && (
+          <div ref={avisoError}>
+            <AvisoError>{error}</AvisoError>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-3">
-          <Button type="submit" disabled={deshabilitado || (editando && !hayCambios)}>
+          <Button type="submit" disabled={deshabilitado}>
             {enviando ? 'Guardando…' : editando ? 'Guardar cambios' : 'Registrar establecimiento'}
           </Button>
           <Button type="button" variant="outline" onClick={() => navigate(volverA)} disabled={enviando}>
@@ -455,6 +488,11 @@ export default function FormularioEstablecimiento({ id }) {
           </Button>
         </div>
       </form>
+
+      <AvisoCambiosSinGuardar
+        bloqueo={bloqueo}
+        descripcion="Si sale ahora, se pierden los cambios del establecimiento."
+      />
     </section>
   )
 }

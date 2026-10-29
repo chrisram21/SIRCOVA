@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { toast } from 'sonner'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { consultarPoblacion, guardarPoblacion, listarPeriodos } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
@@ -178,6 +179,37 @@ test('sin años en el calendario lo dice y no pide la población', async () => {
   expect(consultarPoblacion).not.toHaveBeenCalled()
 })
 
+test('sin años y con PERIODO_CREAR, el aviso lleva a la pestaña Periodos', async () => {
+  listarPeriodos.mockResolvedValue([])
+
+  await abrir(undefined, [...PERMISOS, 'PERIODO_CREAR'])
+
+  const vacio = screen.getByText('No hay años en el calendario. Créelos en la pestaña Periodos.').parentElement
+  expect(within(vacio).getByRole('link', { name: 'Ir a Periodos' }).getAttribute('href')).toBe(
+    '/configuracion?pestana=periodos',
+  )
+})
+
+test('sin PERIODO_CREAR, el aviso de vacío no lleva a Periodos', async () => {
+  listarPeriodos.mockResolvedValue([])
+
+  await abrir()
+
+  expect(screen.queryByRole('link', { name: 'Ir a Periodos' })).toBeNull()
+})
+
+test('si falla la lista de periodos muestra el aviso, y "Reintentar" vuelve a pedir', async () => {
+  listarPeriodos.mockRejectedValueOnce(new ErrorApi(500, 'ERROR_INESPERADO', 'Ocurrió un error inesperado.'))
+
+  await abrir()
+
+  expect(await screen.findByText('No se pudo cargar la población: Ocurrió un error inesperado.')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+  await waitFor(() => expect(tabla()).toBeTruthy())
+  expect(listarPeriodos).toHaveBeenCalledTimes(2)
+})
+
 test('si falla la petición muestra el aviso, y "Reintentar" vuelve a pedir', async () => {
   consultarPoblacion.mockRejectedValueOnce(new ErrorApi(500, 'ERROR_INESPERADO', 'Ocurrió un error inesperado.'))
 
@@ -256,7 +288,7 @@ describe('Editar la población de un municipio', () => {
       grupos: { NACIDOS_VIVOS: 1000, MENOR_1: 985 },
     })
     expect(textoDe('Tacaná').slice(0, 3)).toEqual(['Tacaná', '1,000', '985'])
-    expect(screen.getByText('Población de Tacaná guardada.')).toBeTruthy()
+    expect(toast.success).toHaveBeenCalledWith('Población de Tacaná guardada.')
     expect(consultarPoblacion).toHaveBeenCalledTimes(1)
   })
 

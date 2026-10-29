@@ -1,5 +1,6 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
+import { toast } from 'sonner'
 import { listarEstablecimientos } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
 import { guardarSesion } from '@/api/sesion.js'
@@ -96,9 +97,16 @@ function crearSesion(permisos) {
   }
 }
 
-// Muestra la cadena de consulta actual, para revisar lo que la página escribe en la URL.
+// Muestra la cadena de consulta actual, para revisar lo que la página escribe en la URL, y el state de la navegación.
 function Ubicacion() {
-  return <output data-testid="ubicacion">{useLocation().search}</output>
+  const { search, pathname, state } = useLocation()
+  return (
+    <>
+      <output data-testid="ubicacion">{search}</output>
+      <output data-testid="ruta">{pathname}</output>
+      <output data-testid="estado">{JSON.stringify(state)}</output>
+    </>
+  )
 }
 const ubicacion = () => screen.getByTestId('ubicacion').textContent
 
@@ -117,7 +125,8 @@ async function abrir(permisos = TODOS_LOS_PERMISOS, ruta = '/usuarios') {
 
 const fila = (nombreUsuario) => screen.getByRole('cell', { name: nombreUsuario }).closest('tr')
 const enlacesDe = (nombreUsuario) => within(fila(nombreUsuario)).queryAllByRole('link').map((a) => a.textContent)
-const botonMenu = (nombreUsuario) => within(fila(nombreUsuario)).queryByRole('button', { name: 'Más acciones' })
+const botonMenu = (nombreUsuario) =>
+  within(fila(nombreUsuario)).queryByRole('button', { name: `Acciones de ${nombreUsuario}` })
 
 // Radix abre el menú con Enter sobre el botón; su contenido va en un portal, fuera de la fila.
 async function abrirMenu(nombreUsuario) {
@@ -202,14 +211,14 @@ test('"Desactivar" pide confirmación: "Cancelar" no llama a la API y "Desactiva
   await elegir('alopez', 'Desactivar')
   fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Desactivar' }))
 
-  expect(await screen.findByText('Se desactivó la cuenta alopez.')).toBeTruthy()
+  await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Se desactivó la cuenta alopez.'))
   expect(desactivarCuenta).toHaveBeenCalledWith(8)
   await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
   expect(within(fila('alopez')).getByText('Desactivada')).toBeTruthy()
   expect(await opcionesDe('alopez')).toEqual(['Restaurar'])
 })
 
-test('"Restaurar" llama a restaurarCuenta, muestra "Restaurando…" mientras tanto, actualiza la fila y muestra el éxito', async () => {
+test('"Restaurar" llama a restaurarCuenta, muestra "Restaurando…" mientras tanto, actualiza la fila y avisa con un toast', async () => {
   let resolver
   restaurarCuenta.mockReturnValue(new Promise((resolve) => (resolver = resolve)))
   await abrir()
@@ -219,7 +228,7 @@ test('"Restaurar" llama a restaurarCuenta, muestra "Restaurando…" mientras tan
   expect(await within(fila('mruiz')).findByText('Restaurando…')).toBeTruthy()
   expect(botonMenu('mruiz').disabled).toBe(true)
   resolver({ ...CUENTAS[2], activo: true, desactivadoEn: null })
-  expect(await screen.findByText('Se restauró la cuenta mruiz.')).toBeTruthy()
+  await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Se restauró la cuenta mruiz.'))
   expect(restaurarCuenta).toHaveBeenCalledWith(9)
   expect(within(fila('mruiz')).getByText('Activa')).toBeTruthy()
   expect(within(fila('mruiz')).queryByText('Restaurando…')).toBeNull()
@@ -252,7 +261,7 @@ describe('HU-62: cuentas bloqueadas', () => {
     expect(within(fila('rgomez')).getByText('Bloqueada')).toBeTruthy()
   })
 
-  test('"Desbloquear" llama a desbloquearCuenta sin confirmación, actualiza la fila y muestra el éxito', async () => {
+  test('"Desbloquear" llama a desbloquearCuenta sin confirmación, actualiza la fila y avisa con un toast', async () => {
     let resolver
     desbloquearCuenta.mockReturnValue(new Promise((resolve) => (resolver = resolve)))
     await abrir()
@@ -262,7 +271,7 @@ describe('HU-62: cuentas bloqueadas', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull()
     expect(await within(fila('rgomez')).findByText('Desbloqueando…')).toBeTruthy()
     resolver({ ...CUENTAS[3], bloqueada: false })
-    expect(await screen.findByText('Se desbloqueó la cuenta rgomez.')).toBeTruthy()
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Se desbloqueó la cuenta rgomez.'))
     expect(desbloquearCuenta).toHaveBeenCalledWith(10)
     expect(within(fila('rgomez')).queryByText('Bloqueada')).toBeNull()
     expect(await opcionesDe('rgomez')).toEqual(['Desactivar', 'Restablecer contraseña'])
@@ -329,7 +338,7 @@ describe('HU-63: restablecer contraseña', () => {
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     // Mientras el diálogo está abierto, Radix oculta el resto de la página a la accesibilidad; la fila se revisa después.
     expect(within(fila('rgomez')).queryByText('Bloqueada')).toBeNull()
-    expect(screen.getByText('Se restableció la contraseña de rgomez.')).toBeTruthy()
+    expect(toast.success).toHaveBeenCalledWith('Se restableció la contraseña de rgomez.')
     expect(document.body.textContent).not.toContain(CONTRASENA_GENERADA)
     expect(JSON.stringify({ ...sessionStorage })).not.toContain(CONTRASENA_GENERADA)
   })
@@ -349,7 +358,7 @@ describe('HU-63: restablecer contraseña', () => {
   })
 })
 
-test('si la acción falla, muestra el mensaje del backend y la fila no cambia', async () => {
+test('si la acción falla, muestra el mensaje del backend en la página y la fila no cambia', async () => {
   restaurarCuenta.mockRejectedValue(new ErrorApi(409, 'EMPLEADO_INACTIVO', 'El empleado de esta cuenta está inactivo.'))
   await abrir()
 
@@ -357,14 +366,51 @@ test('si la acción falla, muestra el mensaje del backend y la fila no cambia', 
 
   expect(await screen.findByText('El empleado de esta cuenta está inactivo.')).toBeTruthy()
   expect(within(fila('mruiz')).getByText('Desactivada')).toBeTruthy()
+  expect(toast.success).not.toHaveBeenCalled()
 })
 
-test('si falla la carga, se muestra el error', async () => {
-  listarUsuarios.mockRejectedValue(new ErrorApi(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.'))
+test('un error que no viene de la API muestra el mensaje genérico, no "undefined"', async () => {
+  restaurarCuenta.mockRejectedValue(new TypeError('Failed to fetch'))
+  await abrir()
+
+  await elegir('mruiz', 'Restaurar')
+
+  expect(await screen.findByText('Ocurrió un error inesperado. Intente de nuevo.')).toBeTruthy()
+})
+
+test('si falla la carga, se muestra el error y «Reintentar» vuelve a pedir las cuentas', async () => {
+  listarUsuarios.mockRejectedValueOnce(new ErrorApi(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.'))
   await abrir()
 
   expect(await screen.findByText('No se pudieron cargar las cuentas: No se pudo conectar con el servidor.')).toBeTruthy()
   expect(screen.queryByRole('table')).toBeNull()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+  expect(await screen.findByRole('table')).toBeTruthy()
+  expect(listarUsuarios).toHaveBeenCalledTimes(2)
+  expect(screen.queryByText(/No se pudieron cargar las cuentas/)).toBeNull()
+})
+
+test('«Editar» y «Registrar personal» llevan los filtros y la página para volver a ellos', async () => {
+  const volverA = { pathname: '/usuarios', search: '?estado=ACTIVA&pagina=2' }
+  await abrir(TODOS_LOS_PERMISOS, '/usuarios?estado=ACTIVA&pagina=2')
+
+  fireEvent.click(within(fila('alopez')).getByRole('link', { name: 'Editar' }))
+  expect(screen.getByTestId('ruta').textContent).toBe('/usuarios/8/editar')
+  expect(JSON.parse(screen.getByTestId('estado').textContent)).toEqual({ volverA })
+  cleanup()
+
+  await abrir(TODOS_LOS_PERMISOS, '/usuarios?estado=ACTIVA&pagina=2')
+  fireEvent.click(screen.getByRole('link', { name: 'Registrar personal' }))
+  expect(screen.getByTestId('ruta').textContent).toBe('/usuarios/nuevo')
+  expect(JSON.parse(screen.getByTestId('estado').textContent)).toEqual({ volverA })
+})
+
+test('el menú de cada fila se nombra con su usuario', async () => {
+  await abrir()
+  expect(botonMenu('alopez').getAttribute('aria-label')).toBe('Acciones de alopez')
+  expect(screen.queryByRole('button', { name: 'Más acciones' })).toBeNull()
 })
 
 test('sin cuentas, muestra el aviso', async () => {
@@ -605,6 +651,18 @@ describe('HU-07: búsqueda y filtros', () => {
     expect(screen.getAllByRole('row')).toHaveLength(CUENTAS.length + 1)
   })
 
+  test('«Reintentar» vuelve a pedir los filtros que fallaron y los habilita', async () => {
+    listarRoles.mockRejectedValueOnce(new ErrorApi(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.'))
+    await abrir()
+    await screen.findByText(/No se pudieron cargar los filtros/)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+    await waitFor(() => expect(nativo('rolId').options).toHaveLength(3))
+    expect(screen.getByRole('combobox', { name: 'Filtrar por rol' }).disabled).toBe(false)
+    expect(screen.queryByText(/No se pudieron cargar los filtros/)).toBeNull()
+  })
+
   test('con el filtro "Activas", una cuenta bloqueada muestra "Activa" y "Bloqueada", y otra solo "Activa"', async () => {
     listarUsuarios.mockResolvedValue(respuesta([CUENTAS[1], CUENTAS[3]]))
     await abrir(TODOS_LOS_PERMISOS, '/usuarios?estado=ACTIVA')
@@ -624,7 +682,7 @@ describe('HU-07: búsqueda y filtros', () => {
     await elegir('alopez', 'Desactivar')
     fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Desactivar' }))
 
-    expect(await screen.findByText('Se desactivó la cuenta alopez.')).toBeTruthy()
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Se desactivó la cuenta alopez.'))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(within(fila('alopez')).getByText('Desactivada')).toBeTruthy()
     expect(listarUsuarios).toHaveBeenCalledTimes(1)

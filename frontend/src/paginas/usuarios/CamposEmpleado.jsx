@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
 import {
   validarApellidos,
   validarCargo,
@@ -16,13 +17,14 @@ import {
 // Radix Select no acepta '' como valor de una opción.
 export const NINGUNO = 'ninguno'
 
+// En el orden en que aparecen en el formulario; el id de cada campo es su nombre.
 const REGLAS = {
   nombres: validarNombres,
   apellidos: validarApellidos,
+  cui: validarCui,
   cargo: validarCargo,
   correo: validarCorreo,
   telefono: validarTelefono,
-  cui: validarCui,
 }
 
 const AYUDA_CUI = 'Se usa solo para evitar registros repetidos; el sistema no lo muestra después.'
@@ -35,6 +37,28 @@ export function erroresDeEmpleado(empleado, campos = Object.keys(REGLAS)) {
     if (error) errores[campo] = error
   }
   return errores
+}
+
+// Los ids de los campos con error, en el orden del formulario: el primero recibe el foco al enviar.
+export function camposConError(errores) {
+  return Object.keys(REGLAS).filter((campo) => errores[campo])
+}
+
+export function enfocarPrimero(ids) {
+  for (const id of ids) {
+    const campo = document.getElementById(id)
+    if (campo) {
+      campo.focus()
+      return
+    }
+  }
+}
+
+// Se monta cuando el formulario ya cargó: antes no hay nada que perder. Así, las pruebas de rutas que montan la
+// página con MemoryRouter (sin data router, que useBlocker exige) siguen funcionando.
+export function AvisoSalida({ hayCambios, descripcion }) {
+  const bloqueo = useAvisoCambiosSinGuardar(hayCambios)
+  return <AvisoCambiosSinGuardar bloqueo={bloqueo} descripcion={descripcion} />
 }
 
 export function Campo({ id, etiqueta, obligatorio = false, children }) {
@@ -79,11 +103,17 @@ export function CampoTexto({ id, etiqueta, obligatorio, valor, alCambiar, deshab
   )
 }
 
-export function CampoSeleccion({ id, etiqueta, obligatorio, valor, alCambiar, deshabilitado, marcador, opciones }) {
+export function CampoSeleccion({ id, etiqueta, obligatorio, valor, alCambiar, deshabilitado, marcador, opciones, error }) {
+  const idError = `${id}-error`
   return (
     <Campo id={id} etiqueta={etiqueta} obligatorio={obligatorio}>
       <Select value={valor} onValueChange={alCambiar} disabled={deshabilitado} name={id}>
-        <SelectTrigger id={id} className="w-full bg-card">
+        <SelectTrigger
+          id={id}
+          className="w-full bg-card"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? idError : undefined}
+        >
           <SelectValue placeholder={marcador} />
         </SelectTrigger>
         <SelectContent>
@@ -94,17 +124,24 @@ export function CampoSeleccion({ id, etiqueta, obligatorio, valor, alCambiar, de
           ))}
         </SelectContent>
       </Select>
+      {error && (
+        <p id={idError} className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
     </Campo>
   )
 }
 
 // Campos del empleado que comparten el registro y la edición. Los valores son texto; los Select usan NINGUNO.
 // Con establecimiento, el municipio se muestra como texto porque el backend lo toma del establecimiento.
-// `errores` viene de erroresDeEmpleado; el mensaje de un campo aparece cuando la persona sale de él por primera vez.
+// `errores` viene de erroresDeEmpleado; el mensaje de un campo aparece cuando la persona sale de él por primera vez,
+// o en todos a la vez con `mostrarErrores` (después de intentar enviar).
 // El CUI guardado nunca se muestra: con `cuiRegistrado` se ve "Registrado" y el campo solo aparece para reemplazarlo.
 export default function CamposEmpleado({
-  empleado, alCambiar, errores = {}, correoObligatorio = false, cuiObligatorio = false, cuiRegistrado = false,
-  reemplazandoCui = false, alReemplazarCui, establecimientos, municipios, ddrissNombre, deshabilitado,
+  empleado, alCambiar, errores = {}, mostrarErrores = false, correoObligatorio = false, cuiObligatorio = false,
+  cuiRegistrado = false, reemplazandoCui = false, alReemplazarCui, establecimientos, municipios, ddrissNombre,
+  deshabilitado,
 }) {
   const [tocados, setTocados] = useState({})
   const establecimiento = establecimientos.find((e) => String(e.id) === empleado.establecimientoId)
@@ -113,7 +150,7 @@ export default function CamposEmpleado({
     valor: empleado[campo],
     alCambiar: alCambiar(campo),
     onBlur: () => setTocados((actual) => (actual[campo] ? actual : { ...actual, [campo]: true })),
-    error: tocados[campo] ? errores[campo] : undefined,
+    error: tocados[campo] || mostrarErrores ? errores[campo] : undefined,
     deshabilitado,
   })
 

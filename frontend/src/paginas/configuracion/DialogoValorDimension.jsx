@@ -1,6 +1,4 @@
 import { useState } from 'react'
-import { CircleAlert } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -13,7 +11,8 @@ import {
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { agregarValorDimension } from '@/api/configuracion.js'
-import { ErrorApi } from '@/api/cliente.js'
+import { mensajeDeError } from '@/api/cliente.js'
+import { AvisoError } from '@/componentes/Avisos.jsx'
 import {
   LARGOS,
   validarCodigoValorDimension,
@@ -21,9 +20,6 @@ import {
   validarEtiquetaValorDimension,
 } from '@/validaciones/campos.js'
 import { CampoTexto } from '../usuarios/CamposEmpleado.jsx'
-
-const MENSAJE_INESPERADO = 'Ocurrió un error inesperado. Intente de nuevo.'
-const mensajeDe = (error) => (error instanceof ErrorApi ? error.mensaje : MENSAJE_INESPERADO)
 
 function erroresDe(esRango, datos) {
   const errores = {}
@@ -97,7 +93,7 @@ export default function DialogoValorDimension({ dimension, alGuardar, alCerrar }
       alGuardar(actualizada, `Valor ${cuerpo.codigo} agregado.`)
     } catch (err) {
       // El Dialog sigue abierto para corregir y volver a intentar.
-      setErrorApi(mensajeDe(err))
+      setErrorApi(mensajeDeError(err))
       setGuardando(false)
     }
   }
@@ -115,12 +111,7 @@ export default function DialogoValorDimension({ dimension, alGuardar, alCerrar }
             </DialogDescription>
           </DialogHeader>
 
-          {errorApi && (
-            <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-              <CircleAlert />
-              <AlertDescription>{errorApi}</AlertDescription>
-            </Alert>
-          )}
+          {errorApi && <AvisoError>{errorApi}</AvisoError>}
 
           {esRango ? (
             <div className="flex flex-col gap-1.5">

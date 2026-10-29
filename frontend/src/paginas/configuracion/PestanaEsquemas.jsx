@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { ChevronDown, CircleAlert, CircleCheck } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { ChevronDown } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,6 +19,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { descartarEsquema, listarEsquemas } from '@/api/configuracion.js'
+import { mensajeDeError } from '@/api/cliente.js'
+import { AvisoError } from '@/componentes/Avisos.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import DialogoPublicarEsquema, { aDiaMesAnio, avisoDePublicacion } from './DialogoPublicarEsquema.jsx'
 
@@ -31,11 +33,10 @@ export default function PestanaEsquemas() {
   // El diálogo de publicar elige el mes en el calendario de periodos.
   const puedePublicar = tienePermiso('ESQUEMA_PUBLICAR') && tienePermiso('PERIODO_CONSULTAR')
   const navigate = useNavigate()
-  const { search, state } = useLocation()
+  const { search } = useLocation()
   const [filas, setFilas] = useState(null)
   const [errorCarga, setErrorCarga] = useState(null)
-  // Empieza con el que trae el editor en el state de la navegación.
-  const [aviso, setAviso] = useState(() => (state?.aviso ? { tipo: 'exito', mensaje: state.aviso } : null))
+  const [errorAccion, setErrorAccion] = useState(null)
   // La fila cuyo borrador se va a descartar, mientras el AlertDialog está abierto.
   const [porDescartar, setPorDescartar] = useState(null)
   const [descartando, setDescartando] = useState(false)
@@ -53,7 +54,7 @@ export default function PestanaEsquemas() {
         if (carga === cargaActual.current) setFilas(lista)
       })
       .catch((err) => {
-        if (carga === cargaActual.current) setErrorCarga(err.mensaje)
+        if (carga === cargaActual.current) setErrorCarga(mensajeDeError(err))
       })
   }
 
@@ -73,13 +74,13 @@ export default function PestanaEsquemas() {
     evento.preventDefault()
     const { vacuna, borrador } = porDescartar
     setDescartando(true)
-    setAviso(null)
+    setErrorAccion(null)
     try {
       await descartarEsquema(borrador.id)
       setFilas((actuales) => actuales.map((f) => (f.vacuna.codigo === vacuna.codigo ? { ...f, borrador: null } : f)))
-      setAviso({ tipo: 'exito', mensaje: `Borrador versión ${borrador.version} de ${vacuna.nombre} descartado.` })
+      toast.success(`Borrador versión ${borrador.version} de ${vacuna.nombre} descartado.`)
     } catch (err) {
-      setAviso({ tipo: 'error', mensaje: err.mensaje })
+      setErrorAccion(mensajeDeError(err))
     } finally {
       setDescartando(false)
       setPorDescartar(null)
@@ -88,38 +89,18 @@ export default function PestanaEsquemas() {
 
   function alPublicar(esquema) {
     setPorPublicar(null)
-    setAviso({ tipo: 'exito', mensaje: avisoDePublicacion(esquema) })
+    setErrorAccion(null)
+    toast.success(avisoDePublicacion(esquema))
     cargar()
   }
 
   if (errorCarga) {
-    return (
-      <div className="flex flex-col items-start gap-3">
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>No se pudieron cargar los esquemas: {errorCarga}</AlertDescription>
-        </Alert>
-        <Button variant="outline" onClick={cargar}>
-          Reintentar
-        </Button>
-      </div>
-    )
+    return <AvisoError onReintentar={cargar}>No se pudieron cargar los esquemas: {errorCarga}</AvisoError>
   }
 
   return (
     <div className="flex flex-col gap-6">
-      {aviso?.tipo === 'exito' && (
-        <Alert role="status" className="border-ring/40 bg-accent text-accent-foreground">
-          <CircleCheck />
-          <AlertDescription className="text-accent-foreground">{aviso.mensaje}</AlertDescription>
-        </Alert>
-      )}
-      {aviso?.tipo === 'error' && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>{aviso.mensaje}</AlertDescription>
-        </Alert>
-      )}
+      {errorAccion && <AvisoError>{errorAccion}</AvisoError>}
       <Card>
         <CardHeader>
           <CardTitle>Esquemas de captura</CardTitle>

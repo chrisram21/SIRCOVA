@@ -1,4 +1,4 @@
-import { alPerderSesion, ErrorApi, solicitar } from './cliente.js'
+import { alPerderSesion, ErrorApi, ESPERA_MAXIMA_MS, solicitar } from './cliente.js'
 import { guardarSesion } from './sesion.js'
 
 function crearToken(payload) {
@@ -164,4 +164,28 @@ test('envía el token de la sesión en Authorization', async () => {
   const [, opciones] = fetch.mock.calls[0]
   expect(opciones.headers.Authorization).toBe(`Bearer ${sesion.token}`)
   expect(JSON.parse(opciones.body)).toEqual({ motivo: 'MANUAL' })
+})
+
+test('sin respuesta en ESPERA_MAXIMA_MS cancela la petición y lo dice', async () => {
+  vi.useFakeTimers()
+  try {
+    fetch.mockImplementation(
+      (url, { signal }) =>
+        new Promise((resolver, rechazar) => signal.addEventListener('abort', () => rechazar(new DOMException('', 'AbortError')))),
+    )
+    const pedido = solicitar('/reportes')
+    const resultado = expect(pedido).rejects.toMatchObject({
+      codigo: 'SIN_RESPUESTA',
+      mensaje: 'El servidor tardó demasiado en responder. Intente de nuevo.',
+    })
+    await vi.advanceTimersByTimeAsync(ESPERA_MAXIMA_MS)
+    await resultado
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+test('un fallo de red antes del límite sigue siendo SIN_CONEXION', async () => {
+  fetch.mockRejectedValue(new TypeError('Failed to fetch'))
+  await expect(solicitar('/reportes')).rejects.toMatchObject({ codigo: 'SIN_CONEXION' })
 })

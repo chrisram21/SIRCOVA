@@ -1,6 +1,4 @@
-import { useEffect, useState } from 'react'
-import { CircleAlert } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -14,7 +12,9 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { listarPeriodos } from '@/api/catalogos.js'
+import { mensajeDeError } from '@/api/cliente.js'
 import { publicarEsquema } from '@/api/configuracion.js'
+import { AvisoError } from '@/componentes/Avisos.jsx'
 import { validarMotivoCambio } from '@/validaciones/campos.js'
 
 const MESES = [
@@ -56,6 +56,12 @@ export default function DialogoPublicarEsquema({ vacuna, borrador, vigente, alPu
   const [motivo, setMotivo] = useState('')
   const [errorApi, setErrorApi] = useState(null)
   const [publicando, setPublicando] = useState(false)
+  const [intentado, setIntentado] = useState(false)
+  // Cada intento con errores sube este número; un efecto lleva el foco al primer campo inválido.
+  const [revisar, setRevisar] = useState(0)
+  // Cada «Reintentar» sube este número y vuelve a pedir los meses.
+  const [intentoMeses, setIntentoMeses] = useState(0)
+  const formulario = useRef(null)
 
   useEffect(() => {
     let vigenteCarga = true
@@ -65,28 +71,43 @@ export default function DialogoPublicarEsquema({ vacuna, borrador, vigente, alPu
         if (vigenteCarga) setMeses(mesesValidos([...actual, ...siguiente], vigente))
       })
       .catch((err) => {
-        if (vigenteCarga) setErrorMeses(err.mensaje)
+        if (vigenteCarga) setErrorMeses(mensajeDeError(err))
       })
     return () => {
       vigenteCarga = false
     }
-  }, [vigente])
+  }, [vigente, intentoMeses])
+
+  useEffect(() => {
+    if (revisar > 0) formulario.current?.querySelector('[aria-invalid="true"]')?.focus()
+  }, [revisar])
 
   const motivoRevisado = validarMotivoCambio(motivo)
-  // Vacío no se marca: el botón queda deshabilitado; solo se avisa de un motivo demasiado largo.
-  const errorMotivo = motivo.trim() !== '' && motivoRevisado.error
-  const listo = desde !== '' && !motivoRevisado.error && !publicando
+  const errorDesde = intentado && desde === '' ? 'Elija el mes desde el que rige la versión.' : null
+  // Un motivo demasiado largo se avisa al escribir; uno vacío, al intentar publicar.
+  const errorMotivo = (intentado || motivo.trim() !== '') && motivoRevisado.error
+
+  function reintentarMeses() {
+    setErrorMeses(null)
+    setMeses(null)
+    setIntentoMeses((n) => n + 1)
+  }
 
   async function confirmar(evento) {
     evento.preventDefault()
-    if (!listo) return
+    if (publicando) return
+    setIntentado(true)
+    if (desde === '' || motivoRevisado.error) {
+      setRevisar((n) => n + 1)
+      return
+    }
     setPublicando(true)
     setErrorApi(null)
     try {
       alPublicar(await publicarEsquema(borrador.id, { vigenciaDesde: desde, motivoCambio: motivoRevisado.valor }))
     } catch (err) {
       // El Dialog sigue abierto y conserva lo elegido.
-      setErrorApi(err.mensaje)
+      setErrorApi(mensajeDeError(err))
       setPublicando(false)
     }
   }
@@ -105,7 +126,7 @@ export default function DialogoPublicarEsquema({ vacuna, borrador, vigente, alPu
   return (
     <Dialog open onOpenChange={(abierto) => !abierto && !publicando && alCerrar()}>
       <DialogContent>
-        <form className="flex flex-col gap-4" onSubmit={confirmar} noValidate>
+        <form ref={formulario} className="flex flex-col gap-4" onSubmit={confirmar} noValidate>
           <DialogHeader>
             <DialogTitle>
               Publicar la versión {borrador.version} de {vacuna.nombre}
@@ -116,36 +137,43 @@ export default function DialogoPublicarEsquema({ vacuna, borrador, vigente, alPu
             </DialogDescription>
           </DialogHeader>
 
-          {errorApi && (
-            <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-              <CircleAlert />
-              <AlertDescription>{errorApi}</AlertDescription>
-            </Alert>
-          )}
+          {errorApi && <AvisoError>{errorApi}</AvisoError>}
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="publicar-vigencia" className="font-semibold">
               Vigente desde
             </Label>
             {errorMeses ? (
-              <p className="text-sm text-destructive">No se pudieron cargar los meses: {errorMeses}</p>
+              <AvisoError onReintentar={reintentarMeses}>No se pudieron cargar los meses: {errorMeses}</AvisoError>
             ) : meses !== null && meses.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 No hay meses disponibles en el calendario; agréguelos en la pestaña «Periodos».
               </p>
             ) : (
-              <Select name="vigenciaDesde" value={desde} onValueChange={setDesde} disabled={meses === null || publicando}>
-                <SelectTrigger id="publicar-vigencia" className="w-full">
-                  <SelectValue placeholder={meses === null ? 'Cargando meses…' : 'Elija el mes'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {(meses ?? []).map((p) => (
-                    <SelectItem key={p.fechaInicio} value={p.fechaInicio}>
-                      {MESES[p.mes - 1]} {p.anio}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <>
+                <Select name="vigenciaDesde" value={desde} onValueChange={setDesde} disabled={meses === null || publicando}>
+                  <SelectTrigger
+                    id="publicar-vigencia"
+                    className="w-full"
+                    aria-invalid={errorDesde ? true : undefined}
+                    aria-describedby={errorDesde ? 'publicar-vigencia-error' : undefined}
+                  >
+                    <SelectValue placeholder={meses === null ? 'Cargando meses…' : 'Elija el mes'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(meses ?? []).map((p) => (
+                      <SelectItem key={p.fechaInicio} value={p.fechaInicio}>
+                        {MESES[p.mes - 1]} {p.anio}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errorDesde && (
+                  <p id="publicar-vigencia-error" className="text-sm text-destructive">
+                    {errorDesde}
+                  </p>
+                )}
+              </>
             )}
           </div>
 
@@ -172,7 +200,7 @@ export default function DialogoPublicarEsquema({ vacuna, borrador, vigente, alPu
             <Button type="button" variant="outline" onClick={alCerrar} disabled={publicando}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={!listo}>
+            <Button type="submit" disabled={publicando}>
               {publicando ? 'Publicando…' : 'Publicar'}
             </Button>
           </DialogFooter>

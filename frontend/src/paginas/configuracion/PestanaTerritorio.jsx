@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { CircleAlert, CircleCheck, MoreHorizontal, Plus } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { MoreHorizontal, Plus } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,6 +30,8 @@ import {
   listarMunicipios,
   reactivarDistrito,
 } from '@/api/catalogos.js'
+import { mensajeDeError } from '@/api/cliente.js'
+import { AvisoError } from '@/componentes/Avisos.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import DialogoDistrito from './DialogoDistrito.jsx'
 
@@ -88,7 +90,7 @@ export default function PestanaTerritorio() {
   const [filtroEstado, setFiltroEstado] = useState(TODOS)
   // null, { distrito: null } para registrar o { distrito } para renombrar.
   const [dialogo, setDialogo] = useState(null)
-  const [aviso, setAviso] = useState(null)
+  const [errorAccion, setErrorAccion] = useState(null)
   // null o { distrito, activar } mientras el AlertDialog de confirmación está abierto.
   const [porCambiar, setPorCambiar] = useState(null)
   const [cambiando, setCambiando] = useState(false)
@@ -104,7 +106,7 @@ export default function PestanaTerritorio() {
         if (carga === cargaActual.current) setDatos({ ddriss, municipios, distritos })
       })
       .catch((err) => {
-        if (carga === cargaActual.current) setErrorCarga(err.mensaje)
+        if (carga === cargaActual.current) setErrorCarga(mensajeDeError(err))
       })
   }
 
@@ -121,7 +123,7 @@ export default function PestanaTerritorio() {
   function alGuardar(guardado) {
     const nuevo = dialogo.distrito === null
     ponerDistrito(guardado, nuevo)
-    setAviso({ tipo: 'exito', mensaje: `Distrito ${guardado.codigo} ${nuevo ? 'registrado' : 'actualizado'}.` })
+    toast.success(`Distrito ${guardado.codigo} ${nuevo ? 'registrado' : 'actualizado'}.`)
     setDialogo(null)
   }
 
@@ -130,13 +132,13 @@ export default function PestanaTerritorio() {
     evento.preventDefault()
     const { distrito, activar } = porCambiar
     setCambiando(true)
-    setAviso(null)
+    setErrorAccion(null)
     try {
       const actualizado = activar ? await reactivarDistrito(distrito.id) : await desactivarDistrito(distrito.id)
       ponerDistrito(actualizado, false)
-      setAviso({ tipo: 'exito', mensaje: `Distrito ${actualizado.codigo} ${activar ? 'reactivado' : 'desactivado'}.` })
+      toast.success(`Distrito ${actualizado.codigo} ${activar ? 'reactivado' : 'desactivado'}.`)
     } catch (err) {
-      setAviso({ tipo: 'error', mensaje: err.mensaje })
+      setErrorAccion(mensajeDeError(err))
     } finally {
       setCambiando(false)
       setPorCambiar(null)
@@ -151,17 +153,7 @@ export default function PestanaTerritorio() {
   }, [])
 
   if (errorCarga) {
-    return (
-      <div className="flex flex-col items-start gap-3">
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>No se pudo cargar el catálogo territorial: {errorCarga}</AlertDescription>
-        </Alert>
-        <Button variant="outline" onClick={cargar}>
-          Reintentar
-        </Button>
-      </div>
-    )
+    return <AvisoError onReintentar={cargar}>No se pudo cargar el catálogo territorial: {errorCarga}</AvisoError>
   }
 
   if (datos === null) {
@@ -187,18 +179,7 @@ export default function PestanaTerritorio() {
 
   return (
     <div className="flex flex-col gap-6">
-      {aviso?.tipo === 'exito' && (
-        <Alert role="status" className="border-ring/40 bg-accent text-accent-foreground">
-          <CircleCheck />
-          <AlertDescription className="text-accent-foreground">{aviso.mensaje}</AlertDescription>
-        </Alert>
-      )}
-      {aviso?.tipo === 'error' && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>{aviso.mensaje}</AlertDescription>
-        </Alert>
-      )}
+      {errorAccion && <AvisoError>{errorAccion}</AvisoError>}
 
       {ddriss.map((d) => (
         <Card key={d.id}>
@@ -290,7 +271,15 @@ export default function PestanaTerritorio() {
           </form>
 
           {distritos.length === 0 ? (
-            <p className="text-muted-foreground">No hay distritos de salud registrados.</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-muted-foreground">No hay distritos de salud registrados.</p>
+              {puedeCrear && (
+                <Button variant="outline" onClick={() => setDialogo({ distrito: null })}>
+                  <Plus />
+                  Registrar distrito
+                </Button>
+              )}
+            </div>
           ) : distritosFiltrados.length === 0 ? (
             <p className="text-muted-foreground">No hay distritos que coincidan con los filtros.</p>
           ) : (

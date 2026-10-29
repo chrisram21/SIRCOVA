@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { CircleAlert, CircleCheck, Pencil } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Link, useSearchParams } from 'react-router-dom'
+import { CalendarPlus, Pencil } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { consultarPoblacion, listarPeriodos } from '@/api/catalogos.js'
+import { mensajeDeError } from '@/api/cliente.js'
+import { AvisoError } from '@/componentes/Avisos.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import DialogoPoblacion from './DialogoPoblacion.jsx'
 
@@ -47,8 +49,8 @@ function Cargando() {
 export default function PestanaPoblacion() {
   const { tienePermiso } = useSesion()
   const puedeRegistrar = tienePermiso('POBLACION_REGISTRAR')
+  const puedeCrearAnio = tienePermiso('PERIODO_CREAR')
   const [parametros, setParametros] = useSearchParams()
-  const [aviso, setAviso] = useState(null)
   // El municipio cuyo Dialog está abierto, o null.
   const [porEditar, setPorEditar] = useState(null)
   // Años con meses en el calendario, del más reciente al más antiguo.
@@ -64,7 +66,7 @@ export default function PestanaPoblacion() {
         if (vigente) setAnios([...new Set(periodos.map((p) => p.anio))].sort((a, b) => b - a))
       })
       .catch((err) => {
-        if (vigente) setErrorCarga(err.mensaje)
+        if (vigente) setErrorCarga(mensajeDeError(err))
       })
     return () => {
       vigente = false
@@ -81,7 +83,7 @@ export default function PestanaPoblacion() {
         if (vigente) setPoblacion(respuesta)
       })
       .catch((err) => {
-        if (vigente) setErrorCarga(err.mensaje)
+        if (vigente) setErrorCarga(mensajeDeError(err))
       })
     return () => {
       vigente = false
@@ -102,12 +104,11 @@ export default function PestanaPoblacion() {
       municipios: actual.municipios.map((m) => (m.id === guardado.id ? guardado : m)),
     }))
     setPorEditar(null)
-    setAviso(`Población de ${guardado.nombre} guardada.`)
+    toast.success(`Población de ${guardado.nombre} guardada.`)
   }
 
   // El año va en la URL junto a la pestaña, para que siga elegido al recargar o volver.
   function elegirAnio(valor) {
-    setAviso(null)
     setParametros(
       (actuales) => {
         const nuevos = new URLSearchParams(actuales)
@@ -119,29 +120,13 @@ export default function PestanaPoblacion() {
   }
 
   if (errorCarga) {
-    return (
-      <div className="flex flex-col items-start gap-3">
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>No se pudo cargar la población: {errorCarga}</AlertDescription>
-        </Alert>
-        <Button variant="outline" onClick={reintentar}>
-          Reintentar
-        </Button>
-      </div>
-    )
+    return <AvisoError onReintentar={reintentar}>No se pudo cargar la población: {errorCarga}</AvisoError>
   }
 
   if (anios === null || (anio !== undefined && poblacion?.anio !== anio)) return <Cargando />
 
   return (
     <div className="flex flex-col gap-6">
-      {aviso && (
-        <Alert role="status" className="border-ring/40 bg-accent text-accent-foreground">
-          <CircleCheck />
-          <AlertDescription className="text-accent-foreground">{aviso}</AlertDescription>
-        </Alert>
-      )}
       <Card>
         <CardHeader>
           <CardTitle>Población objetivo</CardTitle>
@@ -151,7 +136,17 @@ export default function PestanaPoblacion() {
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {anios.length === 0 ? (
-            <p className="text-muted-foreground">No hay años en el calendario. Créelos en la pestaña Periodos.</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-muted-foreground">No hay años en el calendario. Créelos en la pestaña Periodos.</p>
+              {puedeCrearAnio && (
+                <Button asChild variant="outline">
+                  <Link to="/configuracion?pestana=periodos">
+                    <CalendarPlus />
+                    Ir a Periodos
+                  </Link>
+                </Button>
+              )}
+            </div>
           ) : (
             <>
               {/* Dentro de un form, Radix agrega el <select> nativo del Select. */}

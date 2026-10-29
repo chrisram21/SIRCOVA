@@ -169,3 +169,22 @@ test('un id que no existe muestra "El esquema no existe."', async () => {
   montar('no-existe')
   expect(await screen.findByText(/El esquema no existe\./)).toBeTruthy()
 })
+
+test('"Volver al historial" lleva al historial de la vacuna', async () => {
+  await abrir()
+
+  expect(screen.getByRole('link', { name: 'Volver al historial' }).getAttribute('href')).toBe(
+    '/configuracion/esquemas/historial/2',
+  )
+})
+
+test('si falla la carga por otra razón lo dice, y "Reintentar" la repite', async () => {
+  obtenerEsquema.mockRejectedValueOnce(new ErrorApi(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.'))
+  montar()
+
+  expect(await screen.findByText('No se pudo cargar el esquema: No se pudo conectar con el servidor.')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+  expect(await screen.findByRole('heading', { name: 'Hexavalente · versión 1' })).toBeTruthy()
+  expect(obtenerEsquema).toHaveBeenCalledTimes(2)
+})

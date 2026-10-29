@@ -1,7 +1,6 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowDown, ArrowUp, CircleAlert, Plus, Trash2 } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,7 +11,9 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { obtenerVacuna } from '@/api/catalogos.js'
+import { mensajeDeError } from '@/api/cliente.js'
 import { listarDimensiones } from '@/api/configuracion.js'
+import { AvisoError } from '@/componentes/Avisos.jsx'
 import { validarTituloSeccion } from '@/validaciones/campos.js'
 import { GRUPO_EDAD, problemasDeCoherencia, valoresDeEdad } from './coherenciaEsquema.js'
 
@@ -73,7 +74,8 @@ function Marca({ id, etiqueta, nombre, marcada, alCambiar, deshabilitada, extra 
 // El editor común de los borradores (SPEC 19). Recibe el contenido inicial en la forma del cuerpo del POST, y
 // onGuardar recibe el contenido editado; un error de onGuardar se muestra aquí y conserva lo editado.
 // onPublicar (SPEC 20) recibe el contenido si hay cambios sin guardar, o null. soloLectura muestra una versión sin
-// dejar cambiarla. onVistaPrevia (SPEC 21) recibe el contenido actual, sin guardar, y sus problemas.
+// dejar cambiarla. onVistaPrevia (SPEC 21) recibe el contenido actual, sin guardar, y sus problemas. onCambios recibe
+// si lo editado difiere de lo último guardado, para que la página avise antes de salir.
 export default function EditorEsquema({
   vacuna,
   origen,
@@ -84,6 +86,7 @@ export default function EditorEsquema({
   onGuardar,
   onPublicar,
   onVistaPrevia,
+  onCambios,
   volverA,
   soloLectura = false,
 }) {
@@ -95,6 +98,11 @@ export default function EditorEsquema({
   const [errorGuardar, setErrorGuardar] = useState(null)
   // Lo último guardado, para saber si «Publicar» tiene que guardar antes.
   const [guardado, setGuardado] = useState(() => JSON.stringify(contenidoDe(inicial)))
+  // Cada intento de guardar o publicar con problemas sube este número; un efecto lleva el foco al primero.
+  const [revisar, setRevisar] = useState(0)
+  const formulario = useRef(null)
+  const listaProblemas = useRef(null)
+  const avisoError = useRef(null)
 
   const dimensionDe = (codigo) => dimensiones.find((d) => d.codigo === codigo)
   // Los valores activos del catálogo, en su orden, más los elegidos que ya no están activos (marcados).
@@ -227,29 +235,57 @@ export default function EditorEsquema({
 
   const conCambios = JSON.stringify(contenido) !== guardado
 
+  useEffect(() => {
+    if (!soloLectura) onCambios?.(conCambios)
+  }, [conCambios, onCambios, soloLectura])
+
+  // Un título vacío es el único problema con campo; los de coherencia se ven en la lista de problemas.
+  useEffect(() => {
+    if (revisar === 0) return
+    const campo = formulario.current?.querySelector('[aria-invalid="true"]')
+    if (campo) campo.focus()
+    else {
+      listaProblemas.current?.focus()
+      listaProblemas.current?.scrollIntoView?.({ block: 'nearest' })
+    }
+  }, [revisar])
+
+  useEffect(() => {
+    if (errorGuardar) avisoError.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [errorGuardar])
+
+  // Con problemas no se guarda: se marcan los títulos y el foco va al primero.
+  function hayProblemas() {
+    if (problemas.length === 0) return false
+    setTocados(new Set(esquema.secciones.map((s) => s.clave)))
+    setRevisar((n) => n + 1)
+    return true
+  }
+
   async function guardar(evento) {
     evento.preventDefault()
-    if (soloLectura || problemas.length > 0) return
+    if (soloLectura || guardando || hayProblemas()) return
     setGuardando(true)
     setErrorGuardar(null)
     try {
       await onGuardar(contenido)
+      setGuardado(JSON.stringify(contenido))
     } catch (err) {
-      setErrorGuardar(err.mensaje ?? 'Ocurrió un error inesperado. Intente de nuevo.')
+      setErrorGuardar(mensajeDeError(err))
     } finally {
       setGuardando(false)
     }
   }
 
   async function publicar() {
-    if (problemas.length > 0) return
+    if (guardando || hayProblemas()) return
     setGuardando(true)
     setErrorGuardar(null)
     try {
       await onPublicar(conCambios ? contenido : null)
       if (conCambios) setGuardado(JSON.stringify(contenido))
     } catch (err) {
-      setErrorGuardar(err.mensaje ?? 'Ocurrió un error inesperado. Intente de nuevo.')
+      setErrorGuardar(mensajeDeError(err))
     } finally {
       setGuardando(false)
     }
@@ -261,7 +297,7 @@ export default function EditorEsquema({
 
   return (
     // Dentro de un form, Radix agrega el <select> nativo de cada Select.
-    <form onSubmit={guardar} noValidate className="flex flex-col gap-6">
+    <form ref={formulario} onSubmit={guardar} noValidate className="flex flex-col gap-6">
       {/* En solo lectura, el fieldset deshabilita todos los controles, también los de Radix (son botones). */}
       <fieldset disabled={soloLectura} className="flex min-w-0 flex-col gap-6">
         <Card>
@@ -495,6 +531,7 @@ export default function EditorEsquema({
                         aria-label={`Título de la sección ${numero}`}
                         value={seccion.titulo}
                         aria-invalid={errorTitulo ? true : undefined}
+                        aria-describedby={errorTitulo ? `titulo-${seccion.clave}-error` : undefined}
                         onChange={(evento) => cambiarSeccion(seccion.clave, () => ({ titulo: evento.target.value }))}
                         onBlur={() => setTocados((actuales) => new Set(actuales).add(seccion.clave))}
                       />
@@ -554,7 +591,11 @@ export default function EditorEsquema({
                       </div>
                     )}
                   </div>
-                  {errorTitulo && <p className="text-sm text-destructive">{errorTitulo}</p>}
+                  {errorTitulo && (
+                    <p id={`titulo-${seccion.clave}-error`} className="text-sm text-destructive">
+                      {errorTitulo}
+                    </p>
+                  )}
                   <div className="flex flex-wrap gap-x-4 gap-y-2">
                     {esquema.dosis.map(({ codigo }) => (
                       <Marca
@@ -604,7 +645,12 @@ export default function EditorEsquema({
               {problemas.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No hay problemas.</p>
               ) : (
-                <ul aria-label="Problemas del esquema" className="flex list-disc flex-col gap-1 pl-5 text-sm text-destructive">
+                <ul
+                  ref={listaProblemas}
+                  tabIndex={-1}
+                  aria-label="Problemas del esquema"
+                  className="flex list-disc flex-col gap-1 pl-5 text-sm text-destructive outline-none"
+                >
                   {problemas.map((problema) => (
                     <li key={problema}>{problema}</li>
                   ))}
@@ -614,10 +660,9 @@ export default function EditorEsquema({
           </Card>
 
           {errorGuardar && (
-            <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-              <CircleAlert />
-              <AlertDescription>{errorGuardar}</AlertDescription>
-            </Alert>
+            <div ref={avisoError}>
+              <AvisoError>{errorGuardar}</AvisoError>
+            </div>
           )}
 
           <div className="flex flex-wrap justify-end gap-3">
@@ -631,11 +676,11 @@ export default function EditorEsquema({
               </Button>
             )}
             {onPublicar && (
-              <Button type="button" variant="outline" disabled={problemas.length > 0 || guardando} onClick={publicar}>
+              <Button type="button" variant="outline" disabled={guardando} onClick={publicar}>
                 {conCambios ? 'Guardar y publicar' : 'Publicar'}
               </Button>
             )}
-            <Button type="submit" disabled={problemas.length > 0 || guardando}>
+            <Button type="submit" disabled={guardando}>
               {guardando ? 'Guardando…' : 'Guardar borrador'}
             </Button>
           </div>

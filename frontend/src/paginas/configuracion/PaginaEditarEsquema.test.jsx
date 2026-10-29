@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-router-dom'
+import { toast } from 'sonner'
 import { listarPeriodos, obtenerVacuna } from '@/api/catalogos.js'
 import { editarEsquema, listarDimensiones, listarEsquemas, obtenerEsquema, publicarEsquema } from '@/api/configuracion.js'
 import { ErrorApi } from '@/api/cliente.js'
@@ -80,18 +81,26 @@ function crearSesion(permisos) {
   }
 }
 
+// El aviso de cambios sin guardar (useBlocker) necesita un data router.
 function montar(id = 'b-1', permisos = EDITAR) {
   guardarSesion(crearSesion(permisos))
-  render(
-    <MemoryRouter initialEntries={[`/configuracion/esquemas/${id}/editar`]}>
-      <ProveedorSesion>
-        <Routes>
-          <Route path="/configuracion/esquemas/:id/editar" element={<PaginaEditarEsquema />} />
-          <Route path="/configuracion" element={<Pestana />} />
-        </Routes>
-      </ProveedorSesion>
-    </MemoryRouter>,
+  const router = createMemoryRouter(
+    [
+      {
+        element: (
+          <ProveedorSesion>
+            <Outlet />
+          </ProveedorSesion>
+        ),
+        children: [
+          { path: '/configuracion/esquemas/:id/editar', element: <PaginaEditarEsquema /> },
+          { path: '/configuracion', element: <Pestana /> },
+        ],
+      },
+    ],
+    { initialEntries: [`/configuracion/esquemas/${id}/editar`] },
   )
+  render(<RouterProvider router={router} />)
 }
 
 async function abrir(id, permisos) {
@@ -108,7 +117,7 @@ beforeEach(() => {
   editarEsquema.mockResolvedValue(BORRADOR)
 })
 
-test('carga el borrador, guarda con editarEsquema y vuelve a la pestaña con el aviso', async () => {
+test('carga el borrador, guarda con editarEsquema y vuelve a la pestaña con el aviso, sin pedir confirmación', async () => {
   await abrir()
 
   expect(obtenerEsquema).toHaveBeenCalledWith('b-1')
@@ -134,9 +143,33 @@ test('carga el borrador, guarda con editarEsquema y vuelve a la pestaña con el 
       { titulo: 'De 1 a < 6 años', grupoEdad: '1_A_5', dosis: ['D1', 'R1'] },
     ],
   })
-  await waitFor(() =>
-    expect(screen.getByTestId('pestana').textContent).toBe('?pestana=esquemas|Borrador de Vacuna de prueba guardado (versión 3).'),
-  )
+  // Vuelve sin state.aviso: el aviso va en un toast.
+  await waitFor(() => expect(screen.getByTestId('pestana').textContent).toBe('?pestana=esquemas|'))
+  expect(toast.success).toHaveBeenCalledWith('Borrador de Vacuna de prueba guardado (versión 3).')
+  expect(screen.queryByRole('alertdialog')).toBeNull()
+})
+
+test('con cambios, "Volver" pide confirmación y "Seguir editando" se queda', async () => {
+  await abrir()
+  fireEvent.change(screen.getByRole('textbox', { name: 'Título de la sección 1' }), { target: { value: 'Menores de 1 año' } })
+
+  fireEvent.click(screen.getByRole('link', { name: 'Volver' }))
+  const dialogo = await screen.findByRole('alertdialog')
+  expect(dialogo.textContent).toContain('Si sale ahora, se pierden los cambios del borrador.')
+  fireEvent.click(within(dialogo).getByRole('button', { name: 'Seguir editando' }))
+
+  await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+  expect(screen.queryByTestId('pestana')).toBeNull()
+  expect(screen.getByRole('textbox', { name: 'Título de la sección 1' }).value).toBe('Menores de 1 año')
+})
+
+test('sin cambios, "Volver" sale sin preguntar', async () => {
+  await abrir()
+
+  fireEvent.click(screen.getByRole('link', { name: 'Volver' }))
+
+  await waitFor(() => expect(screen.getByTestId('pestana').textContent).toBe('?pestana=esquemas|'))
+  expect(screen.queryByRole('alertdialog')).toBeNull()
 })
 
 test('al guardar reenvía la etiqueta de la desagregación tal como la recibió', async () => {
@@ -171,11 +204,15 @@ test('un id que no existe muestra "El esquema no existe."', async () => {
   expect(screen.getByRole('link', { name: 'Volver a los esquemas' }).getAttribute('href')).toBe('/configuracion?pestana=esquemas')
 })
 
-test('si falla la carga por otra razón lo dice', async () => {
-  obtenerEsquema.mockRejectedValue(new ErrorApi(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.'))
+test('si falla la carga por otra razón lo dice, y "Reintentar" la repite', async () => {
+  obtenerEsquema.mockRejectedValueOnce(new ErrorApi(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.'))
   await abrir()
 
   expect(screen.getByText('No se pudo cargar el esquema: No se pudo conectar con el servidor.')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+  expect(await screen.findByRole('button', { name: 'Guardar borrador' })).toBeTruthy()
+  expect(obtenerEsquema).toHaveBeenCalledTimes(2)
 })
 
 describe('vista previa desde el editor', () => {
@@ -208,7 +245,8 @@ describe('vista previa desde el editor', () => {
     await abrir()
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'R1 en la sección 2' }))
-    expect(screen.getByRole('button', { name: 'Guardar borrador' }).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar borrador' }))
+    expect(editarEsquema).not.toHaveBeenCalled()
     const boton = screen.getByRole('button', { name: 'Vista previa' })
     expect(boton.disabled).toBe(false)
     fireEvent.click(boton)
@@ -288,10 +326,15 @@ describe('publicar desde el editor', () => {
     expect(listarEsquemas).not.toHaveBeenCalled()
   })
 
-  test('con un problema de coherencia el botón queda deshabilitado', async () => {
+  test('con un problema de coherencia no guarda ni abre el diálogo, y el foco va a la lista de problemas', async () => {
     await abrir('b-1', PUBLICAR)
     fireEvent.click(screen.getByRole('checkbox', { name: 'R1 en la sección 2' }))
-    expect(screen.getByRole('button', { name: 'Guardar y publicar' }).disabled).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar y publicar' }))
+
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('list', { name: 'Problemas del esquema' })))
+    expect(editarEsquema).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   test('al publicar vuelve a la pestaña con el aviso', async () => {
@@ -309,11 +352,39 @@ describe('publicar desde el editor', () => {
     fireEvent.change(within(dialogo).getByLabelText('Motivo del cambio'), { target: { value: 'Cambio de prueba' } })
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Publicar' }))
 
-    await waitFor(() =>
-      expect(screen.getByTestId('pestana').textContent).toBe(
-        '?pestana=esquemas|Versión 3 de Vacuna de prueba publicada; vigente desde 01/11/2026.',
-      ),
-    )
+    await waitFor(() => expect(screen.getByTestId('pestana').textContent).toBe('?pestana=esquemas|'))
+    expect(toast.success).toHaveBeenCalledWith('Versión 3 de Vacuna de prueba publicada; vigente desde 01/11/2026.')
     expect(publicarEsquema).toHaveBeenCalledWith('b-1', { vigenciaDesde: '2026-11-01', motivoCambio: 'Cambio de prueba' })
   })
+})
+
+test('tras "Guardar y publicar" y publicar, vuelve sin pedir confirmación', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-24T12:00:00-06:00'))
+  listarEsquemas.mockResolvedValue([
+    {
+      vacuna: { id: 2, codigo: 'ZVT', nombre: 'Vacuna de prueba', activa: true },
+      vigente: null,
+      borrador: { id: 'b-1', version: 3, creadoEn: '2026-10-15T15:00:00.000Z' },
+    },
+  ])
+  listarPeriodos.mockResolvedValue([{ id: 11, anio: 2026, mes: 11, fechaInicio: '2026-11-01' }])
+  publicarEsquema.mockResolvedValue({ ...BORRADOR, estado: 'VIGENTE', vigencia: { desde: '2026-11-01', hasta: null } })
+  try {
+    await abrir('b-1', PUBLICAR)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Título de la sección 1' }), { target: { value: 'Menores de 1 año' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar y publicar' }))
+
+    const dialogo = await screen.findByRole('dialog')
+    const select = () => document.querySelector('select[name="vigenciaDesde"]')
+    await waitFor(() => expect(select().disabled).toBe(false))
+    fireEvent.change(select(), { target: { value: '2026-11-01' } })
+    fireEvent.change(within(dialogo).getByLabelText('Motivo del cambio'), { target: { value: 'Cambio de prueba' } })
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Publicar' }))
+
+    await waitFor(() => expect(screen.getByTestId('pestana').textContent).toBe('?pestana=esquemas|'))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+  } finally {
+    vi.useRealTimers()
+  }
 })

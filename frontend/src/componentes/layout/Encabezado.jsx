@@ -1,74 +1,68 @@
-import { useState } from 'react'
-import { KeyRound, LogOut } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { Fragment } from 'react'
+import { CalendarDays } from 'lucide-react'
+import { Link, useLocation } from 'react-router-dom'
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import { Button } from '@/components/ui/button'
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb'
+import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
-import { useCambiosPendientes } from '@/componentes/ProveedorCambiosPendientes.jsx'
-import { useSesion } from '@/componentes/ProveedorSesion.jsx'
-import { RUTA_CAMBIO_CONTRASENA } from '@/componentes/RutaProtegida.jsx'
+import { tituloDeRuta, ubicarRuta } from './ubicarRuta.js'
+
+// Dónde está el usuario: la opción del menú y, en una subruta, el enlace para volver a ella. Si la pantalla llegó con
+// state.volverA (la lista con sus filtros), la miga vuelve ahí, como su botón «Volver».
+function migasDe(pathname, volverA) {
+  const ubicada = ubicarRuta(pathname)
+  if (ubicada?.subruta) {
+    return [
+      { titulo: ubicada.opcion.titulo, ruta: volverA ?? ubicada.opcion.ruta },
+      { titulo: ubicada.subruta.titulo },
+    ]
+  }
+  const titulo = tituloDeRuta(pathname)
+  return titulo ? [{ titulo }] : []
+}
+
+const FECHA_LARGA = new Intl.DateTimeFormat('es-GT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
 export default function Encabezado() {
-  const { sesion, cerrar } = useSesion()
-  const { hayCambios } = useCambiosPendientes()
-  const navegar = useNavigate()
-  const [confirmando, setConfirmando] = useState(false)
-  const { rol, rolNombre, empleado } = sesion.usuario
-
-  function cerrarSesion() {
-    cerrar()
-    navegar('/login', { replace: true })
-  }
-
-  // useBlocker no lo detecta: la sesión se borra antes de navegar.
-  function pedirCierre() {
-    if (hayCambios) setConfirmando(true)
-    else cerrarSesion()
-  }
+  const { pathname, state } = useLocation()
+  const migas = migasDe(pathname, state?.volverA)
 
   return (
-    <header className="flex items-center gap-3 border-b bg-card px-4 py-3">
-      <SidebarTrigger aria-label="Mostrar u ocultar el menú" />
-      <div className="ml-auto text-right leading-tight">
-        <p className="text-sm font-medium">
-          {empleado.nombres} {empleado.apellidos}
-        </p>
-        <p className="text-xs text-muted-foreground">{rolNombre ?? rol}</p>
-      </div>
-      <Button variant="outline" size="sm" onClick={() => navegar(RUTA_CAMBIO_CONTRASENA)}>
-        <KeyRound />
-        Cambiar contraseña
-      </Button>
-      <Button variant="outline" size="sm" onClick={pedirCierre}>
-        <LogOut />
-        Cerrar sesión
-      </Button>
-
-      <AlertDialog open={confirmando} onOpenChange={setConfirmando}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Hay cambios sin guardar</AlertDialogTitle>
-            <AlertDialogDescription>
-              Si cierra sesión ahora, se pierden los cambios sin guardar del reporte.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Seguir editando</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={cerrarSesion}>
-              Cerrar sesión sin guardar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+    <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center gap-2 border-b bg-card/80 px-4 backdrop-blur-md backdrop-saturate-150">
+      <SidebarTrigger className="-ml-1" aria-label="Mostrar u ocultar el menú" />
+      {migas.length > 0 && (
+        <>
+          <Separator orientation="vertical" className="my-auto mr-1 data-[orientation=vertical]:h-4" />
+          <Breadcrumb aria-label="Ubicación">
+            <BreadcrumbList>
+              {migas.map((miga, indice) => (
+                <Fragment key={miga.titulo}>
+                  {indice > 0 && <BreadcrumbSeparator />}
+                  <BreadcrumbItem>
+                    {miga.ruta ? (
+                      <BreadcrumbLink asChild>
+                        <Link to={miga.ruta}>{miga.titulo}</Link>
+                      </BreadcrumbLink>
+                    ) : (
+                      <BreadcrumbPage>{miga.titulo}</BreadcrumbPage>
+                    )}
+                  </BreadcrumbItem>
+                </Fragment>
+              ))}
+            </BreadcrumbList>
+          </Breadcrumb>
+        </>
+      )}
+      <p className="ml-auto hidden items-center gap-2 rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground md:flex">
+        <CalendarDays className="size-3.5" aria-hidden="true" />
+        <span className="first-letter:uppercase">{FECHA_LARGA.format(new Date())}</span>
+      </p>
     </header>
   )
 }

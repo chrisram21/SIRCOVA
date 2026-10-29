@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { toast } from 'sonner'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { desactivarEstablecimiento, listarEstablecimientos, reactivarEstablecimiento } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
@@ -221,6 +222,25 @@ test('sin establecimientos muestra "No hay establecimientos registrados."', asyn
   expect(screen.getByText('No hay establecimientos registrados.')).toBeTruthy()
 })
 
+test('sin establecimientos y con ESTABLECIMIENTO_CREAR, el aviso trae el enlace de registro', async () => {
+  listarEstablecimientos.mockResolvedValue([])
+
+  await abrir(undefined, ['CONFIGURACION_CONSULTAR', 'ESTABLECIMIENTO_CONSULTAR', 'ESTABLECIMIENTO_CREAR'])
+
+  const vacio = screen.getByText('No hay establecimientos registrados.').parentElement
+  expect(within(vacio).getByRole('link', { name: 'Registrar establecimiento' }).getAttribute('href')).toBe(
+    '/configuracion/establecimientos/nuevo',
+  )
+})
+
+test('sin ESTABLECIMIENTO_CREAR, el aviso de vacío no trae el enlace', async () => {
+  listarEstablecimientos.mockResolvedValue([])
+
+  await abrir()
+
+  expect(screen.queryByRole('link', { name: 'Registrar establecimiento' })).toBeNull()
+})
+
 test('si falla la petición muestra el aviso, y "Reintentar" vuelve a pedir', async () => {
   listarEstablecimientos.mockRejectedValueOnce(new ErrorApi(500, 'ERROR_INESPERADO', 'Ocurrió un error inesperado.'))
 
@@ -267,7 +287,7 @@ describe('acciones', () => {
     expect(within(dialogo).getByText('Su personal no podrá crear reportes nuevos.')).toBeTruthy()
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Desactivar' }))
 
-    expect(await screen.findByText('Establecimiento CS-1207 desactivado.')).toBeTruthy()
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Establecimiento CS-1207 desactivado.'))
     expect(desactivarEstablecimiento).toHaveBeenCalledWith(2)
     expect(celdasDe('CS-1207')[6].textContent).toBe('Inactivo')
     const menu = await abrirMenu('CS-1207')
@@ -283,7 +303,7 @@ describe('acciones', () => {
     await elegirAccion('PS-1207-01', 'Reactivar')
     fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Reactivar' }))
 
-    expect(await screen.findByText('Establecimiento PS-1207-01 reactivado.')).toBeTruthy()
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Establecimiento PS-1207-01 reactivado.'))
     expect(reactivarEstablecimiento).toHaveBeenCalledWith(34)
     expect(celdasDe('PS-1207-01')[6].textContent).toBe('Activo')
   })

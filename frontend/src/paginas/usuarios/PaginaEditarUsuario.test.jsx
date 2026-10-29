@@ -1,5 +1,6 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { createMemoryRouter, Outlet, RouterProvider } from 'react-router-dom'
+import { toast } from 'sonner'
 import { listarEstablecimientos, listarMunicipios } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
 import { guardarSesion } from '@/api/sesion.js'
@@ -78,18 +79,28 @@ function crearSesion() {
   }
 }
 
-async function abrir(id = 8) {
+// Data router: el aviso de cambios sin guardar usa useBlocker. `volverA` es lo que manda la lista de Usuarios.
+async function abrir(id = 8, { volverA } = {}) {
   guardarSesion(crearSesion())
-  render(
-    <MemoryRouter initialEntries={[`/usuarios/${id}/editar`]}>
-      <ProveedorSesion>
-        <Routes>
-          <Route path="/usuarios/:id/editar" element={<PaginaEditarUsuario />} />
-        </Routes>
-      </ProveedorSesion>
-    </MemoryRouter>,
+  const router = createMemoryRouter(
+    [
+      {
+        element: (
+          <ProveedorSesion>
+            <Outlet />
+          </ProveedorSesion>
+        ),
+        children: [
+          { path: '/usuarios/:id/editar', element: <PaginaEditarUsuario /> },
+          { path: '/usuarios', element: <h1>Lista de usuarios</h1> },
+        ],
+      },
+    ],
+    { initialEntries: [{ pathname: `/usuarios/${id}/editar`, state: volverA ? { volverA } : null }] },
   )
+  render(<RouterProvider router={router} />)
   await waitFor(() => expect(obtenerUsuario).toHaveBeenCalled())
+  return router
 }
 
 const esperarFormulario = () => waitFor(() => expect(screen.getByLabelText(/^Nombres/).disabled).toBe(false))
@@ -98,6 +109,7 @@ const escribir = (etiqueta, valor) => fireEvent.change(screen.getByLabelText(eti
 const elegir = (nombre, valor) =>
   fireEvent.change(document.querySelector(`select[name="${nombre}"]`), { target: { value: String(valor) } })
 const botonGuardar = () => screen.getByRole('button', { name: /^(Guardar cambios|Guardando…)$/ })
+const EXITO = 'Se guardaron los cambios de Ana López.'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -122,19 +134,25 @@ test('carga los datos de la cuenta en el formulario y pide la cuenta de la ruta'
   expect(document.querySelector('select[name="rol"]').value).toBe('2')
 })
 
-test('"Guardar cambios" está deshabilitado sin cambios y con nombres vacíos', async () => {
+test('"Guardar cambios" está habilitado: sin cambios avisa que no hay nada que guardar; con nombres vacíos, marca el error', async () => {
   await abrir()
   await esperarFormulario()
-  expect(botonGuardar().disabled).toBe(true)
-
-  escribir(/^Cargo/, 'Epidemióloga')
   expect(botonGuardar().disabled).toBe(false)
 
+  fireEvent.click(botonGuardar())
+  expect(toast.info).toHaveBeenCalledWith('No hay cambios que guardar.')
+  expect(editarEmpleado).not.toHaveBeenCalled()
+
+  escribir(/^Cargo/, 'Epidemióloga')
   escribir(/^Nombres/, '  ')
-  expect(botonGuardar().disabled).toBe(true)
+  fireEvent.click(botonGuardar())
+
+  expect(screen.getByText('Los nombres son obligatorios.')).toBeTruthy()
+  expect(document.activeElement).toBe(screen.getByLabelText(/^Nombres/))
+  expect(editarEmpleado).not.toHaveBeenCalled()
 })
 
-test('un campo cambiado mal escrito muestra su mensaje al salir de él y deshabilita "Guardar cambios"', async () => {
+test('un campo cambiado mal escrito muestra su mensaje al salir de él y no deja guardar hasta corregirlo', async () => {
   await abrir()
   await esperarFormulario()
 
@@ -143,11 +161,27 @@ test('un campo cambiado mal escrito muestra su mensaje al salir de él y deshabi
 
   expect(screen.getByText('Los nombres solo pueden tener letras, espacios, apóstrofos y guiones.')).toBeTruthy()
   expect(screen.getByLabelText(/^Nombres/).getAttribute('aria-invalid')).toBe('true')
-  expect(botonGuardar().disabled).toBe(true)
+  fireEvent.click(botonGuardar())
+  expect(editarEmpleado).not.toHaveBeenCalled()
 
   escribir(/^Nombres/, 'Ana María')
   expect(screen.queryByText('Los nombres solo pueden tener letras, espacios, apóstrofos y guiones.')).toBeNull()
-  expect(botonGuardar().disabled).toBe(false)
+  fireEvent.click(botonGuardar())
+  await waitFor(() => expect(editarEmpleado).toHaveBeenCalledWith(108, { nombres: 'Ana María' }))
+})
+
+test('al guardar con varios errores se ven todos y el foco va al primero, aunque no se haya salido de ellos', async () => {
+  await abrir()
+  await esperarFormulario()
+
+  escribir(/^Teléfono/, '9551')
+  escribir(/^Cargo/, '1')
+  fireEvent.click(botonGuardar())
+
+  expect(screen.getByText('El cargo solo puede tener letras, espacios y los signos . , ( ) / -.')).toBeTruthy()
+  expect(screen.getByText('El teléfono debe tener 8 dígitos y empezar con 2 a 7.')).toBeTruthy()
+  expect(document.activeElement).toBe(screen.getByLabelText(/^Cargo/))
+  expect(editarEmpleado).not.toHaveBeenCalled()
 })
 
 test('un dato viejo mal escrito que no se tocó no impide guardar otro campo', async () => {
@@ -159,7 +193,6 @@ test('un dato viejo mal escrito que no se tocó no impide guardar otro campo', a
   escribir(/^Cargo/, 'Estadígrafa')
 
   expect(screen.queryByText('El teléfono debe tener 8 dígitos y empezar con 2 a 7.')).toBeNull()
-  expect(botonGuardar().disabled).toBe(false)
   fireEvent.click(botonGuardar())
   await waitFor(() => expect(editarEmpleado).toHaveBeenCalledWith(108, { cargo: 'Estadígrafa' }))
 })
@@ -178,7 +211,9 @@ test('el correo es obligatorio solo si el empleado ya tenía uno', async () => {
   escribir(/^Correo/, '')
   fireEvent.blur(screen.getByLabelText(/^Correo/))
   expect(screen.getByText('El correo es obligatorio.')).toBeTruthy()
-  expect(botonGuardar().disabled).toBe(true)
+  fireEvent.click(botonGuardar())
+  expect(document.activeElement).toBe(screen.getByLabelText(/^Correo/))
+  expect(editarEmpleado).not.toHaveBeenCalled()
 })
 
 test('sin CUI registrado, el campo está vacío y es opcional; escrito, se envía como cui', async () => {
@@ -192,12 +227,24 @@ test('sin CUI registrado, el campo está vacío y es opcional; escrito, se enví
   escribir(/^CUI/, '1234567880101')
   fireEvent.blur(screen.getByLabelText(/^CUI/))
   expect(screen.getByText('El CUI no es válido; revise los dígitos.')).toBeTruthy()
-  expect(botonGuardar().disabled).toBe(true)
+  fireEvent.click(botonGuardar())
+  expect(document.activeElement).toBe(screen.getByLabelText(/^CUI/))
+  expect(editarEmpleado).not.toHaveBeenCalled()
 
   escribir(/^CUI/, '1234 56789 0101')
   fireEvent.click(botonGuardar())
   await waitFor(() => expect(editarEmpleado).toHaveBeenCalledWith(108, { cui: '1234 56789 0101' }))
-  // Tras guardar, el empleado tiene CUI: se muestra la insignia y no el campo.
+})
+
+test('si el rol falla después de guardar el CUI, el formulario toma lo guardado: se ve "Registrado" y no el campo', async () => {
+  cambiarRol.mockRejectedValueOnce(new ErrorApi(422, 'ROL_INVALIDO', 'El rol no existe.'))
+  await abrir()
+  await esperarFormulario()
+
+  escribir(/^CUI/, '1234 56789 0101')
+  elegir('rol', 3)
+  fireEvent.click(botonGuardar())
+
   expect(await screen.findByText('Registrado')).toBeTruthy()
   expect(screen.queryByLabelText(/^CUI/)).toBeNull()
 })
@@ -213,12 +260,14 @@ test('con CUI registrado se ve "Registrado"; "Reemplazar CUI" muestra el campo v
   fireEvent.click(screen.getByRole('button', { name: 'Reemplazar CUI' }))
   expect(screen.getByLabelText(/^CUI/).value).toBe('')
   escribir(/^CUI/, '1234567890101')
-  expect(botonGuardar().disabled).toBe(false)
 
   fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
   expect(screen.queryByLabelText(/^CUI/)).toBeNull()
   expect(screen.getByText('Registrado')).toBeTruthy()
-  expect(botonGuardar().disabled).toBe(true)
+  // Cancelar el reemplazo descarta el CUI escrito: no queda nada que guardar.
+  fireEvent.click(botonGuardar())
+  expect(toast.info).toHaveBeenCalledWith('No hay cambios que guardar.')
+  expect(editarEmpleado).not.toHaveBeenCalled()
 
   fireEvent.click(screen.getByRole('button', { name: 'Reemplazar CUI' }))
   expect(screen.getByLabelText(/^CUI/).value).toBe('')
@@ -231,31 +280,34 @@ test('sin escribir un CUI, editarEmpleado no recibe cui; un 409 CUI_DUPLICADO mu
   await abrir()
   await esperarFormulario()
 
-  escribir(/^Cargo/, 'Estadígrafa')
-  fireEvent.click(botonGuardar())
-  await waitFor(() => expect(editarEmpleado).toHaveBeenCalledWith(108, { cargo: 'Estadígrafa' }))
-
+  // Guardar bien lleva a la lista; el 409 se prueba primero, porque deja la pantalla abierta.
   editarEmpleado.mockRejectedValueOnce(new ErrorApi(409, 'CUI_DUPLICADO', 'Ya hay un empleado registrado con ese CUI.'))
   fireEvent.click(screen.getByRole('button', { name: 'Reemplazar CUI' }))
   escribir(/^CUI/, '1234567890101')
   fireEvent.click(botonGuardar())
   expect(await screen.findByText('Ya hay un empleado registrado con ese CUI.')).toBeTruthy()
   expect(screen.getByLabelText(/^CUI/).value).toBe('1234567890101')
+
+  fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+  escribir(/^Cargo/, 'Estadígrafa')
+  fireEvent.click(botonGuardar())
+  await waitFor(() => expect(editarEmpleado).toHaveBeenLastCalledWith(108, { cargo: 'Estadígrafa' }))
 })
 
-test('cambiar solo el cargo llama solo a editarEmpleado, con { cargo }, y muestra el éxito', async () => {
-  await abrir()
+test('cambiar solo el cargo llama solo a editarEmpleado, con { cargo }, avisa con un toast y vuelve a la lista', async () => {
+  const router = await abrir()
   await esperarFormulario()
 
   escribir(/^Cargo/, 'Epidemióloga')
   fireEvent.click(botonGuardar())
 
-  expect(await screen.findByText('Se guardaron los cambios de Ana López.')).toBeTruthy()
+  await waitFor(() => expect(toast.success).toHaveBeenCalledWith(EXITO))
   expect(editarEmpleado).toHaveBeenCalledWith(108, { cargo: 'Epidemióloga' })
   expect(cambiarRol).not.toHaveBeenCalled()
-  expect(screen.getByRole('link', { name: 'Volver a Usuarios' }).getAttribute('href')).toBe('/usuarios')
-  // El formulario toma lo guardado: ya no hay cambios pendientes.
-  expect(botonGuardar().disabled).toBe(true)
+  // El formulario quedó igual a lo guardado: vuelve sin preguntar por cambios sin guardar.
+  expect(await screen.findByRole('heading', { name: 'Lista de usuarios' })).toBeTruthy()
+  expect(router.state.location.pathname).toBe('/usuarios')
+  expect(screen.queryByRole('alertdialog')).toBeNull()
 })
 
 test('vaciar un campo opcional lo envía como null', async () => {
@@ -275,7 +327,7 @@ test('cambiar solo el rol llama solo a cambiarRol', async () => {
   elegir('rol', 3)
   fireEvent.click(botonGuardar())
 
-  expect(await screen.findByText('Se guardaron los cambios de Ana López.')).toBeTruthy()
+  await waitFor(() => expect(toast.success).toHaveBeenCalledWith(EXITO))
   expect(cambiarRol).toHaveBeenCalledWith(8, 3)
   expect(editarEmpleado).not.toHaveBeenCalled()
 })
@@ -287,7 +339,9 @@ test('el rol de personal del establecimiento sin establecimiento muestra el avis
   elegir('rol', 1)
 
   expect(screen.getByText('Para el rol Personal del establecimiento, el empleado debe tener un establecimiento.')).toBeTruthy()
-  expect(botonGuardar().disabled).toBe(true)
+  fireEvent.click(botonGuardar())
+  expect(document.activeElement).toBe(document.getElementById('rol'))
+  expect(cambiarRol).not.toHaveBeenCalled()
 })
 
 test('si falla el rol después del empleado, muestra el aviso parcial y reintentar llama solo a cambiarRol', async () => {
@@ -306,7 +360,7 @@ test('si falla el rol después del empleado, muestra el aviso parcial y reintent
 
   fireEvent.click(botonGuardar())
 
-  expect(await screen.findByText('Se guardaron los cambios de Ana López.')).toBeTruthy()
+  await waitFor(() => expect(toast.success).toHaveBeenCalledWith(EXITO))
   expect(editarEmpleado).toHaveBeenCalledTimes(1)
   expect(cambiarRol).toHaveBeenCalledTimes(2)
 })
@@ -349,4 +403,106 @@ test('si falla la carga, muestra el error y no se puede guardar', async () => {
 
   expect(await screen.findByText('No se pudieron cargar los datos de la cuenta: El recurso solicitado no existe.')).toBeTruthy()
   expect(botonGuardar().disabled).toBe(true)
+})
+
+test('«Reintentar» vuelve a pedir los datos de la cuenta', async () => {
+  obtenerUsuario.mockRejectedValueOnce(new ErrorApi(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.'))
+  await abrir()
+  await screen.findByText(/No se pudieron cargar los datos de la cuenta/)
+
+  fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+  await esperarFormulario()
+  expect(obtenerUsuario).toHaveBeenCalledTimes(2)
+  expect(screen.getByLabelText(/^Nombres/).value).toBe('Ana')
+  expect(screen.queryByText(/No se pudieron cargar los datos de la cuenta/)).toBeNull()
+})
+
+test('el error de la API se muestra junto a los botones, debajo del formulario', async () => {
+  editarEmpleado.mockRejectedValue(new ErrorApi(409, 'CORREO_DUPLICADO', 'Ya hay un empleado con ese correo.'))
+  await abrir()
+  await esperarFormulario()
+
+  escribir(/^Correo/, 'otra@prueba.local')
+  fireEvent.click(botonGuardar())
+
+  const alerta = (await screen.findByText('Ya hay un empleado con ese correo.')).closest('[role="alert"]')
+  expect(alerta.nextElementSibling.contains(botonGuardar())).toBe(true)
+})
+
+describe('volver a la lista con sus filtros', () => {
+  const volverA = { pathname: '/usuarios', search: '?estado=ACTIVA&pagina=2' }
+
+  test('«Volver a Usuarios» y «Cancelar» llevan a la lista con los filtros; sin ellos, a /usuarios', async () => {
+    await abrir(8, { volverA })
+    await esperarFormulario()
+    expect(screen.getByRole('link', { name: 'Volver a Usuarios' }).getAttribute('href')).toBe('/usuarios?estado=ACTIVA&pagina=2')
+    expect(screen.getByRole('link', { name: 'Cancelar' }).getAttribute('href')).toBe('/usuarios?estado=ACTIVA&pagina=2')
+    cleanup()
+
+    await abrir()
+    await esperarFormulario()
+    expect(screen.getByRole('link', { name: 'Cancelar' }).getAttribute('href')).toBe('/usuarios')
+  })
+
+  test('después de guardar vuelve a la lista con los filtros', async () => {
+    const router = await abrir(8, { volverA })
+    await esperarFormulario()
+
+    escribir(/^Cargo/, 'Epidemióloga')
+    fireEvent.click(botonGuardar())
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/usuarios'))
+    expect(router.state.location.search).toBe('?estado=ACTIVA&pagina=2')
+  })
+
+  test('una cuenta desactivada también vuelve con los filtros', async () => {
+    obtenerUsuario.mockResolvedValue(cuenta({ activo: false }))
+    await abrir(8, { volverA })
+
+    expect((await screen.findByRole('link', { name: 'Volver a Usuarios' })).getAttribute('href')).toBe(
+      '/usuarios?estado=ACTIVA&pagina=2',
+    )
+  })
+})
+
+describe('cambios sin guardar', () => {
+  test('sin cambios, «Cancelar» sale sin preguntar', async () => {
+    const router = await abrir()
+    await esperarFormulario()
+
+    fireEvent.click(screen.getByRole('link', { name: 'Cancelar' }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/usuarios'))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+  })
+
+  test('con cambios pide confirmación: «Seguir editando» se queda con lo escrito y «Salir sin guardar» sale', async () => {
+    const router = await abrir()
+    await esperarFormulario()
+    escribir(/^Cargo/, 'Epidemióloga')
+
+    fireEvent.click(screen.getByRole('link', { name: 'Volver a Usuarios' }))
+    const dialogo = await screen.findByRole('alertdialog')
+    expect(dialogo.textContent).toContain('Si sale ahora, se pierden los cambios que no guardó.')
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Seguir editando' }))
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(router.state.location.pathname).toBe('/usuarios/8/editar')
+    expect(screen.getByLabelText(/^Cargo/).value).toBe('Epidemióloga')
+
+    fireEvent.click(screen.getByRole('link', { name: 'Cancelar' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Salir sin guardar' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/usuarios'))
+    expect(editarEmpleado).not.toHaveBeenCalled()
+  })
+
+  test('cambiar solo el rol también cuenta como cambio sin guardar', async () => {
+    await abrir()
+    await esperarFormulario()
+    elegir('rol', 3)
+
+    fireEvent.click(screen.getByRole('link', { name: 'Cancelar' }))
+    expect(await screen.findByRole('alertdialog')).toBeTruthy()
+  })
 })

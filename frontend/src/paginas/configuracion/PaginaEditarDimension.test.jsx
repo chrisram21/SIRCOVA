@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-router-dom'
+import { toast } from 'sonner'
 import {
   agregarValorDimension,
   desactivarValorDimension,
@@ -75,20 +76,33 @@ function Ubicacion() {
   return <output data-testid="ubicacion">{`${pathname}${search}`}</output>
 }
 
+// El aviso de cambios sin guardar (useBlocker) necesita un data router.
+function montar(ruta) {
+  guardarSesion(crearSesion())
+  const router = createMemoryRouter(
+    [
+      {
+        element: (
+          <ProveedorSesion>
+            <Outlet />
+            <Ubicacion />
+          </ProveedorSesion>
+        ),
+        children: [
+          { path: '/configuracion/dimensiones/:codigo/editar', element: <PaginaEditarDimension /> },
+          { path: '/configuracion', element: <p>Pestaña</p> },
+        ],
+      },
+    ],
+    { initialEntries: [ruta] },
+  )
+  render(<RouterProvider router={router} />)
+}
+const ubicacion = () => screen.getByTestId('ubicacion').textContent
+
 async function abrir(dimension = VIA) {
   obtenerDimension.mockResolvedValue(dimension)
-  guardarSesion(crearSesion())
-  render(
-    <MemoryRouter initialEntries={[`/configuracion/dimensiones/${dimension.codigo}/editar`]}>
-      <ProveedorSesion>
-        <Routes>
-          <Route path="/configuracion/dimensiones/:codigo/editar" element={<PaginaEditarDimension />} />
-          <Route path="/configuracion" element={<p>Pestaña</p>} />
-        </Routes>
-        <Ubicacion />
-      </ProveedorSesion>
-    </MemoryRouter>,
-  )
+  montar(`/configuracion/dimensiones/${dimension.codigo}/editar`)
   await waitFor(() => expect(screen.queryByLabelText('Cargando dimensión')).toBeNull())
 }
 
@@ -118,16 +132,68 @@ test('muestra los datos, los valores en orden y pide la dimensión por su códig
   expect(within(tabla()).queryByRole('columnheader', { name: 'Rango' })).toBeNull()
 })
 
-test('guardar el nombre llama a editarDimension solo con lo que cambió y muestra el aviso', async () => {
+test('guardar el nombre llama a editarDimension solo con lo que cambió, muestra el aviso y ya no hay cambios', async () => {
   editarDimension.mockResolvedValue({ ...VIA, nombre: 'Vía' })
   await abrir()
 
   fireEvent.change(screen.getByLabelText(/^Nombre\*?$/), { target: { value: '  Vía ' } })
   fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
 
-  expect(await screen.findByText('Dimensión Vía actualizada.')).toBeTruthy()
+  await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Dimensión Vía actualizada.'))
   expect(editarDimension).toHaveBeenCalledWith('via', { nombre: 'Vía' })
-  expect(screen.getByRole('button', { name: 'Guardar cambios' }).disabled).toBe(true)
+  expect(screen.getByLabelText(/^Nombre\*?$/).value).toBe('Vía')
+
+  // Lo guardado ya no cuenta como cambio: «Volver» sale sin preguntar.
+  fireEvent.click(screen.getByRole('link', { name: 'Volver' }))
+  await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=dimensiones'))
+  expect(screen.queryByRole('alertdialog')).toBeNull()
+})
+
+test('sin cambios, "Guardar cambios" avisa que no hay nada que guardar y no llama a la API', async () => {
+  await abrir()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+
+  expect(toast.info).toHaveBeenCalledWith('No hay cambios que guardar.')
+  expect(editarDimension).not.toHaveBeenCalled()
+})
+
+test('un error al guardar se muestra junto al botón y conserva lo escrito', async () => {
+  editarDimension.mockRejectedValue(new ErrorApi(409, 'DIMENSION_DUPLICADA', 'Ya hay una dimensión con ese nombre.'))
+  await abrir()
+
+  fireEvent.change(screen.getByLabelText(/^Nombre\*?$/), { target: { value: 'Vía' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+
+  const aviso = (await screen.findByText('Ya hay una dimensión con ese nombre.')).closest('[role="alert"]')
+  expect(aviso.parentElement.nextElementSibling.contains(screen.getByRole('button', { name: 'Guardar cambios' }))).toBe(true)
+  expect(screen.getByLabelText(/^Nombre\*?$/).value).toBe('Vía')
+})
+
+test('con el nombre cambiado, "Volver" pide confirmación y "Seguir editando" se queda', async () => {
+  await abrir()
+  fireEvent.change(screen.getByLabelText(/^Nombre\*?$/), { target: { value: 'Vía' } })
+
+  fireEvent.click(screen.getByRole('link', { name: 'Volver' }))
+  const dialogo = await screen.findByRole('alertdialog')
+  expect(dialogo.textContent).toContain('Si sale ahora, se pierden los cambios de la dimensión.')
+  fireEvent.click(within(dialogo).getByRole('button', { name: 'Seguir editando' }))
+
+  await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+  expect(ubicacion()).toBe('/configuracion/dimensiones/via/editar')
+  expect(screen.getByLabelText(/^Nombre\*?$/).value).toBe('Vía')
+})
+
+test('si falla la carga muestra el aviso, y "Reintentar" vuelve a pedir la dimensión', async () => {
+  obtenerDimension.mockRejectedValueOnce(new ErrorApi(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.'))
+  obtenerDimension.mockResolvedValue(VIA)
+  montar('/configuracion/dimensiones/via/editar')
+
+  expect(await screen.findByText('No se pudo cargar la dimensión: No se pudo conectar con el servidor.')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+  expect(await screen.findByRole('table', { name: 'Valores' })).toBeTruthy()
+  expect(obtenerDimension).toHaveBeenCalledTimes(2)
 })
 
 test('un nombre inválido muestra su error y no llama a la API', async () => {
@@ -137,6 +203,7 @@ test('un nombre inválido muestra su error y no llama a la API', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
 
   expect(screen.getByText('El nombre debe tener entre 2 y 60 caracteres.')).toBeTruthy()
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText(/^Nombre\*?$/)))
   expect(editarDimension).not.toHaveBeenCalled()
 })
 
@@ -151,7 +218,7 @@ test('"Bajar" manda la lista completa reordenada, con los inactivos, y reemplaza
   expect(screen.getByRole('button', { name: 'Bajar ID' }).disabled).toBe(true)
   fireEvent.click(screen.getByRole('button', { name: 'Bajar IM' }))
 
-  expect(await screen.findByText('Orden de los valores actualizado.')).toBeTruthy()
+  await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Orden de los valores actualizado.'))
   expect(ordenarValoresDimension).toHaveBeenCalledWith('via', ['SC', 'IM', 'ID'])
   expect(within(filaDe('SC')).getAllByRole('cell')[0].textContent).toBe('1')
 })
@@ -167,7 +234,7 @@ test('en una CATEGORICA el Dialog pide código y etiqueta, y agrega el valor', a
   escribirEn(dialogo, /^Etiqueta\*?$/, 'Oral')
   fireEvent.click(within(dialogo).getByRole('button', { name: 'Agregar valor' }))
 
-  expect(await screen.findByText('Valor OR agregado.')).toBeTruthy()
+  await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Valor OR agregado.'))
   expect(agregarValorDimension).toHaveBeenCalledWith('via', { codigo: 'OR', etiqueta: 'Oral' })
   expect(screen.queryByRole('dialog')).toBeNull()
   expect(filaDe('OR')).toBeTruthy()
@@ -222,7 +289,7 @@ describe('dimensión RANGO_EDAD', () => {
     escribirEn(dialogo, /^Edad máxima/, '600')
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Agregar valor' }))
 
-    expect(await screen.findByText('Valor EMBARAZADAS agregado.')).toBeTruthy()
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Valor EMBARAZADAS agregado.'))
     expect(agregarValorDimension).toHaveBeenCalledWith('grupo_edad', {
       codigo: 'EMBARAZADAS',
       etiqueta: 'Mujeres embarazadas esperadas',
@@ -272,7 +339,7 @@ describe('desactivar y editar valores', () => {
     expect(within(confirmacion).getByText('¿Desactivar el valor SC · Subcutánea?')).toBeTruthy()
     fireEvent.click(within(confirmacion).getByRole('button', { name: 'Desactivar' }))
 
-    expect(await screen.findByText('Valor SC desactivado.')).toBeTruthy()
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Valor SC desactivado.'))
     expect(desactivarValorDimension).toHaveBeenCalledWith('via', 'SC')
     expect(insignias('SC')).toEqual(['Inactivo'])
   })
@@ -290,7 +357,7 @@ describe('desactivar y editar valores', () => {
     escribirEn(dialogo, /^Etiqueta\*?$/, 'Inyección intramuscular')
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Guardar' }))
 
-    expect(await screen.findByText('Etiqueta de IM actualizada.')).toBeTruthy()
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Etiqueta de IM actualizada.'))
     expect(editarValorDimension).toHaveBeenCalledWith('via', 'IM', { etiqueta: 'Inyección intramuscular' })
     expect(within(filaDe('IM')).getByText('Inyección intramuscular')).toBeTruthy()
   })
@@ -298,19 +365,23 @@ describe('desactivar y editar valores', () => {
 
 test('un código que no existe muestra "La dimensión no existe." con el enlace a la pestaña', async () => {
   obtenerDimension.mockRejectedValue(new ErrorApi(404, 'NO_ENCONTRADO', 'El recurso solicitado no existe.'))
-  guardarSesion(crearSesion())
-  render(
-    <MemoryRouter initialEntries={['/configuracion/dimensiones/no_existe/editar']}>
-      <ProveedorSesion>
-        <Routes>
-          <Route path="/configuracion/dimensiones/:codigo/editar" element={<PaginaEditarDimension />} />
-        </Routes>
-      </ProveedorSesion>
-    </MemoryRouter>,
-  )
+  montar('/configuracion/dimensiones/no_existe/editar')
 
   expect(await screen.findByText(/La dimensión no existe\./)).toBeTruthy()
   expect(screen.getByRole('link', { name: 'Volver a las dimensiones' }).getAttribute('href')).toBe(
     '/configuracion?pestana=dimensiones',
   )
+})
+
+test('en el Dialog de la etiqueta, una etiqueta vacía muestra su error y le lleva el foco', async () => {
+  await abrir()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Editar la etiqueta de IM' }))
+  const dialogo = await screen.findByRole('dialog')
+  escribirEn(dialogo, /^Etiqueta\*?$/, '')
+  fireEvent.click(within(dialogo).getByRole('button', { name: 'Guardar' }))
+
+  expect(within(dialogo).getByText('La etiqueta debe tener entre 1 y 60 caracteres.')).toBeTruthy()
+  await waitFor(() => expect(document.activeElement).toBe(within(dialogo).getByLabelText(/^Etiqueta\*?$/)))
+  expect(editarValorDimension).not.toHaveBeenCalled()
 })

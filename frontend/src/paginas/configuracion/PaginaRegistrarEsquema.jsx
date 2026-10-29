@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { CircleAlert, TriangleAlert } from 'lucide-react'
+import { TriangleAlert } from 'lucide-react'
+import { toast } from 'sonner'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { crearEsquema, listarEsquemas, obtenerEsquema } from '@/api/configuracion.js'
-import { ErrorApi } from '@/api/cliente.js'
+import { ErrorApi, mensajeDeError } from '@/api/cliente.js'
+import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
+import { AvisoError } from '@/componentes/Avisos.jsx'
+import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import EditorEsquema, { cargarReferencias, PESTANA_ESQUEMAS } from './EditorEsquema.jsx'
 import { territorioDe } from './PestanaEsquemas.jsx'
 
@@ -70,6 +73,16 @@ export default function PaginaRegistrarEsquema() {
 
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
+  // Cada «Reintentar» sube este número y vuelve a cargar.
+  const [intentoCarga, setIntentoCarga] = useState(0)
+  // Lo informa el editor; tras guardar se sale en un efecto, cuando el aviso ya no bloquea.
+  const [hayCambios, setHayCambios] = useState(false)
+  const [guardado, setGuardado] = useState(false)
+  const bloqueo = useAvisoCambiosSinGuardar(hayCambios && !guardado)
+
+  useEffect(() => {
+    if (guardado) navigate(volverA)
+  }, [guardado, navigate, volverA])
 
   useEffect(() => {
     let vigente = true
@@ -91,16 +104,22 @@ export default function PaginaRegistrarEsquema() {
       .catch((err) => {
         if (!vigente) return
         const sinRemedio = err.message === NO_SE_PUEDE || (err instanceof ErrorApi && err.status === 404)
-        setError(sinRemedio ? NO_SE_PUEDE : err.mensaje ?? 'Ocurrió un error inesperado. Intente de nuevo.')
+        setError(sinRemedio ? NO_SE_PUEDE : mensajeDeError(err))
       })
     return () => {
       vigente = false
     }
-  }, [vacunaId, origen])
+  }, [vacunaId, origen, intentoCarga])
+
+  function reintentarCarga() {
+    setError(null)
+    setIntentoCarga((n) => n + 1)
+  }
 
   async function guardar(contenido) {
     const creado = await crearEsquema({ vacunaId, copiaDe: datos.base?.id ?? null, ...contenido })
-    navigate(volverA, { state: { aviso: `Borrador de ${datos.vacuna.nombre} guardado (versión ${creado.version}).` } })
+    toast.success(`Borrador de ${datos.vacuna.nombre} guardado (versión ${creado.version}).`)
+    setGuardado(true)
   }
 
   const { base } = datos ?? {}
@@ -111,31 +130,20 @@ export default function PaginaRegistrarEsquema() {
 
   return (
     <section className="flex max-w-5xl flex-col gap-6 p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Nuevo borrador de esquema</h1>
-        <Button type="button" variant="outline" onClick={() => navigate(volverA)}>
-          Volver
-        </Button>
-      </div>
+      <EncabezadoPagina antetitulo="Configuración" titulo="Nuevo borrador de esquema" volverA={volverA} />
 
       {error === NO_SE_PUEDE && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>
-            <span>
-              No se puede crear el borrador de esta vacuna.{' '}
-              <Link to={volverA} className="underline">
-                Volver a los esquemas
-              </Link>
-            </span>
-          </AlertDescription>
-        </Alert>
+        <AvisoError>
+          <span>
+            No se puede crear el borrador de esta vacuna.{' '}
+            <Link to={volverA} className="underline">
+              Volver a los esquemas
+            </Link>
+          </span>
+        </AvisoError>
       )}
       {error && error !== NO_SE_PUEDE && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>No se pudo preparar el borrador: {error}</AlertDescription>
-        </Alert>
+        <AvisoError onReintentar={reintentarCarga}>No se pudo preparar el borrador: {error}</AvisoError>
       )}
 
       {!datos && !error && (
@@ -166,10 +174,13 @@ export default function PaginaRegistrarEsquema() {
             dimensiones={datos.dimensiones}
             inicial={datos.inicial}
             onGuardar={guardar}
+            onCambios={setHayCambios}
             volverA={volverA}
           />
         </>
       )}
+
+      <AvisoCambiosSinGuardar bloqueo={bloqueo} descripcion="Si sale ahora, se pierde el borrador sin guardar." />
     </section>
   )
 }

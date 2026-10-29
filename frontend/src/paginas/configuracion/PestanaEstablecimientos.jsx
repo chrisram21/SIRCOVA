@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { CircleAlert, CircleCheck, MoreHorizontal, Plus, Search } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { MoreHorizontal, Plus, Search } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +26,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { desactivarEstablecimiento, listarEstablecimientos, reactivarEstablecimiento } from '@/api/catalogos.js'
+import { mensajeDeError } from '@/api/cliente.js'
+import { AvisoError } from '@/componentes/Avisos.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 
 // Radix Select no acepta '' como valor de una opción; "todos" equivale a no filtrar.
@@ -86,12 +88,11 @@ export default function PestanaEstablecimientos() {
   const puedeCrear = tienePermiso('ESTABLECIMIENTO_CREAR')
   const puedeEditar = tienePermiso('ESTABLECIMIENTO_EDITAR')
   const navigate = useNavigate()
-  const { search, state } = useLocation()
+  const { search } = useLocation()
   const [parametros, setParametros] = useSearchParams()
   const [establecimientos, setEstablecimientos] = useState(null)
   const [errorCarga, setErrorCarga] = useState(null)
-  // Empieza con el que trae el formulario en el state de la navegación, así no se pierde al cambiar un filtro.
-  const [aviso, setAviso] = useState(() => (state?.aviso ? { tipo: 'exito', mensaje: state.aviso } : null))
+  const [errorAccion, setErrorAccion] = useState(null)
   // null o { establecimiento, activar } mientras el AlertDialog de confirmación está abierto.
   const [porCambiar, setPorCambiar] = useState(null)
   const [cambiando, setCambiando] = useState(false)
@@ -107,7 +108,7 @@ export default function PestanaEstablecimientos() {
         if (carga === cargaActual.current) setEstablecimientos(lista)
       })
       .catch((err) => {
-        if (carga === cargaActual.current) setErrorCarga(err.mensaje)
+        if (carga === cargaActual.current) setErrorCarga(mensajeDeError(err))
       })
   }
 
@@ -127,19 +128,16 @@ export default function PestanaEstablecimientos() {
     evento.preventDefault()
     const { establecimiento, activar } = porCambiar
     setCambiando(true)
-    setAviso(null)
+    setErrorAccion(null)
     try {
       const actualizado = activar
         ? await reactivarEstablecimiento(establecimiento.id)
         : await desactivarEstablecimiento(establecimiento.id)
       // La fila se reemplaza con la respuesta, sin volver a pedir la lista.
       setEstablecimientos((actuales) => actuales.map((e) => (e.id === actualizado.id ? actualizado : e)))
-      setAviso({
-        tipo: 'exito',
-        mensaje: `Establecimiento ${actualizado.codigo} ${activar ? 'reactivado' : 'desactivado'}.`,
-      })
+      toast.success(`Establecimiento ${actualizado.codigo} ${activar ? 'reactivado' : 'desactivado'}.`)
     } catch (err) {
-      setAviso({ tipo: 'error', mensaje: err.mensaje })
+      setErrorAccion(mensajeDeError(err))
     } finally {
       setCambiando(false)
       setPorCambiar(null)
@@ -160,17 +158,7 @@ export default function PestanaEstablecimientos() {
   }
 
   if (errorCarga) {
-    return (
-      <div className="flex flex-col items-start gap-3">
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>No se pudieron cargar los establecimientos: {errorCarga}</AlertDescription>
-        </Alert>
-        <Button variant="outline" onClick={cargar}>
-          Reintentar
-        </Button>
-      </div>
-    )
+    return <AvisoError onReintentar={cargar}>No se pudieron cargar los establecimientos: {errorCarga}</AvisoError>
   }
 
   if (establecimientos === null) {
@@ -212,18 +200,7 @@ export default function PestanaEstablecimientos() {
 
   return (
     <div className="flex flex-col gap-6">
-      {aviso?.tipo === 'exito' && (
-        <Alert role="status" className="border-ring/40 bg-accent text-accent-foreground">
-          <CircleCheck />
-          <AlertDescription className="text-accent-foreground">{aviso.mensaje}</AlertDescription>
-        </Alert>
-      )}
-      {aviso?.tipo === 'error' && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>{aviso.mensaje}</AlertDescription>
-        </Alert>
-      )}
+      {errorAccion && <AvisoError>{errorAccion}</AvisoError>}
       <Card>
         <CardHeader>
           <CardTitle>Establecimientos e instituciones</CardTitle>
@@ -279,7 +256,17 @@ export default function PestanaEstablecimientos() {
           </form>
 
           {establecimientos.length === 0 ? (
-            <p className="text-muted-foreground">No hay establecimientos registrados.</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-muted-foreground">No hay establecimientos registrados.</p>
+              {puedeCrear && (
+                <Button asChild variant="outline">
+                  <Link to="/configuracion/establecimientos/nuevo" state={{ volverA: search }}>
+                    <Plus />
+                    Registrar establecimiento
+                  </Link>
+                </Button>
+              )}
+            </div>
           ) : filtrados.length === 0 ? (
             <p className="text-muted-foreground">No hay establecimientos que coincidan con los filtros.</p>
           ) : (
