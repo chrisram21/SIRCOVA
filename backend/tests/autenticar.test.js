@@ -7,6 +7,7 @@ import entorno from '../src/config/entorno.js';
 import pool from '../src/config/mysql.js';
 import { autenticar, verificarToken } from '../src/middlewares/autenticar.js';
 import { manejarErrores } from '../src/middlewares/errores.js';
+import { tokenDePrueba, borrarSesionesDe } from './sesionDePrueba.js';
 
 // Apps mínimas solo para la prueba: así se revisa req.usuario sin depender de una ruta real.
 // La de verificarToken no consulta la base, por eso acepta el usuario 7 firmado a mano.
@@ -26,8 +27,9 @@ const datosSesion = {
   municipioId: null,
 };
 
-const firmar = (opciones = {}, secreto = entorno.jwt.secreto) =>
-  jwt.sign(datosSesion, secreto, { algorithm: 'HS256', subject: '7', expiresIn: '5m', ...opciones });
+// El sid va fuera de datosSesion porque no forma parte de req.usuario.
+const firmar = (opciones = {}, secreto = entorno.jwt.secreto, carga = { ...datosSesion, sid: 1 }) =>
+  jwt.sign(carga, secreto, { algorithm: 'HS256', subject: '7', expiresIn: '5m', ...opciones });
 
 const pedir = (encabezado) => {
   const peticion = request(appToken).get('/protegida');
@@ -49,6 +51,8 @@ describe('verificarToken', () => {
     ['token firmado con otro secreto', `Bearer ${firmar({}, 'otro-secreto-cualquiera')}`],
     ['token con otro algoritmo (HS512)', `Bearer ${firmar({ algorithm: 'HS512' })}`],
     ['token sin sub', `Bearer ${jwt.sign(datosSesion, entorno.jwt.secreto, { algorithm: 'HS256' })}`],
+    ['token sin sid', `Bearer ${firmar({}, entorno.jwt.secreto, datosSesion)}`],
+    ['token con un sid que no es un entero', `Bearer ${firmar({}, entorno.jwt.secreto, { ...datosSesion, sid: 'uno' })}`],
   ])('%s: responde 401 NO_AUTENTICADO', async (_, encabezado) => {
     const res = await pedir(encabezado);
 
@@ -99,6 +103,7 @@ describe('autenticar revisa la cuenta en la base', () => {
   const PREFIJO = 'vitest-hu05-aut-';
   const ids = {};
   let ddrissId;
+  let sidAjeno;
 
   async function crearCuenta(nombre, { cuentaActiva = true, empleadoActiva = true, debeCambiar = false } = {}) {
     const [empleado] = await pool.query(
@@ -114,19 +119,18 @@ describe('autenticar revisa la cuenta en la base', () => {
   }
 
   const tokenPara = (id, datos = {}) =>
-    jwt.sign(
-      { rol: 'REVISOR', permisos: ['ROL_CONSULTAR'], ddrissId, establecimientoId: null, municipioId: null, ...datos },
-      entorno.jwt.secreto,
-      { algorithm: 'HS256', subject: String(id), expiresIn: '5m' },
-    );
+    tokenDePrueba(id, {
+      rol: 'REVISOR', permisos: ['ROL_CONSULTAR'], ddrissId, establecimientoId: null, municipioId: null, ...datos,
+    });
 
-  const consultarRoles = (credencial) =>
-    request(app).get('/api/v1/roles').set('Authorization', `Bearer ${credencial}`);
+  const consultarRoles = async (credencial) =>
+    request(app).get('/api/v1/roles').set('Authorization', `Bearer ${await credencial}`);
 
   beforeAll(async () => {
     const login = await iniciarSesion();
     if (login.status !== 200) throw new Error(`No se pudo iniciar sesión con el usuario de prueba (${login.status})`);
     ddrissId = login.body.usuario.empleado.ddrissId;
+    sidAjeno = jwt.decode(login.body.token).sid;
 
     ids.activa = await crearCuenta('activa');
     ids.desactivada = await crearCuenta('desactivada', { cuentaActiva: false });
@@ -135,6 +139,7 @@ describe('autenticar revisa la cuenta en la base', () => {
   });
 
   afterAll(async () => {
+    await borrarSesionesDe(`${PREFIJO}%`);
     await pool.query('DELETE FROM usuario WHERE nombre_usuario LIKE ?', [`${PREFIJO}%`]);
     await pool.query('DELETE FROM empleado WHERE correo LIKE ?', [`${PREFIJO}%`]);
   });
@@ -171,7 +176,23 @@ describe('autenticar revisa la cuenta en la base', () => {
   });
 
   it('con un sub que no existe: responde 401 NO_AUTENTICADO', async () => {
-    const res = await consultarRoles(tokenPara(999999999));
+    // Una cuenta que no existe no puede tener sesión: este token se firma a mano.
+    const res = await consultarRoles(
+      jwt.sign({ rol: 'REVISOR', permisos: [], sid: 1 }, entorno.jwt.secreto, { algorithm: 'HS256', subject: '999999999' }),
+    );
+
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ error: { codigo: 'NO_AUTENTICADO', mensaje: 'Debe iniciar sesión.' } });
+  });
+
+  it('con el sid de una sesión de otra cuenta: responde 401 NO_AUTENTICADO', async () => {
+    const ajeno = jwt.sign(
+      { rol: 'REVISOR', permisos: ['ROL_CONSULTAR'], ddrissId, establecimientoId: null, municipioId: null, sid: sidAjeno },
+      entorno.jwt.secreto,
+      { algorithm: 'HS256', subject: String(ids.activa), expiresIn: '5m' },
+    );
+
+    const res = await consultarRoles(ajeno);
 
     expect(res.status).toBe(401);
     expect(res.body).toEqual({ error: { codigo: 'NO_AUTENTICADO', mensaje: 'Debe iniciar sesión.' } });
@@ -191,7 +212,8 @@ describe('autenticar revisa la cuenta en la base', () => {
     ['POST /auth/logout', '/api/v1/auth/logout', { motivo: 'OTRO' }],
     ['POST /auth/contrasena', '/api/v1/auth/contrasena', {}],
   ])('con la contraseña temporal pendiente, %s no responde ese 403', async (_, ruta, cuerpo) => {
-    const res = await request(app).post(ruta).set('Authorization', `Bearer ${tokenPara(ids.debeCambiar)}`).send(cuerpo);
+    const token = await tokenPara(ids.debeCambiar);
+    const res = await request(app).post(ruta).set('Authorization', `Bearer ${token}`).send(cuerpo);
 
     expect(res.status).toBe(400);
     expect(res.body.error.codigo).toBe('ENTRADA_INVALIDA');

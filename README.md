@@ -56,7 +56,7 @@ El sistema usa **persistencia políglota**: cada motor tiene un rol fijo.
 
 | Motor | Rol | Contenido |
 |---|---|---|
-| **MySQL** | Datos transaccionales | Usuarios y empleados, roles, municipios, establecimientos, vacunas, periodos, poblaciones objetivo, producción, estados y transiciones del reporte, resultados de indicadores, alertas y bitácora, además de las DDRISS y el cierre de periodos por DDRISS (32 tablas, 4 vistas) |
+| **MySQL** | Datos transaccionales | Usuarios y empleados, roles, municipios, establecimientos, vacunas, periodos, poblaciones objetivo, producción, estados y transiciones del reporte, resultados de indicadores, alertas y bitácora, además de las DDRISS y el cierre de periodos por DDRISS (33 tablas, 4 vistas) |
 | **MongoDB** | Configuración versionada | Catálogo de dimensiones, esquemas de captura por vacuna, reglas de validación y configuración de indicadores (4 colecciones) |
 
 Principios del modelo:

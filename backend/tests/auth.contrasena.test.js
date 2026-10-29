@@ -1,11 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import app from '../src/app.js';
-import entorno from '../src/config/entorno.js';
 import pool from '../src/config/mysql.js';
 import { MOTIVOS } from '../src/modulos/auth/politicaContrasena.service.js';
+import { tokenDePrueba, borrarSesionesDe } from './sesionDePrueba.js';
 
 // El cambio correcto y el login con la nueva escriben su usuario_id en la bitácora, y la llave foránea impide
 // borrar esa cuenta: por eso usa una cuenta permanente que se reinicia en cada corrida. Los casos que fallan no
@@ -50,14 +49,10 @@ async function prepararCuenta(nombreUsuario) {
 }
 
 const tokenPara = (id) =>
-  jwt.sign(
-    { rol: 'REVISOR', permisos: [], ddrissId, establecimientoId: null, municipioId: null },
-    entorno.jwt.secreto,
-    { algorithm: 'HS256', subject: String(id), expiresIn: '5m' },
-  );
+  tokenDePrueba(id, { rol: 'REVISOR', permisos: [], ddrissId, establecimientoId: null, municipioId: null });
 
-const cambiar = (id, cuerpo) =>
-  request(app).post('/api/v1/auth/contrasena').set('Authorization', `Bearer ${tokenPara(id)}`).send(cuerpo);
+const cambiar = async (id, cuerpo) =>
+  request(app).post('/api/v1/auth/contrasena').set('Authorization', `Bearer ${await tokenPara(id)}`).send(cuerpo);
 
 const iniciarSesion = (nombreUsuario, contrasena) =>
   request(app).post('/api/v1/auth/login').send({ nombreUsuario, contrasena });
@@ -89,6 +84,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await borrarSesionesDe(TEMPORAL);
   await pool.query('DELETE FROM usuario WHERE nombre_usuario = ?', [TEMPORAL]);
   await pool.query('DELETE FROM empleado WHERE correo = ?', [`${TEMPORAL}@prueba.local`]);
 });

@@ -4,6 +4,7 @@ import { ErrorApi } from '../../middlewares/errores.js';
 import { registrarBitacora, diferencias, MODULOS, ACCIONES } from '../auditoria/auditoria.service.js';
 import { filtroAlcance, verificarAlcance } from '../auth/alcance.service.js';
 import { generarContrasenaTemporal } from '../auth/contrasenaTemporal.service.js';
+import { cerrarSesionDeUsuario } from '../auth/sesiones.service.js';
 import {
   validarNombres,
   validarApellidos,
@@ -482,6 +483,8 @@ export async function cambiarRol(id, cuerpo, administrador, contexto) {
     const cambios = diferencias({ rol: cuenta.rol }, { rol: rol.codigo });
     if (cambios) {
       await conexion.query('UPDATE usuario SET rol_id = ? WHERE id = ?', [rol.id, cuenta.id]);
+      // El rol define los permisos del token: la sesión abierta se cierra en la misma transacción.
+      const sesionCerrada = await cerrarSesionDeUsuario(conexion, cuenta.id, 'DATOS_CAMBIADOS');
       await registrarBitacora(conexion, {
         ...contexto,
         modulo: MODULOS.USUARIOS,
@@ -489,7 +492,7 @@ export async function cambiarRol(id, cuerpo, administrador, contexto) {
         entidad: 'usuario',
         entidadId: cuenta.id,
         valoresAnteriores: cambios.anteriores,
-        valoresNuevos: cambios.nuevos,
+        valoresNuevos: { ...cambios.nuevos, ...(sesionCerrada && { sesionCerrada: true }) },
       });
     }
     return aUsuarioDetalle(await buscarDetalle(conexion, cuenta.id));
@@ -514,6 +517,7 @@ async function cambiarEstadoCuenta(id, activo, administrador, contexto) {
           : 'UPDATE usuario SET activo = FALSE, desactivado_en = NOW() WHERE id = ?',
         [cuenta.id],
       );
+      const sesionCerrada = !activo && (await cerrarSesionDeUsuario(conexion, cuenta.id, 'CUENTA_DESACTIVADA'));
       await registrarBitacora(conexion, {
         ...contexto,
         modulo: MODULOS.USUARIOS,
@@ -521,7 +525,7 @@ async function cambiarEstadoCuenta(id, activo, administrador, contexto) {
         entidad: 'usuario',
         entidadId: cuenta.id,
         valoresAnteriores: cambios.anteriores,
-        valoresNuevos: cambios.nuevos,
+        valoresNuevos: { ...cambios.nuevos, ...(sesionCerrada && { sesionCerrada: true }) },
       });
     }
     return aUsuarioDetalle(await buscarDetalle(conexion, cuenta.id));
@@ -585,6 +589,7 @@ export async function restablecerContrasena(id, administrador, contexto) {
         WHERE id = ?`,
       [hash, cuenta.id],
     );
+    const sesionCerrada = await cerrarSesionDeUsuario(conexion, cuenta.id, 'CONTRASENA_RESTABLECIDA');
     // Se registra siempre, aunque estos datos no cambien: la contraseña sí cambió (excepción escrita en el SPEC 10).
     await registrarBitacora(conexion, {
       ...contexto,
@@ -593,7 +598,7 @@ export async function restablecerContrasena(id, administrador, contexto) {
       entidad: 'usuario',
       entidadId: cuenta.id,
       valoresAnteriores: { debeCambiarContrasena: Boolean(cuenta.debe_cambiar_contrasena), bloqueada: Boolean(cuenta.bloqueada) },
-      valoresNuevos: { debeCambiarContrasena: true, bloqueada: false },
+      valoresNuevos: { debeCambiarContrasena: true, bloqueada: false, ...(sesionCerrada && { sesionCerrada: true }) },
     });
     return { usuario: aUsuarioDetalle(await buscarDetalle(conexion, cuenta.id)), contrasenaTemporal: contrasena };
   });
@@ -656,7 +661,7 @@ export async function editarEmpleado(id, cuerpo, administrador, contexto) {
       verificarAlcance(administrador, { ddrissId: fila.ddriss_id });
 
       const [[cuenta]] = await conexion.query(
-        'SELECT u.activo, r.codigo AS rol FROM usuario u JOIN rol r ON r.id = u.rol_id WHERE u.empleado_id = ?',
+        'SELECT u.id, u.activo, r.codigo AS rol FROM usuario u JOIN rol r ON r.id = u.rol_id WHERE u.empleado_id = ?',
         [empleadoId],
       );
       if (cuenta && !cuenta.activo) throw errores.cuentaDesactivada();
@@ -698,6 +703,11 @@ export async function editarEmpleado(id, cuerpo, administrador, contexto) {
         [...columnas.map(([, valor]) => valor), empleadoId],
       );
 
+      // El establecimiento y el municipio definen el ámbito del token: la sesión abierta se cierra.
+      const nuevos = diferencia?.nuevos ?? {};
+      const cambiaAmbito = Object.hasOwn(nuevos, 'establecimientoId') || Object.hasOwn(nuevos, 'municipioId');
+      const sesionCerrada =
+        cuenta && cambiaAmbito && (await cerrarSesionDeUsuario(conexion, cuenta.id, 'DATOS_CAMBIADOS'));
       // Al reemplazar un CUI, cuiRegistrado sigue en true y diferencias no ve el cambio.
       const reemplazaCui = cambiaCui && fila.cui_hmac != null;
       await registrarBitacora(conexion, {
@@ -707,7 +717,11 @@ export async function editarEmpleado(id, cuerpo, administrador, contexto) {
         entidad: 'empleado',
         entidadId: empleadoId,
         valoresAnteriores: diferencia?.anteriores ?? null,
-        valoresNuevos: { ...diferencia?.nuevos, ...(reemplazaCui && { cuiReemplazado: true }) },
+        valoresNuevos: {
+          ...diferencia?.nuevos,
+          ...(reemplazaCui && { cuiReemplazado: true }),
+          ...(sesionCerrada && { sesionCerrada: true }),
+        },
       });
       return despues;
     });

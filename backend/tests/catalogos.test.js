@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
 import app from '../src/app.js';
 import entorno from '../src/config/entorno.js';
 import pool from '../src/config/mysql.js';
+import { tokenDePrueba, borrarSesionesDe } from './sesionDePrueba.js';
 
 let token;
 let administrador;
@@ -14,10 +14,9 @@ let administrador;
 const PREFIJO = 'vitest-hu05-cat-';
 
 const firmarPara = (id, datos) =>
-  jwt.sign(
+  tokenDePrueba(
+    id,
     { rol: 'ADMINISTRADOR', permisos: [], ddrissId: administrador.ddrissId, establecimientoId: null, municipioId: null, ...datos },
-    entorno.jwt.secreto,
-    { algorithm: 'HS256', subject: String(id), expiresIn: '5m' },
   );
 
 // Firma un token con el mismo usuario de prueba pero otros permisos o DDRISS, para los casos sin permiso o de otro ámbito.
@@ -49,6 +48,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await borrarSesionesDe(`${PREFIJO}%`);
   await pool.query('DELETE FROM usuario WHERE nombre_usuario LIKE ?', [`${PREFIJO}%`]);
   await pool.query('DELETE FROM empleado WHERE correo LIKE ?', [`${PREFIJO}%`]);
 });
@@ -115,7 +115,7 @@ describe('GET /municipios', () => {
 
     const res = await consultar(
       '/municipios',
-      firmarPara(autoridad, { rol: 'AUTORIDAD', ddrissId: null, permisos: ['MUNICIPIO_CONSULTAR'] }),
+      await firmarPara(autoridad, { rol: 'AUTORIDAD', ddrissId: null, permisos: ['MUNICIPIO_CONSULTAR'] }),
     );
 
     expect(res.status).toBe(200);
@@ -170,7 +170,7 @@ describe('GET /municipios (HU-08)', () => {
   it('la autoridad nacional recibe todos los municipios activos con los dos alcances', async () => {
     const [[{ total }]] = await pool.query('SELECT COUNT(*) AS total FROM municipio WHERE activo = TRUE');
     const autoridad = await crearCuentaPrueba('autoridad-hu08', 'AUTORIDAD', { ddrissId: null });
-    const credencial = firmarPara(autoridad, { rol: 'AUTORIDAD', ddrissId: null, permisos: ['MUNICIPIO_CONSULTAR'] });
+    const credencial = await firmarPara(autoridad, { rol: 'AUTORIDAD', ddrissId: null, permisos: ['MUNICIPIO_CONSULTAR'] });
 
     for (const alcance of ['departamento', 'procedencia']) {
       const res = await consultar(`/municipios?alcance=${alcance}`, credencial);
@@ -255,7 +255,7 @@ describe('GET /establecimientos', () => {
 
     const res = await consultar(
       '/establecimientos',
-      firmarPara(personal, { rol: 'ESTABLECIMIENTO', establecimientoId: establecimiento.id, permisos: ['ESTABLECIMIENTO_CONSULTAR'] }),
+      await firmarPara(personal, { rol: 'ESTABLECIMIENTO', establecimientoId: establecimiento.id, permisos: ['ESTABLECIMIENTO_CONSULTAR'] }),
     );
 
     expect(res.status).toBe(200);
@@ -335,7 +335,7 @@ describe('GET /establecimientos/{id}', () => {
 
   it('uno inexistente o de otra DDRISS responde 404 NO_ENCONTRADO', async () => {
     const [[establecimiento]] = await pool.query("SELECT id FROM establecimiento WHERE codigo = 'CS-1201'");
-    const otraDdriss = firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['ESTABLECIMIENTO_CONSULTAR'] });
+    const otraDdriss = await firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['ESTABLECIMIENTO_CONSULTAR'] });
 
     for (const [ruta, credencial] of [
       ['/establecimientos/999999999', token],
@@ -402,7 +402,7 @@ describe('permisos de los catálogos', () => {
   it.each(['/roles', '/ddriss', '/municipios', '/establecimientos', '/tipos-establecimiento'])(
     '%s sin su permiso responde 403 SIN_PERMISO',
     async (ruta) => {
-      const res = await consultar(ruta, firmar({ permisos: ['POBLACION_REGISTRAR'] }));
+      const res = await consultar(ruta, await firmar({ permisos: ['POBLACION_REGISTRAR'] }));
 
       expect(res.status).toBe(403);
       expect(res.body.error.codigo).toBe('SIN_PERMISO');

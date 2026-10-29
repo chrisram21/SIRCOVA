@@ -10,10 +10,18 @@ info:
     El modelo de datos está descrito en `05_contexto_base_de_datos.md`.
     El sistema maneja solo datos agregados: ningún endpoint recibe ni devuelve datos de pacientes.
 
-    Todas las rutas, salvo `/salud` y `/auth/login`, exigen el encabezado `Authorization: Bearer <token>`.
-    En cada petición se revisa además la cuenta del token: si la cuenta o su empleado están desactivados
-    responde 401 `CUENTA_DESACTIVADA`, y si el rol, el establecimiento o el municipio ya no son los del
-    token responde 401 `SESION_DESACTUALIZADA`. En los dos casos hay que iniciar sesión de nuevo.
+    Todas las rutas, salvo `/salud`, `/auth/login` y `/auth/refrescar`, exigen el encabezado
+    `Authorization: Bearer <token>`. En cada petición se revisa además la cuenta del token: si la cuenta
+    o su empleado están desactivados responde 401 `CUENTA_DESACTIVADA`, y si el rol, el establecimiento
+    o el municipio ya no son los del token responde 401 `SESION_DESACTUALIZADA`. En los dos casos hay que
+    iniciar sesión de nuevo.
+
+    **Sesiones.** El servidor guarda cada sesión, y un usuario solo tiene una abierta: un inicio de sesión
+    nuevo cierra la anterior. El JWT dura `JWT_EXPIRACION` (2 h) y lleva el id de su sesión (`sid`); en cada
+    petición se revisa que esa sesión siga abierta. El JWT se renueva con `POST /auth/refrescar` y la cookie
+    `sircova_refresh` (`HttpOnly`) hasta el fin de la jornada, `SESION_DURACION_MAXIMA` (8 h) desde el
+    inicio de sesión. Una sesión sin peticiones durante `SESION_INACTIVIDAD` (30 min) deja de servir.
+    Los 401 de la sesión están en la respuesta `NoAutenticado`.
 
     **Cambio obligatorio de contraseña.** Mientras la cuenta tenga `debeCambiarContrasena` (por ejemplo,
     con la contraseña temporal que le dio el administrador), todo endpoint protegido responde
@@ -86,8 +94,11 @@ paths:
       tags: [Autenticación]
       summary: Iniciar sesión
       description: |
-        Devuelve un JWT (HS256) que vence según `JWT_EXPIRACION` y contiene `sub`, `rol`, `permisos`,
-        `ddrissId`, `establecimientoId` y `municipioId`.
+        Devuelve un JWT (HS256) que vence según `JWT_EXPIRACION` y contiene `sub`, `sid` (el id de la sesión),
+        `rol`, `permisos`, `ddrissId`, `establecimientoId` y `municipioId`.
+
+        Abre una sesión nueva y cierra la que el usuario tuviera abierta: esa recibe después
+        401 `SESION_REEMPLAZADA`. Pone la cookie `sircova_refresh` con el refresh token de la sesión.
 
         Al 5.º intento fallido seguido la cuenta se bloquea 15 minutos; ese mismo intento ya responde 423.
         Un usuario inexistente y una contraseña incorrecta responden el mismo 401.
@@ -106,13 +117,11 @@ paths:
       responses:
         "200":
           description: Sesión iniciada
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/CookieRefresh" }
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  token: { type: string, example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... }
-                  usuario: { $ref: "#/components/schemas/UsuarioSesion" }
+              schema: { $ref: "#/components/schemas/RespuestaLogin" }
         "400":
           description: Falta el nombre de usuario o la contraseña
           content:
@@ -147,22 +156,77 @@ paths:
               example:
                 error: { codigo: CUENTA_BLOQUEADA, mensaje: Su usuario ha sido bloqueado. Contáctese con su administrador de DDRISS o intente de nuevo en 15 minutos. }
 
+  /auth/refrescar:
+    post:
+      tags: [Autenticación]
+      summary: Renovar el JWT con la cookie de la sesión
+      description: |
+        No lleva Bearer: la sesión se identifica con la cookie `sircova_refresh`. Devuelve un JWT nuevo con
+        los permisos y datos actuales de la cuenta, en la misma forma que el login, hasta el fin de la jornada.
+
+        Cambia el refresh token y manda la cookie nueva. El refresh anterior se acepta 30 segundos más
+        (varias pestañas que renuevan a la vez): en ese caso responde el JWT sin cambiar la cookie.
+        Funciona aunque la cuenta deba cambiar la contraseña (`debeCambiarContrasena: true`).
+
+        No va a la bitácora. Cualquier 401 borra la cookie.
+      security:
+        - cookieRefresh: []
+      responses:
+        "200":
+          description: JWT renovado
+          headers:
+            Set-Cookie:
+              description: La cookie nueva; no viene si se usó el refresh anterior dentro del margen de 30 s
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RespuestaLogin" }
+        "401":
+          description: |
+            Sin cookie, con un refresh desconocido o usado fuera del margen (NO_AUTENTICADO), o con la sesión
+            cerrada (SESION_CERRADA, SESION_REEMPLAZADA, CONTRASENA_RESTABLECIDA, CUENTA_DESACTIVADA,
+            SESION_DESACTUALIZADA), inactiva (SESION_INACTIVA) o con la jornada terminada (JORNADA_TERMINADA).
+            Borra la cookie.
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/CookieRefreshBorrada" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                noAutenticado:
+                  value:
+                    error: { codigo: NO_AUTENTICADO, mensaje: Debe iniciar sesión. }
+                jornadaTerminada:
+                  value:
+                    error: { codigo: JORNADA_TERMINADA, mensaje: Su jornada de 8 horas terminó; inicie sesión de nuevo. }
+
   /auth/logout:
     post:
       tags: [Autenticación]
       summary: Cerrar sesión
       description: |
-        Registra el cierre en la bitácora (acción `LOGOUT` con el motivo). No revoca el token:
-        sigue siendo válido hasta su `exp`, pero el frontend ya lo borró.
+        Cierra la sesión en el servidor: después, el token responde 401 `SESION_CERRADA` y la cookie ya no
+        renueva. Registra el cierre en la bitácora (acción `LOGOUT` con el motivo).
+
+        La sesión se toma del Bearer si es válido y no venció; si no, de la cookie `sircova_refresh`.
+        Sin ninguno de los dos responde 401. Si la sesión ya estaba cerrada (por ejemplo, reemplazada)
+        o la cookie no corresponde a ninguna, responde 204 sin escribir en la bitácora.
+        Siempre borra la cookie.
 
         El cuerpo es opcional; sin `motivo` se registra `MANUAL`.
+      security:
+        - bearerAuth: []
+        - cookieRefresh: []
       requestBody:
         required: false
         content:
           application/json:
             schema: { $ref: "#/components/schemas/CierreSesionEntrada" }
       responses:
-        "204": { description: Cierre de sesión registrado }
+        "204":
+          description: Sesión cerrada, o ya estaba cerrada
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/CookieRefreshBorrada" }
         "400":
           description: El motivo no es MANUAL ni INACTIVIDAD
           content:
@@ -186,7 +250,7 @@ paths:
         Una contraseña actual incorrecta no suma a los intentos fallidos ni se registra en la bitácora.
 
         El cambio deja `debeCambiarContrasena` en `false` y queda en la bitácora (acción `CAMBIO_CONTRASENA`)
-        sin las contraseñas. El token sigue siendo válido hasta su `exp`; el frontend cierra la sesión.
+        sin las contraseñas. La sesión sigue abierta.
         Es una de las rutas que se pueden usar mientras la cuenta deba cambiar la contraseña.
       requestBody:
         required: true
@@ -3110,6 +3174,21 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    cookieRefresh:
+      type: apiKey
+      in: cookie
+      name: sircova_refresh
+      description: Refresh token de la sesión. La pone el login; solo viaja a `/api/v1/auth`.
+
+  headers:
+    CookieRefresh:
+      description: |
+        `sircova_refresh=<token>; Max-Age=<segundos hasta el fin de la jornada>; Path=/api/v1/auth;
+        HttpOnly; Secure; SameSite=Strict`
+      schema: { type: string }
+    CookieRefreshBorrada:
+      description: '`sircova_refresh=; Max-Age=0; Path=/api/v1/auth; HttpOnly; Secure; SameSite=Strict`'
+      schema: { type: string }
 
   parameters:
     Id:
@@ -3157,9 +3236,12 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
     NoAutenticado:
       description: |
-        Falta el token, no es válido o su cuenta no existe (NO_AUTENTICADO), el token venció (SESION_VENCIDA),
-        la cuenta o su empleado están desactivados (CUENTA_DESACTIVADA), o el rol, el establecimiento o el
-        municipio cambiaron desde que se emitió el token (SESION_DESACTUALIZADA)
+        Falta el token, no es válido, no tiene `sid`, o su cuenta o su sesión no existen (NO_AUTENTICADO);
+        el token venció (SESION_VENCIDA); la cuenta o su empleado están desactivados (CUENTA_DESACTIVADA);
+        el rol, el establecimiento o el municipio cambiaron desde que se emitió el token (SESION_DESACTUALIZADA);
+        se inició sesión con la cuenta en otro equipo (SESION_REEMPLAZADA); se cerró la sesión (SESION_CERRADA);
+        el administrador restableció la contraseña (CONTRASENA_RESTABLECIDA); la sesión no tuvo peticiones
+        durante `SESION_INACTIVIDAD` (SESION_INACTIVA), o terminó la jornada (JORNADA_TERMINADA)
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -3176,6 +3258,21 @@ components:
             sesionDesactualizada:
               value:
                 error: { codigo: SESION_DESACTUALIZADA, mensaje: Sus datos de acceso cambiaron; inicie sesión de nuevo. }
+            sesionReemplazada:
+              value:
+                error: { codigo: SESION_REEMPLAZADA, mensaje: Se inició sesión con su cuenta en otro equipo. Inicie sesión de nuevo para continuar aquí. }
+            sesionCerrada:
+              value:
+                error: { codigo: SESION_CERRADA, mensaje: Su sesión se cerró; inicie sesión de nuevo. }
+            contrasenaRestablecida:
+              value:
+                error: { codigo: CONTRASENA_RESTABLECIDA, mensaje: Su contraseña fue restablecida. Inicie sesión con la contraseña temporal que le dé su administrador. }
+            sesionInactiva:
+              value:
+                error: { codigo: SESION_INACTIVA, mensaje: Su sesión se cerró por inactividad. Inicie sesión de nuevo. }
+            jornadaTerminada:
+              value:
+                error: { codigo: JORNADA_TERMINADA, mensaje: Su jornada de 8 horas terminó; inicie sesión de nuevo. }
     SinPermiso:
       description: El usuario no tiene el permiso de la operación, o su rol es de solo consulta
       content:
@@ -3400,6 +3497,12 @@ components:
     EstadoReporte:
       type: string
       enum: [BORRADOR, ENVIADO, EN_REVISION, CORRECCION_SOLICITADA, APROBADO, CERRADO, RECTIFICACION]
+
+    RespuestaLogin:
+      type: object
+      properties:
+        token: { type: string, example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... }
+        usuario: { $ref: "#/components/schemas/UsuarioSesion" }
 
     UsuarioSesion:
       type: object

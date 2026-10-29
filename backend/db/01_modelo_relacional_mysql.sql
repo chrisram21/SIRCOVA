@@ -1,7 +1,13 @@
 -- =============================================================================
 --  Plataforma web de producción de vacunación — DDRISS San Marcos (MSPAS)
 --  Modelo relacional preliminar (MySQL 8.0, InnoDB, utf8mb4)
---  Versión: 0.9   Fecha: 2026-10-22
+--  Versión: 0.10   Fecha: 2026-10-28
+--  Cambios v0.10 (sesiones en el servidor, SPEC 27, 28/10/2026):
+--    Nueva tabla sesion: cada inicio de sesión crea una fila y el JWT lleva su
+--    id (sid), para poder cerrarla antes de que venza el token. Una sola
+--    sesión abierta por usuario (columna generada usuario_abierta con índice
+--    único). Guarda el SHA-256 del refresh token de la cookie, nunca el token.
+--    Las bases que ya existían la agregan con 08_sesion_mysql.sql.
 --  Cambios v0.9 (CUI del empleado, SPEC 11, 22/10/2026):
 --    empleado.codigo_empleado pasa a empleado.cui_hmac CHAR(64): la huella
 --    HMAC-SHA256 del CUI del DPI, para no registrar dos veces a la misma
@@ -259,6 +265,32 @@ CREATE TABLE usuario (
   CONSTRAINT fk_usuario_rol       FOREIGN KEY (rol_id)      REFERENCES rol (id),
   CONSTRAINT fk_usuario_creador   FOREIGN KEY (creado_por)  REFERENCES usuario (id)
 ) ENGINE=InnoDB COMMENT='Cuentas de acceso del personal';
+
+-- v0.10: sin ON DELETE CASCADE porque MySQL no lo acepta en la base de una columna
+-- generada STORED (usuario_abierta); las pruebas borran las sesiones antes que la cuenta.
+CREATE TABLE sesion (
+  id                     BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  usuario_id             INT UNSIGNED     NOT NULL,
+  hash_refresh           CHAR(64)         NOT NULL COMMENT 'SHA-256 del refresh token; nunca el token en claro',
+  hash_refresh_anterior  CHAR(64)         NULL     COMMENT 'El anterior, aceptado 30 s después de rotar (varias pestañas)',
+  rotado_en              DATETIME         NULL,
+  creada_en              DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  ultimo_uso             DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Inactividad del lado del servidor',
+  expira_en              DATETIME         NOT NULL COMMENT 'Fin de la jornada: creada_en + 8 h',
+  cerrada_en             DATETIME         NULL,
+  motivo_cierre          ENUM('MANUAL','INACTIVIDAD','REEMPLAZADA','CONTRASENA_RESTABLECIDA',
+                              'CUENTA_DESACTIVADA','DATOS_CAMBIADOS') NULL,
+  ip_origen              VARCHAR(45)      NULL,
+  agente_usuario         VARCHAR(255)     NULL,
+  usuario_abierta        INT UNSIGNED     AS (IF(cerrada_en IS NULL, usuario_id, NULL)) STORED,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_sesion_refresh (hash_refresh),
+  UNIQUE KEY uq_sesion_una_abierta (usuario_abierta) COMMENT 'Una sesión abierta por usuario',
+  KEY ix_sesion_usuario (usuario_id, creada_en),
+  KEY ix_sesion_refresh_anterior (hash_refresh_anterior),
+  CONSTRAINT fk_sesion_usuario FOREIGN KEY (usuario_id) REFERENCES usuario (id),
+  CONSTRAINT ck_sesion_cierre CHECK ((cerrada_en IS NULL) = (motivo_cierre IS NULL))
+) ENGINE=InnoDB COMMENT='Sesiones del personal; una abierta por usuario';
 
 -- -----------------------------------------------------------------------------
 -- MÓDULO 2. CONFIGURACIÓN Y CATÁLOGOS (vacunación)

@@ -6,6 +6,7 @@ import app from '../src/app.js';
 import entorno from '../src/config/entorno.js';
 import pool from '../src/config/mysql.js';
 import { obtenerDb } from '../src/config/mongodb.js';
+import { tokenDePrueba } from './sesionDePrueba.js';
 
 // Las pruebas crean por SQL la vacuna ZVT_HU17, los 12 meses de 2090 en periodo (la vigencia no admite meses
 // pasados) y junio de 2018 (un mes pasado que está en el calendario), y en MongoDB un vigente nacional de ZVT_HU17 y
@@ -167,17 +168,13 @@ async function tokenDeLaSemilla(rol) {
     'SELECT p.codigo FROM rol_permiso rp JOIN permiso p ON p.id = rp.permiso_id WHERE rp.rol_id = ?',
     [cuenta.rol_id],
   );
-  return jwt.sign(
-    {
-      rol,
-      permisos: permisos.map((p) => p.codigo),
-      ddrissId: cuenta.ddriss_id,
-      establecimientoId: cuenta.establecimiento_id,
-      municipioId: cuenta.municipio_id,
-    },
-    entorno.jwt.secreto,
-    { algorithm: 'HS256', subject: String(cuenta.id), expiresIn: '5m' },
-  );
+  return await tokenDePrueba(cuenta.id, {
+    rol,
+    permisos: permisos.map((p) => p.codigo),
+    ddrissId: cuenta.ddriss_id,
+    establecimientoId: cuenta.establecimiento_id,
+    municipioId: cuenta.municipio_id,
+  });
 }
 
 async function motivoGuardado(id) {

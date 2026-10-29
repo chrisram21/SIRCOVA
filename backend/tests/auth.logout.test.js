@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../src/app.js';
@@ -28,7 +28,8 @@ async function bitacoraDesde(id) {
   return filas;
 }
 
-beforeAll(async () => {
+// Cada caso inicia sesión: un logout cierra la sesión y el siguiente ya no escribiría LOGOUT.
+beforeEach(async () => {
   if (!USUARIO || !CONTRASENA) throw new Error('Defina PRUEBA_USUARIO y PRUEBA_CONTRASENA en backend/.env');
   const respuesta = await request(app)
     .post('/api/v1/auth/login')

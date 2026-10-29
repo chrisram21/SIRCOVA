@@ -5,6 +5,7 @@ import entorno from '../../config/entorno.js';
 import { ErrorApi } from '../../middlewares/errores.js';
 import { registrarBitacora, MODULOS, ACCIONES } from '../auditoria/auditoria.service.js';
 import { evaluarContrasena } from './politicaContrasena.service.js';
+import * as sesiones from './sesiones.service.js';
 
 // Hash de una contraseña al azar: se compara cuando el usuario no existe para que la respuesta tarde lo mismo.
 const HASH_FICTICIO = '$2b$12$YoGDls95Ec5nVQ1mAJIxA.RNOKGr3YCDvCzFdvzP18Zj2yYCV4g86';
@@ -28,6 +29,7 @@ const errores = {
       `Su usuario ha sido bloqueado. Contáctese con su administrador de DDRISS o intente de nuevo en ${MINUTOS_BLOQUEO} minutos.`,
     ),
   motivoInvalido: () => new ErrorApi(400, 'ENTRADA_INVALIDA', 'El motivo del cierre de sesión no es válido.'),
+  noAutenticado: () => new ErrorApi(401, 'NO_AUTENTICADO', 'Debe iniciar sesión.'),
   cambioInvalido: () => new ErrorApi(400, 'ENTRADA_INVALIDA', 'Debe indicar la contraseña actual y la nueva.'),
   actualIncorrecta: () => new ErrorApi(422, 'CONTRASENA_ACTUAL_INCORRECTA', 'La contraseña actual no es correcta.'),
   repetida: () => new ErrorApi(422, 'CONTRASENA_REPETIDA', 'La contraseña nueva debe ser distinta de la actual.'),
@@ -64,7 +66,7 @@ async function obtenerPermisos(conexion, rolId) {
   return filas.map((f) => f.codigo);
 }
 
-function armarSesion(usuario, permisos) {
+function armarSesion(usuario, permisos, sesionId) {
   const empleado = {
     nombres: usuario.nombres,
     apellidos: usuario.apellidos,
@@ -74,6 +76,7 @@ function armarSesion(usuario, permisos) {
   };
   const token = jwt.sign(
     {
+      sid: sesionId,
       rol: usuario.rol,
       permisos,
       ddrissId: empleado.ddrissId,
@@ -166,8 +169,19 @@ async function evaluarIntento(conexion, { nombreUsuario, contrasena }, contexto)
     'UPDATE usuario SET intentos_fallidos = 0, bloqueado_hasta = NULL, ultimo_acceso = NOW() WHERE id = ?',
     [usuario.id],
   );
-  await bitacora({ accion: ACCIONES.LOGIN_OK, usuarioId: usuario.id, entidadId: usuario.id });
-  return { sesion: armarSesion(usuario, await obtenerPermisos(conexion, usuario.rol_id)) };
+  // Gana el último inicio de sesión: la sesión abierta en otro equipo se cierra aquí.
+  const anterior = await sesiones.cerrarSesionDeUsuario(conexion, usuario.id, 'REEMPLAZADA');
+  const nueva = await sesiones.crearSesion(conexion, usuario.id, contexto);
+  await bitacora({
+    accion: ACCIONES.LOGIN_OK,
+    usuarioId: usuario.id,
+    entidadId: usuario.id,
+    valoresNuevos: anterior?.vigente ? { sesionReemplazada: true } : null,
+  });
+  return {
+    sesion: armarSesion(usuario, await obtenerPermisos(conexion, usuario.rol_id), nueva.id),
+    refresh: { token: nueva.refreshToken, segundosRestantes: nueva.segundosRestantes },
+  };
 }
 
 export async function iniciarSesion(datos, contexto) {
@@ -190,22 +204,80 @@ export async function iniciarSesion(datos, contexto) {
   }
 
   if (resultado.error) throw resultado.error;
-  return resultado.sesion;
+  return { respuesta: resultado.sesion, refresh: resultado.refresh };
 }
 
-// El token no se revoca: sigue sirviendo hasta su exp, pero el frontend ya lo borró.
-export async function cerrarSesion(usuario, datos, contexto) {
+async function buscarCuenta(conexion, usuarioId) {
+  const [[cuenta]] = await conexion.query(
+    `SELECT u.id, u.nombre_usuario, u.rol_id, r.codigo AS rol, r.nombre AS rol_nombre, u.activo,
+            e.activo AS empleado_activo, u.debe_cambiar_contrasena,
+            e.nombres, e.apellidos, e.ddriss_id, e.establecimiento_id, e.municipio_id
+       FROM usuario u
+       JOIN rol r ON r.id = u.rol_id
+       JOIN empleado e ON e.id = u.empleado_id
+      WHERE u.id = ?`,
+    [usuarioId],
+  );
+  return cuenta;
+}
+
+// Renueva el JWT con los permisos y datos actuales de la cuenta. Sin bitácora: no es una acción sobre los datos
+// (excepción a la regla 7). Devuelve refresh: null cuando llegó el refresh anterior dentro del margen, porque el
+// navegador ya tiene el nuevo y el servidor no lo conoce en claro.
+export async function refrescarSesion(refreshToken) {
+  if (!refreshToken) throw errores.noAutenticado();
+
+  return enTransaccion(async (conexion) => {
+    const sesion = await sesiones.buscarPorRefresh(conexion, refreshToken);
+    if (!sesion) throw errores.noAutenticado();
+    const errorSesion = sesiones.errorDeSesion(sesion);
+    if (errorSesion) throw errorSesion;
+
+    const cuenta = await buscarCuenta(conexion, sesion.usuarioId);
+    if (!cuenta.activo || !cuenta.empleado_activo) throw sesiones.erroresSesion.cuentaDesactivada();
+    // Regla 10, como en el login: sin DDRISS el token significaría "todo el país".
+    const sinDdriss = cuenta.rol !== 'AUTORIDAD' && cuenta.ddriss_id == null;
+    const sinEstablecimiento = cuenta.rol === 'ESTABLECIMIENTO' && cuenta.establecimiento_id == null;
+    if (sinDdriss || sinEstablecimiento) throw sesiones.erroresSesion.desactualizada();
+
+    let refresh = null;
+    if (sesion.esActual) {
+      refresh = { token: await sesiones.rotarRefresh(conexion, sesion.id), segundosRestantes: sesion.segundosRestantes };
+    } else {
+      await sesiones.registrarUso(conexion, sesion.id);
+    }
+    return { respuesta: armarSesion(cuenta, await obtenerPermisos(conexion, cuenta.rol_id), sesion.id), refresh };
+  });
+}
+
+// La sesión llega del Bearer ({ sesionId, usuarioId }) o de la cookie ({ refreshToken }). Si ya estaba cerrada
+// o no existe no se escribe nada: el botón «Cerrar sesión» de una sesión reemplazada no debe fallar.
+export async function cerrarSesion(identificacion, datos, contexto) {
   const motivo = datos.motivo === undefined ? 'MANUAL' : datos.motivo;
   if (!MOTIVOS_CIERRE.includes(motivo)) throw errores.motivoInvalido();
 
-  await registrarBitacora(pool, {
-    ...contexto,
-    usuarioId: usuario.id,
-    modulo: MODULOS.USUARIOS,
-    accion: ACCIONES.LOGOUT,
-    entidad: 'usuario',
-    entidadId: usuario.id,
-    valoresNuevos: { motivo },
+  await enTransaccion(async (conexion) => {
+    let sesion;
+    if (identificacion.sesionId) {
+      const [[fila]] = await conexion.query(
+        'SELECT id, usuario_id FROM sesion WHERE id = ? AND usuario_id = ? FOR UPDATE',
+        [identificacion.sesionId, identificacion.usuarioId],
+      );
+      sesion = fila && { id: fila.id, usuarioId: fila.usuario_id };
+    } else {
+      sesion = await sesiones.buscarPorRefresh(conexion, identificacion.refreshToken);
+    }
+    if (!sesion || !(await sesiones.cerrarSesion(conexion, sesion.id, motivo))) return;
+
+    await registrarBitacora(conexion, {
+      ...contexto,
+      usuarioId: sesion.usuarioId,
+      modulo: MODULOS.USUARIOS,
+      accion: ACCIONES.LOGOUT,
+      entidad: 'usuario',
+      entidadId: sesion.usuarioId,
+      valoresNuevos: { motivo },
+    });
   });
 }
 

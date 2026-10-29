@@ -15,7 +15,8 @@ import { rutaNoEncontrada, manejarErrores } from './middlewares/errores.js';
 const app = express();
 const documentoOpenapi = YAML.parse(fs.readFileSync(entorno.rutaOpenapi, 'utf8'));
 
-app.use(cors({ origin: entorno.corsOrigen }));
+// credentials: para que el navegador mande y guarde la cookie del refresh token.
+app.use(cors({ origin: entorno.corsOrigen, credentials: true }));
 app.use(express.json());
 
 // Swagger UI carga el contrato por URL: incrustado, un `$` seguido de comilla invertida en una descripción rompe su script.

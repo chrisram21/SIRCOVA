@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
 import { Int32, ObjectId } from 'mongodb';
 import app from '../src/app.js';
 import entorno from '../src/config/entorno.js';
 import pool from '../src/config/mysql.js';
 import { obtenerDb } from '../src/config/mongodb.js';
+import { tokenDePrueba } from './sesionDePrueba.js';
 
 // Las pruebas crean por SQL las vacunas ZVT_HU20 (esquema con secciones, sexo en R1 y un campo adicional de cada
 // tipo) y ZVT_HU20S (esquema sin secciones, como Hexavalente v1), y sus esquemas nacionales en MongoDB desde enero
@@ -157,17 +157,13 @@ async function tokenDe(condicion, valor) {
     'SELECT p.codigo FROM rol_permiso rp JOIN permiso p ON p.id = rp.permiso_id WHERE rp.rol_id = ?',
     [cuenta.rol_id],
   );
-  const token = jwt.sign(
-    {
-      rol: cuenta.rol,
-      permisos: permisos.map((p) => p.codigo),
-      ddrissId: cuenta.ddriss_id,
-      establecimientoId: cuenta.establecimiento_id,
-      municipioId: cuenta.municipio_id,
-    },
-    entorno.jwt.secreto,
-    { algorithm: 'HS256', subject: String(cuenta.id), expiresIn: '10m' },
-  );
+  const token = await tokenDePrueba(cuenta.id, {
+    rol: cuenta.rol,
+    permisos: permisos.map((p) => p.codigo),
+    ddrissId: cuenta.ddriss_id,
+    establecimientoId: cuenta.establecimiento_id,
+    municipioId: cuenta.municipio_id,
+  }, { expiresIn: '10m' });
   return { token, usuarioId: cuenta.id };
 }
 

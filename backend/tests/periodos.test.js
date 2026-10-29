@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import app from '../src/app.js';
 import entorno from '../src/config/entorno.js';
 import pool from '../src/config/mysql.js';
+import { tokenDePrueba } from './sesionDePrueba.js';
 
 // Las pruebas que escriben usan el año 2020 (ANIO_PRUEBA), que el equipo no usa en la base de prueba, y borran sus
 // filas de cierre_periodo y periodo al inicio y al final. La bitácora no tiene llave foránea a esas tablas.
@@ -76,17 +77,13 @@ beforeAll(async () => {
     'SELECT p.codigo FROM rol_permiso rp JOIN permiso p ON p.id = rp.permiso_id WHERE rp.rol_id = ?',
     [cuenta.rol_id],
   );
-  tokenEpidemiologia = jwt.sign(
-    {
-      rol: 'EPIDEMIOLOGIA',
-      permisos: permisos.map((p) => p.codigo),
-      ddrissId: cuenta.ddriss_id,
-      establecimientoId: cuenta.establecimiento_id,
-      municipioId: cuenta.municipio_id,
-    },
-    entorno.jwt.secreto,
-    { algorithm: 'HS256', subject: String(cuenta.id), expiresIn: '5m' },
-  );
+  tokenEpidemiologia = await tokenDePrueba(cuenta.id, {
+    rol: 'EPIDEMIOLOGIA',
+    permisos: permisos.map((p) => p.codigo),
+    ddrissId: cuenta.ddriss_id,
+    establecimientoId: cuenta.establecimiento_id,
+    municipioId: cuenta.municipio_id,
+  });
 });
 
 describe('GET /periodos', () => {
