@@ -343,6 +343,7 @@ Estas decisiones no están en el documento de la propuesta; las tomó el equipo 
 
 **Backend (versión preliminar v0.1, 08/10/2026)** · `backend/INSTRUCCIONES_BACKEND.md` y `backend/openapi.yaml`
 - Node.js 22 LTS + Express en **JavaScript**; MySQL 8 y MongoDB 7; autenticación con JWT.
+- Sprint 3 (29/10/2026): se pasa a Node.js 24 LTS por la actualización de seguridad de octubre de 2026.
 - Endpoints bajo `/api/v1`, definidos en **OpenAPI 3** (38 operaciones principales) y visibles con Swagger UI en `/api/docs`.
 - El estado de un reporte **solo cambia por un endpoint** (`POST /reportes/{id}/transiciones`), y solo si la transición está permitida para el rol del usuario.
 

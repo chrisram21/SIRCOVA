@@ -34,7 +34,7 @@ SIRCOVA es un sistema web centralizado para la **DDRISS San Marcos** (Dirección
 | Capa | Tecnología |
 |---|---|
 | Interfaz web | React con Vite, en JavaScript (JSX), con Tailwind CSS, shadcn/ui y Radix UI |
-| API y lógica de negocio | Node.js 22 LTS + Express, en JavaScript (API REST) |
+| API y lógica de negocio | Node.js 24 LTS + Express, en JavaScript (API REST) |
 | Documentación de la API | OpenAPI 3 (`openapi.yaml`), visible con Swagger UI en `/api/docs` |
 | Base de datos relacional | MySQL 8 (`vacunacion_ddriss`), conexión con `mysql2` |
 | Base de datos documental | MongoDB 7 (`vacunacion_config`), controlador oficial `mongodb` |
@@ -130,7 +130,7 @@ Resumen de esas reglas:
 
 ## 8. Entorno local (resumen)
 
-Requisitos: Node.js 22 LTS. El desarrollo se hace contra las **bases de prueba** en Aiven (MySQL) y MongoDB Atlas.
+Requisitos: Node.js 24 LTS (24.22.1 o posterior). El desarrollo se hace contra las **bases de prueba** en Aiven (MySQL) y MongoDB Atlas.
 
 1. Copiar `backend/.env.example` a `backend/.env` y completar los datos de conexión de las bases de prueba. Guardar el certificado CA de Aiven en `backend/certs/ca.pem` (la carpeta `certs/` no se sube).
 2. Copiar `frontend/.env.example` a `frontend/.env`.

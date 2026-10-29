@@ -26,6 +26,18 @@ export function manejarErrores(err, req, res, next) {
     });
   }
 
+  if (err.type === 'encoding.unsupported') {
+    return res.status(415).json({
+      error: { codigo: 'CODIFICACION_NO_ADMITIDA', mensaje: 'El servidor no acepta cuerpos comprimidos.' },
+    });
+  }
+
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({
+      error: { codigo: 'CUERPO_DEMASIADO_GRANDE', mensaje: 'El cuerpo de la solicitud es demasiado grande.' },
+    });
+  }
+
   console.error(err);
   res.status(500).json({
     error: { codigo: 'ERROR_INTERNO', mensaje: 'Ocurrió un error interno. Intente de nuevo.' },

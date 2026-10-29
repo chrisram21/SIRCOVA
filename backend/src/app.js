@@ -17,7 +17,8 @@ const documentoOpenapi = YAML.parse(fs.readFileSync(entorno.rutaOpenapi, 'utf8')
 
 // credentials: para que el navegador mande y guarde la cookie del refresh token.
 app.use(cors({ origin: entorno.corsOrigen, credentials: true }));
-app.use(express.json());
+// inflate: false: un cuerpo comprimido no llega al descompresor de Node (CVE-2026-111497).
+app.use(express.json({ inflate: false, limit: '1mb' }));
 
 // Swagger UI carga el contrato por URL: incrustado, un `$` seguido de comilla invertida en una descripción rompe su script.
 app.get('/api/docs/openapi.json', (req, res) => res.json(documentoOpenapi));
