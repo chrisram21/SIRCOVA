@@ -3187,8 +3187,11 @@ components:
   headers:
     CookieRefresh:
       description: |
-        `sircova_refresh=<token>; Max-Age=<segundos hasta el fin de la jornada>; Path=/api/v1/auth;
+        `sircova_refresh=<token>; Max-Age=<segundos hasta el fin de la jornada + 3600>; Path=/api/v1/auth;
         HttpOnly; Secure; SameSite=Strict`
+
+        La cookie dura 1 h más que la jornada: así, al terminar, `POST /auth/refrescar` todavía la recibe y
+        responde 401 `JORNADA_TERMINADA` (y la borra) en lugar de `NO_AUTENTICADO`. La sesión no dura más.
       schema: { type: string }
     CookieRefreshBorrada:
       description: '`sircova_refresh=; Max-Age=0; Path=/api/v1/auth; HttpOnly; Secure; SameSite=Strict`'

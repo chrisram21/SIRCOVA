@@ -1,5 +1,5 @@
-import { alPerderSesion, ErrorApi, ESPERA_MAXIMA_MS, solicitar } from './cliente.js'
-import { guardarSesion } from './sesion.js'
+import { alPerderSesion, ErrorApi, ESPERA_MAXIMA_MS, leerUltimaPeticion, refrescar, solicitar } from './cliente.js'
+import { borrarSesion, guardarSesion, leerSesion, leerTokenGuardado } from './sesion.js'
 
 function crearToken(payload) {
   const codificar = (objeto) =>
@@ -7,9 +7,10 @@ function crearToken(payload) {
   return `${codificar({ alg: 'HS256', typ: 'JWT' })}.${codificar(payload)}.firma`
 }
 
-function crearSesion(sub = '7') {
+// `renovacion` distingue el token renovado de la misma cuenta.
+function crearSesion(sub = '7', renovacion = 0) {
   return {
-    token: crearToken({ sub, rol: 'ADMINISTRADOR', exp: Math.floor(Date.now() / 1000) + 3600 }),
+    token: crearToken({ sub, rol: 'ADMINISTRADOR', renovacion, exp: Math.floor(Date.now() / 1000) + 3600 }),
     usuario: { id: Number(sub), nombreUsuario: 'jperez', rol: 'ADMINISTRADOR', permisos: [], empleado: {} },
   }
 }
@@ -18,7 +19,8 @@ function respuestaJson(status, cuerpo) {
   return { status, ok: status >= 200 && status < 300, json: async () => cuerpo }
 }
 
-const ERROR_401 = { error: { codigo: 'SESION_VENCIDA', mensaje: 'Su sesión venció; inicie sesión de nuevo.' } }
+const ERROR_401 = { error: { codigo: 'SESION_CERRADA', mensaje: 'Su sesión se cerró. Inicie sesión de nuevo.' } }
+const ERROR_VENCIDA = { error: { codigo: 'SESION_VENCIDA', mensaje: 'Su sesión venció. Inicie sesión de nuevo.' } }
 
 let quitarManejador
 
@@ -42,7 +44,7 @@ test('un 401 con sesión guardada llama al manejador con el ErrorApi y lo lanza'
   const error = await solicitar('/algo').catch((e) => e)
 
   expect(error).toBeInstanceOf(ErrorApi)
-  expect(error).toMatchObject({ status: 401, codigo: 'SESION_VENCIDA', mensaje: ERROR_401.error.mensaje })
+  expect(error).toMatchObject({ status: 401, codigo: 'SESION_CERRADA', mensaje: ERROR_401.error.mensaje })
   expect(manejador).toHaveBeenCalledTimes(1)
   expect(manejador).toHaveBeenCalledWith(error)
 })
@@ -80,7 +82,7 @@ test('un 401 después de borrar la sesión no llama al manejador', async () => {
   const manejador = vi.fn()
   quitarManejador = alPerderSesion(manejador)
   fetch.mockImplementation(async () => {
-    sessionStorage.clear()
+    borrarSesion()
     return respuestaJson(401, ERROR_401)
   })
 
@@ -188,4 +190,142 @@ test('sin respuesta en ESPERA_MAXIMA_MS cancela la petición y lo dice', async (
 test('un fallo de red antes del límite sigue siendo SIN_CONEXION', async () => {
   fetch.mockRejectedValue(new TypeError('Failed to fetch'))
   await expect(solicitar('/reportes')).rejects.toMatchObject({ codigo: 'SIN_CONEXION' })
+})
+
+test('toda petición va con credentials: include, para guardar y mandar la cookie', async () => {
+  fetch.mockResolvedValue(respuestaJson(200, {}))
+  await solicitar('/roles')
+  await refrescar().catch(() => {})
+  expect(fetch.mock.calls.map(([, opciones]) => opciones.credentials)).toEqual(['include', 'include'])
+})
+
+describe('renovación con POST /auth/refrescar', () => {
+  const vencida = crearSesion('7')
+  const renovada = crearSesion('7', 1)
+
+  // /auth/refrescar devuelve `refresco` (o lo lanza si es un Error); el resto responde 401 SESION_VENCIDA con el token
+  // vencido y 200 con cualquier otro.
+  function simularApi(refresco) {
+    fetch.mockImplementation(async (url, { headers }) => {
+      if (url.endsWith('/auth/refrescar')) {
+        if (refresco instanceof Error) throw refresco
+        return refresco
+      }
+      return headers.Authorization === `Bearer ${vencida.token}`
+        ? respuestaJson(401, ERROR_VENCIDA)
+        : respuestaJson(200, { ok: true })
+    })
+  }
+  const llamadasA = (ruta) => fetch.mock.calls.filter(([url]) => url.endsWith(ruta))
+
+  test('un 401 SESION_VENCIDA renueva, guarda la sesión nueva y repite la petición con el token nuevo', async () => {
+    guardarSesion(vencida)
+    simularApi(respuestaJson(200, renovada))
+
+    expect(await solicitar('/reportes')).toEqual({ ok: true })
+    expect(leerSesion()).toEqual(renovada)
+    expect(llamadasA('/auth/refrescar')).toHaveLength(1)
+    expect(llamadasA('/auth/refrescar')[0][1].headers.Authorization).toBeUndefined()
+    expect(llamadasA('/reportes').map(([, opciones]) => opciones.headers.Authorization)).toEqual([
+      `Bearer ${vencida.token}`,
+      `Bearer ${renovada.token}`,
+    ])
+  })
+
+  test('dos peticiones vencidas a la vez hacen un solo refresco', async () => {
+    guardarSesion(vencida)
+    simularApi(respuestaJson(200, renovada))
+
+    await Promise.all([solicitar('/reportes'), solicitar('/roles')])
+    expect(llamadasA('/auth/refrescar')).toHaveLength(1)
+    expect(llamadasA('/reportes')).toHaveLength(2)
+    expect(llamadasA('/roles')).toHaveLength(2)
+  })
+
+  test('si el token ya cambió (otra petición renovó), repite con el actual sin renovar', async () => {
+    guardarSesion(vencida)
+    fetch.mockImplementation(async (url, { headers }) => {
+      if (headers.Authorization === `Bearer ${vencida.token}`) {
+        guardarSesion(renovada)
+        return respuestaJson(401, ERROR_VENCIDA)
+      }
+      return respuestaJson(200, { ok: true })
+    })
+
+    expect(await solicitar('/reportes')).toEqual({ ok: true })
+    expect(llamadasA('/auth/refrescar')).toHaveLength(0)
+    expect(fetch.mock.calls[1][1].headers.Authorization).toBe(`Bearer ${renovada.token}`)
+  })
+
+  test('un refresco que falla con 401 no repite y llama al manejador con su error', async () => {
+    guardarSesion(vencida)
+    const manejador = vi.fn()
+    quitarManejador = alPerderSesion(manejador)
+    const jornada = { error: { codigo: 'JORNADA_TERMINADA', mensaje: 'Terminó su jornada. Inicie sesión de nuevo.' } }
+    simularApi(respuestaJson(401, jornada))
+
+    const error = await solicitar('/reportes').catch((e) => e)
+
+    expect(error).toMatchObject({ status: 401, codigo: 'JORNADA_TERMINADA' })
+    expect(manejador).toHaveBeenCalledTimes(1)
+    expect(manejador).toHaveBeenCalledWith(error)
+    expect(llamadasA('/reportes')).toHaveLength(1)
+  })
+
+  test('un refresco que falla por la red no repite ni llama al manejador', async () => {
+    guardarSesion(vencida)
+    const manejador = vi.fn()
+    quitarManejador = alPerderSesion(manejador)
+    simularApi(new TypeError('Failed to fetch'))
+
+    await expect(solicitar('/reportes')).rejects.toMatchObject({ codigo: 'SIN_CONEXION' })
+    expect(manejador).not.toHaveBeenCalled()
+    expect(llamadasA('/reportes')).toHaveLength(1)
+    expect(leerTokenGuardado()).toBe(vencida.token)
+  })
+
+  test('otro 401 no intenta renovar', async () => {
+    guardarSesion(vencida)
+    quitarManejador = alPerderSesion(vi.fn())
+    fetch.mockResolvedValue(respuestaJson(401, ERROR_401))
+
+    await expect(solicitar('/reportes')).rejects.toMatchObject({ codigo: 'SESION_CERRADA' })
+    expect(llamadasA('/auth/refrescar')).toHaveLength(0)
+  })
+
+  test('un SESION_VENCIDA de /auth/login no intenta renovar', async () => {
+    guardarSesion(vencida)
+    quitarManejador = alPerderSesion(vi.fn())
+    fetch.mockResolvedValue(respuestaJson(401, ERROR_VENCIDA))
+
+    await expect(solicitar('/auth/login', { metodo: 'POST', cuerpo: {} })).rejects.toBeInstanceOf(ErrorApi)
+    expect(llamadasA('/auth/refrescar')).toHaveLength(0)
+  })
+
+  test('un refresco que trae otra cuenta lanza SESION_OTRA_CUENTA y no cambia la sesión guardada', async () => {
+    guardarSesion(vencida)
+    fetch.mockResolvedValue(respuestaJson(200, crearSesion('8')))
+
+    await expect(refrescar()).rejects.toMatchObject({ status: 401, codigo: 'SESION_OTRA_CUENTA' })
+    expect(leerSesion()).toEqual(vencida)
+  })
+
+  test('sin sesión en memoria (al recargar), el refresco guarda la que llega', async () => {
+    fetch.mockResolvedValue(respuestaJson(200, renovada))
+
+    expect(await refrescar()).toEqual(renovada)
+    expect(leerSesion()).toEqual(renovada)
+  })
+
+  test('un refresco correcto actualiza la hora de la última petición', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2026-10-29T10:00:00Z'))
+      fetch.mockResolvedValue(respuestaJson(200, renovada))
+      await refrescar()
+      expect(leerUltimaPeticion()).toBe(new Date('2026-10-29T10:00:00Z').getTime())
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

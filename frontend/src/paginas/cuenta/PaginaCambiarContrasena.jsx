@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -25,7 +26,7 @@ function MensajeError({ id, children }) {
 
 // obligatoria: la cuenta tiene la contraseña temporal pendiente; se muestra sola, sin menú.
 export default function PaginaCambiarContrasena({ obligatoria = false }) {
-  const { sesion, cerrar, terminarTrasCambioContrasena } = useSesion()
+  const { sesion, cerrar, actualizarTrasCambioContrasena } = useSesion()
   const navegar = useNavigate()
   const [actual, setActual] = useState('')
   const [nueva, setNueva] = useState('')
@@ -98,12 +99,15 @@ export default function PaginaCambiarContrasena({ obligatoria = false }) {
     setError(null)
     try {
       await cambiarContrasena({ contrasenaActual: actual, contrasenaNueva: nueva })
-      terminarTrasCambioContrasena()
-      navegar('/login', { replace: true })
     } catch (err) {
       setError(mensajeDeError(err))
       setEnviando(false)
+      return
     }
+    // La sesión sigue. Si no se pudo renovar tras el cambio obligatorio, ya se cerró y el login muestra por qué.
+    if (obligatoria && !(await actualizarTrasCambioContrasena())) return
+    toast.success('Contraseña cambiada.')
+    navegar('/inicio', { replace: true })
   }
 
   function salir() {

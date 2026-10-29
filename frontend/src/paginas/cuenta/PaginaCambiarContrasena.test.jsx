@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { toast } from 'sonner'
 import App from '@/App.jsx'
 import { cambiarContrasena, cerrarSesion } from '@/api/auth.js'
 import { ErrorApi } from '@/api/cliente.js'
-import { guardarSesion } from '@/api/sesion.js'
+import { guardarSesion, leerSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 import { cargarEvaluador, MOTIVOS } from '@/componentes/contrasena/politicaContrasena.js'
 
@@ -151,20 +152,63 @@ test('si no carga el medidor, no deja enviar y «Reintentar» lo vuelve a pedir'
   expect(screen.queryByText('No se pudo cargar el medidor de contraseñas.')).toBeNull()
 })
 
-test('un envío válido cambia la contraseña, cierra la sesión sin logout y muestra el aviso en el login', async () => {
+test('el cambio voluntario mantiene la sesión: avisa con un toast y vuelve a /inicio, sin logout', async () => {
   cambiarContrasena.mockResolvedValue(null)
-  abrir('/cuenta/contrasena')
+  abrir('/cuenta/contrasena', { debeCambiar: false })
+  const sesion = leerSesion()
   await llenar()
 
   expect(screen.getByText('Fortaleza: Muy fuerte')).toBeTruthy()
   expect(botonEnviar().disabled).toBe(false)
   fireEvent.click(botonEnviar())
 
-  expect(await screen.findByRole('heading', { name: 'Iniciar sesión' })).toBeTruthy()
+  await waitFor(() => expect(screen.queryByLabelText('Contraseña actual')).toBeNull())
   expect(cambiarContrasena).toHaveBeenCalledWith({ contrasenaActual: ACTUAL, contrasenaNueva: NUEVA })
-  expect(screen.getByText('Su contraseña se cambió. Inicie sesión con la nueva.')).toBeTruthy()
-  expect(sessionStorage.getItem('sircova.sesion')).toBeNull()
+  expect(toast.success).toHaveBeenCalledWith('Contraseña cambiada.')
+  expect(screen.getByRole('navigation', { name: 'Menú principal' })).toBeTruthy()
+  expect(screen.queryByRole('heading', { name: 'Iniciar sesión' })).toBeNull()
+  expect(leerSesion()).toEqual(sesion)
   expect(cerrarSesion).not.toHaveBeenCalled()
+})
+
+describe('cambio obligatorio (contraseña temporal)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  test('renueva la sesión y llega a /inicio dentro del menú, sin volver a iniciar sesión', async () => {
+    const renovada = crearSesion(false)
+    const fetchFalso = vi.fn(async () => ({ status: 200, ok: true, json: async () => renovada }))
+    vi.stubGlobal('fetch', fetchFalso)
+    cambiarContrasena.mockResolvedValue(null)
+    abrir('/cuenta/contrasena')
+    await llenar()
+
+    fireEvent.click(botonEnviar())
+
+    await waitFor(() => expect(screen.queryByLabelText('Contraseña actual')).toBeNull())
+    expect(screen.getByRole('navigation', { name: 'Menú principal' })).toBeTruthy()
+    expect(fetchFalso.mock.calls.map(([url]) => url.endsWith('/auth/refrescar'))).toEqual([true])
+    expect(leerSesion()).toEqual(renovada)
+    expect(leerSesion().usuario.debeCambiarContrasena).toBe(false)
+    expect(toast.success).toHaveBeenCalledWith('Contraseña cambiada.')
+    expect(cerrarSesion).not.toHaveBeenCalled()
+  })
+
+  test('si no se puede renovar, cierra la sesión sin logout y el login dice por qué', async () => {
+    // El fetch de las pruebas responde 401 NO_AUTENTICADO a /auth/refrescar.
+    cambiarContrasena.mockResolvedValue(null)
+    abrir('/cuenta/contrasena')
+    await llenar()
+
+    fireEvent.click(botonEnviar())
+
+    expect(await screen.findByRole('heading', { name: 'Iniciar sesión' })).toBeTruthy()
+    expect(screen.getByRole('status').textContent).toContain('Debe iniciar sesión.')
+    expect(leerSesion()).toBeNull()
+    expect(toast.success).not.toHaveBeenCalled()
+    expect(cerrarSesion).not.toHaveBeenCalled()
+  })
 })
 
 test('si el backend responde 422, muestra el mensaje y conserva lo escrito', async () => {
@@ -181,7 +225,7 @@ test('si el backend responde 422, muestra el mensaje y conserva lo escrito', asy
   expect(alerta.nextElementSibling.contains(botonEnviar())).toBe(true)
   expect(screen.getByLabelText('Contraseña actual').value).toBe(ACTUAL)
   expect(screen.getByLabelText('Contraseña nueva').value).toBe(NUEVA)
-  expect(sessionStorage.getItem('sircova.sesion')).not.toBeNull()
+  expect(leerSesion()).not.toBeNull()
 })
 
 test('en el cambio obligatorio, "Cerrar sesión" cierra con MANUAL y lleva al login', async () => {

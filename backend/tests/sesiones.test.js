@@ -6,6 +6,7 @@ import bcrypt from 'bcrypt';
 import app from '../src/app.js';
 import entorno from '../src/config/entorno.js';
 import pool from '../src/config/mysql.js';
+import { MARGEN_COOKIE_SEGUNDOS } from '../src/modulos/auth/cookieRefresh.js';
 
 // Inicia sesión de verdad, así que su usuario_id queda en la bitácora y la llave foránea impide borrarla:
 // es una cuenta permanente que se reinicia en cada corrida. Sus filas de sesion sí se borran.
@@ -106,7 +107,7 @@ describe('POST /auth/login · sesión', () => {
     expect(cookie.valor).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(cookie.atributos).toEqual(
       expect.arrayContaining([
-        `Max-Age=${entorno.sesion.duracionMaxima}`,
+        `Max-Age=${entorno.sesion.duracionMaxima + MARGEN_COOKIE_SEGUNDOS}`,
         'Path=/api/v1/auth',
         'HttpOnly',
         'Secure',
@@ -308,8 +309,8 @@ describe('POST /auth/refrescar', () => {
     expect(sesion.hash_refresh).toBe(hashDe(nueva.valor));
     expect(nueva.atributos).toEqual(expect.arrayContaining(['Path=/api/v1/auth', 'HttpOnly', 'Secure', 'SameSite=Strict']));
     const maxAge = Number(nueva.atributos.find((a) => a.startsWith('Max-Age=')).slice('Max-Age='.length));
-    expect(maxAge).toBeGreaterThan(entorno.sesion.duracionMaxima - 60);
-    expect(maxAge).toBeLessThanOrEqual(entorno.sesion.duracionMaxima);
+    expect(maxAge).toBeGreaterThan(entorno.sesion.duracionMaxima + MARGEN_COOKIE_SEGUNDOS - 60);
+    expect(maxAge).toBeLessThanOrEqual(entorno.sesion.duracionMaxima + MARGEN_COOKIE_SEGUNDOS);
     expect((await usarSesion(renovado.body.token)).status).toBe(400);
   });
 

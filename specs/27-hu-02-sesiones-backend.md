@@ -136,7 +136,7 @@ Lleva lo mismo de hoy más `sid` (el `id` de la sesión, como número). `verific
 | `Secure` | sí | Solo viaja por HTTPS; los navegadores tratan `http://localhost` como seguro (se confirma en la verificación manual) |
 | `SameSite` | `Strict` | No se manda desde otros sitios (protege contra CSRF) |
 | `Path` | `/api/v1/auth` | Solo viaja a `login`, `refrescar` y `logout` |
-| `Max-Age` | los segundos que faltan para `expira_en` | La cookie muere con la jornada |
+| `Max-Age` | los segundos que faltan para `expira_en`, más 1 h (`MARGEN_COOKIE_SEGUNDOS`, desde el SPEC 28) | Al terminar la jornada, `refrescar` todavía recibe la cookie y responde `JORNADA_TERMINADA` |
 
 - Para borrarla se manda la misma cookie vacía con `Max-Age=0`.
 - La cookie se lee con una función pequeña que interpreta el encabezado `Cookie`, sin `cookie-parser` (no está en la lista de dependencias permitidas). La lectura y la escritura van en `modulos/auth/cookieRefresh.js`.
@@ -350,7 +350,7 @@ Durante el trabajo se corre solo el archivo de prueba de cada paso. La suite com
 
 - [ ] `openapi.yaml` describe `cookieRefresh`, `POST /auth/refrescar`, la cookie del login y el logout con cookie, y `/api/docs` los muestra.
 - [ ] El 08 corre dos veces sin error en Aiven, y el 01 v0.10 y `CONTEXTO BD.md` tienen la tabla `sesion`.
-- [ ] `POST /auth/login` responde el mismo cuerpo de hoy y la cookie `sircova_refresh` con `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/api/v1/auth` y `Max-Age` igual a la jornada.
+- [ ] `POST /auth/login` responde el mismo cuerpo de hoy y la cookie `sircova_refresh` con `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/api/v1/auth` y `Max-Age` igual a la jornada (desde el SPEC 28, la jornada más 1 h).
 - [ ] Un segundo login de la misma cuenta deja al token anterior con 401 `SESION_REEMPLAZADA`, y la base tiene una sola sesión abierta de esa cuenta.
 - [ ] Dos logins en paralelo de la misma cuenta dejan una sola sesión abierta.
 - [ ] Un token sin `sid`, o con el `sid` de otra cuenta, responde 401 `NO_AUTENTICADO`.
@@ -381,7 +381,8 @@ Durante el trabajo se corre solo el archivo de prueba de cada paso. La suite com
 - **Sí:** al iniciar sesión, la sesión anterior se cierra siempre con `REEMPLAZADA`, pero `LOGIN_OK` lleva `sesionReemplazada: true` solo si seguía vigente (decidido en la fase de preguntas). **No:** un motivo `VENCIDA` en el `ENUM`. **No:** marcar siempre `sesionReemplazada`.
 - **Sí:** el logout es idempotente: con una sesión ya cerrada o una cookie desconocida, borra la cookie y responde 204 sin bitácora (decidido en la fase de preguntas). **No:** un 401, que haría fallar el botón «Cerrar sesión» de una sesión reemplazada.
 - **Sí:** `refrescar` funciona con `debe_cambiar_contrasena = TRUE`, como el login (decidido en la fase de preguntas). El resto de la API sigue con el 403 `CAMBIO_CONTRASENA_REQUERIDO`.
-- **Sí:** `Secure` siempre; una variable para quitarlo en desarrollo solo si la verificación en `localhost` falla (decidido en la fase de preguntas). **No:** la variable desde ahora, que puede quedar mal puesta en producción.
+- **Sí:** `Secure` siempre; una variable para quitarlo en desarrollo solo si la verificación en `localhost` falla (decidido en la fase de preguntas). **No:** la variable desde ahora, que puede quedar mal puesta en producción. En la verificación del SPEC 28 (Opera GX, `http://localhost:5173`, 2026-10-29) el navegador aceptó la cookie con `Secure`: la variable no hizo falta.
+- **Sí (SPEC 28, 2026-10-29):** la cookie dura la jornada más 1 h (`MARGEN_COOKIE_SEGUNDOS` en `cookieRefresh.js`). Con `Max-Age` igual a la jornada, el navegador la borraba justo al terminar, `refrescar` llegaba sin cookie y la persona veía «Debe iniciar sesión.» en vez de `JORNADA_TERMINADA`. La sesión no se alarga: la jornada la revisa el servidor y el 401 borra la cookie. **No:** un texto propio del frontend para ese caso, que no sabe si fue la jornada.
 - **Sí:** las pruebas nuevas van en `sesiones.test.js`, con una cuenta propia y permanente; los cierres por el administrador, en `usuarios.test.js` (decidido en la fase de preguntas). **No:** repartirlas en los archivos de `auth`.
 - **Sí:** cambiar la propia contraseña mantiene la sesión (decisión del equipo). El frontend actual igual vuelve al login después del cambio; el spec del frontend decide si lo mantiene.
 - **Sí:** `SESION_DURACION_MAXIMA` y `SESION_INACTIVIDAD` son obligatorias, como `JWT_EXPIRACION` (decidido al escribir el spec). **No:** valores por defecto en el código, que esconden una configuración olvidada.
@@ -399,7 +400,7 @@ Durante el trabajo se corre solo el archivo de prueba de cada paso. La suite com
 | Una prueba pierde su token porque otro login de la misma cuenta lo cerró | `tokenDePrueba` reutiliza la sesión abierta; las pruebas de sesiones usan su propia cuenta. |
 | Las fechas de la sesión salen corridas 6 h y la jornada o la inactividad fallan | Todas las fechas se escriben y comparan con `NOW()` de MySQL, nunca con la hora de Node. |
 | Dos refrescos simultáneos con el mismo refresh rotan dos veces | El `SELECT … FOR UPDATE` es la primera consulta de la transacción (nota del 2026-10-23): el segundo espera y entra por el margen. |
-| El `Secure` de la cookie no funciona en `http://localhost` en algún navegador o en `curl` | Se comprueba en el paso 9; si falla, una variable de entorno lo desactiva solo en desarrollo y se anota en este spec. |
+| El `Secure` de la cookie no funciona en `http://localhost` en algún navegador o en `curl` | Se comprueba en el paso 9; si falla, una variable de entorno lo desactiva solo en desarrollo y se anota en este spec. Comprobado en el SPEC 28: el navegador la acepta en `localhost`. |
 | Los compañeros arrancan la API sin las variables nuevas | La API no arranca y dice cuáles faltan; `.env.example` y la nota de `CLAUDE.md` las nombran. |
 | El frontend actual no conoce los códigos nuevos | Muestra el `mensaje` de cualquier 401; los mensajes nuevos sirven tal como llegan. |
 | La sesión del navegador de quien prueba a mano se cierra al correr las pruebas | Nota en `CLAUDE.md`; para probar a mano mientras corren las pruebas, usar otra cuenta. |
