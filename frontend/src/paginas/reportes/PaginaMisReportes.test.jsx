@@ -158,6 +158,7 @@ test('sin reportes y sin filtros invita a crear el del mes en Registro', async (
 
   expect(screen.getByText(/Todavía no tiene reportes/)).toBeTruthy()
   expect(screen.getByRole('link', { name: 'Registro de producción' }).getAttribute('href')).toBe('/registro')
+  expect(screen.getByRole('link', { name: 'Ir al registro' }).getAttribute('href')).toBe('/registro')
   expect(screen.getByText('Mis reportes')).toBeTruthy()
 })
 
@@ -177,4 +178,15 @@ test('si la carga falla muestra el mensaje y «Reintentar» vuelve a pedir la li
   fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
   await waitFor(() => expect(screen.getAllByRole('row')).toHaveLength(REPORTES.length + 1))
   expect(listarReportes).toHaveBeenCalledTimes(2)
+})
+
+test('si fallan los años, el filtro de año queda deshabilitado y «Reintentar» los vuelve a pedir', async () => {
+  listarPeriodos.mockRejectedValueOnce(new ErrorApi(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.'))
+  await abrir()
+
+  expect(await screen.findByText('No se pudieron cargar los años: No se pudo conectar con el servidor.')).toBeTruthy()
+  expect(nativo('anio').disabled).toBe(true)
+  fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+  await waitFor(() => expect(screen.queryByText(/No se pudieron cargar los años/)).toBeNull())
+  expect(listarPeriodos).toHaveBeenCalledTimes(2)
 })

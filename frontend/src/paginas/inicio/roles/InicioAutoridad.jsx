@@ -1,7 +1,8 @@
-import { TarjetasSinDatos } from '../TarjetaSinDatos.jsx'
+import { TarjetasDelInicio } from '../TarjetaSinDatos.jsx'
 
-const TARJETAS = ['Indicadores clave', 'Avance y proyección', 'Ranking de municipios']
+// Sin endpoints de indicadores todavía: las agrega el spec de cada dato.
+const TARJETAS = [{ titulo: 'Indicadores clave' }, { titulo: 'Avance y proyección' }, { titulo: 'Ranking de municipios' }]
 
 export default function InicioAutoridad() {
-  return <TarjetasSinDatos titulos={TARJETAS} />
+  return <TarjetasDelInicio tarjetas={TARJETAS} />
 }

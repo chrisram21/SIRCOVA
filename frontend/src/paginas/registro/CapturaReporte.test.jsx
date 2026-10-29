@@ -1,10 +1,14 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { toast } from 'sonner'
 import { ErrorApi } from '@/api/cliente.js'
 import { guardarVacuna, obtenerFormulario } from '@/api/produccion.js'
 import CapturaReporte from './CapturaReporte.jsx'
 
 vi.mock('@/api/produccion.js', () => ({ obtenerFormulario: vi.fn(), guardarVacuna: vi.fn() }))
+
+// El aviso de guardado es un toast (sonner, simulado en preparar-pruebas.js).
+const borradorGuardado = () => waitFor(() => expect(toast.success).toHaveBeenCalledWith('Borrador guardado.'))
 
 const valor = (codigo, etiqueta, orden) => ({ codigo, etiqueta, orden, activo: true })
 const HEXAVALENTE = {
@@ -109,10 +113,10 @@ const formulario = (cambios = {}) => ({
 })
 
 // useBlocker necesita un data router.
-function dibujar() {
+function dibujar({ reporte = REPORTE, formularioPedido } = {}) {
   const router = createMemoryRouter(
     [
-      { path: '/registro', element: <CapturaReporte reporte={REPORTE} /> },
+      { path: '/registro', element: <CapturaReporte reporte={reporte} formularioPedido={formularioPedido} /> },
       { path: '/inicio', element: <p>Pantalla de inicio</p> },
     ],
     { initialEntries: ['/registro'] },
@@ -196,6 +200,15 @@ test('«Guardar borrador» se deshabilita con una celda inválida y lo dice', as
 
   expect(botonGuardar().disabled).toBe(true)
   expect(screen.getByText('Corrija las cantidades marcadas para guardar.')).toBeTruthy()
+  expect(
+    screen.getByText('Hay cantidades de Hexavalente que no son números enteros (0 en adelante); están marcadas en rojo.'),
+  ).toBeTruthy()
+  expect(campo('1.ª dosis · De 1 a < 6 años').getAttribute('title')).toBe('Escriba un número entero, de 0 en adelante.')
+  // La pestaña de la vacuna lo marca, para encontrarla desde otra pestaña.
+  const pestana = screen.getByRole('tab', { name: 'Hexavalente' })
+  const descripcion = pestana.getAttribute('aria-describedby').split(' ').map((id) => document.getElementById(id).textContent)
+  expect(descripcion).toContain('(cantidades no válidas)')
+  expect(screen.getByRole('tab', { name: 'VPH' }).getAttribute('aria-describedby')).toBeNull()
 
   escribir('1.ª dosis · De 1 a < 6 años', '2')
   expect(botonGuardar().disabled).toBe(false)
@@ -216,7 +229,7 @@ test('guarda solo las vacunas con cambios, en orden, con la versionFila encadena
   escribir('1.ª dosis · Masculino', '3')
   fireEvent.click(botonGuardar())
 
-  expect(await screen.findByText('Borrador guardado.')).toBeTruthy()
+  await borradorGuardado()
   expect(guardarVacuna).toHaveBeenCalledTimes(2)
   // La celda de otro municipio (la tarjeta B) también se manda: el PUT reemplaza todas las procedencias.
   expect(guardarVacuna).toHaveBeenNthCalledWith(1, 7, 3, {
@@ -251,7 +264,7 @@ test('mientras se guarda, los campos y el botón quedan deshabilitados', async (
   expect(screen.getByRole('spinbutton', { name: 'Frascos abiertos (obligatorio)' }).disabled).toBe(true)
 
   terminar({ versionFila: 4, vacuna: capturaHexa({ celdas: [celda('D1', { grupo_edad: 'MENOR_1' }, 80)] }) })
-  await screen.findByText('Borrador guardado.')
+  await borradorGuardado()
   expect(campo('1.ª dosis · < 1 año').disabled).toBe(false)
 })
 
@@ -262,7 +275,7 @@ test('un cambio solo en los datos adicionales guarda esa vacuna con el número c
   fireEvent.change(screen.getByRole('spinbutton', { name: 'Frascos abiertos (obligatorio)' }), { target: { value: '15' } })
   fireEvent.click(botonGuardar())
 
-  await screen.findByText('Borrador guardado.')
+  await borradorGuardado()
   expect(guardarVacuna).toHaveBeenCalledTimes(1)
   expect(guardarVacuna.mock.calls[0][2].datosAdicionales).toEqual({ frascos: 15 })
 })
@@ -306,10 +319,33 @@ test('un reporte que no se puede editar se ve en solo lectura, sin «Guardar bor
   await montar(formulario({ editable: false }))
 
   expect(screen.queryByRole('button', { name: 'Guardar borrador' })).toBeNull()
+  expect(screen.getByText('Solo consulta')).toBeTruthy()
   expect(screen.getByText('Este reporte no se puede editar en su estado actual.')).toBeTruthy()
   expect(campo('1.ª dosis · < 1 año').value).toBe('78')
   for (const elemento of screen.getAllByRole('textbox')) expect(elemento.disabled).toBe(true)
   expect(screen.getByRole('spinbutton', { name: 'Frascos abiertos (obligatorio)' }).disabled).toBe(true)
+})
+
+test('en solo lectura, el aviso dice el estado del reporte cuando ya salió del Borrador', async () => {
+  obtenerFormulario.mockResolvedValue(formulario({ editable: false }))
+  dibujar({ reporte: { ...REPORTE, estado: 'EN_REVISION' } })
+
+  expect(await screen.findByText('El reporte está en «En revisión»: solo se puede consultar.')).toBeTruthy()
+})
+
+test('con el formulario ya pedido (formularioPedido), lo usa y no lo vuelve a pedir; «Reintentar» sí pide', async () => {
+  const fallo = Promise.reject(new ErrorApi(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.'))
+  fallo.catch(() => {})
+  obtenerFormulario.mockResolvedValue(formulario())
+  dibujar({ formularioPedido: fallo })
+
+  expect(await screen.findByText('No se pudo cargar el formulario: No se pudo conectar con el servidor.')).toBeTruthy()
+  expect(obtenerFormulario).not.toHaveBeenCalled()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+  await waitFor(() => expect(screen.queryByLabelText('Cargando formulario')).toBeNull())
+  expect(obtenerFormulario).toHaveBeenCalledWith(7)
+  expect(campo('1.ª dosis · < 1 año').value).toBe('78')
 })
 
 test('una vacuna cuyo esquema ya no está avisa en su pestaña', async () => {
@@ -366,7 +402,7 @@ describe('tarjeta B: otros municipios', () => {
     await agregarFila(MIGRANTES, 'D2', 0)
     fireEvent.click(botonGuardar())
 
-    await screen.findByText('Borrador guardado.')
+    await borradorGuardado()
     expect(guardarVacuna.mock.calls[0][2].celdas).toEqual([
       { dosisCodigo: 'D1', municipioProcedenciaId: 1, dimensiones: { grupo_edad: 'MENOR_1' }, cantidad: 78 },
       { dosisCodigo: 'D1', municipioProcedenciaId: MIGRANTES, dimensiones: { grupo_edad: 'MENOR_1' }, cantidad: 1 },
@@ -384,7 +420,7 @@ describe('tarjeta B: otros municipios', () => {
     expect(botonGuardar().disabled).toBe(false)
     fireEvent.click(botonGuardar())
 
-    await screen.findByText('Borrador guardado.')
+    await borradorGuardado()
     expect(guardarVacuna.mock.calls[0][2].celdas.map((c) => c.municipioProcedenciaId)).not.toContain(SAN_PEDRO)
   })
 
@@ -399,7 +435,7 @@ describe('tarjeta B: otros municipios', () => {
     guardarVacuna.mockResolvedValueOnce({ versionFila: 4, vacuna: conOtras() })
     escribir('1.ª dosis · De 1 a < 6 años', '2')
     fireEvent.click(botonGuardar())
-    await screen.findByText('Borrador guardado.')
+    await borradorGuardado()
     expect(filasDeB()).not.toContainEqual(['Sibinal', '1.ª dosis', '< 1 año'])
   })
 
@@ -456,7 +492,7 @@ describe('cambios sin guardar', () => {
     escribir('1.ª dosis · < 1 año', '80')
     fireEvent.click(botonGuardar())
 
-    await screen.findByText('Borrador guardado.')
+    await borradorGuardado()
     expect(screen.getByText(/^Guardado a las \d{2}:\d{2}$/)).toBeTruthy()
     expect(insignia('Cambios sin guardar')).toBeNull()
     expect(marcada('Hexavalente')).toBe(false)

@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-router-dom'
+import { toast } from 'sonner'
 import {
   agregarDosis,
   desactivarDosis,
@@ -90,20 +91,32 @@ function Ubicacion() {
 }
 const ubicacion = () => screen.getByTestId('ubicacion').textContent
 
+// El aviso de cambios sin guardar (useBlocker) necesita un data router.
+function montar(entrada) {
+  guardarSesion(crearSesion(PERMISOS))
+  const router = createMemoryRouter(
+    [
+      {
+        element: (
+          <ProveedorSesion>
+            <Outlet />
+            <Ubicacion />
+          </ProveedorSesion>
+        ),
+        children: [
+          { path: '/configuracion', element: <PaginaConfiguracion /> },
+          { path: '/configuracion/vacunas/:id/editar', element: <PaginaEditarVacuna /> },
+        ],
+      },
+    ],
+    { initialEntries: [entrada] },
+  )
+  render(<RouterProvider router={router} />)
+}
+
 async function abrir(vacuna = HEXA) {
   obtenerVacuna.mockResolvedValue(vacuna)
-  guardarSesion(crearSesion(PERMISOS))
-  render(
-    <MemoryRouter initialEntries={[`/configuracion/vacunas/${vacuna.id}/editar`]}>
-      <ProveedorSesion>
-        <Routes>
-          <Route path="/configuracion" element={<PaginaConfiguracion />} />
-          <Route path="/configuracion/vacunas/:id/editar" element={<PaginaEditarVacuna />} />
-        </Routes>
-        <Ubicacion />
-      </ProveedorSesion>
-    </MemoryRouter>,
-  )
+  montar(`/configuracion/vacunas/${vacuna.id}/editar`)
   await screen.findByRole('table', { name: 'Dosis' })
 }
 
@@ -141,10 +154,9 @@ test('muestra el código como texto y la tabla de dosis con sus marcas', async (
   expect(screen.getByLabelText(/^Orden en el informe/).value).toBe('4')
 })
 
-test('"Guardar cambios" envía solo los campos que cambiaron y vuelve a la pestaña con el aviso', async () => {
+test('"Guardar cambios" envía solo los campos que cambiaron y vuelve a la pestaña con el aviso, sin pedir confirmación', async () => {
   editarVacuna.mockResolvedValue({ ...HEXA, nombre: 'Hexavalente acelular' })
   await abrir()
-  expect(screen.getByRole('button', { name: 'Guardar cambios' }).disabled).toBe(true)
 
   fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: '  Hexavalente acelular ' } })
   fireEvent.change(screen.getByLabelText(/^Descripción/), { target: { value: '' } })
@@ -152,7 +164,17 @@ test('"Guardar cambios" envía solo los campos que cambiaron y vuelve a la pesta
 
   await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=vacunas'))
   expect(editarVacuna).toHaveBeenCalledWith(2, { nombre: 'Hexavalente acelular' })
-  expect(await screen.findByText('Vacuna HEXA actualizada.')).toBeTruthy()
+  expect(toast.success).toHaveBeenCalledWith('Vacuna HEXA actualizada.')
+  expect(screen.queryByRole('alertdialog')).toBeNull()
+})
+
+test('sin cambios, "Guardar cambios" avisa que no hay nada que guardar y no llama a la API', async () => {
+  await abrir()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+
+  expect(toast.info).toHaveBeenCalledWith('No hay cambios que guardar.')
+  expect(editarVacuna).not.toHaveBeenCalled()
 })
 
 test('cambiar el orden en el informe lo envía como número; vacío muestra el error y no llama a la API', async () => {
@@ -164,6 +186,8 @@ test('cambiar el orden en el informe lo envía como número; vacío muestra el e
   expect(
     await screen.findByText('El orden en el informe debe ser un número entero entre 0 y 65535.'),
   ).toBeTruthy()
+  // El foco va al campo con el error.
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText(/^Orden en el informe/)))
   expect(editarVacuna).not.toHaveBeenCalled()
 
   fireEvent.change(screen.getByLabelText(/^Orden en el informe/), { target: { value: '7' } })
@@ -188,7 +212,7 @@ test('agregar una dosis llama a agregarDosis y la tabla muestra la marca que tra
   expect(within(dialogo).getByLabelText('Nombre').value).toBe('Tercera dosis')
   fireEvent.click(within(dialogo).getByRole('button', { name: 'Guardar' }))
 
-  expect(await screen.findByText('Dosis D3 agregada.')).toBeTruthy()
+  await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Dosis D3 agregada.'))
   expect(agregarDosis).toHaveBeenCalledWith(2, { tipo: 'DOSIS', nombre: 'Tercera dosis', esTrazadora: false })
   expect(queCompleta()).toEqual(['D3'])
   expect(screen.queryByRole('dialog')).toBeNull()
@@ -218,7 +242,7 @@ test('editar una dosis envía solo lo que cambió y reemplaza la tabla con la re
   fireEvent.click(within(dialogo).getByRole('checkbox', { name: 'Trazadora' }))
   fireEvent.click(within(dialogo).getByRole('button', { name: 'Guardar' }))
 
-  expect(await screen.findByText('Dosis D1 actualizada.')).toBeTruthy()
+  await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Dosis D1 actualizada.'))
   expect(editarDosis).toHaveBeenCalledWith(2, 2, { esTrazadora: true })
   expect(marcasDe('D1')).toBe('Trazadora')
 })
@@ -269,30 +293,88 @@ test('desactivar una dosis muestra la marca recalculada que trae la respuesta', 
   fireEvent.click(within(menu).getByRole('menuitem', { name: 'Desactivar' }))
   fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Desactivar' }))
 
-  expect(await screen.findByText('Dosis D2 desactivada.')).toBeTruthy()
+  await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Dosis D2 desactivada.'))
   expect(queCompleta()).toEqual(['D1'])
   expect(within(filaDe('D2')).getAllByRole('cell')[4].textContent).toBe('Inactiva')
 })
 
 test('"Volver" regresa a la pestaña con los filtros que traía', async () => {
   obtenerVacuna.mockResolvedValue(HEXA)
-  guardarSesion(crearSesion(PERMISOS))
-  render(
-    <MemoryRouter
-      initialEntries={[{ pathname: '/configuracion/vacunas/2/editar', state: { volverA: '?pestana=vacunas&q=hexa' } }]}
-    >
-      <ProveedorSesion>
-        <Routes>
-          <Route path="/configuracion" element={<PaginaConfiguracion />} />
-          <Route path="/configuracion/vacunas/:id/editar" element={<PaginaEditarVacuna />} />
-        </Routes>
-        <Ubicacion />
-      </ProveedorSesion>
-    </MemoryRouter>,
-  )
+  montar({ pathname: '/configuracion/vacunas/2/editar', state: { volverA: '?pestana=vacunas&q=hexa' } })
   await screen.findByRole('table', { name: 'Dosis' })
 
-  fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
+  fireEvent.click(screen.getByRole('link', { name: 'Volver' }))
 
   await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=vacunas&q=hexa'))
+})
+
+test('si falla la carga muestra el aviso, y "Reintentar" vuelve a pedir la vacuna', async () => {
+  obtenerVacuna.mockRejectedValueOnce(new ErrorApi(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.'))
+  obtenerVacuna.mockResolvedValue(HEXA)
+  montar('/configuracion/vacunas/2/editar')
+
+  expect(await screen.findByText('No se pudo cargar la vacuna: No se pudo conectar con el servidor.')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+  expect(await screen.findByRole('table', { name: 'Dosis' })).toBeTruthy()
+  expect(obtenerVacuna).toHaveBeenCalledTimes(2)
+})
+
+test('un error al guardar se muestra junto al botón y conserva lo escrito', async () => {
+  editarVacuna.mockRejectedValue(new ErrorApi(409, 'VACUNA_DUPLICADA', 'Ya hay una vacuna con ese nombre.'))
+  await abrir()
+
+  fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: 'Hexavalente acelular' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+
+  const aviso = (await screen.findByText('Ya hay una vacuna con ese nombre.')).closest('[role="alert"]')
+  expect(aviso.parentElement.nextElementSibling.contains(screen.getByRole('button', { name: 'Guardar cambios' }))).toBe(true)
+  expect(screen.getByLabelText(/^Nombre/).value).toBe('Hexavalente acelular')
+})
+
+describe('cambios sin guardar', () => {
+  test('con un cambio, "Volver" pide confirmación; "Seguir editando" se queda', async () => {
+    await abrir()
+    fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: 'Hexavalente acelular' } })
+
+    fireEvent.click(screen.getByRole('link', { name: 'Volver' }))
+    const dialogo = await screen.findByRole('alertdialog')
+    expect(dialogo.textContent).toContain('Si sale ahora, se pierden los cambios de la vacuna.')
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Seguir editando' }))
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(ubicacion()).toBe('/configuracion/vacunas/2/editar')
+    expect(screen.getByLabelText(/^Nombre/).value).toBe('Hexavalente acelular')
+  })
+
+  test('los cambios de las dosis se guardan al confirmarlos: no cuentan como cambios sin guardar', async () => {
+    editarDosis.mockResolvedValue({
+      ...HEXA,
+      dosis: HEXA.dosis.map((d) => (d.codigo === 'D1' ? { ...d, esTrazadora: true } : d)),
+    })
+    await abrir()
+    const menu = await abrirMenu('D1')
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Editar' }))
+    const dialogo = await screen.findByRole('dialog')
+    fireEvent.click(within(dialogo).getByRole('checkbox', { name: 'Trazadora' }))
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Guardar' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+    fireEvent.click(screen.getByRole('link', { name: 'Volver' }))
+
+    await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=vacunas'))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+  })
+})
+
+test('en el Dialog de agregar dosis, sin tipo avisa qué falta y le lleva el foco', async () => {
+  await abrir()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Agregar dosis' }))
+  const dialogo = await screen.findByRole('dialog')
+  fireEvent.click(within(dialogo).getByRole('button', { name: 'Guardar' }))
+
+  expect(within(dialogo).getByText('Elija el tipo de la dosis.')).toBeTruthy()
+  await waitFor(() => expect(document.activeElement).toBe(within(dialogo).getByRole('combobox', { name: 'Tipo' })))
+  expect(agregarDosis).not.toHaveBeenCalled()
 })

@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
-import { CircleAlert } from 'lucide-react'
+import { ClipboardPen } from 'lucide-react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { listarPeriodos } from '@/api/catalogos.js'
+import { mensajeDeError } from '@/api/cliente.js'
 import { listarReportes } from '@/api/produccion.js'
+import { AvisoError } from '@/componentes/Avisos.jsx'
+import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import InsigniaEstadoReporte, { ESTADOS_REPORTE } from '@/componentes/InsigniaEstadoReporte.jsx'
 import { cn } from '@/lib/utils'
 import PaginacionUsuarios, { FILAS_POR_PAGINA } from '@/paginas/usuarios/PaginacionUsuarios.jsx'
@@ -90,6 +92,7 @@ export default function PaginaMisReportes() {
   const [intento, setIntento] = useState(0)
   const [anios, setAnios] = useState([])
   const [errorAnios, setErrorAnios] = useState(null)
+  const [intentoAnios, setIntentoAnios] = useState(0)
 
   // Cualquier cambio que no sea de página vuelve a la página 1.
   function irA(cambios) {
@@ -103,13 +106,14 @@ export default function PaginaMisReportes() {
 
   useEffect(() => {
     let vigente = true
+    setErrorAnios(null)
     listarPeriodos()
       .then((periodos) => vigente && setAnios([...new Set(periodos.map((p) => p.anio))].sort((a, b) => b - a)))
-      .catch((err) => vigente && setErrorAnios(err.mensaje))
+      .catch((err) => vigente && setErrorAnios(mensajeDeError(err)))
     return () => {
       vigente = false
     }
-  }, [])
+  }, [intentoAnios])
 
   useEffect(() => {
     // Al cambiar la URL antes de que llegue la respuesta, la respuesta vieja se descarta.
@@ -130,7 +134,7 @@ export default function PaginaMisReportes() {
       })
       .catch((err) => {
         if (!vigente) return
-        setErrorCarga(err.mensaje)
+        setErrorCarga(mensajeDeError(err))
         setCargando(false)
       })
     return () => {
@@ -144,10 +148,7 @@ export default function PaginaMisReportes() {
 
   return (
     <section className="flex flex-col gap-6 p-6">
-      <div>
-        <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{antetitulo}</p>
-        <h1 className="text-2xl font-semibold">Reportes mensuales</h1>
-      </div>
+      <EncabezadoPagina antetitulo={antetitulo} titulo="Reportes mensuales" />
 
       <div className="flex flex-col gap-3">
         {/* Dentro de un form, Radix agrega el <select> nativo de cada Select. */}
@@ -183,23 +184,16 @@ export default function PaginaMisReportes() {
           )}
         </form>
         {errorAnios && (
-          <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-            <CircleAlert />
-            <AlertDescription>No se pudieron cargar los años: {errorAnios}</AlertDescription>
-          </Alert>
+          <AvisoError onReintentar={() => setIntentoAnios((n) => n + 1)}>
+            No se pudieron cargar los años: {errorAnios}
+          </AvisoError>
         )}
       </div>
 
       {errorCarga ? (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription className="flex flex-wrap items-center gap-2">
-            No se pudieron cargar los reportes: {errorCarga}
-            <Button variant="outline" size="sm" onClick={() => setIntento((n) => n + 1)}>
-              Reintentar
-            </Button>
-          </AlertDescription>
-        </Alert>
+        <AvisoError onReintentar={() => setIntento((n) => n + 1)}>
+          No se pudieron cargar los reportes: {errorCarga}
+        </AvisoError>
       ) : resultado === null ? (
         <div className="flex flex-col gap-2" aria-label="Cargando reportes">
           {[1, 2, 3].map((n) => (
@@ -210,17 +204,29 @@ export default function PaginaMisReportes() {
         hayFiltros ? (
           <p className="text-muted-foreground">No hay reportes con estos filtros.</p>
         ) : (
-          <p className="text-muted-foreground">
-            Todavía no tiene reportes. Cree el del mes en{' '}
-            <Link to="/registro" className="text-enlace underline-offset-4 hover:underline">
-              Registro de producción
-            </Link>
-            .
-          </p>
+          <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed bg-card p-6">
+            <p className="text-muted-foreground">
+              Todavía no tiene reportes. Cree el del mes en{' '}
+              <Link to="/registro" className="text-enlace underline-offset-4 hover:underline">
+                Registro de producción
+              </Link>
+              .
+            </p>
+            <Button asChild>
+              <Link to="/registro">
+                <ClipboardPen />
+                Ir al registro
+              </Link>
+            </Button>
+          </div>
         )
       ) : (
         <div className="flex flex-col gap-4">
-          <div className="overflow-x-auto rounded-lg border bg-card" aria-busy={cargando}>
+          {/* Mientras llega otra página o filtro se sigue viendo la anterior, atenuada. */}
+          <div
+            className={cn('overflow-x-auto rounded-lg border bg-card transition-opacity', cargando && 'opacity-60')}
+            aria-busy={cargando}
+          >
             <Table>
               <TableHeader>
                 <TableRow>

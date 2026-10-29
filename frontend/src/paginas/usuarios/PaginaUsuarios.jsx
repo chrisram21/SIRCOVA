@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { CircleAlert, CircleCheck, MoreHorizontal, UserPlus } from 'lucide-react'
+import { MoreHorizontal, UserPlus } from 'lucide-react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { toast } from 'sonner'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { mensajeDeError } from '@/api/cliente.js'
 import {
   desactivarCuenta,
   desbloquearCuenta,
@@ -29,6 +30,8 @@ import {
   restablecerContrasena,
   restaurarCuenta,
 } from '@/api/usuarios.js'
+import { AvisoError } from '@/componentes/Avisos.jsx'
+import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import DialogoContrasenaTemporal from './DialogoContrasenaTemporal.jsx'
 import FiltrosUsuarios from './FiltrosUsuarios.jsx'
@@ -70,7 +73,7 @@ function consultaDe(filtros) {
 
 export default function PaginaUsuarios() {
   const { sesion, tienePermiso } = useSesion()
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const [parametros, setParametros] = useSearchParams()
   const filtros = filtrosDeUrl(parametros)
   const clave = consultaDe(filtros)
@@ -79,7 +82,8 @@ export default function PaginaUsuarios() {
   const [resultado, setResultado] = useState(null)
   const [cargando, setCargando] = useState(true)
   const [errorCarga, setErrorCarga] = useState(null)
-  const [aviso, setAviso] = useState(null)
+  const [intentoCarga, setIntentoCarga] = useState(0)
+  const [errorAccion, setErrorAccion] = useState(null)
   const [enProceso, setEnProceso] = useState(null)
   const [porDesactivar, setPorDesactivar] = useState(null)
   const [porRestablecer, setPorRestablecer] = useState(null)
@@ -92,6 +96,8 @@ export default function PaginaUsuarios() {
   }
 
   const limpiarFiltros = () => setParametros(new URLSearchParams())
+  // Editar y Registrar personal vuelven a la lista con los mismos filtros y la misma página.
+  const estadoVolver = { volverA: { pathname, search } }
 
   function hrefDe(pagina) {
     const consulta = consultaDe({ ...filtros, pagina })
@@ -117,21 +123,26 @@ export default function PaginaUsuarios() {
       })
       .catch((err) => {
         if (!vigente) return
-        setErrorCarga(err.mensaje)
+        setErrorCarga(mensajeDeError(err))
         setCargando(false)
       })
     return () => {
       vigente = false
     }
-    // Solo clave: React Router crea un setParametros nuevo en cada cambio de URL, y este escribe la URL completa.
-  }, [clave])
+    // Sin setParametros: React Router crea uno nuevo en cada cambio de URL, y este escribe la URL completa.
+  }, [clave, intentoCarga])
+
+  function reintentarCarga() {
+    setErrorCarga(null)
+    setIntentoCarga((intento) => intento + 1)
+  }
 
   const puedeEditar = tienePermiso('USUARIO_EDITAR')
   const puedeDesactivar = tienePermiso('USUARIO_DESACTIVAR')
   const puedeDesbloquear = tienePermiso('USUARIO_DESBLOQUEAR')
   const puedeRestablecer = tienePermiso('USUARIO_RESTABLECER_CONTRASENA')
 
-  // Opciones del menú "Más acciones" de una fila; sin opciones, la fila no muestra el menú.
+  // Opciones del menú de acciones de una fila; sin opciones, la fila no muestra el menú.
   function opcionesDe(cuenta, propia) {
     const opciones = []
     if (cuenta.activo && puedeDesactivar && !propia) {
@@ -161,7 +172,7 @@ export default function PaginaUsuarios() {
 
   async function ejecutar(cuenta, accion, mensajeExito, textoEnCurso) {
     setEnProceso({ id: cuenta.id, texto: textoEnCurso })
-    setAviso(null)
+    setErrorAccion(null)
     try {
       const actualizada = await accion(cuenta.id)
       // La fila se reemplaza en su lugar aunque ya no cumpla el filtro; no se vuelve a pedir la página.
@@ -169,9 +180,9 @@ export default function PaginaUsuarios() {
         ...actual,
         elementos: actual.elementos.map((c) => (c.id === actualizada.id ? actualizada : c)),
       }))
-      setAviso({ tipo: 'exito', mensaje: mensajeExito })
+      toast.success(mensajeExito)
     } catch (err) {
-      setAviso({ tipo: 'error', mensaje: err.mensaje })
+      setErrorAccion(mensajeDeError(err))
     } finally {
       setEnProceso(null)
     }
@@ -207,38 +218,26 @@ export default function PaginaUsuarios() {
 
   return (
     <section className="flex flex-col gap-6 p-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Usuarios</h1>
-        {tienePermiso('EMPLEADO_CREAR') && (
-          <Button asChild>
-            <Link to="/usuarios/nuevo">
-              <UserPlus />
-              Registrar personal
-            </Link>
-          </Button>
-        )}
-      </div>
+      <EncabezadoPagina
+        titulo="Usuarios"
+        acciones={
+          tienePermiso('EMPLEADO_CREAR') && (
+            <Button asChild>
+              <Link to="/usuarios/nuevo" state={estadoVolver}>
+                <UserPlus />
+                Registrar personal
+              </Link>
+            </Button>
+          )
+        }
+      />
 
       <FiltrosUsuarios filtros={filtros} hayFiltros={hayFiltros} alCambiar={irA} alLimpiar={limpiarFiltros} />
 
-      {aviso?.tipo === 'exito' && (
-        <Alert role="status" className="border-ring/40 bg-accent text-accent-foreground">
-          <CircleCheck />
-          <AlertDescription className="text-accent-foreground">{aviso.mensaje}</AlertDescription>
-        </Alert>
-      )}
-      {aviso?.tipo === 'error' && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>{aviso.mensaje}</AlertDescription>
-        </Alert>
-      )}
+      {errorAccion && <AvisoError>{errorAccion}</AvisoError>}
 
       {errorCarga ? (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>No se pudieron cargar las cuentas: {errorCarga}</AlertDescription>
-        </Alert>
+        <AvisoError onReintentar={reintentarCarga}>No se pudieron cargar las cuentas: {errorCarga}</AvisoError>
       ) : resultado === null ? (
         <div className="flex flex-col gap-2" aria-label="Cargando cuentas">
           {[1, 2, 3].map((n) => (
@@ -305,14 +304,21 @@ export default function PaginaUsuarios() {
                           )}
                           {cuenta.activo && puedeEditar && (
                             <Button variant="outline" size="sm" asChild>
-                              <Link to={`/usuarios/${cuenta.id}/editar`}>Editar</Link>
+                              <Link to={`/usuarios/${cuenta.id}/editar`} state={estadoVolver}>
+                                Editar
+                              </Link>
                             </Button>
                           )}
                           {opciones.length > 0 && (
                             // No modal: así el AlertDialog que abre una opción no hereda el bloqueo del menú.
                             <DropdownMenu modal={false}>
                               <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="icon-sm" aria-label="Más acciones" disabled={ocupada}>
+                                <Button
+                                  variant="outline"
+                                  size="icon-sm"
+                                  aria-label={`Acciones de ${cuenta.nombreUsuario}`}
+                                  disabled={ocupada}
+                                >
                                   <MoreHorizontal />
                                 </Button>
                               </DropdownMenuTrigger>

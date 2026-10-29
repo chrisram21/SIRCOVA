@@ -42,6 +42,7 @@ const inicial = () => ({
 })
 
 let onGuardar
+let onCambios
 
 function montar(datos = inicial()) {
   render(
@@ -54,6 +55,7 @@ function montar(datos = inicial()) {
         dimensiones={DIMENSIONES}
         inicial={datos}
         onGuardar={onGuardar}
+        onCambios={onCambios}
         volverA="/configuracion?pestana=esquemas"
       />
     </MemoryRouter>,
@@ -72,6 +74,7 @@ const guardado = () => onGuardar.mock.calls.at(-1)[0]
 
 beforeEach(() => {
   onGuardar = vi.fn().mockResolvedValue(undefined)
+  onCambios = vi.fn()
 })
 
 test('sin cambios guarda el contenido inicial', async () => {
@@ -89,7 +92,8 @@ test('marcar y desmarcar dosis y valores cambia lo que se guarda', async () => {
 
   marcar('Segunda dosis (D2)')
   expect(problemas()).toEqual([M.dosisSinSeccion('D2')])
-  expect(botonGuardar().disabled).toBe(true)
+  fireEvent.click(botonGuardar())
+  expect(onGuardar).not.toHaveBeenCalled()
   marcar('D2 en la sección 1')
   expect(problemas()).toEqual([])
 
@@ -166,17 +170,22 @@ test('sin grupo_edad no hay Select de grupo y "Agregar sección" se deshabilita 
   expect(guardado().secciones).toEqual([{ titulo: '< 1 año', grupoEdad: null, dosis: ['D1', 'R1'] }])
 })
 
-test('dos secciones con el mismo grupo o una dosis sin sección aparecen en Problemas y deshabilitan Guardar', () => {
+test('dos secciones con el mismo grupo o una dosis sin sección aparecen en Problemas e impiden guardar', async () => {
   montar()
 
   elegir('grupo-seccion-2', 'MENOR_1')
   expect(problemas()).toContain(M.grupoRepetido('MENOR_1'))
-  expect(botonGuardar().disabled).toBe(true)
+  fireEvent.click(botonGuardar())
+  expect(onGuardar).not.toHaveBeenCalled()
 
   elegir('grupo-seccion-2', '1_A_5')
   marcar('R1 en la sección 2')
   expect(problemas()).toEqual([M.dosisSinSeccion('R1')])
-  expect(botonGuardar().disabled).toBe(true)
+  fireEvent.click(botonGuardar())
+  expect(onGuardar).not.toHaveBeenCalled()
+  // Sin un campo con error, el foco va a la lista de problemas.
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('list', { name: 'Problemas del esquema' })))
+  expect(botonGuardar().disabled).toBe(false)
 })
 
 test('"Subir" y "Bajar" cambian el orden de las secciones', async () => {
@@ -229,10 +238,37 @@ test('un título vacío es un problema y se marca al salir del campo', () => {
   const titulo = screen.getByRole('textbox', { name: 'Título de la sección 1' })
   fireEvent.change(titulo, { target: { value: '   ' } })
   expect(problemas()).toEqual(['Sección 1: El título de la sección debe tener entre 1 y 60 caracteres.'])
-  expect(botonGuardar().disabled).toBe(true)
+  expect(titulo.getAttribute('aria-invalid')).toBeNull()
 
   fireEvent.blur(titulo)
   expect(titulo.getAttribute('aria-invalid')).toBe('true')
+})
+
+test('guardar con un título vacío no llama a onGuardar, marca el título y le lleva el foco', async () => {
+  montar()
+  const titulo = screen.getByRole('textbox', { name: 'Título de la sección 2' })
+  fireEvent.change(titulo, { target: { value: '' } })
+
+  fireEvent.click(botonGuardar())
+
+  expect(onGuardar).not.toHaveBeenCalled()
+  expect(titulo.getAttribute('aria-invalid')).toBe('true')
+  await waitFor(() => expect(document.activeElement).toBe(titulo))
+})
+
+test('onCambios avisa si lo editado difiere de lo guardado, también tras guardar', async () => {
+  montar()
+  expect(onCambios).toHaveBeenLastCalledWith(false)
+
+  const titulo = screen.getByRole('textbox', { name: 'Título de la sección 1' })
+  fireEvent.change(titulo, { target: { value: 'Menores de 1 año' } })
+  expect(onCambios).toHaveBeenLastCalledWith(true)
+  fireEvent.change(titulo, { target: { value: '< 1 año' } })
+  expect(onCambios).toHaveBeenLastCalledWith(false)
+
+  fireEvent.change(titulo, { target: { value: 'Menores de 1 año' } })
+  fireEvent.click(botonGuardar())
+  await waitFor(() => expect(onCambios).toHaveBeenLastCalledWith(false))
 })
 
 test('una sección sin título se nombra por su número en los problemas', () => {

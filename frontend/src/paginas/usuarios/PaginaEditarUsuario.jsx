@@ -1,19 +1,25 @@
 import { useEffect, useState } from 'react'
-import { CircleAlert, CircleCheck } from 'lucide-react'
-import { Link, useParams } from 'react-router-dom'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { listarEstablecimientos, listarMunicipios } from '@/api/catalogos.js'
-import { ErrorApi } from '@/api/cliente.js'
+import { mensajeDeError } from '@/api/cliente.js'
 import { cambiarRol, editarEmpleado, listarRoles, obtenerUsuario } from '@/api/usuarios.js'
+import { AvisoError } from '@/componentes/Avisos.jsx'
+import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
-import CamposEmpleado, { CampoSeleccion, erroresDeEmpleado, NINGUNO } from './CamposEmpleado.jsx'
+import CamposEmpleado, {
+  AvisoSalida,
+  CampoSeleccion,
+  camposConError,
+  enfocarPrimero,
+  erroresDeEmpleado,
+  NINGUNO,
+} from './CamposEmpleado.jsx'
 
-const MENSAJE_INESPERADO = 'Ocurrió un error inesperado. Intente de nuevo.'
 const TEXTOS_OPCIONALES = ['cargo', 'correo', 'telefono']
 
-const mensajeDe = (error) => (error instanceof ErrorApi ? error.mensaje : MENSAJE_INESPERADO)
 const aOpcion = (id) => (id == null ? NINGUNO : String(id))
 
 // El formulario trabaja con texto. Con establecimiento se guarda también su municipio, para que al quitarlo
@@ -52,17 +58,25 @@ function cambiosDe(base, actual) {
 
 export default function PaginaEditarUsuario() {
   const { id } = useParams()
+  const { state } = useLocation()
+  const navegar = useNavigate()
   const { sesion } = useSesion()
+  // La lista manda sus filtros y su página para volver a ellos.
+  const volverA = state?.volverA?.pathname ? state.volverA : '/usuarios'
+
   const [cuenta, setCuenta] = useState(null)
   const [catalogos, setCatalogos] = useState(null)
   const [errorCarga, setErrorCarga] = useState(null)
+  const [intentoCarga, setIntentoCarga] = useState(0)
   // Lo guardado en el backend; los cambios se calculan contra esto.
   const [base, setBase] = useState(null)
   const [formulario, setFormulario] = useState(null)
   const [rolId, setRolId] = useState('')
   const [reemplazandoCui, setReemplazandoCui] = useState(false)
   const [guardando, setGuardando] = useState(false)
-  const [aviso, setAviso] = useState(null)
+  const [error, setError] = useState(null)
+  const [intentado, setIntentado] = useState(false)
+  const [guardado, setGuardado] = useState(false)
 
   useEffect(() => {
     let vigente = true
@@ -77,26 +91,35 @@ export default function PaginaEditarUsuario() {
         setRolId(inicial.rolId)
       })
       .catch((err) => {
-        if (vigente) setErrorCarga(mensajeDe(err))
+        if (vigente) setErrorCarga(mensajeDeError(err))
       })
     return () => {
       vigente = false
     }
-  }, [id])
+  }, [id, intentoCarga])
+
+  // Se navega después del render en que el formulario ya quedó igual a lo guardado; si no, el aviso de
+  // cambios sin guardar todavía bloquearía la salida.
+  useEffect(() => {
+    if (guardado) navegar(volverA)
+    // Solo al terminar de guardar; volverA es un objeto nuevo en cada render.
+  }, [guardado])
+
+  function reintentarCarga() {
+    setErrorCarga(null)
+    setIntentoCarga((intento) => intento + 1)
+  }
 
   const propia = cuenta !== null && cuenta.id === sesion?.usuario?.id
 
   if (cuenta && !cuenta.activo) {
     return (
       <section className="flex max-w-3xl flex-col gap-6 p-6">
-        <h1 className="text-2xl font-semibold">Editar usuario</h1>
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>La cuenta {cuenta.nombreUsuario} está desactivada; restáurela para editarla.</AlertDescription>
-        </Alert>
+        <EncabezadoPagina titulo="Editar usuario" />
+        <AvisoError>La cuenta {cuenta.nombreUsuario} está desactivada; restáurela para editarla.</AvisoError>
         <div>
           <Button variant="outline" asChild>
-            <Link to="/usuarios">Volver a Usuarios</Link>
+            <Link to={volverA}>Volver a Usuarios</Link>
           </Button>
         </div>
       </section>
@@ -105,7 +128,7 @@ export default function PaginaEditarUsuario() {
 
   const cambiarCampo = (campo) => (valor) => {
     setFormulario((actual) => ({ ...actual, [campo]: valor }))
-    setAviso(null)
+    setError(null)
   }
 
   const cambios = base && formulario ? cambiosDe(base.empleado, formulario) : {}
@@ -115,15 +138,27 @@ export default function PaginaEditarUsuario() {
   const cambioRol = base !== null && rolId !== base.rolId
   const rol = catalogos?.roles.find((r) => String(r.id) === rolId)
   const rolSinEstablecimiento = rol?.codigo === 'ESTABLECIMIENTO' && formulario?.establecimientoId === NINGUNO
-  const datosCompletos = formulario !== null && Object.keys(erroresEmpleado).length === 0
-  const puedeGuardar =
-    catalogos !== null && !guardando && datosCompletos && !rolSinEstablecimiento && (hayCambiosEmpleado || cambioRol)
+  const hayCambios = hayCambiosEmpleado || cambioRol
 
   async function guardar(evento) {
     evento.preventDefault()
-    if (!puedeGuardar) return
+    if (catalogos === null || guardando) return
+
+    // En la cuenta propia el rol no se cambia: se corrige con el establecimiento.
+    const campoDelRol = propia ? 'establecimiento' : 'rol'
+    const invalidos = [...camposConError(erroresEmpleado), ...(rolSinEstablecimiento ? [campoDelRol] : [])]
+    if (invalidos.length > 0) {
+      setIntentado(true)
+      enfocarPrimero(invalidos)
+      return
+    }
+    if (!hayCambios) {
+      toast.info('No hay cambios que guardar.')
+      return
+    }
+
     setGuardando(true)
-    setAviso(null)
+    setError(null)
 
     let empleado = cuenta.empleado
     let nuevaBase = base
@@ -131,7 +166,7 @@ export default function PaginaEditarUsuario() {
       try {
         empleado = await editarEmpleado(cuenta.empleadoId, cambios)
       } catch (err) {
-        setAviso({ tipo: 'error', mensaje: mensajeDe(err) })
+        setError(mensajeDeError(err))
         setGuardando(false)
         return
       }
@@ -147,10 +182,10 @@ export default function PaginaEditarUsuario() {
         actualizada = await cambiarRol(cuenta.id, Number(rolId))
       } catch (err) {
         const mensaje = hayCambiosEmpleado
-          ? `Se guardaron los datos de ${empleado.nombres} ${empleado.apellidos}, pero no se pudo cambiar el rol: ${mensajeDe(err)}`
-          : mensajeDe(err)
+          ? `Se guardaron los datos de ${empleado.nombres} ${empleado.apellidos}, pero no se pudo cambiar el rol: ${mensajeDeError(err)}`
+          : mensajeDeError(err)
         setCuenta(actualizada)
-        setAviso({ tipo: 'error', mensaje })
+        setError(mensaje)
         setGuardando(false)
         return
       }
@@ -159,39 +194,24 @@ export default function PaginaEditarUsuario() {
     }
 
     setCuenta(actualizada)
-    setAviso({ tipo: 'exito', mensaje: `Se guardaron los cambios de ${empleado.nombres} ${empleado.apellidos}.` })
     setGuardando(false)
+    toast.success(`Se guardaron los cambios de ${empleado.nombres} ${empleado.apellidos}.`)
+    setGuardado(true)
   }
 
   const deshabilitado = catalogos === null || guardando
 
   return (
     <section className="flex max-w-3xl flex-col gap-6 p-6">
-      <h1 className="text-2xl font-semibold">Editar usuario</h1>
+      <EncabezadoPagina
+        titulo="Editar usuario"
+        descripcion={cuenta ? `${cuenta.empleado.nombres} ${cuenta.empleado.apellidos} · ${cuenta.nombreUsuario}` : undefined}
+        volverA={volverA}
+        textoVolver="Volver a Usuarios"
+      />
 
       {errorCarga && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>No se pudieron cargar los datos de la cuenta: {errorCarga}</AlertDescription>
-        </Alert>
-      )}
-
-      {aviso?.tipo === 'exito' && (
-        <Alert role="status" className="border-ring/40 bg-accent text-accent-foreground">
-          <CircleCheck />
-          <AlertDescription className="text-accent-foreground">
-            <p>{aviso.mensaje}</p>
-            <Button variant="outline" size="sm" className="mt-2" asChild>
-              <Link to="/usuarios">Volver a Usuarios</Link>
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
-      {aviso?.tipo === 'error' && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>{aviso.mensaje}</AlertDescription>
-        </Alert>
+        <AvisoError onReintentar={reintentarCarga}>No se pudieron cargar los datos de la cuenta: {errorCarga}</AvisoError>
       )}
 
       <form onSubmit={guardar} noValidate className="flex flex-col gap-6">
@@ -204,12 +224,13 @@ export default function PaginaEditarUsuario() {
               empleado={formulario ?? aFormulario({ nombres: '', apellidos: '' })}
               alCambiar={cambiarCampo}
               errores={erroresEmpleado}
+              mostrarErrores={intentado}
               correoObligatorio={Boolean(base?.empleado.correo)}
               cuiRegistrado={Boolean(cuenta?.empleado.cuiRegistrado)}
               reemplazandoCui={reemplazandoCui}
               alReemplazarCui={(valor) => {
                 setReemplazandoCui(valor)
-                setAviso(null)
+                setError(null)
               }}
               establecimientos={catalogos?.establecimientos ?? []}
               municipios={catalogos?.municipios ?? []}
@@ -239,30 +260,34 @@ export default function PaginaEditarUsuario() {
               valor={rolId}
               alCambiar={(valor) => {
                 setRolId(valor)
-                setAviso(null)
+                setError(null)
               }}
               deshabilitado={deshabilitado || propia}
               marcador="Elija un rol"
               opciones={(catalogos?.roles ?? []).map((r) => ({ valor: String(r.id), texto: r.nombre }))}
+              error={
+                rolSinEstablecimiento ? `Para el rol ${rol.nombre}, el empleado debe tener un establecimiento.` : undefined
+              }
             />
             {propia && <p className="text-sm text-muted-foreground md:col-span-2">No puede cambiar su propio rol.</p>}
-            {rolSinEstablecimiento && (
-              <p role="alert" className="text-sm text-destructive md:col-span-2">
-                Para el rol {rol.nombre}, el empleado debe tener un establecimiento.
-              </p>
-            )}
           </CardContent>
         </Card>
 
+        {error && <AvisoError>{error}</AvisoError>}
+
         <div className="flex flex-wrap gap-3">
-          <Button type="submit" disabled={!puedeGuardar}>
+          <Button type="submit" disabled={deshabilitado}>
             {guardando ? 'Guardando…' : 'Guardar cambios'}
           </Button>
           <Button variant="outline" asChild>
-            <Link to="/usuarios">Cancelar</Link>
+            <Link to={volverA}>Cancelar</Link>
           </Button>
         </div>
       </form>
+
+      {formulario && (
+        <AvisoSalida hayCambios={hayCambios} descripcion="Si sale ahora, se pierden los cambios que no guardó." />
+      )}
     </section>
   )
 }

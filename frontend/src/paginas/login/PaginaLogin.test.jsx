@@ -50,18 +50,56 @@ beforeEach(() => {
   iniciarSesion.mockReset()
 })
 
-test('"Ingresar" está deshabilitado si falta el usuario o la contraseña', () => {
+test('"Ingresar" está habilitado; si falta el usuario o la contraseña, lo dice, enfoca el campo y no envía', () => {
   abrirLogin()
-  expect(botonIngresar().disabled).toBe(true)
-
-  fireEvent.change(campoUsuario(), { target: { value: 'jperez' } })
-  expect(botonIngresar().disabled).toBe(true)
-
-  fireEvent.change(campoContrasena(), { target: { value: 'secreta123' } })
   expect(botonIngresar().disabled).toBe(false)
 
+  fireEvent.click(botonIngresar())
+  expect(screen.getByText('Escriba su usuario.')).toBeTruthy()
+  expect(screen.getByText('Escriba su contraseña.')).toBeTruthy()
+  expect(campoUsuario().getAttribute('aria-invalid')).toBe('true')
+  expect(document.activeElement).toBe(campoUsuario())
+
+  fireEvent.change(campoUsuario(), { target: { value: 'jperez' } })
+  expect(screen.queryByText('Escriba su usuario.')).toBeNull()
+  fireEvent.click(botonIngresar())
+  expect(document.activeElement).toBe(campoContrasena())
+
+  fireEvent.change(campoContrasena(), { target: { value: 'secreta123' } })
   fireEvent.change(campoUsuario(), { target: { value: '   ' } })
-  expect(botonIngresar().disabled).toBe(true)
+  fireEvent.click(botonIngresar())
+  expect(document.activeElement).toBe(campoUsuario())
+  expect(iniciarSesion).not.toHaveBeenCalled()
+})
+
+test('el h1 de la página es «Iniciar sesión» y el logo está sobre el formulario en pantallas angostas', () => {
+  abrirLogin()
+
+  expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Iniciar sesión')
+  const formulario = campoUsuario().closest('form')
+  const logo = within(formulario).getByText('SIRCOVA')
+  expect(logo.closest('.lg\\:hidden')).toBeTruthy()
+})
+
+test('«¿Olvidó su contraseña?» despliega la ayuda sin enviar el formulario', () => {
+  const AYUDA =
+    'Pida al administrador del sistema de su DDRISS que restablezca su contraseña; le dará una contraseña temporal.'
+  abrirLogin()
+  const boton = screen.getByRole('button', { name: '¿Olvidó su contraseña?' })
+  expect(boton.getAttribute('aria-expanded')).toBe('false')
+  expect(screen.getByText(AYUDA).hidden).toBe(true)
+
+  fireEvent.click(boton)
+
+  expect(boton.getAttribute('aria-expanded')).toBe('true')
+  const ayuda = screen.getByText(AYUDA)
+  expect(ayuda.hidden).toBe(false)
+  expect(boton.getAttribute('aria-controls')).toBe(ayuda.id)
+  expect(iniciarSesion).not.toHaveBeenCalled()
+  expect(screen.queryByText('Escriba su usuario.')).toBeNull()
+
+  fireEvent.click(boton)
+  expect(screen.getByText(AYUDA).hidden).toBe(true)
 })
 
 test('con una respuesta correcta se guarda la sesión y se muestra /inicio', async () => {
@@ -85,6 +123,9 @@ test('con un 401 se muestra su mensaje y se puede volver a enviar', async () => 
 
   const alerta = await screen.findByRole('alert')
   expect(alerta.textContent).toContain(MENSAJE_CREDENCIALES)
+  // El error va justo encima del botón, y la contraseña vaciada no se marca como "falta".
+  expect(alerta.nextElementSibling).toBe(botonIngresar())
+  expect(screen.queryByText('Escriba su contraseña.')).toBeNull()
   expect(campoContrasena().value).toBe('')
   expect(document.activeElement).toBe(campoContrasena())
   expect(campoUsuario().getAttribute('aria-invalid')).toBe('true')
@@ -249,5 +290,38 @@ describe('aviso de sesión cerrada', () => {
     expect((await screen.findByRole('alert')).textContent).toContain(MENSAJE_CREDENCIALES)
     expect(screen.queryByRole('status')).toBeNull()
     expect(sessionStorage.getItem('sircova.sesion')).toBeNull()
+  })
+})
+
+describe('acceso rápido (solo en desarrollo)', () => {
+  afterEach(() => vi.unstubAllEnvs())
+
+  test('sin las variables de .env.local, los botones están deshabilitados y se explica qué falta', () => {
+    abrirLogin()
+
+    expect(screen.getByRole('heading', { name: 'Acceso rápido · solo en desarrollo' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Administrador' }).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: 'Personal del establecimiento' }).disabled).toBe(true)
+    expect(screen.getByText(/no tienen usuario o contraseña en/)).toBeTruthy()
+  })
+
+  test('un botón sin contraseña configurada queda deshabilitado', () => {
+    vi.stubEnv('VITE_ACCESO_RAPIDO_ESTABLECIMIENTO_USUARIO', 'cs1201')
+    abrirLogin()
+
+    expect(screen.getByRole('button', { name: 'Personal del establecimiento' }).disabled).toBe(true)
+  })
+
+  test('«Administrador» inicia sesión con las credenciales configuradas', async () => {
+    vi.stubEnv('VITE_ACCESO_RAPIDO_ADMIN_USUARIO', 'admin.prueba')
+    vi.stubEnv('VITE_ACCESO_RAPIDO_ADMIN_CONTRASENA', 'clave-de-prueba')
+    iniciarSesion.mockResolvedValue(crearRespuestaLogin())
+    abrirLogin()
+
+    expect(screen.getByRole('button', { name: 'Personal del establecimiento' }).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Administrador' }))
+
+    expect(await screen.findByText('Usuarios activos')).toBeTruthy()
+    expect(iniciarSesion).toHaveBeenCalledWith('admin.prueba', 'clave-de-prueba')
   })
 })

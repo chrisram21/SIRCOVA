@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { toast } from 'sonner'
 import { MemoryRouter } from 'react-router-dom'
 import {
   crearDistrito,
@@ -127,6 +128,8 @@ test('abre la pestaña Territorio y pide los municipios de procedencia, incluido
   await abrir()
 
   expect(screen.getByRole('heading', { name: 'Catálogos del sistema' })).toBeTruthy()
+  expect(screen.getByText('Configuración')).toBeTruthy()
+  expect(screen.getByRole('tablist').getAttribute('data-variant')).toBe('line')
   expect(screen.getByRole('tab', { name: 'Territorio' }).getAttribute('aria-selected')).toBe('true')
   expect(listarMunicipios).toHaveBeenCalledWith({ alcance: 'procedencia', incluirInactivos: true })
   expect(listarDdriss).toHaveBeenCalledTimes(1)
@@ -186,6 +189,24 @@ test('sin distritos muestra "No hay distritos de salud registrados."', async () 
   expect(screen.getByText('No hay distritos de salud registrados.')).toBeTruthy()
 })
 
+test('sin distritos, el aviso trae "Registrar distrito", que abre el Dialog', async () => {
+  listarDistritos.mockResolvedValue([])
+  await abrir()
+
+  const vacio = screen.getByText('No hay distritos de salud registrados.').parentElement
+  fireEvent.click(within(vacio).getByRole('button', { name: 'Registrar distrito' }))
+
+  expect(within(await screen.findByRole('dialog')).getByText('El código se genera al guardar.')).toBeTruthy()
+})
+
+test('sin DISTRITO_CREAR, el aviso de vacío no ofrece registrar', async () => {
+  listarDistritos.mockResolvedValue([])
+  await abrir(['CONFIGURACION_CONSULTAR', 'DDRISS_CONSULTAR', 'MUNICIPIO_CONSULTAR', 'DISTRITO_CONSULTAR'])
+
+  expect(screen.getByText('No hay distritos de salud registrados.')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Registrar distrito' })).toBeNull()
+})
+
 test('si falla una petición muestra el aviso, y "Reintentar" vuelve a pedir', async () => {
   listarDistritos.mockRejectedValueOnce(new ErrorApi(500, 'ERROR_INESPERADO', 'Ocurrió un error inesperado.'))
 
@@ -198,6 +219,19 @@ test('si falla una petición muestra el aviso, y "Reintentar" vuelve a pedir', a
 
   await waitFor(() => expect(screen.getByRole('table', { name: 'Distritos de salud' })).toBeTruthy())
   expect(listarDistritos).toHaveBeenCalledTimes(2)
+})
+
+test('un error que no es de la API muestra el mensaje genérico', async () => {
+  listarDistritos.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+
+  await abrir()
+
+  expect(
+    await screen.findByText(
+      'No se pudo cargar el catálogo territorial: Ocurrió un error inesperado. Intente de nuevo.',
+    ),
+  ).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Reintentar' })).toBeTruthy()
 })
 
 test('sin DISTRITO_CONSULTAR no aparece la pestaña', async () => {
@@ -246,7 +280,7 @@ describe('registrar y renombrar', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(crearDistrito).toHaveBeenCalledWith({ municipioId: 7, nombre: 'Distrito de Salud Tacaná Este' })
     expect(within(tabla('Distritos de salud')).getByText('DS-1207-04')).toBeTruthy()
-    expect(screen.getByRole('status').textContent).toBe('Distrito DS-1207-04 registrado.')
+    expect(toast.success).toHaveBeenCalledWith('Distrito DS-1207-04 registrado.')
     // Tacaná pasa a tener tres distritos activos.
     expect(within(filaDe('Municipios', '1207')).getAllByRole('cell')[3].textContent).toBe('3')
   })
@@ -305,7 +339,7 @@ describe('registrar y renombrar', () => {
     expect(renombrarDistrito).toHaveBeenCalledWith(31, 'Distrito de Salud Tacaná Alto')
     expect(within(filaDe('Distritos de salud', 'DS-1207-02')).getByText('Distrito de Salud Tacaná Alto')).toBeTruthy()
     expect(filasDe('Distritos de salud')).toHaveLength(DISTRITOS.length)
-    expect(screen.getByRole('status').textContent).toBe('Distrito DS-1207-02 actualizado.')
+    expect(toast.success).toHaveBeenCalledWith('Distrito DS-1207-02 actualizado.')
   })
 
   test('sin DISTRITO_CREAR no aparece "Registrar distrito", y sin DISTRITO_EDITAR no hay acciones', async () => {
@@ -335,7 +369,7 @@ describe('desactivar y reactivar', () => {
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(desactivarDistrito).toHaveBeenCalledWith(31)
     expect(within(filaDe('Distritos de salud', 'DS-1207-02')).getByText('Inactivo')).toBeTruthy()
-    expect(screen.getByRole('status').textContent).toBe('Distrito DS-1207-02 desactivado.')
+    expect(toast.success).toHaveBeenCalledWith('Distrito DS-1207-02 desactivado.')
     const menu = await abrirMenu('DS-1207-02')
     expect(within(menu).getAllByRole('menuitem').map((o) => o.textContent)).toEqual(['Renombrar', 'Reactivar'])
   })

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { toast } from 'sonner'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { abrirPeriodo, cambiarFechaLimite, crearAnioPeriodos, listarPeriodos } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
@@ -207,7 +208,8 @@ test('con los permisos del Revisor aparecen las pestañas Vacunas y Periodos', a
 })
 
 describe('Crear año', () => {
-  const boton = () => screen.getByRole('button', { name: 'Crear año' })
+  // El de la tarjeta; con el calendario vacío hay otro junto al aviso.
+  const boton = () => screen.getAllByRole('button', { name: 'Crear año' })[0]
   const selectNuevo = () => document.querySelector('select[name="anioNuevo"]')
   const dialogo = () => screen.getByRole('dialog', { name: 'Crear año' })
 
@@ -231,9 +233,9 @@ describe('Crear año', () => {
     fireEvent.change(selectNuevo(), { target: { value: '2023' } })
     fireEvent.click(within(dialogo()).getByRole('button', { name: 'Crear año' }))
 
-    expect(
-      await screen.findByText('Año 2023 agregado al calendario. Abra cada mes cuando corresponda.'),
-    ).toBeTruthy()
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith('Año 2023 agregado al calendario. Abra cada mes cuando corresponda.'),
+    )
     expect(crearAnioPeriodos).toHaveBeenCalledWith(2023)
     expect(screen.queryByRole('dialog')).toBeNull()
     // Radix actualiza su <select> nativo en un efecto, después del render.
@@ -272,9 +274,27 @@ describe('Crear año', () => {
     expect(boton().disabled).toBe(false)
   })
 
+  test('con el calendario vacío, el aviso trae su propio "Crear año", que abre el Dialog', async () => {
+    listarPeriodos.mockResolvedValue([])
+    await abrir(undefined, PERMISOS_CREAR)
+
+    const vacio = screen.getByText('No hay años en el calendario.').parentElement
+    fireEvent.click(within(vacio).getByRole('button', { name: 'Crear año' }))
+
+    expect(dialogo()).toBeTruthy()
+  })
+
   test('sin PERIODO_CREAR no aparece el botón', async () => {
     await abrir()
 
+    expect(screen.queryByRole('button', { name: 'Crear año' })).toBeNull()
+  })
+
+  test('sin PERIODO_CREAR el calendario vacío no ofrece crear', async () => {
+    listarPeriodos.mockResolvedValue([])
+    await abrir()
+
+    expect(screen.getByText('No hay años en el calendario.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Crear año' })).toBeNull()
   })
 })
@@ -299,6 +319,7 @@ describe('Abrir y cambiar la fecha límite', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(abrirPeriodo).toHaveBeenCalledWith(noviembre.id, '2026-12-10')
     expect(textoDe(filaDe('Noviembre')).slice(2)).toEqual(['10/12/2026', 'Abierto', 'Cambiar fecha límite'])
+    expect(toast.success).toHaveBeenCalledWith('Noviembre 2026 abierto; fecha límite 10/12/2026.')
   })
 
   test('en diciembre la fecha sugerida es el 10 de enero del año siguiente', async () => {
@@ -341,6 +362,22 @@ describe('Abrir y cambiar la fecha límite', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(cambiarFechaLimite).toHaveBeenCalledWith(septiembre.id, '2026-10-30')
     expect(textoDe(filaDe('Septiembre')).slice(2, 4)).toEqual(['30/10/2026', 'Abierto'])
+    expect(toast.success).toHaveBeenCalledWith(
+      'Fecha límite de Septiembre 2026 cambiada al 30/10/2026. El mes volvió a Abierto.',
+    )
+  })
+
+  test('cambiar la fecha de un mes abierto lo avisa sin mencionar la reapertura', async () => {
+    const octubre = periodoDe(2026, 10)
+    cambiarFechaLimite.mockResolvedValue({ ...octubre, fechaLimiteEnvio: '2026-11-15' })
+    await abrir(undefined, PERMISOS_EDITAR)
+
+    fireEvent.click(accionDe('Octubre'))
+    fireEvent.change(campoFecha(), { target: { value: '2026-11-15' } })
+    confirmar('Guardar')
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(toast.success).toHaveBeenCalledWith('Fecha límite de Octubre 2026 cambiada al 15/11/2026.')
   })
 
   test('en un mes abierto no muestra el aviso de reapertura', async () => {

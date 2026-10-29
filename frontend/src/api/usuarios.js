@@ -1,3 +1,4 @@
+import { consultarConCache } from './cache.js'
 import { solicitar } from './cliente.js'
 
 export function registrarEmpleado(empleado) {
@@ -8,8 +9,9 @@ export function crearCuenta(cuenta) {
   return solicitar('/usuarios', { metodo: 'POST', cuerpo: cuenta })
 }
 
+// Los roles no cambian desde la aplicación.
 export function listarRoles() {
-  return solicitar('/roles')
+  return consultarConCache('/roles')
 }
 
 // filtros: { busqueda, rolId, establecimientoId, estado, pagina, porPagina }; solo se envían los que tienen valor.

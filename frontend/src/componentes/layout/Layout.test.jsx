@@ -43,6 +43,13 @@ function abrir(ruta, opciones) {
 
 const menu = () => within(screen.getByRole('navigation', { name: 'Menú principal' }))
 const opcionesVisibles = () => menu().getAllByRole('link').map((enlace) => enlace.textContent)
+const botonCuenta = () => screen.getByRole('button', { name: /^Cuenta de / })
+
+// Radix abre el menú con Enter sobre el botón; su contenido va en un portal.
+async function opcionDeCuenta(nombre) {
+  fireEvent.keyDown(botonCuenta(), { key: 'Enter' })
+  return within(await screen.findByRole('menu')).findByRole('menuitem', { name: nombre })
+}
 
 beforeEach(() => {
   sessionStorage.clear()
@@ -100,45 +107,79 @@ test('"Usuarios" sigue activa en su subruta /usuarios/nuevo, que no aparece en e
   expect(opcionesVisibles()).toEqual(['Inicio', 'Usuarios'])
 })
 
-test('/usuarios muestra "Registrar personal" solo con EMPLEADO_CREAR', () => {
+// Las pantallas se cargan al entrar en ellas (lazy): se esperan con findBy.
+test('/usuarios muestra "Registrar personal" solo con EMPLEADO_CREAR', async () => {
   abrir('/usuarios', { permisos: ['USUARIO_CONSULTAR', 'EMPLEADO_CREAR'] })
-  expect(screen.getByRole('link', { name: 'Registrar personal' }).getAttribute('href')).toBe('/usuarios/nuevo')
+  expect((await screen.findByRole('link', { name: 'Registrar personal' })).getAttribute('href')).toBe('/usuarios/nuevo')
 })
 
-test('/usuarios sin EMPLEADO_CREAR no muestra "Registrar personal"', () => {
+test('/usuarios sin EMPLEADO_CREAR no muestra "Registrar personal"', async () => {
   abrir('/usuarios', { permisos: ['USUARIO_CONSULTAR'] })
 
-  expect(screen.getByRole('heading', { name: 'Usuarios' })).toBeTruthy()
+  expect(await screen.findByRole('heading', { name: 'Usuarios' })).toBeTruthy()
   expect(screen.queryByRole('link', { name: 'Registrar personal' })).toBeNull()
 })
 
-test('el encabezado muestra nombre, apellidos y rolNombre', () => {
+test('el pie del menú muestra nombre, apellidos y rolNombre', () => {
   abrir('/inicio', { rolNombre: 'Administrador del sistema' })
 
-  const encabezado = within(screen.getByRole('banner'))
-  expect(encabezado.getByText('Juan Pérez')).toBeTruthy()
-  expect(encabezado.getByText('Administrador del sistema')).toBeTruthy()
+  const cuenta = within(botonCuenta())
+  expect(cuenta.getByText('Juan Pérez')).toBeTruthy()
+  expect(cuenta.getByText('Administrador del sistema')).toBeTruthy()
 })
 
-test('sin rolNombre, el encabezado muestra el código del rol', () => {
+test('sin rolNombre, el pie del menú muestra el código del rol', () => {
   abrir('/inicio', { rolNombre: null })
 
-  expect(within(screen.getByRole('banner')).getByText('ADMINISTRADOR')).toBeTruthy()
+  expect(within(botonCuenta()).getByText('ADMINISTRADOR')).toBeTruthy()
 })
 
-test('"Cambiar contraseña" del encabezado abre la pantalla de cambio dentro del Layout', () => {
+test('"Cambiar contraseña" del menú de la cuenta abre la pantalla de cambio dentro del Layout', async () => {
   abrir('/inicio')
 
-  fireEvent.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Cambiar contraseña' }))
+  fireEvent.click(await opcionDeCuenta('Cambiar contraseña'))
 
   expect(screen.getByLabelText('Contraseña actual')).toBeTruthy()
   expect(screen.getByRole('navigation', { name: 'Menú principal' })).toBeTruthy()
 })
 
-test('"Cerrar sesión" avisa al servidor con MANUAL, borra sircova.sesion y lleva a /login sin aviso', () => {
+test('el encabezado muestra dónde se está: la opción del menú y, en una subruta, el enlace para volver a ella', async () => {
+  abrir('/usuarios/nuevo', { permisos: ['USUARIO_CONSULTAR', 'EMPLEADO_CREAR'] })
+
+  const ubicacion = within(screen.getByRole('navigation', { name: 'Ubicación' }))
+  expect(ubicacion.getByRole('link', { name: 'Usuarios' }).getAttribute('href')).toBe('/usuarios')
+  expect(ubicacion.getByText('Registrar personal').getAttribute('aria-current')).toBe('page')
+  expect(await screen.findByRole('heading', { name: 'Registrar personal' })).toBeTruthy()
+})
+
+test('en una subruta abierta desde la lista con filtros, la miga vuelve a la lista con ellos', () => {
+  guardarSesion(crearSesion({ permisos: ['USUARIO_CONSULTAR', 'EMPLEADO_CREAR'] }))
+  render(
+    <MemoryRouter
+      initialEntries={[{ pathname: '/usuarios/nuevo', state: { volverA: { pathname: '/usuarios', search: '?estado=ACTIVA' } } }]}
+    >
+      <ProveedorSesion>
+        <App />
+      </ProveedorSesion>
+    </MemoryRouter>,
+  )
+
+  const ubicacion = within(screen.getByRole('navigation', { name: 'Ubicación' }))
+  expect(ubicacion.getByRole('link', { name: 'Usuarios' }).getAttribute('href')).toBe('/usuarios?estado=ACTIVA')
+})
+
+test('el título de la pestaña del navegador sigue a la pantalla', async () => {
+  abrir('/usuarios/nuevo', { permisos: ['USUARIO_CONSULTAR', 'EMPLEADO_CREAR'] })
+  expect(document.title).toBe('Registrar personal · SIRCOVA')
+
+  fireEvent.click(menu().getByRole('link', { name: 'Inicio' }))
+  expect(document.title).toBe('Inicio · SIRCOVA')
+})
+
+test('"Cerrar sesión" avisa al servidor con MANUAL, borra sircova.sesion y lleva a /login sin aviso', async () => {
   abrir('/inicio')
 
-  fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }))
+  fireEvent.click(await opcionDeCuenta('Cerrar sesión'))
 
   expect(cerrarSesion).toHaveBeenCalledTimes(1)
   expect(cerrarSesion).toHaveBeenCalledWith('MANUAL')
@@ -190,11 +231,11 @@ describe('«Cerrar sesión» con cambios sin guardar', () => {
     return router
   }
 
-  const cerrar = () => fireEvent.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Cerrar sesión' }))
+  const cerrar = async () => fireEvent.click(await opcionDeCuenta('Cerrar sesión'))
 
   test('sin cambios, cierra como siempre, sin diálogo', async () => {
     const router = abrirConPantalla()
-    cerrar()
+    await cerrar()
     expect(await screen.findByRole('heading', { name: 'Iniciar sesión' })).toBeTruthy()
     expect(cerrarSesion).toHaveBeenCalledWith('MANUAL')
     expect(router.state.location.pathname).toBe('/login')
@@ -204,9 +245,9 @@ describe('«Cerrar sesión» con cambios sin guardar', () => {
   test('con cambios, pide confirmación; «Seguir editando» no cierra la sesión', async () => {
     const router = abrirConPantalla()
     fireEvent.click(screen.getByRole('button', { name: 'Escribir' }))
-    cerrar()
+    await cerrar()
     const dialogo = await screen.findByRole('alertdialog')
-    expect(dialogo.textContent).toContain('Si cierra sesión ahora, se pierden los cambios sin guardar del reporte.')
+    expect(dialogo.textContent).toContain('Si cierra sesión ahora, se pierden los cambios sin guardar.')
 
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Seguir editando' }))
     await vi.waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
@@ -218,7 +259,7 @@ describe('«Cerrar sesión» con cambios sin guardar', () => {
   test('con cambios, «Cerrar sesión sin guardar» cierra y llega a /login sin el otro diálogo', async () => {
     const router = abrirConPantalla()
     fireEvent.click(screen.getByRole('button', { name: 'Escribir' }))
-    cerrar()
+    await cerrar()
     fireEvent.click(await screen.findByRole('button', { name: 'Cerrar sesión sin guardar' }))
 
     expect(await screen.findByRole('heading', { name: 'Iniciar sesión' })).toBeTruthy()
@@ -233,7 +274,7 @@ test('si POST /auth/logout falla, la sesión se cierra igual', async () => {
   cerrarSesion.mockRejectedValue(new Error('sin conexión'))
   abrir('/inicio')
 
-  fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }))
+  fireEvent.click(await opcionDeCuenta('Cerrar sesión'))
 
   expect(sessionStorage.getItem('sircova.sesion')).toBeNull()
   expect(await screen.findByRole('heading', { name: 'Iniciar sesión' })).toBeTruthy()

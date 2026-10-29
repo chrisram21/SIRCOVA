@@ -1,6 +1,4 @@
 import { useState } from 'react'
-import { CircleAlert } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -13,6 +11,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { guardarPoblacion } from '@/api/catalogos.js'
+import { mensajeDeError } from '@/api/cliente.js'
+import { AvisoError } from '@/componentes/Avisos.jsx'
 import { validarCantidadPoblacion, validarFuentePoblacion } from '@/validaciones/campos.js'
 
 const GRUPO_VACIO = 'Un grupo ya registrado no se puede dejar vacío.'
@@ -71,7 +71,7 @@ export default function DialogoPoblacion({ municipio, anio, grupos, alGuardar, a
       alGuardar(await guardarPoblacion(municipio.id, anio, cuerpo))
     } catch (err) {
       // El Dialog sigue abierto y conserva lo escrito.
-      setErrorApi(err.mensaje)
+      setErrorApi(mensajeDeError(err))
       setGuardando(false)
     }
   }
@@ -96,12 +96,7 @@ export default function DialogoPoblacion({ municipio, anio, grupos, alGuardar, a
             </DialogDescription>
           </DialogHeader>
 
-          {errorApi && (
-            <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-              <CircleAlert />
-              <AlertDescription>{errorApi}</AlertDescription>
-            </Alert>
-          )}
+          {errorApi && <AvisoError>{errorApi}</AvisoError>}
           {errorGeneral && <p className="text-sm text-destructive">{errorGeneral}</p>}
 
           <div className="grid gap-4 sm:grid-cols-2">

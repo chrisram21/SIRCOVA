@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-router-dom'
+import { toast } from 'sonner'
 import { crearDimension, listarDimensiones } from '@/api/configuracion.js'
 import { ErrorApi } from '@/api/cliente.js'
 import { guardarSesion } from '@/api/sesion.js'
@@ -34,19 +35,27 @@ function Ubicacion() {
 }
 const ubicacion = () => screen.getByTestId('ubicacion').textContent
 
+// El aviso de cambios sin guardar (useBlocker) necesita un data router.
 function montar(entrada) {
   guardarSesion(crearSesion(PERMISOS))
-  render(
-    <MemoryRouter initialEntries={[entrada]}>
-      <ProveedorSesion>
-        <Routes>
-          <Route path="/configuracion" element={<PaginaConfiguracion />} />
-          <Route path="/configuracion/dimensiones/nueva" element={<PaginaRegistrarDimension />} />
-        </Routes>
-        <Ubicacion />
-      </ProveedorSesion>
-    </MemoryRouter>,
+  const router = createMemoryRouter(
+    [
+      {
+        element: (
+          <ProveedorSesion>
+            <Outlet />
+            <Ubicacion />
+          </ProveedorSesion>
+        ),
+        children: [
+          { path: '/configuracion', element: <PaginaConfiguracion /> },
+          { path: '/configuracion/dimensiones/nueva', element: <PaginaRegistrarDimension /> },
+        ],
+      },
+    ],
+    { initialEntries: [entrada] },
   )
+  render(<RouterProvider router={router} />)
 }
 
 const escribir = (etiqueta, valor) => fireEvent.change(screen.getByLabelText(etiqueta), { target: { value: valor } })
@@ -69,7 +78,7 @@ beforeEach(() => {
   listarDimensiones.mockResolvedValue([])
 })
 
-test('guardar manda los valores en orden y vuelve a la pestaña con su filtro y el aviso', async () => {
+test('guardar manda los valores en orden y vuelve a la pestaña con su filtro y el aviso, sin pedir confirmación', async () => {
   crearDimension.mockResolvedValue({ codigo: 'via', nombre: 'Vía de aplicación' })
   montar({ pathname: '/configuracion/dimensiones/nueva', state: { volverA: '?pestana=dimensiones&activa=true' } })
 
@@ -77,7 +86,9 @@ test('guardar manda los valores en orden y vuelve a la pestaña con su filtro y 
   escribir('Descripción', '  Cómo se aplicó la dosis. ')
   guardar()
 
-  expect(await screen.findByText('Dimensión Vía de aplicación registrada.')).toBeTruthy()
+  await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=dimensiones&activa=true'))
+  expect(toast.success).toHaveBeenCalledWith('Dimensión Vía de aplicación registrada.')
+  expect(screen.queryByRole('alertdialog')).toBeNull()
   expect(crearDimension).toHaveBeenCalledWith({
     codigo: 'via',
     nombre: 'Vía de aplicación',
@@ -146,7 +157,7 @@ test('una etiqueta vacía muestra su error al salir del campo', () => {
   expect(screen.getByText('La etiqueta debe tener entre 1 y 60 caracteres.')).toBeTruthy()
 })
 
-test('un 409 se muestra en un Alert y conserva lo escrito', async () => {
+test('un 409 se muestra junto a los botones y conserva lo escrito', async () => {
   crearDimension.mockRejectedValue(
     new ErrorApi(409, 'DIMENSION_DUPLICADA', 'Ya existe una dimensión con el código via.'),
   )
@@ -155,7 +166,8 @@ test('un 409 se muestra en un Alert y conserva lo escrito', async () => {
   llenar()
   guardar()
 
-  expect(await screen.findByText('Ya existe una dimensión con el código via.')).toBeTruthy()
+  const aviso = (await screen.findByText('Ya existe una dimensión con el código via.')).closest('[role="alert"]')
+  expect(aviso.parentElement.nextElementSibling.contains(screen.getByRole('button', { name: 'Registrar dimensión' }))).toBe(true)
   expect(screen.getByLabelText(/^Código\*?$/).value).toBe('via')
   const lista = screen.getByRole('list', { name: 'Valores de la dimensión' })
   expect(within(lista).getAllByRole('listitem')).toHaveLength(2)
@@ -170,4 +182,35 @@ test('"Cancelar" vuelve a la pestaña sin guardar', async () => {
 
   await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=dimensiones'))
   expect(crearDimension).not.toHaveBeenCalled()
+})
+
+test('al guardar con errores, el foco va al primer campo inválido', async () => {
+  montar('/configuracion/dimensiones/nueva')
+  escribir(/^Código\*?$/, 'via')
+  escribir(/^Nombre\*?$/, 'Vía de aplicación')
+
+  guardar()
+
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText('Código del valor 1')))
+  expect(crearDimension).not.toHaveBeenCalled()
+})
+
+describe('cambios sin guardar', () => {
+  test('con algo escrito, "Cancelar" pide confirmación; "Seguir editando" se queda y "Salir sin guardar" vuelve', async () => {
+    montar('/configuracion/dimensiones/nueva')
+    escribir(/^Nombre\*?$/, 'Vía de aplicación')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    const dialogo = await screen.findByRole('alertdialog')
+    expect(dialogo.textContent).toContain('Si sale ahora, se pierden los datos de la dimensión.')
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Seguir editando' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(ubicacion()).toBe('/configuracion/dimensiones/nueva')
+    expect(screen.getByLabelText(/^Nombre\*?$/).value).toBe('Vía de aplicación')
+
+    fireEvent.click(screen.getByRole('link', { name: 'Volver' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Salir sin guardar' }))
+    await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=dimensiones'))
+    expect(crearDimension).not.toHaveBeenCalled()
+  })
 })

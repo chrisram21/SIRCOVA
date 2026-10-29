@@ -1,5 +1,6 @@
 import { useSearchParams } from 'react-router-dom'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import PestanaDimensiones from './PestanaDimensiones.jsx'
 import PestanaEsquemas from './PestanaEsquemas.jsx'
@@ -66,16 +67,22 @@ export default function PaginaConfiguracion() {
 
   return (
     <section className="flex flex-col gap-6 p-6">
-      <div className="flex flex-col gap-1">
-        <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Configuración</p>
-        <h1 className="text-2xl font-semibold">Catálogos del sistema</h1>
-      </div>
+      <EncabezadoPagina antetitulo="Configuración" titulo="Catálogos del sistema" />
 
       {activa ? (
         <Tabs value={activa.valor} onValueChange={(valor) => setParametros({ pestana: valor })}>
-          <TabsList>
+          {/* En pantallas angostas las pestañas se desplazan de lado; la línea de la activa va dentro del
+              trigger (bottom-0) porque el desplazamiento recorta lo que sale de la lista. */}
+          <TabsList
+            variant="line"
+            className="w-full justify-start gap-0 overflow-x-auto overflow-y-hidden border-b p-0 group-data-horizontal/tabs:h-auto"
+          >
             {visibles.map((pestana) => (
-              <TabsTrigger key={pestana.valor} value={pestana.valor}>
+              <TabsTrigger
+                key={pestana.valor}
+                value={pestana.valor}
+                className="h-auto flex-none px-3 py-2 group-data-horizontal/tabs:after:bottom-0"
+              >
                 {pestana.titulo}
               </TabsTrigger>
             ))}

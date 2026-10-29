@@ -1,3 +1,4 @@
+import { lazy } from 'react'
 import {
   Bell,
   ChartLine,
@@ -12,31 +13,35 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react'
-import PaginaConfiguracion from '@/paginas/configuracion/PaginaConfiguracion.jsx'
-import PaginaEditarEstablecimiento from '@/paginas/configuracion/PaginaEditarEstablecimiento.jsx'
-import PaginaRegistrarEstablecimiento from '@/paginas/configuracion/PaginaRegistrarEstablecimiento.jsx'
-import PaginaEditarVacuna from '@/paginas/configuracion/PaginaEditarVacuna.jsx'
-import PaginaRegistrarVacuna from '@/paginas/configuracion/PaginaRegistrarVacuna.jsx'
-import PaginaRegistrarDimension from '@/paginas/configuracion/PaginaRegistrarDimension.jsx'
-import PaginaEditarDimension from '@/paginas/configuracion/PaginaEditarDimension.jsx'
-import PaginaRegistrarEsquema from '@/paginas/configuracion/PaginaRegistrarEsquema.jsx'
-import PaginaEditarEsquema from '@/paginas/configuracion/PaginaEditarEsquema.jsx'
-import PaginaHistorialEsquemas from '@/paginas/configuracion/PaginaHistorialEsquemas.jsx'
-import PaginaVerEsquema from '@/paginas/configuracion/PaginaVerEsquema.jsx'
 import PaginaInicio from '@/paginas/inicio/PaginaInicio.jsx'
-import PaginaEditarUsuario from '@/paginas/usuarios/PaginaEditarUsuario.jsx'
-import PaginaRegistrarPersonal from '@/paginas/usuarios/PaginaRegistrarPersonal.jsx'
-import PaginaUsuarios from '@/paginas/usuarios/PaginaUsuarios.jsx'
-import PaginaRegistro from '@/paginas/registro/PaginaRegistro.jsx'
-import PaginaMisReportes from '@/paginas/reportes/PaginaMisReportes.jsx'
+
+// Cada pantalla se descarga al entrar en ella (Layout la espera con Suspense); Inicio va incluida, porque es la primera.
+const PaginaConfiguracion = lazy(() => import('@/paginas/configuracion/PaginaConfiguracion.jsx'))
+const PaginaEditarEstablecimiento = lazy(() => import('@/paginas/configuracion/PaginaEditarEstablecimiento.jsx'))
+const PaginaRegistrarEstablecimiento = lazy(() => import('@/paginas/configuracion/PaginaRegistrarEstablecimiento.jsx'))
+const PaginaEditarVacuna = lazy(() => import('@/paginas/configuracion/PaginaEditarVacuna.jsx'))
+const PaginaRegistrarVacuna = lazy(() => import('@/paginas/configuracion/PaginaRegistrarVacuna.jsx'))
+const PaginaRegistrarDimension = lazy(() => import('@/paginas/configuracion/PaginaRegistrarDimension.jsx'))
+const PaginaEditarDimension = lazy(() => import('@/paginas/configuracion/PaginaEditarDimension.jsx'))
+const PaginaRegistrarEsquema = lazy(() => import('@/paginas/configuracion/PaginaRegistrarEsquema.jsx'))
+const PaginaEditarEsquema = lazy(() => import('@/paginas/configuracion/PaginaEditarEsquema.jsx'))
+const PaginaHistorialEsquemas = lazy(() => import('@/paginas/configuracion/PaginaHistorialEsquemas.jsx'))
+const PaginaVerEsquema = lazy(() => import('@/paginas/configuracion/PaginaVerEsquema.jsx'))
+const PaginaEditarUsuario = lazy(() => import('@/paginas/usuarios/PaginaEditarUsuario.jsx'))
+const PaginaRegistrarPersonal = lazy(() => import('@/paginas/usuarios/PaginaRegistrarPersonal.jsx'))
+const PaginaUsuarios = lazy(() => import('@/paginas/usuarios/PaginaUsuarios.jsx'))
+const PaginaRegistro = lazy(() => import('@/paginas/registro/PaginaRegistro.jsx'))
+const PaginaMisReportes = lazy(() => import('@/paginas/reportes/PaginaMisReportes.jsx'))
 
 // Los permisos son provisionales: el spec que construye cada pantalla confirma su código al crearlo en
 // backend/db/05_permisos_mysql.sql y pone su componente en `pagina` (sin `pagina`, se ve "En construcción").
+// `descripcion` acompaña al acceso rápido del Inicio.
 // `subrutas` son pantallas con permiso propio que no aparecen en el menú; su opción queda activa en ellas.
 const opcionesMenu = [
   { titulo: 'Inicio', ruta: '/inicio', permiso: null, icono: House, pagina: PaginaInicio },
   {
     titulo: 'Registro de producción',
+    descripcion: 'Captura mensual de las dosis aplicadas, por vacuna.',
     ruta: '/registro',
     permiso: 'REPORTE_CONSULTAR',
     icono: ClipboardPen,
@@ -44,19 +49,57 @@ const opcionesMenu = [
   },
   {
     titulo: 'Mis reportes',
+    descripcion: 'El estado de los reportes de cada mes.',
     ruta: '/reportes',
     permiso: 'REPORTE_CONSULTAR',
     icono: FileText,
     pagina: PaginaMisReportes,
   },
-  { titulo: 'Revisión y cierre', ruta: '/revision', permiso: 'REPORTE_REVISAR', icono: ClipboardCheck },
-  { titulo: 'Indicadores', ruta: '/indicadores', permiso: 'INDICADOR_CONSULTAR', icono: ChartLine },
-  { titulo: 'Mapa territorial', ruta: '/mapa', permiso: 'MAPA_CONSULTAR', icono: MapIcon },
-  { titulo: 'Informes', ruta: '/informes', permiso: 'INFORME_CONSULTAR', icono: FileSpreadsheet },
-  { titulo: 'Alertas', ruta: '/alertas', permiso: 'ALERTA_CONSULTAR', icono: Bell },
-  { titulo: 'Auditoría', ruta: '/auditoria', permiso: 'BITACORA_CONSULTAR', icono: ScrollText },
+  {
+    titulo: 'Revisión y cierre',
+    descripcion: 'Revisión, aprobación y cierre de los reportes.',
+    ruta: '/revision',
+    permiso: 'REPORTE_REVISAR',
+    icono: ClipboardCheck,
+  },
+  {
+    titulo: 'Indicadores',
+    descripcion: 'Cobertura, brecha, deserción y proyección por municipio y vacuna.',
+    ruta: '/indicadores',
+    permiso: 'INDICADOR_CONSULTAR',
+    icono: ChartLine,
+  },
+  {
+    titulo: 'Mapa territorial',
+    descripcion: 'Dónde se concentra el rezago en los municipios.',
+    ruta: '/mapa',
+    permiso: 'MAPA_CONSULTAR',
+    icono: MapIcon,
+  },
+  {
+    titulo: 'Informes',
+    descripcion: 'Informe consolidado mensual y anual, en Excel y PDF.',
+    ruta: '/informes',
+    permiso: 'INFORME_CONSULTAR',
+    icono: FileSpreadsheet,
+  },
+  {
+    titulo: 'Alertas',
+    descripcion: 'Avisos de calidad de los datos y del proceso.',
+    ruta: '/alertas',
+    permiso: 'ALERTA_CONSULTAR',
+    icono: Bell,
+  },
+  {
+    titulo: 'Auditoría',
+    descripcion: 'La bitácora de lo que se hace en el sistema.',
+    ruta: '/auditoria',
+    permiso: 'BITACORA_CONSULTAR',
+    icono: ScrollText,
+  },
   {
     titulo: 'Usuarios',
+    descripcion: 'El personal, sus cuentas y sus roles.',
     ruta: '/usuarios',
     permiso: 'USUARIO_CONSULTAR',
     icono: Users,
@@ -68,6 +111,7 @@ const opcionesMenu = [
   },
   {
     titulo: 'Configuración',
+    descripcion: 'Territorio, establecimientos, vacunas, esquemas y periodos.',
     ruta: '/configuracion',
     permiso: 'CONFIGURACION_CONSULTAR',
     icono: Settings,
@@ -136,7 +180,13 @@ const opcionesMenu = [
       },
     ],
   },
-  { titulo: 'Roles y permisos', ruta: '/permisos', permiso: 'PERMISO_CONSULTAR', icono: ShieldCheck },
+  {
+    titulo: 'Roles y permisos',
+    descripcion: 'Qué puede hacer cada rol.',
+    ruta: '/permisos',
+    permiso: 'PERMISO_CONSULTAR',
+    icono: ShieldCheck,
+  },
 ]
 
 export default opcionesMenu

@@ -1,7 +1,13 @@
+import { consultarConCache, invalidarCache } from './cache.js'
 import { solicitar } from './cliente.js'
 
+// Escribir en un catálogo borra lo guardado de las listas que lo muestran (api/cache.js).
+function yLuegoInvalidar(promesa, ...prefijos) {
+  return promesa.finally(() => invalidarCache(...prefijos))
+}
+
 export function listarDdriss() {
-  return solicitar('/ddriss')
+  return consultarConCache('/ddriss')
 }
 
 // Solo se envían los filtros que tienen valor.
@@ -17,31 +23,31 @@ function conConsulta(ruta, filtros) {
 // alcance: 'departamento' (por defecto); 'procedencia', que suma el 9999 y los municipios de establecimientos
 // externos; o 'todos', los de cualquier departamento.
 export function listarMunicipios({ alcance, incluirInactivos } = {}) {
-  return solicitar(conConsulta('/municipios', { alcance, incluirInactivos }))
+  return consultarConCache(conConsulta('/municipios', { alcance, incluirInactivos }))
 }
 
 export function listarDistritos({ municipioId, activo } = {}) {
-  return solicitar(conConsulta('/distritos', { municipioId, activo }))
+  return consultarConCache(conConsulta('/distritos', { municipioId, activo }))
 }
 
 export function crearDistrito({ municipioId, nombre }) {
-  return solicitar('/distritos', { metodo: 'POST', cuerpo: { municipioId, nombre } })
+  return yLuegoInvalidar(solicitar('/distritos', { metodo: 'POST', cuerpo: { municipioId, nombre } }), '/distritos', '/municipios', '/establecimientos')
 }
 
 export function renombrarDistrito(id, nombre) {
-  return solicitar(`/distritos/${id}`, { metodo: 'PATCH', cuerpo: { nombre } })
+  return yLuegoInvalidar(solicitar(`/distritos/${id}`, { metodo: 'PATCH', cuerpo: { nombre } }), '/distritos', '/municipios', '/establecimientos')
 }
 
 export function desactivarDistrito(id) {
-  return solicitar(`/distritos/${id}/desactivar`, { metodo: 'POST' })
+  return yLuegoInvalidar(solicitar(`/distritos/${id}/desactivar`, { metodo: 'POST' }), '/distritos', '/municipios', '/establecimientos')
 }
 
 export function reactivarDistrito(id) {
-  return solicitar(`/distritos/${id}/reactivar`, { metodo: 'POST' })
+  return yLuegoInvalidar(solicitar(`/distritos/${id}/reactivar`, { metodo: 'POST' }), '/distritos', '/municipios', '/establecimientos')
 }
 
 export function listarEstablecimientos({ activo, municipioId, tipoEstablecimientoId } = {}) {
-  return solicitar(conConsulta('/establecimientos', { activo, municipioId, tipoEstablecimientoId }))
+  return consultarConCache(conConsulta('/establecimientos', { activo, municipioId, tipoEstablecimientoId }))
 }
 
 export function obtenerEstablecimiento(id) {
@@ -49,24 +55,24 @@ export function obtenerEstablecimiento(id) {
 }
 
 export function crearEstablecimiento(datos) {
-  return solicitar('/establecimientos', { metodo: 'POST', cuerpo: datos })
+  return yLuegoInvalidar(solicitar('/establecimientos', { metodo: 'POST', cuerpo: datos }), '/establecimientos')
 }
 
 // Solo los campos que cambiaron.
 export function editarEstablecimiento(id, cambios) {
-  return solicitar(`/establecimientos/${id}`, { metodo: 'PATCH', cuerpo: cambios })
+  return yLuegoInvalidar(solicitar(`/establecimientos/${id}`, { metodo: 'PATCH', cuerpo: cambios }), '/establecimientos')
 }
 
 export function desactivarEstablecimiento(id) {
-  return solicitar(`/establecimientos/${id}/desactivar`, { metodo: 'POST' })
+  return yLuegoInvalidar(solicitar(`/establecimientos/${id}/desactivar`, { metodo: 'POST' }), '/establecimientos')
 }
 
 export function reactivarEstablecimiento(id) {
-  return solicitar(`/establecimientos/${id}/reactivar`, { metodo: 'POST' })
+  return yLuegoInvalidar(solicitar(`/establecimientos/${id}/reactivar`, { metodo: 'POST' }), '/establecimientos')
 }
 
 export function listarTiposEstablecimiento() {
-  return solicitar('/tipos-establecimiento')
+  return consultarConCache('/tipos-establecimiento')
 }
 
 // El catálogo de vacunas es nacional: no se filtra por DDRISS. Cada vacuna trae todas sus dosis, también las
@@ -116,20 +122,20 @@ export function reactivarDosis(vacunaId, dosisId) {
 // El calendario es común; estado, fechaLimiteEnvio y cerradoEn son los de la DDRISS del usuario (null si el mes no
 // está abierto en ella).
 export function listarPeriodos({ anio, estado } = {}) {
-  return solicitar(conConsulta('/periodos', { anio, estado }))
+  return consultarConCache(conConsulta('/periodos', { anio, estado }))
 }
 
 // Agrega al calendario los meses que falten del año, sin abrir ninguno.
 export function crearAnioPeriodos(anio) {
-  return solicitar('/periodos', { metodo: 'POST', cuerpo: { anio } })
+  return yLuegoInvalidar(solicitar('/periodos', { metodo: 'POST', cuerpo: { anio } }), '/periodos')
 }
 
 export function abrirPeriodo(id, fechaLimiteEnvio) {
-  return solicitar(`/periodos/${id}/abrir`, { metodo: 'POST', cuerpo: { fechaLimiteEnvio } })
+  return yLuegoInvalidar(solicitar(`/periodos/${id}/abrir`, { metodo: 'POST', cuerpo: { fechaLimiteEnvio } }), '/periodos')
 }
 
 export function cambiarFechaLimite(id, fechaLimiteEnvio) {
-  return solicitar(`/periodos/${id}`, { metodo: 'PATCH', cuerpo: { fechaLimiteEnvio } })
+  return yLuegoInvalidar(solicitar(`/periodos/${id}`, { metodo: 'PATCH', cuerpo: { fechaLimiteEnvio } }), '/periodos')
 }
 
 // Los 7 grupos y los municipios del departamento sede de la DDRISS, cada uno con su población del año por grupo.

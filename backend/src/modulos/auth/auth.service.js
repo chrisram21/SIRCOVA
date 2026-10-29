@@ -328,3 +328,51 @@ export async function cambiarContrasena(usuario, datos, contexto) {
     });
   });
 }
+
+const CONSULTA_PERFIL = `
+  SELECT u.id, u.nombre_usuario, r.codigo AS rol, r.nombre AS rol_nombre, u.debe_cambiar_contrasena,
+         UNIX_TIMESTAMP(u.ultimo_acceso) AS ultimo_acceso, UNIX_TIMESTAMP(u.creado_en) AS creado_en,
+         e.id AS empleado_id, e.cui_hmac IS NOT NULL AS cui_registrado, e.nombres, e.apellidos, e.cargo, e.correo,
+         e.telefono, e.ddriss_id, d.nombre AS ddriss_nombre, e.establecimiento_id, est.codigo AS establecimiento_codigo,
+         est.nombre AS establecimiento_nombre, e.municipio_id, m.nombre AS municipio_nombre
+    FROM usuario u
+    JOIN rol r ON r.id = u.rol_id
+    JOIN empleado e ON e.id = u.empleado_id
+    LEFT JOIN ddriss d ON d.id = e.ddriss_id
+    LEFT JOIN establecimiento est ON est.id = e.establecimiento_id
+    LEFT JOIN municipio m ON m.id = e.municipio_id
+   WHERE u.id = ?`;
+
+// mysql2 lee los DATETIME como hora local; con UNIX_TIMESTAMP la fecha sale bien (notas de CLAUDE.md, 2026-10-21).
+const aFechaIso = (segundos) => (segundos == null ? null : new Date(Number(segundos) * 1000).toISOString());
+
+// autenticar ya comprobó que la cuenta existe y está activa.
+export async function obtenerPerfil(usuario) {
+  const [[fila]] = await pool.query(CONSULTA_PERFIL, [usuario.id]);
+  return {
+    id: fila.id,
+    nombreUsuario: fila.nombre_usuario,
+    rol: fila.rol,
+    rolNombre: fila.rol_nombre,
+    permisos: usuario.permisos,
+    debeCambiarContrasena: Boolean(fila.debe_cambiar_contrasena),
+    ultimoAcceso: aFechaIso(fila.ultimo_acceso),
+    creadoEn: aFechaIso(fila.creado_en),
+    empleado: {
+      id: fila.empleado_id,
+      cuiRegistrado: Boolean(fila.cui_registrado),
+      nombres: fila.nombres,
+      apellidos: fila.apellidos,
+      cargo: fila.cargo,
+      correo: fila.correo,
+      telefono: fila.telefono,
+      ddrissId: fila.ddriss_id,
+      ddrissNombre: fila.ddriss_nombre,
+      establecimientoId: fila.establecimiento_id,
+      establecimientoCodigo: fila.establecimiento_codigo,
+      establecimientoNombre: fila.establecimiento_nombre,
+      municipioId: fila.municipio_id,
+      municipioNombre: fila.municipio_nombre,
+    },
+  };
+}

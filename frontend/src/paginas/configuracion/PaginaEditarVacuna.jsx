@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
-import { CircleAlert, CircleCheck, MoreHorizontal, Plus } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { CircleCheck, MoreHorizontal, Plus } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { toast } from 'sonner'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,17 +44,17 @@ import {
   obtenerVacuna,
   reactivarDosis,
 } from '@/api/catalogos.js'
-import { ErrorApi } from '@/api/cliente.js'
+import { mensajeDeError } from '@/api/cliente.js'
+import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
+import { AvisoError } from '@/componentes/Avisos.jsx'
+import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { LARGOS, validarDescripcionVacuna, validarNombreDosis, validarNombreVacuna } from '@/validaciones/campos.js'
 import { Campo, CampoTexto } from '../usuarios/CamposEmpleado.jsx'
 import { MENSAJE_ORDEN, ORDEN_INFORME_MAXIMO, validarOrdenInforme } from './FormularioVacuna.jsx'
 import { nombreSugerido, siguienteCodigo, tiposAdmitidos, TIPOS_DOSIS } from './secuenciaDosis.js'
 
-const MENSAJE_INESPERADO = 'Ocurrió un error inesperado. Intente de nuevo.'
 // Ruta de la pestaña si se llegó a la página sin pasar por ella (p. ej. con la dirección escrita a mano).
 const PESTANA = '?pestana=vacunas'
-
-const mensajeDe = (error) => (error instanceof ErrorApi ? error.mensaje : MENSAJE_INESPERADO)
 
 // Al editar, el orden en el informe no puede quedar vacío: PATCH /vacunas/{id} exige un número.
 const REGLAS = {
@@ -100,6 +100,13 @@ function DialogoDosis({ vacuna, dosis, alGuardar, alCerrar }) {
   const [errores, setErrores] = useState({})
   const [errorApi, setErrorApi] = useState(null)
   const [guardando, setGuardando] = useState(false)
+  // Cada intento con errores sube este número; un efecto lleva el foco al primer campo inválido.
+  const [revisar, setRevisar] = useState(0)
+  const formulario = useRef(null)
+
+  useEffect(() => {
+    if (revisar > 0) formulario.current?.querySelector('[aria-invalid="true"]')?.focus()
+  }, [revisar])
 
   const codigoDe = (t) => (t ? siguienteCodigo(t, vacuna.dosis.map((d) => d.codigo)) : null)
   const codigo = editando ? dosis.codigo : codigoDe(tipo)
@@ -121,7 +128,10 @@ function DialogoDosis({ vacuna, dosis, alGuardar, alCerrar }) {
       nombre: validacion.error,
     }
     setErrores(nuevosErrores)
-    if (nuevosErrores.tipo || nuevosErrores.nombre) return
+    if (nuevosErrores.tipo || nuevosErrores.nombre) {
+      setRevisar((n) => n + 1)
+      return
+    }
 
     const cambios = {}
     if (editando) {
@@ -139,7 +149,7 @@ function DialogoDosis({ vacuna, dosis, alGuardar, alCerrar }) {
       alGuardar(guardada, editando ? `Dosis ${dosis.codigo} actualizada.` : `Dosis ${codigo} agregada.`)
     } catch (err) {
       // El Dialog sigue abierto para corregir y volver a intentar.
-      setErrorApi(mensajeDe(err))
+      setErrorApi(mensajeDeError(err))
       setGuardando(false)
     }
   }
@@ -147,7 +157,7 @@ function DialogoDosis({ vacuna, dosis, alGuardar, alCerrar }) {
   return (
     <Dialog open onOpenChange={(abierto) => !abierto && !guardando && alCerrar()}>
       <DialogContent>
-        <form className="flex flex-col gap-4" onSubmit={guardar} noValidate>
+        <form ref={formulario} className="flex flex-col gap-4" onSubmit={guardar} noValidate>
           <DialogHeader>
             <DialogTitle>{editando ? `Editar la dosis ${dosis.codigo}` : 'Agregar dosis'}</DialogTitle>
             <DialogDescription>
@@ -157,12 +167,7 @@ function DialogoDosis({ vacuna, dosis, alGuardar, alCerrar }) {
             </DialogDescription>
           </DialogHeader>
 
-          {errorApi && (
-            <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-              <CircleAlert />
-              <AlertDescription>{errorApi}</AlertDescription>
-            </Alert>
-          )}
+          {errorApi && <AvisoError>{errorApi}</AvisoError>}
 
           {!editando && (
             <div className="flex flex-col gap-2">
@@ -325,12 +330,21 @@ export default function PaginaEditarVacuna() {
   const [intentado, setIntentado] = useState(false)
   const [errorGuardar, setErrorGuardar] = useState(null)
   const [guardando, setGuardando] = useState(false)
-  const [aviso, setAviso] = useState(null)
+  // Tras guardar se sale en un efecto, cuando el aviso de cambios sin guardar ya no bloquea.
+  const [guardado, setGuardado] = useState(false)
+  // Cada intento de envío con errores sube este número; un efecto lleva el foco al primer campo inválido.
+  const [revisar, setRevisar] = useState(0)
+  // Cada «Reintentar» sube este número y vuelve a cargar.
+  const [intentoCarga, setIntentoCarga] = useState(0)
+  // El error de una acción sobre las dosis; los éxitos van en un toast.
+  const [errorDosis, setErrorDosis] = useState(null)
   // null, { dosis: null } para agregar o { dosis } para editar, mientras el Dialog está abierto.
   const [dialogo, setDialogo] = useState(null)
   // null o { dosis, activar } mientras el AlertDialog de confirmación está abierto.
   const [porCambiar, setPorCambiar] = useState(null)
   const [cambiando, setCambiando] = useState(false)
+  const formulario = useRef(null)
+  const avisoError = useRef(null)
 
   useEffect(() => {
     let vigente = true
@@ -341,15 +355,29 @@ export default function PaginaEditarVacuna() {
         setDatos(aDatos(encontrada))
       })
       .catch((err) => {
-        if (vigente) setErrorCarga(mensajeDe(err))
+        if (vigente) setErrorCarga(mensajeDeError(err))
       })
     return () => {
       vigente = false
     }
-  }, [id])
+  }, [id, intentoCarga])
 
   const cambios = vacuna ? cambiosDe(aDatos(vacuna), datos) : {}
   const hayCambios = Object.keys(cambios).length > 0
+  const bloqueo = useAvisoCambiosSinGuardar(hayCambios && !guardado)
+
+  useEffect(() => {
+    if (guardado) navigate(volverA)
+  }, [guardado, navigate, volverA])
+
+  useEffect(() => {
+    if (revisar > 0) formulario.current?.querySelector('[aria-invalid="true"]')?.focus()
+  }, [revisar])
+
+  useEffect(() => {
+    if (errorGuardar) avisoError.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [errorGuardar])
+
   // Al editar, solo se validan los campos que cambian, como el backend.
   const errores = {}
   for (const campo of Object.keys(cambios)) {
@@ -371,24 +399,39 @@ export default function PaginaEditarVacuna() {
   async function guardar(evento) {
     evento.preventDefault()
     setIntentado(true)
-    if (guardando || !hayCambios || Object.keys(errores).length > 0) return
+    if (guardando) return
+    if (Object.keys(errores).length > 0) {
+      setRevisar((n) => n + 1)
+      return
+    }
+    if (!hayCambios) {
+      toast.info('No hay cambios que guardar.')
+      return
+    }
     setGuardando(true)
     setErrorGuardar(null)
     const cuerpo = { ...cambios }
     if (cuerpo.ordenInforme !== undefined) cuerpo.ordenInforme = validarOrdenInforme(cuerpo.ordenInforme).valor
     try {
       const guardada = await editarVacuna(vacuna.id, cuerpo)
-      navigate(volverA, { state: { aviso: `Vacuna ${guardada.codigo} actualizada.` } })
+      toast.success(`Vacuna ${guardada.codigo} actualizada.`)
+      setGuardado(true)
     } catch (err) {
-      setErrorGuardar(mensajeDe(err))
+      setErrorGuardar(mensajeDeError(err))
       setGuardando(false)
     }
+  }
+
+  function reintentarCarga() {
+    setErrorCarga(null)
+    setIntentoCarga((n) => n + 1)
   }
 
   function alGuardarDosis(actualizada, mensaje) {
     setVacuna(actualizada)
     setDialogo(null)
-    setAviso({ tipo: 'exito', mensaje })
+    setErrorDosis(null)
+    toast.success(mensaje)
   }
 
   async function confirmarCambio(evento) {
@@ -396,15 +439,15 @@ export default function PaginaEditarVacuna() {
     evento.preventDefault()
     const { dosis, activar } = porCambiar
     setCambiando(true)
-    setAviso(null)
+    setErrorDosis(null)
     try {
       const actualizada = activar
         ? await reactivarDosis(vacuna.id, dosis.id)
         : await desactivarDosis(vacuna.id, dosis.id)
       setVacuna(actualizada)
-      setAviso({ tipo: 'exito', mensaje: `Dosis ${dosis.codigo} ${activar ? 'reactivada' : 'desactivada'}.` })
+      toast.success(`Dosis ${dosis.codigo} ${activar ? 'reactivada' : 'desactivada'}.`)
     } catch (err) {
-      setAviso({ tipo: 'error', mensaje: mensajeDe(err) })
+      setErrorDosis(mensajeDeError(err))
     } finally {
       setCambiando(false)
       setPorCambiar(null)
@@ -413,19 +456,9 @@ export default function PaginaEditarVacuna() {
 
   return (
     <section className="flex max-w-4xl flex-col gap-6 p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Editar vacuna</h1>
-        <Button type="button" variant="outline" onClick={() => navigate(volverA)} disabled={guardando}>
-          Volver
-        </Button>
-      </div>
+      <EncabezadoPagina antetitulo="Configuración" titulo="Editar vacuna" volverA={volverA} />
 
-      {errorCarga && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>No se pudo cargar la vacuna: {errorCarga}</AlertDescription>
-        </Alert>
-      )}
+      {errorCarga && <AvisoError onReintentar={reintentarCarga}>No se pudo cargar la vacuna: {errorCarga}</AvisoError>}
 
       {!vacuna && !errorCarga && (
         <Card aria-label="Cargando vacuna">
@@ -439,19 +472,13 @@ export default function PaginaEditarVacuna() {
 
       {vacuna && (
         <>
-          <form onSubmit={guardar} noValidate>
+          <form ref={formulario} onSubmit={guardar} noValidate>
             <Card>
               <CardHeader>
                 <CardTitle>Datos de la vacuna</CardTitle>
                 <CardDescription>Catálogo nacional: los cambios aplican a todas las DDRISS.</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
-                {errorGuardar && (
-                  <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-                    <CircleAlert />
-                    <AlertDescription>{errorGuardar}</AlertDescription>
-                  </Alert>
-                )}
                 <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-[auto_1fr]">
                   <dt className="text-muted-foreground">Código</dt>
                   <dd className="font-medium">{vacuna.codigo}</dd>
@@ -491,8 +518,13 @@ export default function PaginaEditarVacuna() {
                   />
                   <MensajeError id="descripcion-error" mensaje={errorDe('descripcion')} />
                 </Campo>
+                {errorGuardar && (
+                  <div ref={avisoError}>
+                    <AvisoError>{errorGuardar}</AvisoError>
+                  </div>
+                )}
                 <div>
-                  <Button type="submit" disabled={guardando || !hayCambios}>
+                  <Button type="submit" disabled={guardando}>
                     {guardando ? 'Guardando…' : 'Guardar cambios'}
                   </Button>
                 </div>
@@ -514,18 +546,7 @@ export default function PaginaEditarVacuna() {
               </CardAction>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              {aviso?.tipo === 'exito' && (
-                <Alert role="status" className="border-ring/40 bg-accent text-accent-foreground">
-                  <CircleCheck />
-                  <AlertDescription className="text-accent-foreground">{aviso.mensaje}</AlertDescription>
-                </Alert>
-              )}
-              {aviso?.tipo === 'error' && (
-                <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-                  <CircleAlert />
-                  <AlertDescription>{aviso.mensaje}</AlertDescription>
-                </Alert>
-              )}
+              {errorDosis && <AvisoError>{errorDosis}</AvisoError>}
               <TablaDosis
                 dosis={vacuna.dosis}
                 alEditar={(dosis) => setDialogo({ dosis })}
@@ -579,6 +600,8 @@ export default function PaginaEditarVacuna() {
           </AlertDialog>
         </>
       )}
+
+      <AvisoCambiosSinGuardar bloqueo={bloqueo} descripcion="Si sale ahora, se pierden los cambios de la vacuna." />
     </section>
   )
 }

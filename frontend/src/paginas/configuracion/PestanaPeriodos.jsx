@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { CircleAlert, CircleCheck, Plus } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Plus } from 'lucide-react'
+import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -18,6 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { crearAnioPeriodos, listarPeriodos } from '@/api/catalogos.js'
+import { mensajeDeError } from '@/api/cliente.js'
+import { AvisoError } from '@/componentes/Avisos.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import DialogoFechaLimite from './DialogoFechaLimite.jsx'
 
@@ -79,7 +81,7 @@ function DialogoCrearAnio({ anios, alGuardar, alCerrar }) {
       alGuardar(Number(anio), await crearAnioPeriodos(Number(anio)))
     } catch (err) {
       // El Dialog sigue abierto para elegir otro año o volver a intentar.
-      setErrorApi(err.mensaje)
+      setErrorApi(mensajeDeError(err))
       setGuardando(false)
     }
   }
@@ -95,12 +97,7 @@ function DialogoCrearAnio({ anios, alGuardar, alCerrar }) {
             </DialogDescription>
           </DialogHeader>
 
-          {errorApi && (
-            <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-              <CircleAlert />
-              <AlertDescription>{errorApi}</AlertDescription>
-            </Alert>
-          )}
+          {errorApi && <AvisoError>{errorApi}</AvisoError>}
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="periodo-anio-nuevo" className="font-semibold">
@@ -141,7 +138,6 @@ export default function PestanaPeriodos() {
   const [parametros, setParametros] = useSearchParams()
   const [periodos, setPeriodos] = useState(null)
   const [errorCarga, setErrorCarga] = useState(null)
-  const [aviso, setAviso] = useState(null)
   const [creandoAnio, setCreandoAnio] = useState(false)
   // El mes cuyo Dialog de fecha límite está abierto, o null.
   const [porEditar, setPorEditar] = useState(null)
@@ -157,7 +153,7 @@ export default function PestanaPeriodos() {
         if (carga === cargaActual.current) setPeriodos(lista)
       })
       .catch((err) => {
-        if (carga === cargaActual.current) setErrorCarga(err.mensaje)
+        if (carga === cargaActual.current) setErrorCarga(mensajeDeError(err))
       })
   }
 
@@ -185,27 +181,26 @@ export default function PestanaPeriodos() {
     setPeriodos((actuales) => [...actuales.filter((p) => p.anio !== anio), ...delAnio])
     elegirAnio(String(anio))
     setCreandoAnio(false)
-    setAviso(`Año ${anio} agregado al calendario. Abra cada mes cuando corresponda.`)
+    toast.success(`Año ${anio} agregado al calendario. Abra cada mes cuando corresponda.`)
   }
 
   // La fila se reemplaza con la respuesta, que trae el estado nuevo (un mes en cierre puede volver a Abierto).
   function alGuardarFecha(actualizado) {
+    const mes = `${MESES[actualizado.mes - 1]} ${actualizado.anio}`
+    const fecha = aDiaMesAnio(actualizado.fechaLimiteEnvio)
     setPeriodos((actuales) => actuales.map((p) => (p.id === actualizado.id ? actualizado : p)))
+    toast.success(
+      porEditar.estado === null
+        ? `${mes} abierto; fecha límite ${fecha}.`
+        : `Fecha límite de ${mes} cambiada al ${fecha}.${
+            porEditar.estado === 'EN_CIERRE' && actualizado.estado === 'ABIERTO' ? ' El mes volvió a Abierto.' : ''
+          }`,
+    )
     setPorEditar(null)
   }
 
   if (errorCarga) {
-    return (
-      <div className="flex flex-col items-start gap-3">
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>No se pudieron cargar los periodos: {errorCarga}</AlertDescription>
-        </Alert>
-        <Button variant="outline" onClick={cargar}>
-          Reintentar
-        </Button>
-      </div>
-    )
+    return <AvisoError onReintentar={cargar}>No se pudieron cargar los periodos: {errorCarga}</AvisoError>
   }
 
   if (periodos === null) {
@@ -233,12 +228,6 @@ export default function PestanaPeriodos() {
 
   return (
     <div className="flex flex-col gap-6">
-      {aviso && (
-        <Alert role="status" className="border-ring/40 bg-accent text-accent-foreground">
-          <CircleCheck />
-          <AlertDescription className="text-accent-foreground">{aviso}</AlertDescription>
-        </Alert>
-      )}
       <Card>
         <CardHeader>
           <CardTitle>Periodos de reporte</CardTitle>
@@ -258,7 +247,15 @@ export default function PestanaPeriodos() {
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {anios.length === 0 ? (
-            <p className="text-muted-foreground">No hay años en el calendario.</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-muted-foreground">No hay años en el calendario.</p>
+              {puedeCrear && (
+                <Button variant="outline" onClick={() => setCreandoAnio(true)}>
+                  <Plus />
+                  Crear año
+                </Button>
+              )}
+            </div>
           ) : (
             <>
               {/* Dentro de un form, Radix agrega el <select> nativo del Select. */}

@@ -1,6 +1,4 @@
 import { useState } from 'react'
-import { CircleAlert } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -13,6 +11,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { abrirPeriodo, cambiarFechaLimite } from '@/api/catalogos.js'
+import { mensajeDeError } from '@/api/cliente.js'
+import { AvisoError } from '@/componentes/Avisos.jsx'
 
 const dosDigitos = (numero) => String(numero).padStart(2, '0')
 
@@ -49,7 +49,7 @@ export default function DialogoFechaLimite({ periodo, nombreMes, alGuardar, alCe
       alGuardar(abriendo ? await abrirPeriodo(periodo.id, fecha) : await cambiarFechaLimite(periodo.id, fecha))
     } catch (err) {
       // El Dialog sigue abierto y conserva la fecha escrita.
-      setErrorApi(err.mensaje)
+      setErrorApi(mensajeDeError(err))
       setGuardando(false)
     }
   }
@@ -71,12 +71,7 @@ export default function DialogoFechaLimite({ periodo, nombreMes, alGuardar, alCe
             </DialogDescription>
           </DialogHeader>
 
-          {errorApi && (
-            <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-              <CircleAlert />
-              <AlertDescription>{errorApi}</AlertDescription>
-            </Alert>
-          )}
+          {errorApi && <AvisoError>{errorApi}</AvisoError>}
 
           {periodo.estado === 'EN_CIERRE' && (
             <p className="text-sm text-muted-foreground">

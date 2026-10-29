@@ -69,10 +69,11 @@ test('sin EMPLEADO_CREAR, la subruta /usuarios/nuevo lleva a /inicio', () => {
   expect(screen.getByText('Usuarios activos')).toBeTruthy()
 })
 
-test('con EMPLEADO_CREAR, la subruta /usuarios/nuevo muestra su página', () => {
+// Las pantallas se cargan al entrar en ellas (lazy): se esperan con findBy.
+test('con EMPLEADO_CREAR, la subruta /usuarios/nuevo muestra su página', async () => {
   abrir('/usuarios/nuevo', ['USUARIO_CONSULTAR', 'EMPLEADO_CREAR'])
 
-  expect(screen.getByRole('heading', { name: 'Registrar personal' })).toBeTruthy()
+  expect(await screen.findByRole('heading', { name: 'Registrar personal' })).toBeTruthy()
 })
 
 test('sin USUARIO_EDITAR, la subruta /usuarios/5/editar lleva a /inicio', () => {
@@ -82,10 +83,10 @@ test('sin USUARIO_EDITAR, la subruta /usuarios/5/editar lleva a /inicio', () => 
   expect(screen.getByText('Usuarios activos')).toBeTruthy()
 })
 
-test('con USUARIO_EDITAR, la subruta /usuarios/5/editar muestra su página', () => {
+test('con USUARIO_EDITAR, la subruta /usuarios/5/editar muestra su página', async () => {
   abrir('/usuarios/5/editar', ['USUARIO_CONSULTAR', 'USUARIO_EDITAR'])
 
-  expect(screen.getByRole('heading', { name: 'Editar usuario' })).toBeTruthy()
+  expect(await screen.findByRole('heading', { name: 'Editar usuario' })).toBeTruthy()
 })
 
 test('sin sesión, /indicadores lleva a /login', () => {

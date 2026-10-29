@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { CircleAlert } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { obtenerEsquema } from '@/api/configuracion.js'
-import { ErrorApi } from '@/api/cliente.js'
+import { ErrorApi, mensajeDeError } from '@/api/cliente.js'
+import { AvisoError } from '@/componentes/Avisos.jsx'
+import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import EditorEsquema, { cargarReferencias, contenidoDe, PESTANA_ESQUEMAS } from './EditorEsquema.jsx'
 import { ESTADOS, textoPublicacion, textoVigencia } from './PaginaHistorialEsquemas.jsx'
@@ -28,13 +28,14 @@ function Dato({ etiqueta, children }) {
 // Cualquier versión visible (nacional o de la DDRISS, en cualquier estado), con el editor en solo lectura.
 export default function PaginaVerEsquema() {
   const { id } = useParams()
-  const navigate = useNavigate()
   const { state } = useLocation()
   const { tienePermiso } = useSesion()
   const pestana = state?.volverA || PESTANA_ESQUEMAS
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
   const [vistaPrevia, setVistaPrevia] = useState(false)
+  // Cada «Reintentar» sube este número y vuelve a cargar.
+  const [intentoCarga, setIntentoCarga] = useState(0)
 
   useEffect(() => {
     let vigente = true
@@ -46,12 +47,17 @@ export default function PaginaVerEsquema() {
       .then((cargados) => vigente && setDatos(cargados))
       .catch((err) => {
         if (!vigente) return
-        setError(err instanceof ErrorApi && err.status === 404 ? NO_EXISTE : (err.mensaje ?? 'Ocurrió un error inesperado.'))
+        setError(err instanceof ErrorApi && err.status === 404 ? NO_EXISTE : mensajeDeError(err))
       })
     return () => {
       vigente = false
     }
-  }, [id])
+  }, [id, intentoCarga])
+
+  function reintentarCarga() {
+    setError(null)
+    setIntentoCarga((n) => n + 1)
+  }
 
   const esquema = datos?.esquema
   const historial = esquema ? `/configuracion/esquemas/historial/${esquema.vacuna.id}` : `/configuracion${pestana}`
@@ -61,42 +67,35 @@ export default function PaginaVerEsquema() {
 
   return (
     <section className="flex max-w-5xl flex-col gap-6 p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">
-          {esquema ? `${esquema.vacuna.nombre} · versión ${esquema.version}` : 'Versión del esquema'}
-        </h1>
-        <div className="flex flex-wrap gap-2">
-          {editable && (
+      <EncabezadoPagina
+        antetitulo="Configuración"
+        titulo={esquema ? `${esquema.vacuna.nombre} · versión ${esquema.version}` : 'Versión del esquema'}
+        volverA={historial}
+        estadoVolver={{ volverA: pestana }}
+        textoVolver={esquema ? 'Volver al historial' : 'Volver'}
+        acciones={
+          editable && (
             <Button asChild>
               <Link to={`/configuracion/esquemas/${esquema.id}/editar`} state={{ volverA: pestana }}>
                 Editar borrador
               </Link>
             </Button>
-          )}
-          <Button type="button" variant="outline" onClick={() => navigate(historial, { state: { volverA: pestana } })}>
-            Volver al historial
-          </Button>
-        </div>
-      </div>
+          )
+        }
+      />
 
       {error === NO_EXISTE && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>
-            <span>
-              El esquema no existe.{' '}
-              <Link to={`/configuracion${pestana}`} className="underline">
-                Volver a los esquemas
-              </Link>
-            </span>
-          </AlertDescription>
-        </Alert>
+        <AvisoError>
+          <span>
+            El esquema no existe.{' '}
+            <Link to={`/configuracion${pestana}`} className="underline">
+              Volver a los esquemas
+            </Link>
+          </span>
+        </AvisoError>
       )}
       {error && error !== NO_EXISTE && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>No se pudo cargar el esquema: {error}</AlertDescription>
-        </Alert>
+        <AvisoError onReintentar={reintentarCarga}>No se pudo cargar el esquema: {error}</AvisoError>
       )}
 
       {!datos && !error && (

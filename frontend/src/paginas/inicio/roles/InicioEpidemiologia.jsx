@@ -1,7 +1,13 @@
-import { TarjetasSinDatos } from '../TarjetaSinDatos.jsx'
+import { TarjetasDelInicio } from '../TarjetaSinDatos.jsx'
 
-const TARJETAS = ['Cobertura departamental', 'Municipios en meta', 'Reportes cerrados del mes', 'Alertas activas']
+// Sin endpoints de indicadores ni de alertas todavía: las agrega el spec de cada dato.
+const TARJETAS = [
+  { titulo: 'Cobertura departamental' },
+  { titulo: 'Municipios en meta' },
+  { titulo: 'Reportes cerrados del mes' },
+  { titulo: 'Alertas activas' },
+]
 
 export default function InicioEpidemiologia() {
-  return <TarjetasSinDatos titulos={TARJETAS} />
+  return <TarjetasDelInicio tarjetas={TARJETAS} />
 }

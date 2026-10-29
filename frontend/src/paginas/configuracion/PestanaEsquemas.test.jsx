@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { toast } from 'sonner'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { listarPeriodos, listarVacunas } from '@/api/catalogos.js'
 import { descartarEsquema, listarDimensiones, listarEsquemas, publicarEsquema } from '@/api/configuracion.js'
@@ -190,7 +191,7 @@ describe('descartar un borrador', () => {
     expect(within(dialogo).getByText('No se puede deshacer.')).toBeTruthy()
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Descartar' }))
 
-    expect(await screen.findByText('Borrador versión 3 de Hexavalente descartado.')).toBeTruthy()
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Borrador versión 3 de Hexavalente descartado.'))
     expect(descartarEsquema).toHaveBeenCalledWith('b-hexa')
     expect(celdasDe('Hexavalente')[2].textContent).toBe('—')
     expect(screen.getByRole('button', { name: 'Crear borrador de HEXA' })).toBeTruthy()
@@ -299,7 +300,7 @@ describe('publicar un borrador', () => {
     })
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Publicar' }))
 
-    expect(await screen.findByText('Versión 3 de Hexavalente publicada; vigente desde 01/12/2026.')).toBeTruthy()
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Versión 3 de Hexavalente publicada; vigente desde 01/12/2026.'))
     expect(publicarEsquema).toHaveBeenCalledWith('b-hexa', {
       vigenciaDesde: '2026-12-01',
       motivoCambio: 'Se agrega la dimensión pueblo.',

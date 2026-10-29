@@ -4,6 +4,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { cn } from '@/lib/utils'
 
 const formatoCantidad = new Intl.NumberFormat('es-GT')
 const ENTERO = /^\d+$/
@@ -30,94 +31,228 @@ export function etiquetaDeColumna(encabezados, indice) {
     .join(' · ')
 }
 
+// Cuántas casillas tiene el formulario, cuántas tienen un dato escrito y la suma de las cantidades válidas.
+export function resumenDeCasillas(formulario, cantidades) {
+  const resumen = { total: 0, llenas: 0, dosis: 0 }
+  for (const { filas } of formulario.tablas) {
+    for (const fila of filas) {
+      for (const celda of fila.celdas) {
+        if (!celda) continue
+        const texto = cantidades[`${fila.dosis}|${celda.claveCombinacion}`] ?? ''
+        resumen.total += 1
+        if (texto.trim() !== '') resumen.llenas += 1
+        resumen.dosis += leerCantidad(texto).valor
+      }
+    }
+  }
+  return resumen
+}
+
+// Enter y las flechas mueven el foco entre las casillas de la tabla, como en una hoja de cálculo. Cada casilla lleva
+// data-fila y data-col; Enter al final de una columna sigue arriba de la siguiente.
+export function moverEntreCasillas(evento) {
+  const { key, shiftKey, currentTarget: campo } = evento
+  const fila = Number(campo.dataset.fila)
+  const col = Number(campo.dataset.col)
+  const casillas = [...campo.closest('table').querySelectorAll('input[data-col]:not(:disabled)')].map((c) => ({
+    c,
+    fila: Number(c.dataset.fila),
+    col: Number(c.dataset.col),
+  }))
+  const primera = (lista, orden) => lista.sort(orden)[0]
+  let destino
+  if (key === 'ArrowDown' || (key === 'Enter' && !shiftKey)) {
+    destino =
+      primera(casillas.filter((x) => x.col === col && x.fila > fila), (a, b) => a.fila - b.fila) ??
+      (key === 'Enter' ? primera(casillas.filter((x) => x.col > col), (a, b) => a.col - b.col || a.fila - b.fila) : null)
+  } else if (key === 'ArrowUp' || (key === 'Enter' && shiftKey)) {
+    destino = primera(casillas.filter((x) => x.col === col && x.fila < fila), (a, b) => b.fila - a.fila)
+  } else if (key === 'ArrowRight' && campo.selectionEnd === campo.value.length) {
+    destino = primera(casillas.filter((x) => x.fila === fila && x.col > col), (a, b) => a.col - b.col)
+  } else if (key === 'ArrowLeft' && campo.selectionStart === 0) {
+    destino = primera(casillas.filter((x) => x.fila === fila && x.col < col), (a, b) => b.col - a.col)
+  }
+  if (!destino) return
+  evento.preventDefault()
+  destino.c.focus()
+}
+
+// Al entrar en una casilla se selecciona su contenido: lo que se escribe lo reemplaza.
+export const seleccionarAlEntrar = (evento) => evento.target.select()
+
+// La letra de cada tarjeta de la captura (A, B, C), como en el 5C.
+export function LetraTarjeta({ children }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground shadow-tarjeta"
+    >
+      {children}
+    </span>
+  )
+}
+
+// Las celdas de cada nivel del encabezado con la columna en que empiezan.
+const conInicio = (nivel) => {
+  let inicio = 0
+  return nivel.map((celda) => {
+    const conSuInicio = { ...celda, inicio }
+    inicio += celda.columnas
+    return conSuInicio
+  })
+}
+
 function TablaCaptura({ tabla, cantidades, alCambiar, soloLectura }) {
   const { encabezados, columnas, filas } = tabla
   const niveles = Math.max(encabezados.length, 1)
+  // La casilla con el foco: su fila y su columna se resaltan para saber qué se está llenando.
+  const [foco, setFoco] = useState(null)
   const leer = (fila, celda) => leerCantidad(cantidades[`${fila.dosis}|${celda.claveCombinacion}`] ?? '')
   const totalFila = (fila) => fila.celdas.reduce((suma, celda) => suma + (celda ? leer(fila, celda).valor : 0), 0)
   const totalColumna = (j) => filas.reduce((suma, fila) => suma + (fila.celdas[j] ? leer(fila, fila.celdas[j]).valor : 0), 0)
   const total = filas.reduce((suma, fila) => suma + totalFila(fila), 0)
 
+  const nivelesConInicio = (encabezados.length > 0 ? encabezados : [[{ etiqueta: 'Cantidad', columnas: 1 }]]).map(conInicio)
+  // Una línea separa los grupos del primer nivel del encabezado (por ejemplo, cada grupo de edad).
+  const iniciosDeGrupo = new Set(nivelesConInicio[0].map(({ inicio }) => inicio))
+  const separa = (j) => iniciosDeGrupo.has(j) && 'border-l'
+  const enFoco = (inicio, abarca) => foco !== null && foco.col >= inicio && foco.col < inicio + abarca
+
   return (
     <div className="flex flex-col gap-2">
       {(tabla.titulo || tabla.seccion) && (
-        <p className="text-sm font-medium">{[tabla.titulo, tabla.seccion].filter(Boolean).join(' · ')}</p>
+        <p className="flex items-center gap-2 text-sm font-semibold">
+          <span aria-hidden="true" className="size-1.5 rounded-full bg-ring" />
+          {[tabla.titulo, tabla.seccion].filter(Boolean).join(' · ')}
+        </p>
       )}
-      <Table aria-label={tabla.titulo ?? 'Dosis'}>
-        <TableHeader>
-          {(encabezados.length > 0 ? encabezados : [[{ etiqueta: 'Cantidad', columnas: 1 }]]).map((nivel, n) => (
-            <TableRow key={n}>
-              {n === 0 && <TableHead rowSpan={niveles}>Dosis</TableHead>}
-              {nivel.map(({ etiqueta, columnas: abarca }, i) => (
-                <TableHead key={i} colSpan={abarca} className="text-center">
-                  {etiqueta}
-                </TableHead>
-              ))}
-              {n === 0 && (
-                <TableHead rowSpan={niveles} className="text-right">
-                  Total
-                </TableHead>
-              )}
-            </TableRow>
-          ))}
-        </TableHeader>
-        <TableBody>
-          {filas.map((fila) => (
-            <TableRow key={fila.dosis}>
-              <TableCell className="font-medium">{fila.etiqueta}</TableCell>
-              {fila.celdas.map((celda, j) => {
-                const columna = etiquetaDeColumna(encabezados, j)
-                const nombre = columna ? `${fila.etiqueta} · ${columna}` : fila.etiqueta
-                if (!celda) {
+      <div className="overflow-hidden rounded-lg border bg-card">
+        <Table aria-label={tabla.titulo ?? 'Dosis'}>
+          <TableHeader>
+            {nivelesConInicio.map((nivel, n) => {
+              // El último nivel, si hay más de uno, es el detalle (por ejemplo, el sexo dentro del grupo de edad).
+              const detalle = nivelesConInicio.length > 1 && n === nivelesConInicio.length - 1
+              return (
+                <TableRow key={n} className="hover:bg-transparent">
+                  {n === 0 && (
+                    <TableHead rowSpan={niveles} className="sticky left-0 z-[2] min-w-32 bg-card">
+                      Dosis
+                    </TableHead>
+                  )}
+                  {nivel.map(({ etiqueta, columnas: abarca, inicio }, i) => (
+                    <TableHead
+                      key={i}
+                      colSpan={abarca}
+                      className={cn(
+                        'h-auto py-2 text-center transition-colors duration-150',
+                        separa(inicio),
+                        detalle
+                          ? 'text-xs leading-tight font-medium whitespace-normal text-muted-foreground'
+                          : 'bg-accent/40 font-semibold text-accent-foreground',
+                        enFoco(inicio, abarca) && 'bg-accent text-accent-foreground',
+                      )}
+                    >
+                      {etiqueta}
+                    </TableHead>
+                  ))}
+                  {n === 0 && (
+                    <TableHead rowSpan={niveles} className="border-l bg-muted/60 text-right">
+                      Total
+                    </TableHead>
+                  )}
+                </TableRow>
+              )
+            })}
+          </TableHeader>
+          <TableBody>
+            {filas.map((fila, i) => (
+              <TableRow key={fila.dosis} className={cn('hover:bg-transparent', foco?.fila === i && 'bg-accent/25')}>
+                <TableCell
+                  className={cn(
+                    'sticky left-0 z-[1] bg-card font-medium transition-colors duration-150',
+                    foco?.fila === i && 'bg-accent text-accent-foreground',
+                  )}
+                >
+                  {fila.etiqueta}
+                </TableCell>
+                {fila.celdas.map((celda, j) => {
+                  const columna = etiquetaDeColumna(encabezados, j)
+                  const nombre = columna ? `${fila.etiqueta} · ${columna}` : fila.etiqueta
+                  if (!celda) {
+                    return (
+                      <TableCell
+                        key={j}
+                        className={cn('fondo-no-aplica text-center text-muted-foreground/50', separa(j))}
+                        aria-label={`${nombre}: no aplica`}
+                      >
+                        —
+                      </TableCell>
+                    )
+                  }
+                  const clave = `${fila.dosis}|${celda.claveCombinacion}`
+                  const texto = cantidades[clave] ?? ''
+                  const valida = leerCantidad(texto).valida
                   return (
-                    <TableCell key={j} className="text-center text-muted-foreground" aria-label={`${nombre}: no aplica`}>
-                      —
+                    <TableCell
+                      key={j}
+                      className={cn('px-1.5 text-center', separa(j), foco?.col === j && foco.fila !== i && 'bg-accent/25')}
+                    >
+                      <Input
+                        aria-label={nombre}
+                        inputMode="numeric"
+                        autoComplete="off"
+                        data-fila={i}
+                        data-col={j}
+                        value={texto}
+                        disabled={soloLectura}
+                        aria-invalid={!valida || undefined}
+                        title={valida ? undefined : 'Escriba un número entero, de 0 en adelante.'}
+                        onChange={(e) => alCambiar(clave, e.target.value)}
+                        onFocus={(e) => {
+                          seleccionarAlEntrar(e)
+                          setFoco({ fila: i, col: j })
+                        }}
+                        onBlur={() => setFoco(null)}
+                        onKeyDown={moverEntreCasillas}
+                        className={cn(
+                          'mx-auto h-9 w-full max-w-24 min-w-14 bg-card text-center font-mono transition-colors',
+                          valida && texto.trim() !== '' && 'border-ring/50 bg-accent font-semibold text-accent-foreground',
+                        )}
+                      />
                     </TableCell>
                   )
-                }
-                const clave = `${fila.dosis}|${celda.claveCombinacion}`
-                const texto = cantidades[clave] ?? ''
+                })}
+                <TableCell
+                  className="border-l bg-muted/40 text-right font-mono font-semibold"
+                  aria-label={`Total de ${fila.etiqueta}`}
+                >
+                  {formatoCantidad.format(totalFila(fila))}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+          <TableFooter>
+            <TableRow className="hover:bg-transparent">
+              <TableCell className="sticky left-0 z-[1] bg-muted font-semibold">Total</TableCell>
+              {columnas.map((_, j) => {
+                const columna = etiquetaDeColumna(encabezados, j)
                 return (
-                  <TableCell key={j} className="text-center">
-                    <Input
-                      aria-label={nombre}
-                      inputMode="numeric"
-                      value={texto}
-                      disabled={soloLectura}
-                      aria-invalid={!leerCantidad(texto).valida || undefined}
-                      onChange={(e) => alCambiar(clave, e.target.value)}
-                      className="w-20 text-right font-mono"
-                    />
+                  <TableCell
+                    key={j}
+                    className={cn('text-center font-mono font-semibold', separa(j))}
+                    aria-label={columna ? `Total de ${columna}` : 'Total de la columna'}
+                  >
+                    {formatoCantidad.format(totalColumna(j))}
                   </TableCell>
                 )
               })}
-              <TableCell className="text-right font-mono" aria-label={`Total de ${fila.etiqueta}`}>
-                {formatoCantidad.format(totalFila(fila))}
+              <TableCell className="border-l bg-accent text-right font-mono font-bold text-accent-foreground" aria-label="Total general">
+                {formatoCantidad.format(total)}
               </TableCell>
             </TableRow>
-          ))}
-        </TableBody>
-        <TableFooter>
-          <TableRow>
-            <TableCell className="font-medium">Total</TableCell>
-            {columnas.map((_, j) => {
-              const columna = etiquetaDeColumna(encabezados, j)
-              return (
-                <TableCell
-                  key={j}
-                  className="text-center font-mono"
-                  aria-label={columna ? `Total de ${columna}` : 'Total de la columna'}
-                >
-                  {formatoCantidad.format(totalColumna(j))}
-                </TableCell>
-              )
-            })}
-            <TableCell className="text-right font-mono" aria-label="Total general">
-              {formatoCantidad.format(total)}
-            </TableCell>
-          </TableRow>
-        </TableFooter>
-      </Table>
+          </TableFooter>
+        </Table>
+      </div>
     </div>
   )
 }

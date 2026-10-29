@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { createMemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
+import { toast } from 'sonner'
 import { obtenerVacuna } from '@/api/catalogos.js'
 import { crearEsquema, listarDimensiones, listarEsquemas, obtenerEsquema } from '@/api/configuracion.js'
 import { ErrorApi } from '@/api/cliente.js'
@@ -74,15 +75,16 @@ function Pestana() {
   )
 }
 
+// El aviso de cambios sin guardar (useBlocker) necesita un data router.
 function montar(ruta) {
-  render(
-    <MemoryRouter initialEntries={[{ pathname: '/configuracion/esquemas/nuevo', search: ruta, state: { volverA: '?pestana=esquemas' } }]}>
-      <Routes>
-        <Route path="/configuracion/esquemas/nuevo" element={<PaginaRegistrarEsquema />} />
-        <Route path="/configuracion" element={<Pestana />} />
-      </Routes>
-    </MemoryRouter>,
+  const router = createMemoryRouter(
+    [
+      { path: '/configuracion/esquemas/nuevo', element: <PaginaRegistrarEsquema /> },
+      { path: '/configuracion', element: <Pestana /> },
+    ],
+    { initialEntries: [{ pathname: '/configuracion/esquemas/nuevo', search: ruta, state: { volverA: '?pestana=esquemas' } }] },
   )
+  render(<RouterProvider router={router} />)
 }
 
 async function abrir(ruta) {
@@ -101,7 +103,7 @@ beforeEach(() => {
   crearEsquema.mockResolvedValue({ ...VIGENTE, id: 'b-1', version: 3, estado: 'BORRADOR' })
 })
 
-test('con origen=copia precarga el vigente sin lo inactivo, lo avisa y guarda con copiaDe', async () => {
+test('con origen=copia precarga el vigente sin lo inactivo, lo avisa y guarda con copiaDe sin pedir confirmación', async () => {
   await abrir('?vacuna=2&origen=copia')
 
   expect(obtenerVacuna).toHaveBeenCalledWith(2)
@@ -132,9 +134,47 @@ test('con origen=copia precarga el vigente sin lo inactivo, lo avisa y guarda co
     desagregacion: [{ dimension: 'grupo_edad', valores: ['MENOR_1'] }],
     secciones: [{ titulo: '< 1 año', grupoEdad: 'MENOR_1', dosis: ['D1', 'R1'] }],
   })
-  await waitFor(() =>
-    expect(screen.getByTestId('pestana').textContent).toBe('?pestana=esquemas|Borrador de Vacuna de prueba guardado (versión 3).'),
-  )
+  // Vuelve sin state.aviso: el aviso va en un toast.
+  await waitFor(() => expect(screen.getByTestId('pestana').textContent).toBe('?pestana=esquemas|'))
+  expect(toast.success).toHaveBeenCalledWith('Borrador de Vacuna de prueba guardado (versión 3).')
+})
+
+test('con un cambio guardado, vuelve sin pedir confirmación', async () => {
+  await abrir('?vacuna=2&origen=copia')
+
+  fireEvent.change(screen.getByRole('textbox', { name: 'Título de la sección 1' }), { target: { value: 'Menores de 1 año' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Guardar borrador' }))
+
+  await waitFor(() => expect(screen.getByTestId('pestana').textContent).toBe('?pestana=esquemas|'))
+  expect(screen.queryByRole('alertdialog')).toBeNull()
+})
+
+test('con cambios, "Cancelar" pide confirmación; "Seguir editando" se queda y "Salir sin guardar" vuelve', async () => {
+  await abrir('?vacuna=2&origen=copia')
+  fireEvent.change(screen.getByRole('textbox', { name: 'Título de la sección 1' }), { target: { value: 'Menores de 1 año' } })
+
+  fireEvent.click(screen.getByRole('link', { name: 'Cancelar' }))
+  const dialogo = await screen.findByRole('alertdialog')
+  expect(dialogo.textContent).toContain('Si sale ahora, se pierde el borrador sin guardar.')
+  fireEvent.click(within(dialogo).getByRole('button', { name: 'Seguir editando' }))
+  await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+  expect(screen.getByRole('textbox', { name: 'Título de la sección 1' }).value).toBe('Menores de 1 año')
+
+  fireEvent.click(screen.getByRole('link', { name: 'Volver' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Salir sin guardar' }))
+  await waitFor(() => expect(screen.getByTestId('pestana').textContent).toBe('?pestana=esquemas|'))
+  expect(crearEsquema).not.toHaveBeenCalled()
+})
+
+test('si falla la carga por otra razón lo dice, y "Reintentar" la repite', async () => {
+  listarEsquemas.mockRejectedValueOnce(new ErrorApi(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.'))
+  await abrir('?vacuna=2&origen=vacio')
+
+  expect(screen.getByText('No se pudo preparar el borrador: No se pudo conectar con el servidor.')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+  expect(await screen.findByRole('button', { name: 'Guardar borrador' })).toBeTruthy()
+  expect(listarEsquemas).toHaveBeenCalledTimes(2)
 })
 
 test('una copia conserva la etiqueta de la desagregación', async () => {
@@ -160,7 +200,9 @@ test('con origen=vacio empieza con las dosis activas marcadas y una sección vac
   expect(['Primera dosis (D1)', 'Segunda dosis (D2)', 'Primer refuerzo (R1)'].map(marcada)).toEqual(['true', 'true', 'true'])
   expect(screen.queryByRole('checkbox', { name: 'Tercera dosis (D3)' })).toBeNull()
   expect(screen.getAllByRole('textbox', { name: /Título de la sección/ })).toHaveLength(1)
-  expect(screen.getByRole('button', { name: 'Guardar borrador' }).disabled).toBe(true)
+  // Con la sección vacía hay problemas: no se guarda.
+  fireEvent.click(screen.getByRole('button', { name: 'Guardar borrador' }))
+  expect(crearEsquema).not.toHaveBeenCalled()
 
   fireEvent.change(screen.getByRole('textbox', { name: 'Título de la sección 1' }), { target: { value: 'General' } })
   for (const codigo of ['D1', 'D2', 'R1']) fireEvent.click(screen.getByRole('checkbox', { name: `${codigo} en la sección 1` }))

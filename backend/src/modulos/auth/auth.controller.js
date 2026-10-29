@@ -31,3 +31,7 @@ export async function cambiarContrasena(req, res) {
   await authService.cambiarContrasena(req.usuario, req.body ?? {}, contextoAuditoria(req));
   res.status(204).end();
 }
+
+export async function perfil(req, res) {
+  res.json(await authService.obtenerPerfil(req.usuario));
+}

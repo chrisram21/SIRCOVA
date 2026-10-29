@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { CircleAlert } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { editarEsquema, listarEsquemas, obtenerEsquema } from '@/api/configuracion.js'
-import { ErrorApi } from '@/api/cliente.js'
+import { ErrorApi, mensajeDeError } from '@/api/cliente.js'
+import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
+import { AvisoError } from '@/componentes/Avisos.jsx'
+import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import DialogoPublicarEsquema, { avisoDePublicacion } from './DialogoPublicarEsquema.jsx'
 import EditorEsquema, { cargarReferencias, contenidoDe, PESTANA_ESQUEMAS } from './EditorEsquema.jsx'
@@ -29,6 +30,16 @@ export default function PaginaEditarEsquema() {
   const [porPublicar, setPorPublicar] = useState(null)
   // { contenido, problemas } del editor mientras la vista previa está abierta.
   const [vistaPrevia, setVistaPrevia] = useState(null)
+  // Cada «Reintentar» sube este número y vuelve a cargar.
+  const [intentoCarga, setIntentoCarga] = useState(0)
+  // Lo informa el editor; tras guardar o publicar se sale en un efecto, cuando el aviso ya no bloquea.
+  const [hayCambios, setHayCambios] = useState(false)
+  const [terminado, setTerminado] = useState(false)
+  const bloqueo = useAvisoCambiosSinGuardar(hayCambios && !terminado)
+
+  useEffect(() => {
+    if (terminado) navigate(volverA)
+  }, [terminado, navigate, volverA])
 
   useEffect(() => {
     let vigente = true
@@ -44,16 +55,22 @@ export default function PaginaEditarEsquema() {
         if (!vigente) return
         if (err.message === NO_EDITABLE) setError(NO_EDITABLE)
         else if (err instanceof ErrorApi && err.status === 404) setError(NO_EXISTE)
-        else setError(err.mensaje ?? 'Ocurrió un error inesperado. Intente de nuevo.')
+        else setError(mensajeDeError(err))
       })
     return () => {
       vigente = false
     }
-  }, [id])
+  }, [id, intentoCarga])
+
+  function reintentarCarga() {
+    setError(null)
+    setIntentoCarga((n) => n + 1)
+  }
 
   async function guardar(contenido) {
     const guardado = await editarEsquema(id, contenido)
-    navigate(volverA, { state: { aviso: `Borrador de ${datos.vacuna.nombre} guardado (versión ${guardado.version}).` } })
+    toast.success(`Borrador de ${datos.vacuna.nombre} guardado (versión ${guardado.version}).`)
+    setTerminado(true)
   }
 
   // Con cambios, primero los guarda: si falla, el editor muestra el error y el diálogo no se abre.
@@ -63,7 +80,10 @@ export default function PaginaEditarEsquema() {
     setPorPublicar(fila)
   }
 
-  const alPublicar = (publicado) => navigate(volverA, { state: { aviso: avisoDePublicacion(publicado) } })
+  function alPublicar(publicado) {
+    toast.success(avisoDePublicacion(publicado))
+    setTerminado(true)
+  }
 
   const esquema = datos?.esquema
   const notaCopia = esquema?.basadoEn
@@ -73,31 +93,20 @@ export default function PaginaEditarEsquema() {
 
   return (
     <section className="flex max-w-5xl flex-col gap-6 p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Editar borrador de esquema</h1>
-        <Button type="button" variant="outline" onClick={() => navigate(volverA)}>
-          Volver
-        </Button>
-      </div>
+      <EncabezadoPagina antetitulo="Configuración" titulo="Editar borrador de esquema" volverA={volverA} />
 
       {(error === NO_EXISTE || error === NO_EDITABLE) && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>
-            <span>
-              {error === NO_EXISTE ? 'El esquema no existe.' : 'Este esquema no se puede editar.'}{' '}
-              <Link to={volverA} className="underline">
-                Volver a los esquemas
-              </Link>
-            </span>
-          </AlertDescription>
-        </Alert>
+        <AvisoError>
+          <span>
+            {error === NO_EXISTE ? 'El esquema no existe.' : 'Este esquema no se puede editar.'}{' '}
+            <Link to={volverA} className="underline">
+              Volver a los esquemas
+            </Link>
+          </span>
+        </AvisoError>
       )}
       {error && error !== NO_EXISTE && error !== NO_EDITABLE && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>No se pudo cargar el esquema: {error}</AlertDescription>
-        </Alert>
+        <AvisoError onReintentar={reintentarCarga}>No se pudo cargar el esquema: {error}</AvisoError>
       )}
 
       {!datos && !error && (
@@ -121,6 +130,7 @@ export default function PaginaEditarEsquema() {
           onGuardar={guardar}
           onPublicar={puedePublicar ? prepararPublicacion : undefined}
           onVistaPrevia={(contenido, problemas) => setVistaPrevia({ contenido, problemas })}
+          onCambios={setHayCambios}
           volverA={volverA}
         />
       )}
@@ -146,6 +156,8 @@ export default function PaginaEditarEsquema() {
           alCerrar={() => setPorPublicar(null)}
         />
       )}
+
+      <AvisoCambiosSinGuardar bloqueo={bloqueo} descripcion="Si sale ahora, se pierden los cambios del borrador." />
     </section>
   )
 }

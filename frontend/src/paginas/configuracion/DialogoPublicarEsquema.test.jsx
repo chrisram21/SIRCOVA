@@ -122,35 +122,48 @@ test('sin meses disponibles, lo avisa y no deja publicar', async () => {
   expect(
     await within(dialogo()).findByText('No hay meses disponibles en el calendario; agréguelos en la pestaña «Periodos».'),
   ).toBeTruthy()
-  expect(botonPublicar().disabled).toBe(true)
+  fireEvent.change(motivo(), { target: { value: 'Cambio' } })
+  fireEvent.click(botonPublicar())
+  expect(publicarEsquema).not.toHaveBeenCalled()
 })
 
-test('si falla la carga del calendario, lo avisa', async () => {
-  listarPeriodos.mockRejectedValue(new ErrorApi(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.'))
+test('si falla la carga del calendario, lo avisa, y "Reintentar" vuelve a pedir los meses', async () => {
+  listarPeriodos.mockRejectedValueOnce(new ErrorApi(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.'))
   montar(VIGENTE_NACIONAL)
 
   expect(
     await within(dialogo()).findByText('No se pudieron cargar los meses: No se pudo conectar con el servidor.'),
   ).toBeTruthy()
+  fireEvent.click(within(dialogo()).getByRole('button', { name: 'Reintentar' }))
+
+  await waitFor(() => expect(select().disabled).toBe(false))
+  expect(opciones()[0]).toBe('2026-10-01')
+  expect(within(dialogo()).queryByText(/No se pudieron cargar los meses/)).toBeNull()
 })
 
-test('"Publicar" se habilita solo con un mes y un motivo válido', async () => {
+test('"Publicar" pide un mes y un motivo válido: muestra los errores y lleva el foco al primero', async () => {
   await montarConMeses(VIGENTE_NACIONAL)
-  expect(botonPublicar().disabled).toBe(true)
+  expect(botonPublicar().disabled).toBe(false)
+
+  fireEvent.click(botonPublicar())
+  expect(within(dialogo()).getByText('Elija el mes desde el que rige la versión.')).toBeTruthy()
+  expect(within(dialogo()).getByText('El motivo del cambio debe tener entre 1 y 300 caracteres.')).toBeTruthy()
+  await waitFor(() => expect(document.activeElement).toBe(within(dialogo()).getByRole('combobox', { name: 'Vigente desde' })))
 
   fireEvent.change(select(), { target: { value: '2026-11-01' } })
   await waitFor(() => expect(select().value).toBe('2026-11-01'))
-  expect(botonPublicar().disabled).toBe(true)
-
   fireEvent.change(motivo(), { target: { value: '   ' } })
-  expect(botonPublicar().disabled).toBe(true)
+  fireEvent.click(botonPublicar())
+  await waitFor(() => expect(document.activeElement).toBe(motivo()))
+  expect(within(dialogo()).queryByText('Elija el mes desde el que rige la versión.')).toBeNull()
 
+  // Uno demasiado largo se avisa al escribir.
   fireEvent.change(motivo(), { target: { value: 'a'.repeat(301) } })
   expect(within(dialogo()).getByText('El motivo del cambio debe tener entre 1 y 300 caracteres.')).toBeTruthy()
-  expect(botonPublicar().disabled).toBe(true)
+  expect(publicarEsquema).not.toHaveBeenCalled()
 
   fireEvent.change(motivo(), { target: { value: '  Cambio del esquema nacional  ' } })
-  expect(botonPublicar().disabled).toBe(false)
+  expect(within(dialogo()).queryByText('El motivo del cambio debe tener entre 1 y 300 caracteres.')).toBeNull()
 })
 
 test('publica con el mes y el motivo recortado y entrega el esquema publicado', async () => {

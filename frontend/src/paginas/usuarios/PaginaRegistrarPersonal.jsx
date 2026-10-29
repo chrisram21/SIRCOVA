@@ -1,19 +1,25 @@
 import { useEffect, useState } from 'react'
-import { CircleAlert, CircleCheck } from 'lucide-react'
-import { Link } from 'react-router-dom'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Link, useLocation } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { listarDdriss, listarEstablecimientos, listarMunicipios } from '@/api/catalogos.js'
-import { ErrorApi } from '@/api/cliente.js'
+import { mensajeDeError } from '@/api/cliente.js'
 import { crearCuenta, listarRoles, registrarEmpleado } from '@/api/usuarios.js'
+import { AvisoError, AvisoExito } from '@/componentes/Avisos.jsx'
+import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { validarNombreUsuario } from '@/validaciones/campos.js'
-import CamposEmpleado, { CampoSeleccion, CampoTexto, erroresDeEmpleado, NINGUNO } from './CamposEmpleado.jsx'
+import CamposEmpleado, {
+  AvisoSalida,
+  CampoSeleccion,
+  CampoTexto,
+  camposConError,
+  enfocarPrimero,
+  erroresDeEmpleado,
+  NINGUNO,
+} from './CamposEmpleado.jsx'
 import DialogoContrasenaTemporal from './DialogoContrasenaTemporal.jsx'
-
-const MENSAJE_INESPERADO = 'Ocurrió un error inesperado. Intente de nuevo.'
 
 const EMPLEADO_VACIO = {
   nombres: '',
@@ -26,8 +32,6 @@ const EMPLEADO_VACIO = {
   municipioId: NINGUNO,
 }
 const CUENTA_VACIA = { crear: false, nombreUsuario: '', rolId: '' }
-
-const mensajeDe = (error) => (error instanceof ErrorApi ? error.mensaje : MENSAJE_INESPERADO)
 
 function armarEmpleado(datos) {
   const cuerpo = { nombres: datos.nombres.trim(), apellidos: datos.apellidos.trim() }
@@ -42,8 +46,13 @@ function armarEmpleado(datos) {
 }
 
 export default function PaginaRegistrarPersonal() {
+  const { state } = useLocation()
+  // La lista manda sus filtros y su página para volver a ellos.
+  const volverA = state?.volverA?.pathname ? state.volverA : '/usuarios'
+
   const [catalogos, setCatalogos] = useState(null)
   const [errorCarga, setErrorCarga] = useState(null)
+  const [intentoCarga, setIntentoCarga] = useState(0)
   const [empleado, setEmpleado] = useState(EMPLEADO_VACIO)
   const [cuenta, setCuenta] = useState(CUENTA_VACIA)
   // Empleado ya guardado cuando falló su cuenta: el formulario pasa a "solo cuenta".
@@ -54,6 +63,8 @@ export default function PaginaRegistrarPersonal() {
   const [error, setError] = useState(null)
   const [enviando, setEnviando] = useState(false)
   const [usuarioTocado, setUsuarioTocado] = useState(false)
+  // Después de intentar enviar, se ven los errores de todos los campos.
+  const [intentado, setIntentado] = useState(false)
 
   useEffect(() => {
     let vigente = true
@@ -62,12 +73,17 @@ export default function PaginaRegistrarPersonal() {
         if (vigente) setCatalogos({ ddriss, roles, municipios, establecimientos })
       })
       .catch((err) => {
-        if (vigente) setErrorCarga(mensajeDe(err))
+        if (vigente) setErrorCarga(mensajeDeError(err))
       })
     return () => {
       vigente = false
     }
-  }, [])
+  }, [intentoCarga])
+
+  function reintentarCarga() {
+    setErrorCarga(null)
+    setIntentoCarga((intento) => intento + 1)
+  }
 
   const cambiarEmpleado = (campo) => (valor) => setEmpleado((actual) => ({ ...actual, [campo]: valor }))
   const cambiarCuenta = (campo) => (valor) => setCuenta((actual) => ({ ...actual, [campo]: valor }))
@@ -77,17 +93,38 @@ export default function PaginaRegistrarPersonal() {
   const tieneEstablecimiento = empleadoGuardado ? empleadoGuardado.establecimientoId != null : Boolean(establecimiento)
   const quiereCuenta = empleadoGuardado !== null || cuenta.crear
 
+  const erroresEmpleado = empleadoGuardado ? {} : erroresDeEmpleado(empleado)
+  const errorUsuario = quiereCuenta ? validarNombreUsuario(cuenta.nombreUsuario).error : undefined
   const rolSinEstablecimiento = rol?.codigo === 'ESTABLECIMIENTO' && !tieneEstablecimiento
-  const erroresEmpleado = erroresDeEmpleado(empleado)
-  const empleadoCompleto = Object.keys(erroresEmpleado).length === 0
-  const errorUsuario = validarNombreUsuario(cuenta.nombreUsuario).error
-  const cuentaCompleta = !errorUsuario && rol !== undefined && !rolSinEstablecimiento
-  const puedeEnviar =
-    catalogos !== null && !enviando && (empleadoGuardado || empleadoCompleto) && (!quiereCuenta || cuentaCompleta)
+  const rolInvalido = quiereCuenta && (rol === undefined || rolSinEstablecimiento)
+  // Sin rol, el aviso espera al envío; el del establecimiento sale al elegir el rol.
+  const errorRol = !rolInvalido
+    ? undefined
+    : rolSinEstablecimiento
+      ? `Para el rol ${rol.nombre}, el empleado debe tener un establecimiento.`
+      : intentado
+        ? 'Elija un rol.'
+        : undefined
+
+  const cuentaEscrita = cuenta.nombreUsuario !== '' || cuenta.rolId !== ''
+  const empleadoEscrito = Object.keys(EMPLEADO_VACIO).some((campo) => empleado[campo] !== EMPLEADO_VACIO[campo])
+  const hayCambios = !resultado && !porMostrar && (cuentaEscrita || (!empleadoGuardado && empleadoEscrito))
 
   async function enviar(evento) {
     evento.preventDefault()
-    if (!puedeEnviar) return
+    if (catalogos === null || enviando) return
+
+    const invalidos = [
+      ...camposConError(erroresEmpleado),
+      ...(errorUsuario ? ['nombre-usuario'] : []),
+      ...(rolInvalido ? ['rol'] : []),
+    ]
+    if (invalidos.length > 0) {
+      setIntentado(true)
+      enfocarPrimero(invalidos)
+      return
+    }
+
     setEnviando(true)
     setError(null)
 
@@ -96,7 +133,7 @@ export default function PaginaRegistrarPersonal() {
       try {
         guardado = await registrarEmpleado(armarEmpleado(empleado))
       } catch (err) {
-        setError(mensajeDe(err))
+        setError(mensajeDeError(err))
         setEnviando(false)
         return
       }
@@ -112,7 +149,7 @@ export default function PaginaRegistrarPersonal() {
         })
       } catch (err) {
         setEmpleadoGuardado(guardado)
-        setError(`Se registró a ${guardado.nombres} ${guardado.apellidos}, pero no se pudo crear la cuenta: ${mensajeDe(err)}`)
+        setError(`Se registró a ${guardado.nombres} ${guardado.apellidos}, pero no se pudo crear la cuenta: ${mensajeDeError(err)}`)
         setEnviando(false)
         return
       }
@@ -139,25 +176,23 @@ export default function PaginaRegistrarPersonal() {
     setResultado(null)
     setError(null)
     setUsuarioTocado(false)
+    setIntentado(false)
   }
 
   if (resultado) {
     return (
       <section className="flex max-w-3xl flex-col gap-6 p-6">
-        <h1 className="text-2xl font-semibold">Registrar personal</h1>
-        <Alert role="status" className="border-ring/40 bg-accent text-accent-foreground">
-          <CircleCheck />
-          <AlertDescription className="text-accent-foreground">
-            <p>
-              Se registró a {resultado.empleado.nombres} {resultado.empleado.apellidos}.
-            </p>
-            {resultado.cuenta && <p>Se creó la cuenta {resultado.cuenta.nombreUsuario}.</p>}
-          </AlertDescription>
-        </Alert>
+        <EncabezadoPagina titulo="Registrar personal" />
+        <AvisoExito>
+          <p>
+            Se registró a {resultado.empleado.nombres} {resultado.empleado.apellidos}.
+          </p>
+          {resultado.cuenta && <p>Se creó la cuenta {resultado.cuenta.nombreUsuario}.</p>}
+        </AvisoExito>
         <div className="flex flex-wrap gap-3">
           <Button onClick={registrarOtro}>Registrar otro</Button>
           <Button variant="outline" asChild>
-            <Link to="/usuarios">Volver a Usuarios</Link>
+            <Link to={volverA}>Volver a Usuarios</Link>
           </Button>
         </div>
       </section>
@@ -169,20 +204,15 @@ export default function PaginaRegistrarPersonal() {
 
   return (
     <section className="flex max-w-3xl flex-col gap-6 p-6">
-      <h1 className="text-2xl font-semibold">Registrar personal</h1>
+      <EncabezadoPagina
+        titulo="Registrar personal"
+        descripcion="Registre al empleado y, si lo necesita, su cuenta de acceso. Los campos con * son obligatorios."
+        volverA={volverA}
+        textoVolver="Volver a Usuarios"
+      />
 
       {errorCarga && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>No se pudieron cargar los datos del formulario: {errorCarga}</AlertDescription>
-        </Alert>
-      )}
-
-      {error && (
-        <Alert variant="destructive" className="border-destructive/20 bg-destructive/10">
-          <CircleAlert />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <AvisoError onReintentar={reintentarCarga}>No se pudieron cargar los datos del formulario: {errorCarga}</AvisoError>
       )}
 
       <form onSubmit={enviar} noValidate className="flex flex-col gap-6">
@@ -205,6 +235,7 @@ export default function PaginaRegistrarPersonal() {
                 empleado={empleado}
                 alCambiar={cambiarEmpleado}
                 errores={erroresEmpleado}
+                mostrarErrores={intentado}
                 correoObligatorio
                 cuiObligatorio
                 establecimientos={catalogos?.establecimientos ?? []}
@@ -237,7 +268,7 @@ export default function PaginaRegistrarPersonal() {
               <div className="grid gap-4 md:grid-cols-2">
                 <CampoTexto id="nombre-usuario" etiqueta="Nombre de usuario" obligatorio valor={cuenta.nombreUsuario}
                   alCambiar={(valor) => cambiarCuenta('nombreUsuario')(valor.toLowerCase())}
-                  onBlur={() => setUsuarioTocado(true)} error={usuarioTocado ? errorUsuario : undefined}
+                  onBlur={() => setUsuarioTocado(true)} error={usuarioTocado || intentado ? errorUsuario : undefined}
                   deshabilitado={deshabilitado} maxLength={50} autoComplete="off" />
                 <CampoSeleccion
                   id="rol"
@@ -248,31 +279,40 @@ export default function PaginaRegistrarPersonal() {
                   deshabilitado={deshabilitado}
                   marcador="Elija un rol"
                   opciones={(catalogos?.roles ?? []).map((r) => ({ valor: String(r.id), texto: r.nombre }))}
+                  error={errorRol}
                 />
 
                 <p className="text-sm text-muted-foreground md:col-span-2">
                   El usuario lleva de 4 a 50 caracteres: minúsculas, números, punto, guion o guion bajo. El sistema genera la contraseña temporal y se la
                   muestra una sola vez; la persona deberá cambiarla al entrar.
                 </p>
-                {rolSinEstablecimiento && (
-                  <p role="alert" className="text-sm text-destructive md:col-span-2">
-                    Para el rol {rol.nombre}, el empleado debe tener un establecimiento.
-                  </p>
-                )}
               </div>
             )}
           </CardContent>
         </Card>
 
+        {error && <AvisoError>{error}</AvisoError>}
+
         <div className="flex flex-wrap gap-3">
-          <Button type="submit" disabled={!puedeEnviar}>
+          <Button type="submit" disabled={deshabilitado}>
             {enviando ? 'Registrando…' : empleadoGuardado ? 'Crear cuenta' : 'Registrar'}
           </Button>
           <Button variant="outline" asChild>
-            <Link to="/usuarios">Cancelar</Link>
+            <Link to={volverA}>Cancelar</Link>
           </Button>
         </div>
       </form>
+
+      {catalogos && (
+        <AvisoSalida
+          hayCambios={hayCambios}
+          descripcion={
+            empleadoGuardado
+              ? `${empleadoGuardado.nombres} ${empleadoGuardado.apellidos} ya quedó registrado, pero si sale ahora no se crea su cuenta.`
+              : 'Si sale ahora, se pierden los datos que escribió.'
+          }
+        />
+      )}
 
       {porMostrar && (
         <DialogoContrasenaTemporal

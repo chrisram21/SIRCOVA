@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { toast } from 'sonner'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { desactivarVacuna, listarVacunas, reactivarVacuna } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
@@ -188,6 +189,25 @@ test('sin vacunas muestra "No hay vacunas registradas."', async () => {
   expect(screen.getByText('No hay vacunas registradas.')).toBeTruthy()
 })
 
+test('sin vacunas y con VACUNA_CREAR, el aviso trae el enlace de registro', async () => {
+  listarVacunas.mockResolvedValue([])
+
+  await abrir(undefined, PERMISOS_REVISOR)
+
+  const vacio = screen.getByText('No hay vacunas registradas.').parentElement
+  expect(within(vacio).getByRole('link', { name: 'Registrar vacuna' }).getAttribute('href')).toBe(
+    '/configuracion/vacunas/nueva',
+  )
+})
+
+test('sin VACUNA_CREAR, el aviso de vacío no trae el enlace', async () => {
+  listarVacunas.mockResolvedValue([])
+
+  await abrir()
+
+  expect(screen.queryByRole('link', { name: 'Registrar vacuna' })).toBeNull()
+})
+
 test('si falla la petición muestra el aviso, y "Reintentar" vuelve a pedir', async () => {
   listarVacunas.mockRejectedValueOnce(new ErrorApi(500, 'ERROR_INESPERADO', 'Ocurrió un error inesperado.'))
 
@@ -234,7 +254,7 @@ describe('acciones', () => {
     ).toBeTruthy()
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Desactivar' }))
 
-    expect(await screen.findByText('Vacuna HEXA desactivada.')).toBeTruthy()
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Vacuna HEXA desactivada.'))
     expect(desactivarVacuna).toHaveBeenCalledWith(4)
     expect(celdasDe('HEXA')[4].textContent).toBe('Inactiva')
     const menu = await abrirMenu('HEXA')
@@ -252,7 +272,7 @@ describe('acciones', () => {
     expect(within(dialogo).getByText('¿Reactivar la vacuna DPT · DPT (refuerzos)?')).toBeTruthy()
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Reactivar' }))
 
-    expect(await screen.findByText('Vacuna DPT reactivada.')).toBeTruthy()
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Vacuna DPT reactivada.'))
     expect(reactivarVacuna).toHaveBeenCalledWith(10)
     expect(celdasDe('DPT')[4].textContent).toBe('Activa')
   })

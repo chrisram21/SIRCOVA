@@ -9,6 +9,21 @@
     --font-sans: 'IBM Plex Sans', sans-serif;
     --font-mono: 'IBM Plex Mono', monospace;
     --color-enlace: var(--enlace);
+    --color-marca-profundo: var(--marca-profundo);
+    --color-estado-borrador: var(--estado-borrador);
+    --color-estado-borrador-foreground: var(--estado-borrador-foreground);
+    --color-estado-enviado: var(--estado-enviado);
+    --color-estado-enviado-foreground: var(--estado-enviado-foreground);
+    --color-estado-revision: var(--estado-revision);
+    --color-estado-revision-foreground: var(--estado-revision-foreground);
+    --color-estado-correccion: var(--estado-correccion);
+    --color-estado-correccion-foreground: var(--estado-correccion-foreground);
+    --color-estado-aprobado: var(--estado-aprobado);
+    --color-estado-aprobado-foreground: var(--estado-aprobado-foreground);
+    --color-estado-cerrado: var(--estado-cerrado);
+    --color-estado-cerrado-foreground: var(--estado-cerrado-foreground);
+    --shadow-tarjeta: var(--sombra-tarjeta);
+    --shadow-elevada: var(--sombra-elevada);
     --color-advertencia: var(--advertencia);
     --color-advertencia-foreground: var(--advertencia-foreground);
     --color-sidebar-ring: var(--sidebar-ring);
@@ -89,16 +104,217 @@
     --sidebar-accent-foreground: #1d4a72;
     --sidebar-border: #e0e7ef;
     --sidebar-ring: #5aa0d0;
+    /* Azul marino más oscuro, solo para los degradados de la marca (banner del Inicio, panel del login). */
+    --marca-profundo: #172a3d;
+    /* Estados del reporte: "Estilo general" de descripcion_pantallas.md, con texto oscuro donde el fondo es claro. */
+    --estado-borrador: #f0f4f8;
+    --estado-borrador-foreground: #3d5167;
+    --estado-enviado: #e3e6e4;
+    --estado-enviado-foreground: #2b3a48;
+    --estado-revision: #b5d4ee;
+    --estado-revision-foreground: #143d63;
+    --estado-correccion: #f6d4bb;
+    --estado-correccion-foreground: #6b3311;
+    --estado-aprobado: #7fb2dc;
+    --estado-aprobado-foreground: #0f2b46;
+    --estado-cerrado: #2f5f8a;
+    --estado-cerrado-foreground: #ffffff;
+    --sombra-tarjeta: 0 1px 2px rgb(31 50 71 / 0.04), 0 2px 6px -2px rgb(31 50 71 / 0.06);
+    --sombra-elevada: 0 18px 40px -18px rgb(31 50 71 / 0.35), 0 6px 12px -6px rgb(31 50 71 / 0.12);
+}
+
+@theme {
+    --ease-salida: cubic-bezier(0.22, 1, 0.36, 1);
+    --animate-aparecer: aparecer 0.55s var(--ease-salida) backwards;
+    --animate-aurora: aurora 20s ease-in-out infinite alternate;
+    --animate-flotar: flotar 6s ease-in-out infinite;
+    --animate-pulso-anillo: pulso-anillo 2s var(--ease-salida) infinite;
+    --animate-trazo: trazo 0.9s var(--ease-salida) backwards;
+    --animate-barra-carga: barra-carga 1.1s ease-in-out infinite;
+
+    @keyframes aparecer {
+        from {
+            opacity: 0;
+            transform: translateY(12px);
+        }
+    }
+    @keyframes aurora {
+        0% {
+            transform: translate3d(0, 0, 0) scale(1);
+        }
+        50% {
+            transform: translate3d(8%, -6%, 0) scale(1.15);
+        }
+        100% {
+            transform: translate3d(-6%, 8%, 0) scale(0.92);
+        }
+    }
+    @keyframes flotar {
+        50% {
+            transform: translateY(-8px);
+        }
+    }
+    @keyframes pulso-anillo {
+        from {
+            transform: scale(1);
+            opacity: 0.7;
+        }
+        to {
+            transform: scale(2.6);
+            opacity: 0;
+        }
+    }
+    @keyframes trazo {
+        from {
+            stroke-dashoffset: 1;
+        }
+    }
+    @keyframes barra-carga {
+        from {
+            transform: translateX(-100%);
+        }
+        to {
+            transform: translateX(300%);
+        }
+    }
+    @keyframes brillo {
+        from {
+            transform: translateX(-150%) skewX(-20deg);
+        }
+        to {
+            transform: translateX(350%) skewX(-20deg);
+        }
+    }
+    @keyframes degradado {
+        to {
+            background-position: 200% center;
+        }
+    }
+}
+
+/* Los hijos entran uno tras otro (rejillas de tarjetas); --retraso adelanta o atrasa toda la secuencia. */
+@utility escalonado {
+    & > * {
+        animation: aparecer 0.55s var(--ease-salida) backwards;
+        animation-delay: var(--retraso, 0ms);
+    }
+    & > :nth-child(2) { animation-delay: calc(var(--retraso, 0ms) + 60ms); }
+    & > :nth-child(3) { animation-delay: calc(var(--retraso, 0ms) + 120ms); }
+    & > :nth-child(4) { animation-delay: calc(var(--retraso, 0ms) + 180ms); }
+    & > :nth-child(5) { animation-delay: calc(var(--retraso, 0ms) + 240ms); }
+    & > :nth-child(6) { animation-delay: calc(var(--retraso, 0ms) + 300ms); }
+    & > :nth-child(n + 7) { animation-delay: calc(var(--retraso, 0ms) + 360ms); }
+}
+
+/* Luz que sigue al puntero; las coordenadas (--x, --y) las pone seguirPuntero (componentes/efectos.js). */
+@utility foco-luz {
+    position: relative;
+    isolation: isolate;
+    &::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        border-radius: inherit;
+        pointer-events: none;
+        background: radial-gradient(
+            380px circle at var(--x, 50%) var(--y, 0%),
+            color-mix(in oklab, var(--ring) 22%, transparent),
+            transparent 65%
+        );
+        opacity: 0;
+        transition: opacity 0.35s var(--ease-salida);
+    }
+    &:hover::before {
+        opacity: 1;
+    }
+}
+
+/* Cuadrícula de fondo que se desvanece hacia los bordes; toma el color de `color`. */
+@utility fondo-cuadricula {
+    background-image:
+        linear-gradient(to right, color-mix(in oklab, currentColor 10%, transparent) 1px, transparent 1px),
+        linear-gradient(to bottom, color-mix(in oklab, currentColor 10%, transparent) 1px, transparent 1px);
+    background-size: 36px 36px;
+    mask-image: radial-gradient(ellipse 75% 65% at 50% 40%, black 15%, transparent 80%);
+}
+
+/* Destello que cruza un botón al pasar el puntero. */
+@utility brillo-hover {
+    position: relative;
+    overflow: hidden;
+    &::after {
+        content: '';
+        position: absolute;
+        inset-block: 0;
+        left: 0;
+        width: 35%;
+        pointer-events: none;
+        background: linear-gradient(90deg, transparent, color-mix(in oklab, white 35%, transparent), transparent);
+        transform: translateX(-150%) skewX(-20deg);
+    }
+    &:hover::after {
+        animation: brillo 0.9s var(--ease-salida);
+    }
+}
+
+/* Casilla que no aplica en una tabla de captura: rayas tenues para que la vista la salte. */
+@utility fondo-no-aplica {
+    background-image: repeating-linear-gradient(
+        -45deg,
+        color-mix(in oklab, var(--muted-foreground) 12%, transparent) 0 1px,
+        transparent 1px 7px
+    );
+}
+
+@utility texto-degradado {
+    background-image: linear-gradient(
+        100deg,
+        var(--ring),
+        color-mix(in oklab, var(--ring) 45%, var(--primary-foreground)),
+        var(--ring)
+    );
+    background-size: 200% auto;
+    background-clip: text;
+    color: transparent;
+    animation: degradado 7s linear infinite;
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    scrollbar-width: thin;
+    scrollbar-color: var(--input) transparent;
     }
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
     }
   html {
     @apply font-sans;
+    }
+  ::selection {
+    background-color: color-mix(in oklab, var(--ring) 30%, transparent);
+    }
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+    }
+  /* Relieve sutil del botón principal y respuesta al presionar cualquier botón. */
+  [data-slot='button'][data-variant='default'] {
+    background-image: linear-gradient(to bottom, color-mix(in oklab, white 10%, transparent), transparent);
+    }
+  [data-slot='button']:not(:disabled):active {
+    scale: 0.98;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
     }
 }
