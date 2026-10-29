@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import app from '../src/app.js';
 import entorno from '../src/config/entorno.js';
 import pool from '../src/config/mysql.js';
+import { tokenDePrueba } from './sesionDePrueba.js';
 
 // Las pruebas usan el año 2021 (ANIO_PRUEBA): crean sus 12 meses en periodo (sin cierre_periodo) y borran esos
 // meses y la población de 2021 al inicio y al final. 2020 es de periodos.test.js.
@@ -117,17 +118,13 @@ async function tokenDeLaSemilla(rol) {
     'SELECT p.codigo FROM rol_permiso rp JOIN permiso p ON p.id = rp.permiso_id WHERE rp.rol_id = ?',
     [cuenta.rol_id],
   );
-  return jwt.sign(
-    {
-      rol,
-      permisos: permisos.map((p) => p.codigo),
-      ddrissId: cuenta.ddriss_id,
-      establecimientoId: cuenta.establecimiento_id,
-      municipioId: cuenta.municipio_id,
-    },
-    entorno.jwt.secreto,
-    { algorithm: 'HS256', subject: String(cuenta.id), expiresIn: '5m' },
-  );
+  return await tokenDePrueba(cuenta.id, {
+    rol,
+    permisos: permisos.map((p) => p.codigo),
+    ddrissId: cuenta.ddriss_id,
+    establecimientoId: cuenta.establecimiento_id,
+    municipioId: cuenta.municipio_id,
+  });
 }
 
 describe('GET /poblaciones-objetivo', () => {

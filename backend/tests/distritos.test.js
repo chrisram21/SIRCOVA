@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
 import app from '../src/app.js';
 import entorno from '../src/config/entorno.js';
 import pool from '../src/config/mysql.js';
+import { tokenDePrueba } from './sesionDePrueba.js';
 
 // Los distritos que crean estas pruebas llevan este prefijo en el nombre y se borran al inicio y al final.
 // La bitácora no tiene llave foránea a distrito_salud, así que sus filas no impiden borrarlos.
@@ -26,10 +26,9 @@ const leerJson = (valor) => (typeof valor === 'string' ? JSON.parse(valor) : val
 
 // Mismo usuario de prueba con otros permisos o con otra DDRISS; autenticar no compara la DDRISS ni los permisos.
 const firmar = (datos) =>
-  jwt.sign(
+  tokenDePrueba(
+    administrador.id,
     { rol: 'ADMINISTRADOR', permisos: [], ddrissId: administrador.ddrissId, establecimientoId: null, municipioId: null, ...datos },
-    entorno.jwt.secreto,
-    { algorithm: 'HS256', subject: String(administrador.id), expiresIn: '5m' },
   );
 
 const filasBitacora = async (accion, distritoId) => {
@@ -321,7 +320,7 @@ describe('desactivar y reactivar', () => {
 describe('alcance y permisos', () => {
   it('un id inexistente o de otra DDRISS responde 404 NO_ENCONTRADO en las tres operaciones', async () => {
     const { body: distrito } = await crear(municipioSemilla.id, 'Ajeno');
-    const otraDdriss = firmar({ ddrissId: administrador.ddrissId + 100, permisos: ['DISTRITO_CONSULTAR', 'DISTRITO_EDITAR'] });
+    const otraDdriss = await firmar({ ddrissId: administrador.ddrissId + 100, permisos: ['DISTRITO_CONSULTAR', 'DISTRITO_EDITAR'] });
 
     const listado = await consultar('/distritos', otraDdriss);
     expect(listado.body.find((d) => d.id === distrito.id)).toBeUndefined();
@@ -341,8 +340,8 @@ describe('alcance y permisos', () => {
 
   it('sin el permiso de cada operación responde 403 SIN_PERMISO', async () => {
     const { body: distrito } = await crear(municipioSemilla.id, 'Permisos');
-    const soloConsulta = firmar({ permisos: ['DISTRITO_CONSULTAR'] });
-    const sinPermisos = firmar({ permisos: ['POBLACION_REGISTRAR'] });
+    const soloConsulta = await firmar({ permisos: ['DISTRITO_CONSULTAR'] });
+    const sinPermisos = await firmar({ permisos: ['POBLACION_REGISTRAR'] });
 
     const respuestas = [
       await consultar('/distritos', sinPermisos),

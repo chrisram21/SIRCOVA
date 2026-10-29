@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
 import app from '../src/app.js';
 import entorno from '../src/config/entorno.js';
 import pool from '../src/config/mysql.js';
@@ -8,6 +7,7 @@ import bcrypt from 'bcrypt';
 import { randomInt } from 'node:crypto';
 import { ALFABETO, LARGO } from '../src/modulos/auth/contrasenaTemporal.service.js';
 import { huellaCui } from '../src/modulos/usuarios/cui.service.js';
+import { tokenDePrueba, borrarSesionesDe } from './sesionDePrueba.js';
 
 // Todo lo que crean estas pruebas lleva este prefijo y se borra en afterAll. Nunca se inicia sesión con las cuentas
 // creadas: la bitácora tiene llave foránea a usuario y entonces ya no se podrían borrar.
@@ -19,10 +19,9 @@ let establecimientoActivo;
 let establecimientoInactivoId;
 
 const firmar = (datos) =>
-  jwt.sign(
+  tokenDePrueba(
+    administrador.id,
     { rol: 'ADMINISTRADOR', permisos: [], ddrissId: administrador.ddrissId, establecimientoId: null, municipioId: null, ...datos },
-    entorno.jwt.secreto,
-    { algorithm: 'HS256', subject: String(administrador.id), expiresIn: '5m' },
   );
 
 let consecutivo = 0;
@@ -70,6 +69,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await borrarSesionesDe(`${PREFIJO}%`);
   await pool.query('DELETE FROM usuario WHERE nombre_usuario LIKE ?', [`${PREFIJO}%`]);
   await pool.query('DELETE FROM empleado WHERE correo LIKE ?', [`${PREFIJO}%`]);
   await pool.query('DELETE FROM establecimiento WHERE codigo = ?', [`${PREFIJO}inact`]);
@@ -174,7 +174,7 @@ describe('POST /empleados', () => {
   });
 
   it('un establecimiento inexistente, inactivo o de otra DDRISS responde 422 ESTABLECIMIENTO_INVALIDO', async () => {
-    const otraDdriss = firmar({ ddrissId: administrador.ddrissId + 100, permisos: ['EMPLEADO_CREAR'] });
+    const otraDdriss = await firmar({ ddrissId: administrador.ddrissId + 100, permisos: ['EMPLEADO_CREAR'] });
     for (const [cuerpo, credencial] of [
       [minimo({ establecimientoId: 999999999 }), token],
       [minimo({ establecimientoId: establecimientoInactivoId }), token],
@@ -215,7 +215,7 @@ describe('POST /empleados', () => {
   });
 
   it('sin EMPLEADO_CREAR responde 403 SIN_PERMISO', async () => {
-    const res = await registrar(minimo(), firmar({ permisos: ['USUARIO_CREAR'] }));
+    const res = await registrar(minimo(), await firmar({ permisos: ['USUARIO_CREAR'] }));
 
     expect(res.status).toBe(403);
     expect(res.body.error.codigo).toBe('SIN_PERMISO');
@@ -308,7 +308,7 @@ describe('POST /usuarios', () => {
   it('un empleado inexistente, inactivo o de otra DDRISS responde 404 NO_ENCONTRADO', async () => {
     const inactivo = await nuevoEmpleado();
     await pool.query('UPDATE empleado SET activo = FALSE WHERE id = ?', [inactivo.id]);
-    const otraDdriss = firmar({ ddrissId: administrador.ddrissId + 100, permisos: ['USUARIO_CREAR'] });
+    const otraDdriss = await firmar({ ddrissId: administrador.ddrissId + 100, permisos: ['USUARIO_CREAR'] });
 
     for (const [cuerpo, credencial] of [
       [cuenta({ id: 999999999 }), token],
@@ -360,7 +360,7 @@ describe('POST /usuarios', () => {
   });
 
   it('sin USUARIO_CREAR responde 403 SIN_PERMISO', async () => {
-    const res = await crearCuenta(cuenta(await nuevoEmpleado()), firmar({ permisos: ['EMPLEADO_CREAR'] }));
+    const res = await crearCuenta(cuenta(await nuevoEmpleado()), await firmar({ permisos: ['EMPLEADO_CREAR'] }));
 
     expect(res.status).toBe(403);
     expect(res.body.error.codigo).toBe('SIN_PERMISO');
@@ -417,6 +417,7 @@ describe('HU-05: cuentas existentes', () => {
   });
 
   afterAll(async () => {
+    await borrarSesionesDe(`${PREFIJO_HU05}%`);
     await pool.query('DELETE FROM usuario WHERE nombre_usuario LIKE ?', [`${PREFIJO_HU05}%`]);
     await pool.query('DELETE FROM empleado WHERE correo LIKE ?', [`${PREFIJO_HU05}%`]);
   });
@@ -474,7 +475,7 @@ describe('HU-05: cuentas existentes', () => {
 
     it('GET /usuarios/{id} de otra DDRISS o inexistente responde 404 NO_ENCONTRADO', async () => {
       const { usuario } = await crearPersonal();
-      const otraDdriss = firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['USUARIO_CONSULTAR'] });
+      const otraDdriss = await firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['USUARIO_CONSULTAR'] });
 
       for (const [ruta, credencial] of [
         [`/usuarios/${usuario.id}`, otraDdriss],
@@ -492,7 +493,7 @@ describe('HU-05: cuentas existentes', () => {
     });
 
     it('sin USUARIO_CONSULTAR responde 403 SIN_PERMISO', async () => {
-      const sinPermiso = firmar({ permisos: ['USUARIO_CREAR'] });
+      const sinPermiso = await firmar({ permisos: ['USUARIO_CREAR'] });
 
       for (const ruta of ['/usuarios', `/usuarios/${administrador.id}`]) {
         const res = await pedir('get', ruta, sinPermiso);
@@ -569,7 +570,7 @@ describe('HU-05: cuentas existentes', () => {
         expect(res.body.error.codigo).toBe('ENTRADA_INVALIDA');
       }
 
-      const otraDdriss = firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['USUARIO_EDITAR'] });
+      const otraDdriss = await firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['USUARIO_EDITAR'] });
       const ajena = await cambiarRol(usuario.id, { rolId: roles.EPIDEMIOLOGIA }, otraDdriss);
       expect(ajena.status).toBe(404);
       expect(ajena.body.error.codigo).toBe('NO_ENCONTRADO');
@@ -578,7 +579,7 @@ describe('HU-05: cuentas existentes', () => {
     it('sin USUARIO_EDITAR responde 403 SIN_PERMISO', async () => {
       const { usuario } = await crearPersonal();
 
-      const res = await cambiarRol(usuario.id, { rolId: roles.EPIDEMIOLOGIA }, firmar({ permisos: ['USUARIO_CONSULTAR'] }));
+      const res = await cambiarRol(usuario.id, { rolId: roles.EPIDEMIOLOGIA }, await firmar({ permisos: ['USUARIO_CONSULTAR'] }));
 
       expect(res.status).toBe(403);
       expect(res.body.error.codigo).toBe('SIN_PERMISO');
@@ -622,11 +623,9 @@ describe('HU-05: cuentas existentes', () => {
       // POST /usuarios la deja con la contraseña temporal pendiente; sin esto, GET /roles respondería 403.
       await pool.query('UPDATE usuario SET debe_cambiar_contrasena = FALSE WHERE id = ?', [usuario.id]);
       // Token con los mismos datos que daría el login de esa cuenta; nunca se inicia sesión con ella mientras está activa.
-      const tokenDeLaCuenta = jwt.sign(
-        { rol: 'REVISOR', permisos: ['ROL_CONSULTAR'], ddrissId: administrador.ddrissId, establecimientoId: null, municipioId: null },
-        entorno.jwt.secreto,
-        { algorithm: 'HS256', subject: String(usuario.id), expiresIn: '5m' },
-      );
+      const tokenDeLaCuenta = await tokenDePrueba(usuario.id, {
+        rol: 'REVISOR', permisos: ['ROL_CONSULTAR'], ddrissId: administrador.ddrissId, establecimientoId: null, municipioId: null,
+      });
       expect((await pedir('get', '/roles', tokenDeLaCuenta)).status).toBe(200);
 
       expect((await desactivar(usuario.id)).status).toBe(200);
@@ -698,8 +697,8 @@ describe('HU-05: cuentas existentes', () => {
 
     it('otra DDRISS responde 404 y sin USUARIO_DESACTIVAR 403', async () => {
       const { usuario } = await crearPersonal();
-      const otraDdriss = firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['USUARIO_DESACTIVAR'] });
-      const sinPermiso = firmar({ permisos: ['USUARIO_EDITAR'] });
+      const otraDdriss = await firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['USUARIO_DESACTIVAR'] });
+      const sinPermiso = await firmar({ permisos: ['USUARIO_EDITAR'] });
 
       for (const accion of [desactivar, restaurar]) {
         const ajena = await accion(usuario.id, otraDdriss);
@@ -740,6 +739,7 @@ describe('HU-05: cuentas existentes', () => {
     });
 
     afterAll(async () => {
+      await borrarSesionesDe(`${PREFIJO_HU07}%`);
       await pool.query('DELETE FROM usuario WHERE nombre_usuario LIKE ?', [`${PREFIJO_HU07}%`]);
       await pool.query('DELETE FROM empleado WHERE correo LIKE ?', [`${PREFIJO_HU07}%`]);
     });
@@ -809,7 +809,7 @@ describe('HU-05: cuentas existentes', () => {
     });
 
     it('no muestra ni cuenta las cuentas de otra DDRISS', async () => {
-      const otraDdriss = firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['USUARIO_CONSULTAR'] });
+      const otraDdriss = await firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['USUARIO_CONSULTAR'] });
       const res = await listar({ busqueda: marca }, otraDdriss);
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ elementos: [], total: 0, pagina: 1, porPagina: 20 });
@@ -858,6 +858,7 @@ describe('HU-05: cuentas existentes', () => {
       pool.query(`UPDATE usuario SET intentos_fallidos = 5, bloqueado_hasta = NOW() ${intervalo} WHERE id = ?`, [id]);
 
     afterAll(async () => {
+      await borrarSesionesDe(`${PREFIJO_HU62}%`);
       await pool.query('DELETE FROM usuario WHERE nombre_usuario LIKE ?', [`${PREFIJO_HU62}%`]);
       await pool.query('DELETE FROM empleado WHERE correo LIKE ?', [`${PREFIJO_HU62}%`]);
     });
@@ -928,7 +929,7 @@ describe('HU-05: cuentas existentes', () => {
     it('otra DDRISS o un id inexistente responden 404 y sin USUARIO_DESBLOQUEAR 403', async () => {
       const { usuario } = await crearCuenta();
       await bloquearPorSql(usuario.id);
-      const otraDdriss = firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['USUARIO_DESBLOQUEAR'] });
+      const otraDdriss = await firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['USUARIO_DESBLOQUEAR'] });
 
       for (const [id, credencial] of [[usuario.id, otraDdriss], [999999999, token], ['abc', token]]) {
         const res = await desbloquear(id, credencial);
@@ -936,7 +937,7 @@ describe('HU-05: cuentas existentes', () => {
         expect(res.body.error.codigo).toBe('NO_ENCONTRADO');
       }
 
-      const prohibida = await desbloquear(usuario.id, firmar({ permisos: ['USUARIO_DESACTIVAR'] }));
+      const prohibida = await desbloquear(usuario.id, await firmar({ permisos: ['USUARIO_DESACTIVAR'] }));
       expect(prohibida.status).toBe(403);
       expect(prohibida.body.error.codigo).toBe('SIN_PERMISO');
       expect((await pedir('get', `/usuarios/${usuario.id}`)).body.bloqueada).toBe(true);
@@ -956,6 +957,7 @@ describe('HU-05: cuentas existentes', () => {
     };
 
     afterAll(async () => {
+      await borrarSesionesDe(`${PREFIJO_HU63}%`);
       await pool.query('DELETE FROM usuario WHERE nombre_usuario LIKE ?', [`${PREFIJO_HU63}%`]);
       await pool.query('DELETE FROM empleado WHERE correo LIKE ?', [`${PREFIJO_HU63}%`]);
     });
@@ -1031,7 +1033,7 @@ describe('HU-05: cuentas existentes', () => {
     it('otra DDRISS o un id inexistente responden 404 y sin USUARIO_RESTABLECER_CONTRASENA 403', async () => {
       const { usuario } = await crearCuenta();
       const hash = (await enBase(usuario.id)).hash_contrasena;
-      const otraDdriss = firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['USUARIO_RESTABLECER_CONTRASENA'] });
+      const otraDdriss = await firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['USUARIO_RESTABLECER_CONTRASENA'] });
 
       for (const [id, credencial] of [[usuario.id, otraDdriss], [999999999, token], ['abc', token]]) {
         const res = await restablecer(id, credencial);
@@ -1039,7 +1041,7 @@ describe('HU-05: cuentas existentes', () => {
         expect(res.body.error.codigo).toBe('NO_ENCONTRADO');
       }
 
-      const prohibida = await restablecer(usuario.id, firmar({ permisos: ['USUARIO_DESBLOQUEAR'] }));
+      const prohibida = await restablecer(usuario.id, await firmar({ permisos: ['USUARIO_DESBLOQUEAR'] }));
       expect(prohibida.status).toBe(403);
       expect(prohibida.body.error.codigo).toBe('SIN_PERMISO');
       expect((await enBase(usuario.id)).hash_contrasena).toBe(hash);
@@ -1161,7 +1163,7 @@ describe('HU-05: cuentas existentes', () => {
 
     it('un empleado con la cuenta desactivada responde 409 CUENTA_DESACTIVADA y uno de otra DDRISS 404', async () => {
       const { empleado, usuario } = await crearPersonal();
-      const otraDdriss = firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['EMPLEADO_EDITAR'] });
+      const otraDdriss = await firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['EMPLEADO_EDITAR'] });
 
       const ajena = await editar(empleado.id, { cargo: 'Otro' }, otraDdriss);
       expect(ajena.status).toBe(404);
@@ -1176,10 +1178,127 @@ describe('HU-05: cuentas existentes', () => {
     it('sin EMPLEADO_EDITAR responde 403 SIN_PERMISO', async () => {
       const { empleado } = await crearPersonal();
 
-      const res = await editar(empleado.id, { cargo: 'Otro' }, firmar({ permisos: ['USUARIO_EDITAR'] }));
+      const res = await editar(empleado.id, { cargo: 'Otro' }, await firmar({ permisos: ['USUARIO_EDITAR'] }));
 
       expect(res.status).toBe(403);
       expect(res.body.error.codigo).toBe('SIN_PERMISO');
+    });
+  });
+
+  // SPEC 27: las acciones del administrador que cambian la contraseña, el estado, el rol o el ámbito de una cuenta
+  // cierran su sesión abierta. La sesión sale de tokenDePrueba: nunca se inicia sesión con estas cuentas.
+  describe('cierre de la sesión por el administrador', () => {
+    const ROLES_URL = '/roles';
+    let otroMunicipioId;
+
+    // Una cuenta REVISOR sin la contraseña temporal pendiente, con su token y su sesión abierta.
+    async function cuentaConSesion() {
+      const { usuario, empleado } = await crearPersonal();
+      await pool.query('UPDATE usuario SET debe_cambiar_contrasena = FALSE WHERE id = ?', [usuario.id]);
+      const tokenDeLaCuenta = await tokenDePrueba(usuario.id, {
+        rol: 'REVISOR', permisos: ['ROL_CONSULTAR'], ddrissId: administrador.ddrissId, establecimientoId: null, municipioId: null,
+      });
+      expect((await pedir('get', ROLES_URL, tokenDeLaCuenta)).status).toBe(200);
+      return { usuario, empleado, tokenDeLaCuenta };
+    }
+
+    const sesionesDe = async (usuarioId) => {
+      const [filas] = await pool.query(
+        'SELECT cerrada_en IS NOT NULL AS cerrada, motivo_cierre FROM sesion WHERE usuario_id = ? ORDER BY id',
+        [usuarioId],
+      );
+      return filas.map((f) => [f.cerrada, f.motivo_cierre]);
+    };
+
+    const errorCon = async (tokenDeLaCuenta) => {
+      const res = await pedir('get', ROLES_URL, tokenDeLaCuenta);
+      return [res.status, res.body.error?.codigo];
+    };
+
+    beforeAll(async () => {
+      [[{ id: otroMunicipioId }]] = await pool.query(
+        `SELECT m.id FROM municipio m JOIN ddriss d ON d.departamento_id = m.departamento_id
+          WHERE d.id = ? AND m.activo = TRUE AND m.codigo_ine <> '9999' ORDER BY m.id LIMIT 1`,
+        [administrador.ddrissId],
+      );
+    });
+
+    it('restablecer la contraseña la cierra: 401 CONTRASENA_RESTABLECIDA', async () => {
+      const { usuario, tokenDeLaCuenta } = await cuentaConSesion();
+
+      expect((await pedir('post', `/usuarios/${usuario.id}/restablecer-contrasena`)).status).toBe(200);
+
+      expect(await errorCon(tokenDeLaCuenta)).toEqual([401, 'CONTRASENA_RESTABLECIDA']);
+      expect(await sesionesDe(usuario.id)).toEqual([[1, 'CONTRASENA_RESTABLECIDA']]);
+      const [fila] = await bitacoraDe('usuario', usuario.id, 'RESTABLECER_CONTRASENA');
+      expect(fila.valores_nuevos).toEqual({ debeCambiarContrasena: true, bloqueada: false, sesionCerrada: true });
+    });
+
+    it('desactivar la cierra: 401 CUENTA_DESACTIVADA; restaurar no abre ninguna', async () => {
+      const { usuario, tokenDeLaCuenta } = await cuentaConSesion();
+
+      expect((await pedir('post', `/usuarios/${usuario.id}/desactivar`)).status).toBe(200);
+      expect(await errorCon(tokenDeLaCuenta)).toEqual([401, 'CUENTA_DESACTIVADA']);
+      expect(await sesionesDe(usuario.id)).toEqual([[1, 'CUENTA_DESACTIVADA']]);
+      expect((await bitacoraDe('usuario', usuario.id, 'DESACTIVAR'))[0].valores_nuevos).toEqual({
+        activo: false,
+        sesionCerrada: true,
+      });
+
+      expect((await pedir('post', `/usuarios/${usuario.id}/restaurar`)).status).toBe(200);
+      expect(await sesionesDe(usuario.id)).toEqual([[1, 'CUENTA_DESACTIVADA']]);
+      expect(await errorCon(tokenDeLaCuenta)).toEqual([401, 'CUENTA_DESACTIVADA']);
+      expect((await bitacoraDe('usuario', usuario.id, 'REACTIVAR'))[0].valores_nuevos).toEqual({ activo: true });
+    });
+
+    it('cambiar el rol la cierra: 401 SESION_DESACTUALIZADA', async () => {
+      const { usuario, tokenDeLaCuenta } = await cuentaConSesion();
+
+      const res = await pedir('patch', `/usuarios/${usuario.id}`).send({ rolId: roles.EPIDEMIOLOGIA });
+
+      expect(res.status).toBe(200);
+      expect(await errorCon(tokenDeLaCuenta)).toEqual([401, 'SESION_DESACTUALIZADA']);
+      expect(await sesionesDe(usuario.id)).toEqual([[1, 'DATOS_CAMBIADOS']]);
+      expect((await bitacoraDe('usuario', usuario.id, 'ACTUALIZAR'))[0].valores_nuevos).toEqual({
+        rol: 'EPIDEMIOLOGIA',
+        sesionCerrada: true,
+      });
+    });
+
+    it.each([
+      ['el establecimiento', () => ({ establecimientoId: establecimientoActivo.id })],
+      ['el municipio', () => ({ municipioId: otroMunicipioId })],
+    ])('cambiar %s del empleado la cierra: 401 SESION_DESACTUALIZADA', async (_, cambio) => {
+      const { usuario, empleado, tokenDeLaCuenta } = await cuentaConSesion();
+
+      const res = await pedir('patch', `/empleados/${empleado.id}`).send(cambio());
+
+      expect(res.status).toBe(200);
+      expect(await errorCon(tokenDeLaCuenta)).toEqual([401, 'SESION_DESACTUALIZADA']);
+      expect(await sesionesDe(usuario.id)).toEqual([[1, 'DATOS_CAMBIADOS']]);
+      expect((await bitacoraDe('empleado', empleado.id, 'ACTUALIZAR'))[0].valores_nuevos.sesionCerrada).toBe(true);
+    });
+
+    it('cambiar otro dato del empleado no la cierra', async () => {
+      const { usuario, empleado, tokenDeLaCuenta } = await cuentaConSesion();
+
+      const res = await pedir('patch', `/empleados/${empleado.id}`).send({ telefono: '77001122' });
+
+      expect(res.status).toBe(200);
+      expect((await pedir('get', ROLES_URL, tokenDeLaCuenta)).status).toBe(200);
+      expect(await sesionesDe(usuario.id)).toEqual([[0, null]]);
+      expect((await bitacoraDe('empleado', empleado.id, 'ACTUALIZAR'))[0].valores_nuevos).toEqual({ telefono: '7700-1122' });
+    });
+
+    it('si la acción falla, la sesión sigue abierta', async () => {
+      const { usuario } = await cuentaConSesion();
+      // Desactivada por SQL, sin pasar por el endpoint: restablecer responde 409 y no debe tocar la sesión.
+      await desactivarPorSql(usuario.id);
+
+      const res = await pedir('post', `/usuarios/${usuario.id}/restablecer-contrasena`);
+
+      expect(res.status).toBe(409);
+      expect(await sesionesDe(usuario.id)).toEqual([[0, null]]);
     });
   });
 
@@ -1194,6 +1313,7 @@ describe('HU-05: cuentas existentes', () => {
     };
 
     afterAll(async () => {
+      await borrarSesionesDe(`${PREFIJO_CUI}%`);
       await pool.query('DELETE FROM usuario WHERE nombre_usuario LIKE ?', [`${PREFIJO_CUI}%`]);
       await pool.query('DELETE FROM empleado WHERE correo LIKE ?', [`${PREFIJO_CUI}%`]);
     });

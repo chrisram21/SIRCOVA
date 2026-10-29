@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
 import app from '../src/app.js';
 import entorno from '../src/config/entorno.js';
 import pool from '../src/config/mysql.js';
+import { tokenDePrueba } from './sesionDePrueba.js';
 
 // Las vacunas que crean estas pruebas tienen el código ZVT_… y el nombre vitest-hu10-…, y se borran (primero sus
 // dosis) al inicio y al final. La bitácora no tiene llave foránea a vacuna ni a dosis, así que sus filas no lo impiden.
@@ -88,17 +88,13 @@ beforeAll(async () => {
     'SELECT p.codigo FROM rol_permiso rp JOIN permiso p ON p.id = rp.permiso_id WHERE rp.rol_id = ?',
     [cuenta.rol_id],
   );
-  tokenEpidemiologia = jwt.sign(
-    {
-      rol: 'EPIDEMIOLOGIA',
-      permisos: permisos.map((p) => p.codigo),
-      ddrissId: cuenta.ddriss_id,
-      establecimientoId: cuenta.establecimiento_id,
-      municipioId: cuenta.municipio_id,
-    },
-    entorno.jwt.secreto,
-    { algorithm: 'HS256', subject: String(cuenta.id), expiresIn: '5m' },
-  );
+  tokenEpidemiologia = await tokenDePrueba(cuenta.id, {
+    rol: 'EPIDEMIOLOGIA',
+    permisos: permisos.map((p) => p.codigo),
+    ddrissId: cuenta.ddriss_id,
+    establecimientoId: cuenta.establecimiento_id,
+    municipioId: cuenta.municipio_id,
+  });
 });
 
 describe('GET /vacunas', () => {

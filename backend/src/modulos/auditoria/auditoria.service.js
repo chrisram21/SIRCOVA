@@ -12,7 +12,7 @@ export const ACCIONES = aEnumeracion(['LOGIN_OK', 'LOGIN_FALLIDO', 'CUENTA_BLOQU
 const CLAVES_SENSIBLES = new Set(
   [
     'contrasena', 'contrasenaActual', 'contrasenaNueva', 'contrasenaTemporal', 'hashContrasena', 'hash_contrasena', 'token',
-    'cui', 'cuiHmac', 'cui_hmac',
+    'cui', 'cuiHmac', 'cui_hmac', 'refreshToken', 'hashRefresh', 'hashRefreshAnterior',
   ]
     .map(normalizarClave),
 );

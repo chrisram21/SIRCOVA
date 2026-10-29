@@ -20,7 +20,7 @@ appPrueba.use(manejarErrores);
 
 const firmar = (rol, permisos) =>
   jwt.sign(
-    { rol, permisos, ddrissId: 1, establecimientoId: null, municipioId: null },
+    { sid: 1, rol, permisos, ddrissId: 1, establecimientoId: null, municipioId: null },
     entorno.jwt.secreto,
     { algorithm: 'HS256', subject: '7', expiresIn: '5m' },
   );

@@ -2,7 +2,7 @@
 
 > **Para qué sirve este documento.** Da contexto preciso sobre la base de datos del proyecto a otros agentes de IA y a los integrantes del equipo. Resume qué se trabajó, cómo está organizada la persistencia (MySQL + MongoDB) y qué es y para qué sirve cada tabla y cada colección.
 >
-> **Estado:** modelo preliminar **v0.9** (22 de octubre de 2026): v0.5 (preparado para varias DDRISS), los bloques A a D de la v0.6 (población por grupo de edad, dosis que cuentan para cobertura, secciones del formulario y avance contra la meta del mes) la v0.7 (Excel del 5C y semillas del Registro Único de Vacunación), la v0.8 (Hospital de San Marcos y vacuna Polio) y la v0.9 (CUI del empleado como huella HMAC). Script de MongoDB **v0.7** (23 de octubre de 2026): formularios de captura por DDRISS. El modelo se sigue refinando por sprint.
+> **Estado:** modelo preliminar **v0.10** (28 de octubre de 2026): v0.5 (preparado para varias DDRISS), los bloques A a D de la v0.6 (población por grupo de edad, dosis que cuentan para cobertura, secciones del formulario y avance contra la meta del mes) la v0.7 (Excel del 5C y semillas del Registro Único de Vacunación), la v0.8 (Hospital de San Marcos y vacuna Polio), la v0.9 (CUI del empleado como huella HMAC) y la v0.10 (sesiones en el servidor). Script de MongoDB **v0.7** (23 de octubre de 2026): formularios de captura por DDRISS. El modelo se sigue refinando por sprint.
 >
 > **Fuente de verdad:** si este resumen y los scripts difieren, mandan los scripts.
 > - `01_modelo_relacional_mysql.sql`: DDL de MySQL 8.0.
@@ -44,12 +44,13 @@
 | **v0.8** | 2026-10-18 | Hospitales e IPV/OPV. 31 formularios 5C (30 municipios y el Hospital de San Marcos), así que `reporta_5c` deja de ser uno por municipio; nueva marca `establecimiento.solo_cobertura` (su producción solo cuenta en el Excel 3; caso Hospital de San Marcos); `v_produccion` expone `solo_cobertura` y `v_consolidado_establecimiento` la excluye. IPV y OPV se fusionan en `POLIO` (id 6): 21 vacunas, 60 dosis. MongoDB (script v0.6): dimensión `presentacion` (IPV u OPV) en el esquema de Polio. |
 | **v0.9** | 2026-10-22 | CUI del empleado (SPEC 11, asesoría del 2026-10-21). `empleado.codigo_empleado` pasa a `empleado.cui_hmac` `CHAR(64)` con el índice único `uq_empleado_cui`: la huella HMAC-SHA256 del CUI del DPI, para no registrar dos veces a la misma persona. El código de empleado no servía para eso: hay personas con dos códigos y el personal contratado usa otros. Se guarda la huella y no el CUI, con una clave secreta (`CUI_HMAC_CLAVE`), porque el CUI tiene pocas combinaciones y un SHA-256 simple se podría revertir. La columna es NULL en la base y la API la exige al crear. Las bases que ya existían se migran con `07_cui_empleado_mysql.sql`, que vacía los códigos anteriores. |
 | **MongoDB v0.7** | 2026-10-23 | Solo cambia el script de MongoDB; el modelo MySQL sigue en v0.9. **Decisión del equipo:** cada DDRISS puede tener su propio formulario de captura. `esquemas_captura` agrega `territorio` (el mismo subesquema de reglas e indicadores) y `basado_en` (versión nacional de la que se copió un formulario de DDRISS). El índice `uq_vigente_por_vacuna` se reemplaza por `uq_esquema_vigente_territorio` (una VIGENTE por vacuna y territorio) e `ix_vigencia` incluye `territorio.ddriss_codigo`; `uq_vacuna_version` no cambia, así que `reporte_vacuna.esquema_version` sigue sin ser ambiguo. Las dimensiones de un esquema solo pueden venir de `catalogo_dimensiones`. Las semillas del 02 son NACIONAL; en el 04, el borrador Hexavalente v3 pasa a ser el ejemplo de formulario de `DDRISS_SM`. |
+| **v0.10** | 2026-10-28 | Sesiones en el servidor (SPEC 27, asesoría del 2026-10-28). Nueva tabla `sesion`: cada inicio de sesión crea una fila y el JWT lleva su id (`sid`), así que la sesión se puede cerrar antes de que venza el token. Una sola sesión abierta por usuario, garantizada por la columna generada `usuario_abierta` con el índice único `uq_sesion_una_abierta`: un inicio de sesión nuevo cierra el anterior. Guarda el SHA-256 del refresh token de la cookie, nunca el token. Las bases que ya existían la agregan con `08_sesion_mysql.sql`. |
 
 Entregables generados en el hilo, todos en `/mnt/project-files/diseno-bd/`:
 
 | Archivo | Contenido |
 |---|---|
-| `01_modelo_relacional_mysql.sql` | DDL de MySQL: 32 tablas, 4 vistas y datos semilla mínimos |
+| `01_modelo_relacional_mysql.sql` | DDL de MySQL: 33 tablas (desde la v0.10), 4 vistas y datos semilla mínimos |
 | `02_colecciones_mongodb.js` | 4 colecciones con validadores `$jsonSchema`, índices y documentos de ejemplo |
 | `03_documento_diseno_bd.md` | Documento de diseño con justificación, decisiones, supuestos y preguntas abiertas |
 | `04_modelo_relacional.dbml` | Modelo MySQL para dbdiagram.io, agrupado en los 4 grupos de la propuesta v2 |
@@ -88,11 +89,11 @@ Entregables generados en el hilo, todos en `/mnt/project-files/diseno-bd/`:
 
 ---
 
-## 4. MySQL: las 32 tablas
+## 4. MySQL: las 33 tablas
 
 Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se agrupan según los cuatro grupos de MySQL de la propuesta v2. "→" indica una llave foránea.
 
-### 4.1 Seguridad y organización (11 tablas)
+### 4.1 Seguridad y organización (12 tablas)
 
 **`rol`**: catálogo de roles del sistema. Sirve para asignar a cada cuenta lo que puede hacer.
 - Columnas: `id`, `codigo` (único), `nombre`, `descripcion`.
@@ -117,6 +118,12 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 - `rol_id` → rol: un rol por cuenta.
 - `creado_por` → usuario: el administrador que creó la cuenta.
 - Nombre, correo y establecimiento se obtienen de `empleado`. Los permisos sobre reportes se deducen de `usuario.rol_id`, `empleado.establecimiento_id` y `empleado.ddriss_id`.
+
+**`sesion`** (nueva en v0.10): **sesiones del personal**. Sirve para cerrar una sesión antes de que venza su token (cerrar sesión, otro inicio de sesión, acciones del administrador) y para que un usuario tenga una sola abierta.
+- Columnas: `id` (el `sid` del JWT), `usuario_id` → usuario (sin `ON DELETE CASCADE`: MySQL no lo acepta en la base de la columna generada; las pruebas borran las sesiones antes que la cuenta), `hash_refresh` (único; SHA-256 del refresh token de la cookie), `hash_refresh_anterior` y `rotado_en` (el anterior se acepta 30 s después de rotar, para varias pestañas), `creada_en`, `ultimo_uso`, `expira_en` (fin de la jornada: inicio + 8 h), `cerrada_en`, `motivo_cierre` (MANUAL, INACTIVIDAD, REEMPLAZADA, CONTRASENA_RESTABLECIDA, CUENTA_DESACTIVADA, DATOS_CAMBIADOS), `ip_origen`, `agente_usuario`.
+- `usuario_abierta`: columna generada (`usuario_id` mientras `cerrada_en` es NULL) con índice único; la base impide dos sesiones abiertas del mismo usuario.
+- `cerrada_en` y `motivo_cierre` van juntos (`ck_sesion_cierre`). La jornada terminada (`expira_en <= NOW()`) y la inactividad (`ultimo_uso` de hace 30 min o más) se calculan; no se escriben.
+- Nunca guarda el refresh token en claro. La renovación del token y `ultimo_uso` no van a la bitácora. Las filas no se borran.
 
 **`departamento`**: catálogo de departamentos.
 - Columnas: `id`, `codigo_ine` (único), `nombre`.
@@ -381,6 +388,7 @@ No hay llaves foráneas entre motores. Los vínculos son estos:
 - No borrar ni renombrar códigos de catálogos ni valores de dimensiones; desactivarlos.
 - Los cambios de estado de un reporte solo se hacen si existen en `transicion_estado` para el rol del usuario.
 - Las acciones auditables apuntan a `usuario`. Los datos de la persona se consultan en `empleado`.
+- Un usuario tiene a lo sumo una fila abierta en `sesion`; las fechas de la sesión se escriben y comparan con `NOW()` de MySQL. El refresh token nunca se guarda en claro.
 - Toda consulta y bandeja se filtra por la DDRISS del usuario (`empleado.ddriss_id`); solo `AUTORIDAD` sin DDRISS ve todas. No volver a guardar banderas fijas de San Marcos: la jurisdicción se deduce de `ddriss`.
 - El estado del mes (abierto, en cierre, cerrado) y la fecha límite se leen y cambian en `cierre_periodo` para la DDRISS correspondiente, nunca en `periodo`.
 - La cobertura usa reportes **CERRADO** y atribución por **procedencia**, salvo que la configuración del indicador diga otra cosa.

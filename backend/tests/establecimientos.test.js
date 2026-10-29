@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
 import app from '../src/app.js';
 import entorno from '../src/config/entorno.js';
 import pool from '../src/config/mysql.js';
+import { tokenDePrueba, borrarSesionesDe } from './sesionDePrueba.js';
 
 // Los establecimientos, distritos y municipios que crean estas pruebas llevan este prefijo en el nombre y se borran
 // al inicio y al final. La bitácora no tiene llave foránea a establecimiento, así que sus filas no lo impiden.
@@ -23,10 +23,9 @@ let municipioInactivo;
 
 // Mismo usuario de prueba con otros permisos o con otra DDRISS; autenticar no compara la DDRISS ni los permisos.
 const firmar = (datos) =>
-  jwt.sign(
+  tokenDePrueba(
+    administrador.id,
     { rol: 'ADMINISTRADOR', permisos: [], ddrissId: administrador.ddrissId, establecimientoId: null, municipioId: null, ...datos },
-    entorno.jwt.secreto,
-    { algorithm: 'HS256', subject: String(administrador.id), expiresIn: '5m' },
   );
 
 const enviar = (metodo, ruta, cuerpo, credencial = token) =>
@@ -56,6 +55,7 @@ const filasBitacora = async (accion, establecimientoId) => {
 };
 
 async function limpiar() {
+  await borrarSesionesDe(`${PREFIJO}%`);
   await pool.query('DELETE FROM usuario WHERE nombre_usuario LIKE ?', [`${PREFIJO}%`]);
   await pool.query('DELETE FROM empleado WHERE correo LIKE ?', [`${PREFIJO}%`]);
   await pool.query('DELETE FROM establecimiento WHERE nombre LIKE ?', [`${PREFIJO}%`]);
@@ -455,7 +455,7 @@ describe('alcance, permisos y rutas', () => {
   });
 
   it('un id inexistente o de otra DDRISS responde 404 en las tres escrituras', async () => {
-    const otraDdriss = firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['ESTABLECIMIENTO_EDITAR'] });
+    const otraDdriss = await firmar({ ddrissId: administrador.ddrissId + 1000, permisos: ['ESTABLECIMIENTO_EDITAR'] });
 
     for (const [ruta, credencial] of [
       ['/establecimientos/999999999', token],
@@ -474,7 +474,7 @@ describe('alcance, permisos y rutas', () => {
   });
 
   it('sin ESTABLECIMIENTO_CREAR o ESTABLECIMIENTO_EDITAR responde 403', async () => {
-    const soloConsulta = firmar({ permisos: ['ESTABLECIMIENTO_CONSULTAR'] });
+    const soloConsulta = await firmar({ permisos: ['ESTABLECIMIENTO_CONSULTAR'] });
 
     for (const [metodo, ruta, cuerpo] of [
       ['post', '/establecimientos', nuevo('Sin permiso')],
