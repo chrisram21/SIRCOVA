@@ -37,6 +37,11 @@ info:
     uno que no existe.
 
     **Bitácora.** Toda escritura, cada exportación y cada acceso denegado quedan en la bitácora, que no se puede modificar ni borrar.
+
+    **Cuerpo de la solicitud.** Ningún endpoint acepta cuerpos comprimidos: un `Content-Encoding` distinto de
+    `identity` responde 415 `CODIFICACION_NO_ADMITIDA` (respuesta `CodificacionNoAdmitida`). El cuerpo no puede
+    pasar de 1 MB: uno más grande responde 413 `CUERPO_DEMASIADO_GRANDE` (respuesta `CuerpoDemasiadoGrande`).
+    Los dos se responden antes de llegar al endpoint, sin revisar el token, y no van a la bitácora.
 servers:
   - url: http://localhost:3000/api/v1
     description: Desarrollo local
@@ -3241,6 +3246,20 @@ components:
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+    CodificacionNoAdmitida:
+      description: El cuerpo llegó comprimido (`Content-Encoding` distinto de `identity`)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: CODIFICACION_NO_ADMITIDA, mensaje: El servidor no acepta cuerpos comprimidos. }
+    CuerpoDemasiadoGrande:
+      description: El cuerpo pasa de 1 MB
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: CUERPO_DEMASIADO_GRANDE, mensaje: El cuerpo de la solicitud es demasiado grande. }
     NoAutenticado:
       description: |
         Falta el token, no es válido, no tiene `sid`, o su cuenta o su sesión no existen (NO_AUTENTICADO);

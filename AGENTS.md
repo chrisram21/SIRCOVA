@@ -27,7 +27,7 @@ Proyecto de fin de carrera (Universidad Mesoamericana, Quetzaltenango, 2026). **
 
 ## 3. Stack (no agregar nada fuera de esta lista sin autorización)
 
-- Node.js 22 LTS + Express, en **JavaScript**. API REST bajo `/api/v1`.
+- Node.js 24 LTS (24.22.1 o posterior) + Express, en **JavaScript**. API REST bajo `/api/v1`.
 - MySQL 8, base `vacunacion_ddriss`, con `mysql2` (consultas siempre parametrizadas).
 - MongoDB 7, base `vacunacion_config`, con el controlador oficial `mongodb`.
 - JWT para autenticación; contraseñas con bcrypt.
@@ -65,7 +65,7 @@ Cada módulo separa **rutas** (declaran el endpoint), **controlador** (recibe y 
 
 Los archivos de cada módulo usan sufijos técnicos en inglés (`.routes.js`, `.controller.js`, `.service.js`) y conservan el nombre del dominio en español, por ejemplo `sistema.controller.js`.
 
-Errores con el formato común: `{ "error": { "codigo": "...", "mensaje": "..." } }` y los códigos HTTP 400, 401, 403, 404, 409 y 422 según `INSTRUCCIONES_BACKEND.md`.
+Errores con el formato común: `{ "error": { "codigo": "...", "mensaje": "..." } }` y los códigos HTTP 400, 401, 403, 404, 409, 413, 415, 422 y 423 según `INSTRUCCIONES_BACKEND.md`.
 
 ```
 frontend/

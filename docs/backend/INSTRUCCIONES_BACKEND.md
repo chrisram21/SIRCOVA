@@ -15,7 +15,7 @@ El frontend queda fuera de esta versión.
 
 | Elemento | Decisión |
 |---|---|
-| Lenguaje y entorno | JavaScript con **Node.js 22 LTS** |
+| Lenguaje y entorno | JavaScript con **Node.js 24 LTS** (24.22.1 o posterior) |
 | Framework | **Express** (API REST) |
 | Base de datos relacional | **MySQL 8**, base `vacunacion_ddriss` (script `01_modelo_relacional_mysql.sql`) |
 | Base de datos documental | **MongoDB 7**, base `vacunacion_config` (script `02_colecciones_mongodb.js`) |
@@ -95,7 +95,10 @@ Si se agrega o cambia un endpoint, primero se actualiza `openapi.yaml` y despué
 | `403` | Sin permiso |
 | `404` | No existe o está fuera del alcance del usuario |
 | `409` | Duplicado o versión desactualizada |
+| `413` | Cuerpo de la solicitud de más de 1 MB |
+| `415` | Cuerpo comprimido (`Content-Encoding` distinto de `identity`) |
 | `422` | Se incumple una regla del negocio |
+| `423` | Cuenta bloqueada por intentos fallidos (inicio de sesión) |
 
 ---
 
