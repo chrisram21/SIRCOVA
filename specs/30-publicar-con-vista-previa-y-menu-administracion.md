@@ -1,6 +1,6 @@
 # SPEC 30 — Publicar con vista previa y menú «Administración»
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-17 y HU-18 (cambio 1) y HU-11 (cambio 2). Las tres ya están terminadas: este spec las modifica y lo anota en su «Avance».
 > **Depende de:** SPEC 06, SPEC 07, SPEC 13 a SPEC 21
 > **Fecha:** 2026-10-29
