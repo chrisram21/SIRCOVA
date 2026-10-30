@@ -2792,10 +2792,14 @@ paths:
         El establecimiento sale de la cuenta del usuario. El mes debe estar `ABIERTO` en `cierre_periodo` de la
         DDRISS del establecimiento. Crea, en una transacción de MySQL, el reporte, una fila de `reporte_vacuna`
         por cada vacuna activa con un esquema publicado que cubra el día 1 del mes (el de la DDRISS del
-        establecimiento, `VIGENTE` o `HISTORICO`, o si no hay, el nacional), una fila en
-        `historial_estado_reporte` (`null` → `BORRADOR`) y una `CREAR` en la bitácora. Las vacunas sin esquema
-        para ese mes se omiten. Las vacunas y sus versiones quedan fijas: desactivar una vacuna o publicar
-        otra versión después no cambia el reporte.
+        establecimiento, `VIGENTE` o `HISTORICO`, o si no hay, el nacional) **marcado con `incluirPorDefecto`**
+        (un esquema sin el campo cuenta como marcado), una fila en `historial_estado_reporte`
+        (`null` → `BORRADOR`) y una `CREAR` en la bitácora. Las vacunas sin esquema para ese mes se omiten, y las
+        de un esquema sin marcar se agregan después con `POST /reportes/{id}/vacunas`. Las vacunas y sus
+        versiones quedan fijas: desactivar una vacuna o publicar otra versión después no cambia el reporte.
+
+        Si hay vacunas con esquema para el mes pero ninguna marcada, el reporte se crea sin vacunas. Solo si
+        ninguna vacuna activa tiene esquema para el mes responde 422 `SIN_ESQUEMAS`.
 
         Los errores se revisan en este orden: cuerpo, establecimiento, periodo, reporte existente y esquemas.
       x-permiso: REPORTE_CREAR
@@ -2919,7 +2923,171 @@ paths:
         "403": { $ref: "#/components/responses/SinPermiso" }
         "404": { $ref: "#/components/responses/NoEncontrado" }
 
+  /reportes/{id}/vacunas-disponibles:
+    get:
+      tags: [Producción]
+      summary: Vacunas que se pueden agregar al reporte
+      description: |
+        Las vacunas activas con un esquema publicado que cubra el día 1 del mes (el de la DDRISS del
+        establecimiento, o si no hay, el nacional), marcado o no, que el reporte todavía no tiene, en el orden de
+        `GET /reportes/{id}`. No exige que el reporte esté en `BORRADOR`: la pantalla solo ofrece agregar cuando el
+        formulario es `editable`. Un reporte que no existe o es de otro establecimiento responde 404.
+      x-permiso: REPORTE_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Las vacunas disponibles (puede ser `[]`)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/VacunaDisponible" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+
+  /reportes/{id}/vacunas:
+    post:
+      tags: [Producción]
+      summary: Agregar una vacuna al reporte en borrador
+      description: |
+        Agrega una fila de `reporte_vacuna` con el esquema que cubre el día 1 del mes en ese momento (como al
+        crear el reporte, marcado o no), sube `versionFila` y deja una `CREAR` de `reporte_vacuna` en la bitácora,
+        en una transacción de MySQL. La versión queda fija aunque después se publique otra.
+
+        Responde la vacuna en la forma de `GET /reportes/{id}` y de `GET /reportes/{id}/formulario` (sin celdas),
+        y `orden`, para que la pantalla la una a las demás sin recargar ni perder lo que no se ha guardado.
+
+        Los errores se revisan en este orden: cuerpo, reporte, vacuna disponible, estado del reporte, estado del
+        mes, `versionFila` y vacuna repetida.
+      x-permiso: REPORTE_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VacunaDeReporteAgregar" }
+      responses:
+        "201":
+          description: Vacuna agregada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VacunaAgregada" }
+        "400":
+          description: El cuerpo no tiene la forma esperada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: esquemaId." }
+                vacunaId:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: vacunaId debe ser un número entero mayor que 0. }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404":
+          description: El reporte no existe o es de otro establecimiento
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: NO_ENCONTRADO, mensaje: El recurso solicitado no existe. }
+        "409":
+          description: El reporte no está en borrador, el mes está cerrado, `versionFila` no es la del reporte o la vacuna ya está
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                noEditable:
+                  value:
+                    error: { codigo: REPORTE_NO_EDITABLE, mensaje: El reporte ya no está en borrador y no se puede editar. }
+                periodoCerrado:
+                  value:
+                    error: { codigo: PERIODO_CERRADO, mensaje: El mes ya está cerrado. }
+                desactualizado:
+                  value:
+                    error: { codigo: REPORTE_DESACTUALIZADO, mensaje: El reporte cambió desde que lo abrió; recárguelo. }
+                repetida:
+                  value:
+                    error: { codigo: VACUNA_YA_EN_REPORTE, mensaje: La vacuna ya está en el reporte. }
+        "422":
+          description: La vacuna no existe, está inactiva o no tiene un esquema publicado que cubra el mes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: VACUNA_NO_DISPONIBLE, mensaje: La vacuna no tiene un formulario de captura para este mes. }
+
   /reportes/{id}/vacunas/{vacunaId}:
+    delete:
+      tags: [Producción]
+      summary: Quitar del reporte en borrador una vacuna que no es base, con sus cantidades
+      description: |
+        Borra la fila de `reporte_vacuna` y, en cascada, sus filas de `detalle_produccion`, `detalle_dimension` y
+        `resultado_validacion`; sube `versionFila` y deja una `ELIMINAR` de `reporte_vacuna` en la bitácora con la
+        fila y todas sus celdas, en una transacción de MySQL. `versionFila` va en la consulta.
+
+        Una vacuna base (su versión fijada está marcada con `incluirPorDefecto`) no se quita, ni una con
+        observaciones del revisor en `observacion_revision`.
+
+        Los errores se revisan en este orden: consulta, reporte y vacuna, estado del reporte, estado del mes,
+        `versionFila`, vacuna base y observaciones.
+      x-permiso: REPORTE_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { name: vacunaId, in: path, required: true, description: "`vacuna.id`", schema: { type: integer } }
+        - { name: versionFila, in: query, required: true, description: La del reporte, schema: { type: integer, minimum: 1, example: 5 } }
+      responses:
+        "200":
+          description: Vacuna quitada
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [versionFila]
+                properties:
+                  versionFila: { type: integer, description: La nueva del reporte, example: 6 }
+        "400":
+          description: Falta `versionFila`, no es válida, está repetida o hay otro parámetro
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: versionFila debe ser un número entero mayor que 0. }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404":
+          description: El reporte no existe o es de otro establecimiento, o la vacuna no está en el reporte
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: NO_ENCONTRADO, mensaje: El recurso solicitado no existe. }
+        "409":
+          description: El reporte no está en borrador, el mes está cerrado, `versionFila` no es la del reporte, la vacuna es base o tiene observaciones
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                noEditable:
+                  value:
+                    error: { codigo: REPORTE_NO_EDITABLE, mensaje: El reporte ya no está en borrador y no se puede editar. }
+                periodoCerrado:
+                  value:
+                    error: { codigo: PERIODO_CERRADO, mensaje: El mes ya está cerrado. }
+                desactualizado:
+                  value:
+                    error: { codigo: REPORTE_DESACTUALIZADO, mensaje: El reporte cambió desde que lo abrió; recárguelo. }
+                base:
+                  value:
+                    error: { codigo: VACUNA_BASE, mensaje: Esta vacuna es parte del reporte del mes y no se puede quitar. }
+                observaciones:
+                  value:
+                    error: { codigo: VACUNA_CON_OBSERVACIONES, mensaje: La vacuna tiene observaciones del revisor y no se puede quitar. }
     put:
       tags: [Producción]
       summary: Guardar las cantidades de todas las procedencias y los datos adicionales de una vacuna del reporte
@@ -4474,6 +4642,13 @@ components:
           minItems: 1
           description: En el orden en que se muestran
           items: { $ref: "#/components/schemas/SeccionEsquemaEntrada" }
+        incluirPorDefecto:
+          type: boolean
+          description: |
+            `true`: la vacuna entra en cada reporte nuevo del mes que cubre la versión (SPEC 31). Opcional: en el
+            `POST`, si no viene, un borrador vacío empieza en `false` y una copia toma la del esquema copiado; en
+            el `PUT`, si no viene, se conserva.
+          example: true
 
     EsquemaCrear:
       allOf:
@@ -4505,7 +4680,7 @@ components:
     EsquemaCaptura:
       type: object
       required: [id, vacuna, version, territorio, estado, vigencia, versionAnteriorId, basadoEn, procedencia, dosis,
-        desagregacion, secciones, camposAdicionales, reglas, presentacion, creadoPor, creadoEn,
+        desagregacion, secciones, incluirPorDefecto, camposAdicionales, reglas, presentacion, creadoPor, creadoEn,
         publicadoPor, publicadoEn, motivoCambio]
       properties:
         id: { type: string, example: 6721a0c1a2b3c4d5e6f70901 }
@@ -4560,6 +4735,12 @@ components:
               orden: { type: integer, example: 1 }
               grupoEdad: { type: string, nullable: true, example: MEF_15_49 }
               dosis: { type: array, items: { type: string }, example: [D1, R1] }
+        incluirPorDefecto:
+          type: boolean
+          description: |
+            `true`: la vacuna entra en los reportes nuevos del mes que cubre esta versión. Un documento sin el campo
+            (anterior a MongoDB v0.8) responde `true`.
+          example: true
         camposAdicionales:
           type: array
           description: Copiados de la base; este spec no los edita
@@ -4769,9 +4950,10 @@ components:
 
     VacunaDeReporte:
       type: object
-      required: [id, vacuna, esquema, dosis, dimensiones]
+      required: [id, vacuna, esquema, base, dosis, dimensiones]
       properties:
         id: { type: integer, description: "`reporte_vacuna.id`", example: 2051 }
+        base: { $ref: "#/components/schemas/VacunaBase" }
         vacuna:
           type: object
           required: [id, codigo, nombre]
@@ -4884,11 +5066,19 @@ components:
         reglas: { $ref: "#/components/schemas/EsquemaCaptura/properties/reglas" }
         presentacion: { $ref: "#/components/schemas/EsquemaCaptura/properties/presentacion" }
 
+    VacunaBase:
+      type: boolean
+      description: |
+        `true` si la versión fijada en `reporte_vacuna` está marcada con `incluirPorDefecto` (o no trae el campo,
+        o ya no está en MongoDB): la vacuna no se puede quitar del reporte (SPEC 31).
+      example: true
+
     VacunaDeFormulario:
       type: object
-      required: [vacunaId, esquema, procedenciasPermitidas, celdas, datosAdicionales, totalDeclarado]
+      required: [vacunaId, base, esquema, procedenciasPermitidas, celdas, datosAdicionales, totalDeclarado]
       properties:
         vacunaId: { type: integer, description: "`vacuna.id`", example: 2 }
+        base: { $ref: "#/components/schemas/VacunaBase" }
         esquema:
           allOf: [{ $ref: "#/components/schemas/EsquemaDeFormulario" }]
           nullable: true
@@ -4952,6 +5142,43 @@ components:
           type: array
           description: En el orden de `GET /reportes/{id}`
           items: { $ref: "#/components/schemas/VacunaDeFormulario" }
+
+    VacunaDisponible:
+      type: object
+      required: [vacunaId, codigo, nombre, esquema]
+      properties:
+        vacunaId: { type: integer, example: 30 }
+        codigo: { type: string, example: VARICELA }
+        nombre: { type: string, example: Varicela }
+        esquema:
+          type: object
+          required: [id, version]
+          description: La versión que se fijaría al agregarla (el esquema que cubre el día 1 del mes)
+          properties:
+            id: { type: string, example: 6721a0c1a2b3c4d5e6f70930 }
+            version: { type: integer, example: 1 }
+
+    VacunaDeReporteAgregar:
+      type: object
+      additionalProperties: false
+      required: [vacunaId, versionFila]
+      description: 'Cualquier otro campo responde 400 ("Campo no permitido: {nombre}.").'
+      properties:
+        vacunaId: { type: integer, minimum: 1, description: "`vacuna.id`", example: 30 }
+        versionFila: { type: integer, minimum: 1, description: La del reporte, example: 5 }
+
+    VacunaAgregada:
+      type: object
+      required: [versionFila, orden, vacuna, formulario]
+      properties:
+        versionFila: { type: integer, description: La nueva del reporte, example: 6 }
+        orden:
+          type: array
+          description: Los `vacunaId` del reporte en el orden de `GET /reportes/{id}`, con la agregada en su lugar
+          items: { type: integer }
+          example: [3, 30, 12]
+        vacuna: { $ref: "#/components/schemas/VacunaDeReporte" }
+        formulario: { $ref: "#/components/schemas/VacunaDeFormulario" }
 
     VacunaDeReporteGuardar:
       type: object
