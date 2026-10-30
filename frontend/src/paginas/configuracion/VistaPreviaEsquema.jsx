@@ -116,6 +116,14 @@ export default function VistaPreviaEsquema({
             </p>
           )}
 
+          {contenido.incluirPorDefecto !== undefined && (
+            <p className="text-sm text-muted-foreground">
+              {contenido.incluirPorDefecto
+                ? 'Entra en los reportes nuevos.'
+                : 'El establecimiento la agrega al reporte si la aplica.'}
+            </p>
+          )}
+
           {formulario.camposAdicionales.length > 0 && (
             <Card>
               <CardHeader>

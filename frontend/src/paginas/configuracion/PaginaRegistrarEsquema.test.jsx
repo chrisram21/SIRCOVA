@@ -119,6 +119,8 @@ test('con origen=copia precarga el vigente sin lo inactivo, lo avisa y guarda co
   expect(marcada('Primera dosis (D1)')).toBe('true')
   expect(marcada('Segunda dosis (D2)')).toBe('false')
   expect(screen.queryByRole('checkbox', { name: 'Tercera dosis (D3)' })).toBeNull()
+  // El vigente no trae la marca (anterior a la v0.8): cuenta como marcado (SPEC 31).
+  expect(marcada('Incluir en los reportes nuevos')).toBe('true')
 
   fireEvent.click(screen.getByRole('button', { name: 'Guardar borrador' }))
 
@@ -133,6 +135,8 @@ test('con origen=copia precarga el vigente sin lo inactivo, lo avisa y guarda co
     ],
     desagregacion: [{ dimension: 'grupo_edad', valores: ['MENOR_1'] }],
     secciones: [{ titulo: '< 1 año', grupoEdad: 'MENOR_1', dosis: ['D1', 'R1'] }],
+    // El vigente copiado no trae la marca (anterior a la v0.8): la copia sale marcada.
+    incluirPorDefecto: true,
   })
   // Vuelve sin state.aviso: el aviso va en un toast.
   await waitFor(() => expect(screen.getByTestId('pestana').textContent).toBe('|'))
@@ -200,6 +204,7 @@ test('con origen=vacio empieza con las dosis activas marcadas y una sección vac
   expect(['Primera dosis (D1)', 'Segunda dosis (D2)', 'Primer refuerzo (R1)'].map(marcada)).toEqual(['true', 'true', 'true'])
   expect(screen.queryByRole('checkbox', { name: 'Tercera dosis (D3)' })).toBeNull()
   expect(screen.getAllByRole('textbox', { name: /Título de la sección/ })).toHaveLength(1)
+  expect(marcada('Incluir en los reportes nuevos')).toBe('false')
   // Con la sección vacía hay problemas: no se guarda.
   fireEvent.click(screen.getByRole('button', { name: 'Guardar borrador' }))
   expect(crearEsquema).not.toHaveBeenCalled()
@@ -214,7 +219,21 @@ test('con origen=vacio empieza con las dosis activas marcadas y una sección vac
     copiaDe: null,
     desagregacion: [],
     secciones: [{ titulo: 'General', grupoEdad: null, dosis: ['D1', 'D2', 'R1'] }],
+    incluirPorDefecto: false,
   })
+})
+
+test('marcar «Incluir en los reportes nuevos» en uno vacío lo manda en true (SPEC 31)', async () => {
+  await abrir('?vacuna=2&origen=vacio')
+
+  fireEvent.change(screen.getByRole('textbox', { name: 'Título de la sección 1' }), { target: { value: 'General' } })
+  for (const codigo of ['D1', 'D2', 'R1']) fireEvent.click(screen.getByRole('checkbox', { name: `${codigo} en la sección 1` }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Incluir en los reportes nuevos' }))
+  expect(marcada('Incluir en los reportes nuevos')).toBe('true')
+  fireEvent.click(screen.getByRole('button', { name: 'Guardar borrador' }))
+
+  await waitFor(() => expect(crearEsquema).toHaveBeenCalledTimes(1))
+  expect(crearEsquema.mock.calls[0][0].incluirPorDefecto).toBe(true)
 })
 
 test('un 422 al guardar se muestra en el Alert y conserva lo editado', async () => {

@@ -90,6 +90,20 @@ it.each([
   within(hoja()).getByText(texto)
 })
 
+it.each([
+  [true, 'Entra en los reportes nuevos.'],
+  [false, 'El establecimiento la agrega al reporte si la aplica.'],
+])('con incluirPorDefecto %s dice «%s» (SPEC 31)', (incluirPorDefecto, texto) => {
+  montar({ c: { ...contenido(), incluirPorDefecto } })
+  within(hoja()).getByText(texto)
+})
+
+it('sin incluirPorDefecto en el contenido no dice nada de los reportes', () => {
+  montar()
+  expect(within(hoja()).queryByText('Entra en los reportes nuevos.')).toBeNull()
+  expect(within(hoja()).queryByText('El establecimiento la agrega al reporte si la aplica.')).toBeNull()
+})
+
 it('lista las reglas con su versión y su severidad, y sin campos no hay card de datos adicionales', () => {
   montar()
   const reglas = within(hoja()).getByRole('list', { name: 'Validaciones del esquema' })

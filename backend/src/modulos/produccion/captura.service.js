@@ -9,7 +9,7 @@ import { aEsquema } from '../configuracion/esquemas.service.js';
 import { celdasDelEsquema, claveCombinacion } from './celdas.service.js';
 import { leerProcedencias, procedenciasPermitidas } from './procedencias.service.js';
 
-const MESES_EDITABLES = ['ABIERTO', 'EN_CIERRE'];
+export const MESES_EDITABLES = ['ABIERTO', 'EN_CIERRE'];
 const GRUPO_EDAD = 'grupo_edad';
 const CANTIDAD_MAXIMA = 4294967295; // INT UNSIGNED de detalle_produccion.cantidad
 const LARGO_TEXTO = 200;
@@ -70,7 +70,7 @@ async function vacunasDelReporte(ejecutor, reporteId) {
 }
 
 // Las filas de detalle_produccion de esas vacunas del reporte, con sus dimensiones de detalle_dimension.
-async function celdasGuardadas(ejecutor, reporteVacunaIds) {
+export async function celdasGuardadas(ejecutor, reporteVacunaIds) {
   if (reporteVacunaIds.length === 0) return [];
   const [filas] = await ejecutor.query(
     `SELECT dp.id, dp.reporte_vacuna_id, d.codigo AS dosis_codigo, dp.municipio_procedencia_id,
@@ -102,7 +102,7 @@ async function celdasGuardadas(ejecutor, reporteVacunaIds) {
 
 // La versión fijada en el reporte, sin los datos de creación ni de publicación. Un documento que ya no está en
 // MongoDB no aparece en el Map.
-async function esquemasDe(idsMongo) {
+export async function esquemasDe(idsMongo) {
   const ids = idsMongo.filter((id) => /^[0-9a-f]{24}$/i.test(id)).map((id) => new ObjectId(id));
   if (ids.length === 0) return new Map();
   const db = await obtenerDb();
@@ -115,7 +115,7 @@ async function esquemasDe(idsMongo) {
   );
 }
 
-const aCelda = ({ dosisCodigo, municipioProcedenciaId, dimensiones, claveCombinacion, cantidad }) => ({
+export const aCelda = ({ dosisCodigo, municipioProcedenciaId, dimensiones, claveCombinacion, cantidad }) => ({
   dosisCodigo,
   municipioProcedenciaId,
   dimensiones,

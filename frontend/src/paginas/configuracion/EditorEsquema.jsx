@@ -33,6 +33,8 @@ export const contenidoDe = (esquema) => ({
   dosis: esquema.dosis.map(({ codigo, desagregacion }) => ({ codigo, desagregacion })),
   desagregacion: esquema.desagregacion,
   secciones: esquema.secciones.map(({ titulo, grupoEdad, dosis }) => ({ titulo, grupoEdad, dosis })),
+  // SPEC 31: un esquema anterior a MongoDB v0.8 no la trae y cuenta como marcado.
+  incluirPorDefecto: esquema.incluirPorDefecto ?? true,
 })
 
 export const RUTA_ESQUEMAS = '/administracion/esquemas'
@@ -92,7 +94,11 @@ export default function EditorEsquema({
 }) {
   const siguienteClave = useRef(0)
   const conClave = (seccion) => ({ ...seccion, clave: siguienteClave.current++ })
-  const [esquema, setEsquema] = useState(() => ({ ...inicial, secciones: inicial.secciones.map(conClave) }))
+  const [esquema, setEsquema] = useState(() => ({
+    ...inicial,
+    incluirPorDefecto: inicial.incluirPorDefecto ?? true,
+    secciones: inicial.secciones.map(conClave),
+  }))
   const [tocados, setTocados] = useState(() => new Set())
   const [guardando, setGuardando] = useState(false)
   const [errorGuardar, setErrorGuardar] = useState(null)
@@ -221,6 +227,7 @@ export default function EditorEsquema({
     dosis: esquema.dosis,
     desagregacion: esquema.desagregacion,
     secciones: esquema.secciones.map(({ titulo, grupoEdad, dosis }) => ({ titulo, grupoEdad, dosis })),
+    incluirPorDefecto: esquema.incluirPorDefecto,
   }
   const erroresDeTitulo = esquema.secciones.map((s) => validarTituloSeccion(s.titulo).error ?? null)
   // Una sección sin título se nombra por su número en los mensajes; lo que se guarda no cambia.
@@ -504,6 +511,25 @@ export default function EditorEsquema({
               alCambiar={(permite) =>
                 actualizar((actual) => ({ procedencia: { ...actual.procedencia, permiteNoEspecificado: permite } }))
               }
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Reportes</CardTitle>
+            <CardDescription>
+              Marcada, la vacuna entra en cada reporte nuevo del mes que cubre esta versión. Sin marcar, el
+              establecimiento la agrega si la aplica.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Marca
+              id="incluir-por-defecto"
+              nombre="Incluir en los reportes nuevos"
+              etiqueta="Incluir en los reportes nuevos"
+              marcada={esquema.incluirPorDefecto}
+              alCambiar={(incluir) => actualizar(() => ({ incluirPorDefecto: incluir }))}
             />
           </CardContent>
         </Card>

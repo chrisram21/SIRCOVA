@@ -84,7 +84,8 @@ test('sin cambios guarda el contenido inicial', async () => {
   fireEvent.click(botonGuardar())
 
   await waitFor(() => expect(onGuardar).toHaveBeenCalledTimes(1))
-  expect(guardado()).toEqual(inicial())
+  // Un contenido sin incluirPorDefecto (anterior a la v0.8) se guarda marcado (SPEC 31).
+  expect(guardado()).toEqual({ ...inicial(), incluirPorDefecto: true })
 })
 
 test('marcar y desmarcar dosis y valores cambia lo que se guarda', async () => {
