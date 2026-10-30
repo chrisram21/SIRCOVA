@@ -2,10 +2,24 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { toast } from 'sonner'
 import { ErrorApi } from '@/api/cliente.js'
-import { guardarVacuna, obtenerFormulario } from '@/api/produccion.js'
+import {
+  agregarVacuna,
+  guardarVacuna,
+  listarVacunasDisponibles,
+  obtenerFormulario,
+  obtenerReporte,
+  quitarVacuna,
+} from '@/api/produccion.js'
 import CapturaReporte from './CapturaReporte.jsx'
 
-vi.mock('@/api/produccion.js', () => ({ obtenerFormulario: vi.fn(), guardarVacuna: vi.fn() }))
+vi.mock('@/api/produccion.js', () => ({
+  obtenerFormulario: vi.fn(),
+  obtenerReporte: vi.fn(),
+  guardarVacuna: vi.fn(),
+  listarVacunasDisponibles: vi.fn(),
+  agregarVacuna: vi.fn(),
+  quitarVacuna: vi.fn(),
+}))
 
 // El aviso de guardado es un toast (sonner, simulado en preparar-pruebas.js).
 const borradorGuardado = () => waitFor(() => expect(toast.success).toHaveBeenCalledWith('Borrador guardado.'))
@@ -142,6 +156,8 @@ const abrirPestana = async (nombre) => {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // «Recargar reporte» pide también el detalle: las vacunas pudieron cambiar (SPEC 31).
+  obtenerReporte.mockResolvedValue(REPORTE)
 })
 
 test('carga las cantidades del municipio propio: un 0 se ve como «0» y una vacía, vacía', async () => {
@@ -543,5 +559,143 @@ describe('cambios sin guardar', () => {
     await montar(formulario({ editable: false }))
     expect(insignia(ultimoCambio())).toBeNull()
     expect(insignia('Cambios sin guardar')).toBeNull()
+  })
+})
+
+describe('agregar y quitar vacunas (SPEC 31)', () => {
+  const VARICELA = {
+    id: 53,
+    vacuna: { id: 9, codigo: 'VARICELA', nombre: 'Varicela' },
+    esquema: { id: 'e-var', version: 1 },
+    base: false,
+    dosis: [{ codigo: 'D1', nombre: '1.ª dosis', orden: 1, activa: true }],
+    dimensiones: [],
+  }
+  const esquemaVaricela = {
+    ...esquemaVph,
+    id: 'e-var',
+    desagregacion: [],
+    secciones: [{ codigo: 'GENERAL', titulo: 'Varicela', orden: 1, grupoEdad: null, dosis: ['D1'] }],
+  }
+  const capturaVaricela = { ...capturaVph(), vacunaId: 9, base: false, esquema: esquemaVaricela }
+  // Hexavalente es base; VPH no.
+  const conBase = (cambios = {}) =>
+    formulario({ vacunas: [capturaHexa({ base: true }), capturaVph({ base: false })], ...cambios })
+  // Con un diálogo abierto el resto de la página queda aria-hidden; las marcas ocultas («(cambios sin guardar)») no
+  // son parte del nombre.
+  const pestanas = () =>
+    screen.getAllByRole('tab', { hidden: true }).map((tab) => tab.textContent.replace(/\(.*\)/, '').trim())
+  const botonQuitar = () => screen.queryByRole('button', { name: 'Quitar vacuna' })
+
+  async function abrirAgregar() {
+    listarVacunasDisponibles.mockResolvedValue([
+      { vacunaId: 9, codigo: 'VARICELA', nombre: 'Varicela', esquema: { id: 'e-var', version: 1 } },
+    ])
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar vacuna' }))
+    return screen.findByRole('dialog')
+  }
+
+  test('«Agregar vacuna» une la vacuna nueva en su lugar sin perder lo escrito, y el siguiente guardado usa la versión nueva', async () => {
+    agregarVacuna.mockResolvedValue({ versionFila: 4, orden: [3, 9, 5], vacuna: VARICELA, formulario: capturaVaricela })
+    guardarVacuna.mockResolvedValue({ versionFila: 5, vacuna: capturaHexa({ base: true }) })
+    await montar(conBase())
+    escribir('1.ª dosis · De 1 a < 6 años', '9')
+
+    const dialogo = await abrirAgregar()
+    expect(listarVacunasDisponibles).toHaveBeenCalledWith(7)
+    within(dialogo).getByText('versión 1')
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Agregar Varicela' }))
+
+    await waitFor(() => expect(pestanas()).toEqual(['Hexavalente', 'Varicela', 'VPH']))
+    expect(agregarVacuna).toHaveBeenCalledWith(7, { vacunaId: 9, versionFila: 3 })
+    expect(toast.success).toHaveBeenCalledWith('Varicela agregada al reporte.')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.getByRole('tab', { name: 'Varicela' }).getAttribute('aria-selected')).toBe('true')
+    expect(campo('1.ª dosis').value).toBe('')
+
+    await abrirPestana('Hexavalente')
+    expect(campo('1.ª dosis · De 1 a < 6 años').value).toBe('9')
+    fireEvent.click(botonGuardar())
+    await borradorGuardado()
+    expect(guardarVacuna.mock.calls[0][2].versionFila).toBe(4)
+  })
+
+  test('sin vacunas disponibles lo dice; un error al agregar se ve en el diálogo, que sigue abierto', async () => {
+    await montar(conBase())
+    listarVacunasDisponibles.mockResolvedValue([])
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar vacuna' }))
+    within(await screen.findByRole('dialog')).getByText('No hay más vacunas con formulario para este mes.')
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+    agregarVacuna.mockRejectedValue(new ErrorApi(409, 'REPORTE_DESACTUALIZADO', 'El reporte cambió desde que lo abrió; recárguelo.'))
+    const dialogo = await abrirAgregar()
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Agregar Varicela' }))
+    expect(await within(dialogo).findByText('El reporte cambió desde que lo abrió; recárguelo.')).toBeTruthy()
+    within(dialogo).getByRole('button', { name: 'Recargar reporte' })
+    expect(pestanas()).toEqual(['Hexavalente', 'VPH'])
+  })
+
+  test('una vacuna base no tiene «Quitar vacuna»; una que no es base sí', async () => {
+    await montar(conBase())
+    expect(botonQuitar()).toBeNull()
+    await abrirPestana('VPH')
+    expect(botonQuitar()).toBeTruthy()
+  })
+
+  test('quitar una vacuna sin cantidades no avisa que se borran, y al confirmar se va su pestaña', async () => {
+    quitarVacuna.mockResolvedValue({ versionFila: 4 })
+    await montar(conBase())
+    await abrirPestana('VPH')
+    fireEvent.click(botonQuitar())
+
+    const dialogo = await screen.findByRole('alertdialog')
+    within(dialogo).getByText('¿Quitar VPH del reporte?')
+    expect(within(dialogo).queryByText('Se borrarán sus cantidades y no se pueden recuperar.')).toBeNull()
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Quitar vacuna' }))
+
+    await waitFor(() => expect(pestanas()).toEqual(['Hexavalente']))
+    expect(quitarVacuna).toHaveBeenCalledWith(7, 5, 3)
+    expect(toast.success).toHaveBeenCalledWith('VPH se quitó del reporte.')
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(screen.getByRole('tab', { name: 'Hexavalente' }).getAttribute('aria-selected')).toBe('true')
+  })
+
+  test('con una cantidad sin guardar avisa que se borran; un error se ve en el diálogo, que sigue abierto', async () => {
+    quitarVacuna.mockRejectedValue(new ErrorApi(409, 'VACUNA_CON_OBSERVACIONES', 'La vacuna tiene observaciones del revisor y no se puede quitar.'))
+    await montar(conBase())
+    await abrirPestana('VPH')
+    escribir('1.ª dosis · Masculino', '3')
+    fireEvent.click(botonQuitar())
+
+    const dialogo = await screen.findByRole('alertdialog')
+    within(dialogo).getByText('Se borrarán sus cantidades y no se pueden recuperar.')
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Quitar vacuna' }))
+    expect(await within(dialogo).findByText('La vacuna tiene observaciones del revisor y no se puede quitar.')).toBeTruthy()
+    expect(screen.getByRole('alertdialog')).toBeTruthy()
+    expect(pestanas()).toEqual(['Hexavalente', 'VPH'])
+  })
+
+  test('un reporte sin vacunas lo dice y ofrece «Agregar vacuna»; en solo consulta, sin botón', async () => {
+    obtenerFormulario.mockResolvedValue(formulario({ vacunas: [] }))
+    dibujar({ reporte: { ...REPORTE, vacunas: [] } })
+    expect(
+      await screen.findByText('Este reporte todavía no tiene vacunas. Agregue las que aplicó el establecimiento.'),
+    ).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Agregar vacuna' })).toBeTruthy()
+  })
+
+  test('con el reporte en solo consulta no hay «Agregar vacuna» ni «Quitar vacuna»', async () => {
+    await montar(conBase({ editable: false }))
+    expect(screen.queryByRole('button', { name: 'Agregar vacuna' })).toBeNull()
+    await abrirPestana('VPH')
+    expect(botonQuitar()).toBeNull()
+  })
+
+  test('un reporte sin vacunas en solo consulta lo dice, sin botón', async () => {
+    obtenerFormulario.mockResolvedValue(formulario({ vacunas: [], editable: false }))
+    dibujar({ reporte: { ...REPORTE, vacunas: [] } })
+    expect(await screen.findByText('Este reporte no tiene vacunas.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Agregar vacuna' })).toBeNull()
   })
 })

@@ -1,6 +1,6 @@
 # SPEC 31 — Vacunas base y vacunas agregadas al reporte
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-19 (crear el reporte mensual), que ya está terminada: este spec modifica su criterio de vacunas y lo anota en su «Avance». Toca también HU-16 (la marca del esquema) y HU-20 (las pestañas que se agregan o se quitan en la captura).
 > **Depende de:** SPEC 19, SPEC 20, SPEC 22, SPEC 23, SPEC 24 y SPEC 30
 > **Fecha:** 2026-10-29
@@ -307,27 +307,27 @@ Las pruebas del backend firman el token de `cs1201` y usan el **año 2025**, que
 
 ## Criterios de aceptación
 
-- [ ] Un reporte nuevo lleva solo las vacunas cuya versión del mes está marcada, o que no traen el campo.
-- [ ] Con vacunas con esquema pero ninguna marcada, el reporte se crea sin vacunas. Sin ninguna con esquema, responde 422 `SIN_ESQUEMAS`.
-- [ ] Un borrador vacío empieza sin marcar, y una copia hereda la marca de la versión copiada.
-- [ ] El editor guarda la marca, y la vista previa y la versión de un esquema la muestran.
-- [ ] El Personal del establecimiento agrega a un reporte en Borrador una vacuna activa con esquema para el mes, y no puede agregar una que ya está, una inactiva o una sin esquema.
-- [ ] Puede quitar una vacuna que no es base, con sus cantidades. No puede quitar una base (409 `VACUNA_BASE`).
-- [ ] Agregar y quitar exigen el reporte en Borrador, el mes editable y la `versionFila` vigente, y suben la versión.
-- [ ] Cada alta deja una fila `CREAR` en la bitácora, y cada baja una `ELIMINAR` con todas las celdas borradas.
-- [ ] Al agregar o quitar, las cantidades sin guardar de las demás pestañas se conservan, y el siguiente guardado no da 409.
-- [ ] Quitar una vacuna con cantidades pide confirmación con el aviso de que se borran.
-- [ ] Ningún documento publicado de `esquemas_captura` cambió, y en Atlas no se ejecutó nada.
-- [ ] Las dos copias del 02 son idénticas (`diff`).
-- [ ] `backend/db/01…`, los permisos, `transicion_estado` y los `package.json` no cambiaron.
-- [ ] Los endpoints responden como dice `openapi.yaml`, y `/api/docs` carga.
-- [ ] Las dos suites pasan (`npm test` en `backend/` y en `frontend/`) y `vite build` termina sin errores.
-- [ ] **A mano, contra la API real, con un mes de prueba que no sea real:**
+- [x] Un reporte nuevo lleva solo las vacunas cuya versión del mes está marcada, o que no traen el campo.
+- [x] Con vacunas con esquema pero ninguna marcada, el reporte se crea sin vacunas. Sin ninguna con esquema, responde 422 `SIN_ESQUEMAS`.
+- [x] Un borrador vacío empieza sin marcar, y una copia hereda la marca de la versión copiada.
+- [x] El editor guarda la marca, y la vista previa y la versión de un esquema la muestran.
+- [x] El Personal del establecimiento agrega a un reporte en Borrador una vacuna activa con esquema para el mes, y no puede agregar una que ya está, una inactiva o una sin esquema.
+- [x] Puede quitar una vacuna que no es base, con sus cantidades. No puede quitar una base (409 `VACUNA_BASE`).
+- [x] Agregar y quitar exigen el reporte en Borrador, el mes editable y la `versionFila` vigente, y suben la versión.
+- [x] Cada alta deja una fila `CREAR` en la bitácora, y cada baja una `ELIMINAR` con todas las celdas borradas.
+- [x] Al agregar o quitar, las cantidades sin guardar de las demás pestañas se conservan, y el siguiente guardado no da 409.
+- [x] Quitar una vacuna con cantidades pide confirmación con el aviso de que se borran.
+- [x] Ningún documento publicado de `esquemas_captura` cambió, y en Atlas no se ejecutó nada.
+- [x] Las dos copias del 02 son idénticas (`diff`).
+- [x] `backend/db/01…`, los permisos, `transicion_estado` y los `package.json` no cambiaron.
+- [x] Los endpoints responden como dice `openapi.yaml`, y `/api/docs` carga.
+- [x] Las dos suites pasan (`npm test` en `backend/` y en `frontend/`) y `vite build` termina sin errores. (2026-10-29: el backend pasa completo; la única prueba que falló, `usuarios.test.js` de HU-63, fue por tiempo con la máquina cargada y pasa sola. El frontend pasa completo, 1064 de 1064, después de un ajuste fuera del plan: las 3 pruebas de acceso rápido de `PaginaLogin.test.jsx` fallaban en cualquier máquina con `.env.local`, porque Vitest lo carga; ahora ponen las variables en vacío antes de cada prueba.)
+- [x] **A mano, contra la API real, con un mes de prueba que no sea real:**
   - en el editor, una versión de una vacuna de prueba sin marcar se publica, y el reporte nuevo no la trae;
   - se agrega, se capturan cantidades y se quita;
   - una base no muestra «Quitar»;
   - al terminar, se borran el reporte y el mes de prueba, y se desactiva la vacuna de prueba.
-- [ ] El «Avance» de HU-19, las notas de HU-16, HU-20 y HU-29 y las «Notas de contexto» de `CLAUDE.md` están actualizados.
+- [x] El «Avance» de HU-19, las notas de HU-16, HU-20 y HU-29 y las «Notas de contexto» de `CLAUDE.md` están actualizados.
 
 ## Decisiones
 

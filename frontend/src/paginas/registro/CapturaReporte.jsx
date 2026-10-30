@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CircleAlert, CircleCheck, Info, Layers, Lock, Save } from 'lucide-react'
+import { CircleAlert, CircleCheck, Info, Layers, Lock, Save, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -25,7 +25,8 @@ import TarjetaProcedencias, {
 import { contenidoDe } from '@/paginas/configuracion/EditorEsquema.jsx'
 import { cn } from '@/lib/utils'
 import { mensajeDeError } from '@/api/cliente.js'
-import { guardarVacuna, obtenerFormulario } from '@/api/produccion.js'
+import { agregarVacuna, guardarVacuna, obtenerFormulario, obtenerReporte, quitarVacuna } from '@/api/produccion.js'
+import { AgregarVacuna, DialogoQuitarVacuna } from './VacunasDelReporte.jsx'
 
 // Con estos dos errores lo guardado ya no coincide con lo que se ve: solo queda volver a cargar.
 const ERRORES_DE_RECARGA = ['REPORTE_DESACTUALIZADO', 'REPORTE_NO_EDITABLE']
@@ -174,6 +175,8 @@ function PestanaVacuna({
   alAgregarFila,
   alQuitarFila,
   alCambiarDato,
+  alQuitar,
+  quitarDeshabilitado,
 }) {
   const { esquema } = captura
 
@@ -210,7 +213,23 @@ function PestanaVacuna({
                 </div>
               </div>
             </div>
-            <ProgresoCasillas resumen={resumenDeCasillas(formulario, cantidades)} />
+            <div className="flex flex-col items-end gap-3">
+              {/* Solo en una vacuna que no es base, con el reporte editable (SPEC 31). */}
+              {alQuitar && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  disabled={quitarDeshabilitado}
+                  onClick={alQuitar}
+                >
+                  <Trash2 />
+                  Quitar vacuna
+                </Button>
+              )}
+              <ProgresoCasillas resumen={resumenDeCasillas(formulario, cantidades)} />
+            </div>
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -288,13 +307,21 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
   const [aviso, setAviso] = useState(null)
   // La hora del último PUT exitoso de esta visita; antes de guardar, la insignia usa actualizadoEn del reporte.
   const [guardadoEn, setGuardadoEn] = useState(null)
+  // Las vacunas del detalle (GET /reportes/{id}); cambian al agregar o quitar una (SPEC 31).
+  const [vacunasReporte, setVacunasReporte] = useState(reporte.vacunas)
+  const [pestana, setPestana] = useState(null)
+  // { vacuna, captura } mientras se confirma «Quitar vacuna».
+  const [porQuitar, setPorQuitar] = useState(null)
+  const [ocupado, setOcupado] = useState(false)
   const cargaActual = useRef(0)
+  // La primera carga usa el detalle que llegó como prop; «Recargar» lo pide de nuevo, porque las vacunas pudieron cambiar.
+  const primeraCarga = useRef(true)
   // El pedido que llegó como prop sirve solo para la primera carga; «Recargar» y «Reintentar» piden de nuevo.
   const pedidoPendiente = useRef(formularioPedido)
 
   // Las vacunas en el orden del reporte, cada una con lo que trae el formulario.
   const vacunas = formulario
-    ? reporte.vacunas
+    ? vacunasReporte
         .map((vacuna) => ({ vacuna, captura: formulario.vacunas.find((c) => c.vacunaId === vacuna.vacuna.id) }))
         .filter(({ captura }) => captura)
     : []
@@ -312,7 +339,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
   // El formulario armado de cada vacuna (se arma de nuevo solo cuando cambia lo cargado o lo guardado).
   const armados = useMemo(
     () => new Map(vacunas.map(({ vacuna, captura }) => [vacuna.id, formularioDe(vacuna, captura)])),
-    [formulario, reporte],
+    [formulario, vacunasReporte],
   )
   // Ctrl+S (⌘+S en Mac) guarda el borrador si se puede; la función se toma en cada render.
   const atajoGuardar = useRef(null)
@@ -329,10 +356,10 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
   const bloqueo = useAvisoCambiosSinGuardar(conCambios.length > 0)
 
   // Las filas de la tarjeta B se arman de nuevo con lo guardado: las que quedaron vacías desaparecen.
-  function tomarVacuna(captura, municipioId, municipios) {
+  function tomarVacuna(captura, municipioId, municipios, lista = vacunasReporte) {
     const campos = captura.esquema?.camposAdicionales ?? []
     const cantidadesVacuna = cantidadesDe(captura, municipioId)
-    const vacuna = reporte.vacunas.find((v) => v.vacuna.id === captura.vacunaId)
+    const vacuna = lista.find((v) => v.vacuna.id === captura.vacunaId)
     const armado = vacuna ? formularioDe(vacuna, captura) : null
     const otrasVacuna = armado
       ? {
@@ -357,14 +384,19 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
     setAviso(null)
     const pedido = pedidoPendiente.current ?? obtenerFormulario(reporte.id)
     pedidoPendiente.current = null
-    pedido
-      .then((recibido) => {
+    const detalle = primeraCarga.current ? Promise.resolve(reporte) : obtenerReporte(reporte.id)
+    primeraCarga.current = false
+    Promise.all([pedido, detalle])
+      .then(([recibido, recibidoDetalle]) => {
         if (carga !== cargaActual.current) return
         setCantidades({})
         setOtras({})
         setDatos({})
         setFirmas({})
-        for (const captura of recibido.vacunas) tomarVacuna(captura, recibido.municipioPropio.id, recibido.municipios)
+        setVacunasReporte(recibidoDetalle.vacunas)
+        for (const captura of recibido.vacunas) {
+          tomarVacuna(captura, recibido.municipioPropio.id, recibido.municipios, recibidoDetalle.vacunas)
+        }
         setFormulario(recibido)
       })
       .catch((err) => carga === cargaActual.current && setErrorCarga(mensajeDeError(err)))
@@ -381,9 +413,81 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
     return <AvisoError onReintentar={cargar}>No se pudo cargar el formulario: {errorCarga}</AvisoError>
   }
   if (!formulario) return <Skeleton aria-label="Cargando formulario" className="h-40 w-full" />
-  if (vacunas.length === 0) return null
 
   const municipioId = formulario.municipioPropio.id
+  const soloLectura = !formulario.editable
+
+  // SPEC 31. La vacuna nueva se une a las demás con lo que responde el POST, sin recargar: lo que no se ha guardado en
+  // las otras pestañas se conserva, y la versionFila nueva es la del siguiente guardado.
+  async function agregar(disponible) {
+    setOcupado(true)
+    try {
+      const respuesta = await agregarVacuna(reporte.id, { vacunaId: disponible.vacunaId, versionFila: formulario.versionFila })
+      const posicion = (id) => respuesta.orden.indexOf(id)
+      const lista = [...vacunasReporte, respuesta.vacuna].sort((a, b) => posicion(a.vacuna.id) - posicion(b.vacuna.id))
+      setVacunasReporte(lista)
+      setFormulario((actual) => ({
+        ...actual,
+        versionFila: respuesta.versionFila,
+        vacunas: [...actual.vacunas, respuesta.formulario],
+      }))
+      tomarVacuna(respuesta.formulario, municipioId, formulario.municipios, lista)
+      // Las pestañas usan el id de reporte_vacuna, como el resto de la pantalla.
+      setPestana(String(respuesta.vacuna.id))
+      toast.success(`${respuesta.vacuna.vacuna.nombre} agregada al reporte.`)
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  async function quitar() {
+    const { vacuna, captura } = porQuitar
+    setOcupado(true)
+    try {
+      const respuesta = await quitarVacuna(reporte.id, captura.vacunaId, formulario.versionFila)
+      const sinLaVacuna = (porVacuna) => Object.fromEntries(Object.entries(porVacuna).filter(([id]) => Number(id) !== captura.vacunaId))
+      // Queda seleccionada la de al lado.
+      const indice = vacunas.findIndex((v) => v.vacuna.id === vacuna.id)
+      const vecina = vacunas[indice + 1] ?? vacunas[indice - 1]
+      setVacunasReporte((actuales) => actuales.filter((v) => v.vacuna.id !== vacuna.vacuna.id))
+      setFormulario((actual) => ({
+        ...actual,
+        versionFila: respuesta.versionFila,
+        vacunas: actual.vacunas.filter((c) => c.vacunaId !== captura.vacunaId),
+      }))
+      setCantidades(sinLaVacuna)
+      setOtras(sinLaVacuna)
+      setDatos(sinLaVacuna)
+      setFirmas(sinLaVacuna)
+      setPestana(vecina ? String(vecina.vacuna.id) : null)
+      setPorQuitar(null)
+      toast.success(`${vacuna.vacuna.nombre} se quitó del reporte.`)
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  const recargarDesdeDialogo = () => {
+    setPorQuitar(null)
+    cargar()
+  }
+  const botonAgregar = !soloLectura && (
+    <AgregarVacuna reporteId={reporte.id} deshabilitado={guardando || ocupado} alAgregar={agregar} alRecargar={cargar} />
+  )
+
+  if (vacunas.length === 0) {
+    return soloLectura ? (
+      <p className="text-sm text-muted-foreground">Este reporte no tiene vacunas.</p>
+    ) : (
+      <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed bg-card px-4 py-6">
+        <p className="text-sm text-muted-foreground">
+          Este reporte todavía no tiene vacunas. Agregue las que aplicó el establecimiento.
+        </p>
+        {botonAgregar}
+      </div>
+    )
+  }
+
   const conInvalidas = new Set(
     vacunas
       .filter(
@@ -393,6 +497,13 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
       .map(({ vacuna }) => vacuna.id),
   )
   const invalidas = conInvalidas.size > 0
+  const conTexto = (porLlave) => Object.values(porLlave ?? {}).some((valor) => valor !== null && String(valor).trim() !== '')
+  const tieneCantidades = (captura) =>
+    captura.celdas.length > 0 ||
+    captura.datosAdicionales !== null ||
+    conTexto(cantidades[captura.vacunaId]) ||
+    conTexto(otrasDe(captura.vacunaId).cantidades) ||
+    conTexto(datos[captura.vacunaId])
   const cambiarOtras = (vacunaId, cambiar) =>
     setOtras((previas) => ({ ...previas, [vacunaId]: cambiar(previas[vacunaId] ?? { filas: [], cantidades: {} }) }))
 
@@ -432,8 +543,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
     setGuardando(false)
   }
 
-  const soloLectura = !formulario.editable
-  const puedeGuardar = !soloLectura && !guardando && !invalidas && conCambios.length > 0
+  const puedeGuardar = !soloLectura && !guardando && !ocupado && !invalidas && conCambios.length > 0
   atajoGuardar.current = puedeGuardar ? guardar : null
   const idsConCambios = new Set(conCambios.map(({ vacuna }) => vacuna.id))
   // Una vacuna está completa cuando todas las casillas de su tarjeta A tienen un dato.
@@ -464,38 +574,44 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
         </Alert>
       )}
 
-      <Tabs defaultValue={String(vacunas[0].vacuna.id)}>
-        {/* Como en Registro.html: una píldora por vacuna. */}
-        <TabsList aria-label="Vacunas" className="h-auto flex-wrap justify-start gap-2 bg-transparent p-0 group-data-horizontal/tabs:h-auto">
-          {vacunas.map(({ vacuna }) => (
-            <TabsTrigger
-              key={vacuna.id}
-              value={String(vacuna.id)}
-              aria-describedby={describirPestana(vacuna.id)}
-              className="h-auto flex-none rounded-full border-border bg-card px-3.5 py-1.5 shadow-tarjeta transition-colors duration-200 hover:not-aria-selected:border-ring/50 hover:not-aria-selected:bg-accent/40 aria-selected:border-primary aria-selected:bg-primary aria-selected:text-primary-foreground aria-selected:shadow-elevada"
-            >
-              {completas.has(vacuna.id) && <CircleCheck aria-hidden="true" className="text-ring" />}
-              {vacuna.vacuna.nombre}
-              {/* Las marcas van en la descripción, no en el nombre: la pestaña se sigue llamando como la vacuna. */}
-              {conInvalidas.has(vacuna.id) && (
-                <>
-                  <CircleAlert aria-hidden="true" className="rounded-full bg-card text-destructive" />
-                  <span id={`invalidas-${vacuna.id}`} hidden>
-                    (cantidades no válidas)
-                  </span>
-                </>
-              )}
-              {idsConCambios.has(vacuna.id) && (
-                <>
-                  <span aria-hidden="true" className="size-2 rounded-full bg-advertencia-foreground ring-2 ring-advertencia" />
-                  <span id={`cambios-${vacuna.id}`} hidden>
-                    (cambios sin guardar)
-                  </span>
-                </>
-              )}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+      <Tabs
+        value={vacunas.some(({ vacuna }) => String(vacuna.id) === pestana) ? pestana : String(vacunas[0].vacuna.id)}
+        onValueChange={setPestana}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Como en Registro.html: una píldora por vacuna. */}
+          <TabsList aria-label="Vacunas" className="h-auto flex-wrap justify-start gap-2 bg-transparent p-0 group-data-horizontal/tabs:h-auto">
+            {vacunas.map(({ vacuna }) => (
+              <TabsTrigger
+                key={vacuna.id}
+                value={String(vacuna.id)}
+                aria-describedby={describirPestana(vacuna.id)}
+                className="h-auto flex-none rounded-full border-border bg-card px-3.5 py-1.5 shadow-tarjeta transition-colors duration-200 hover:not-aria-selected:border-ring/50 hover:not-aria-selected:bg-accent/40 aria-selected:border-primary aria-selected:bg-primary aria-selected:text-primary-foreground aria-selected:shadow-elevada"
+              >
+                {completas.has(vacuna.id) && <CircleCheck aria-hidden="true" className="text-ring" />}
+                {vacuna.vacuna.nombre}
+                {/* Las marcas van en la descripción, no en el nombre: la pestaña se sigue llamando como la vacuna. */}
+                {conInvalidas.has(vacuna.id) && (
+                  <>
+                    <CircleAlert aria-hidden="true" className="rounded-full bg-card text-destructive" />
+                    <span id={`invalidas-${vacuna.id}`} hidden>
+                      (cantidades no válidas)
+                    </span>
+                  </>
+                )}
+                {idsConCambios.has(vacuna.id) && (
+                  <>
+                    <span aria-hidden="true" className="size-2 rounded-full bg-advertencia-foreground ring-2 ring-advertencia" />
+                    <span id={`cambios-${vacuna.id}`} hidden>
+                      (cambios sin guardar)
+                    </span>
+                  </>
+                )}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {botonAgregar}
+        </div>
         {vacunas.map(({ vacuna, captura }) => (
           <TabsContent key={vacuna.id} value={String(vacuna.id)} className="pt-4">
             <PestanaVacuna
@@ -536,6 +652,8 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
               alCambiarDato={(clave, valor) =>
                 setDatos((previos) => ({ ...previos, [captura.vacunaId]: { ...previos[captura.vacunaId], [clave]: valor } }))
               }
+              alQuitar={soloLectura || captura.base !== false ? null : () => setPorQuitar({ vacuna, captura })}
+              quitarDeshabilitado={guardando || ocupado}
             />
           </TabsContent>
         ))}
@@ -574,6 +692,16 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
             {guardando ? 'Guardando…' : 'Guardar borrador'}
           </Button>
         </div>
+      )}
+
+      {porQuitar && (
+        <DialogoQuitarVacuna
+          vacuna={porQuitar.vacuna}
+          conCantidades={tieneCantidades(porQuitar.captura)}
+          alConfirmar={quitar}
+          alCerrar={() => setPorQuitar(null)}
+          alRecargar={recargarDesdeDialogo}
+        />
       )}
 
       <AvisoCambiosSinGuardar
