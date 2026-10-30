@@ -115,6 +115,8 @@ export function aEsquema(doc, usuarios = new Map()) {
       grupoEdad: s.grupo_edad ?? null,
       dosis: [...s.dosis],
     })),
+    // MongoDB v0.8 (SPEC 31): un documento anterior, sin el campo, entra en los reportes nuevos como antes.
+    incluirPorDefecto: doc.incluir_por_defecto ?? true,
     camposAdicionales: (doc.campos_adicionales ?? []).map(clavesACamel),
     reglas: doc.reglas.map((r) => ({ codigo: r.codigo, version: r.version, severidadOverride: r.severidad_override ?? null })),
     presentacion: clavesACamel(doc.presentacion),
@@ -209,7 +211,7 @@ export async function esquemasDelPeriodo(codigosVacuna, ddrissCodigo, fecha) {
         'vigencia.desde': { $lte: fecha },
         $and: [{ $or: [{ 'vigencia.hasta': null }, { 'vigencia.hasta': { $gte: fecha } }] }, { $or: territorios }],
       },
-      { projection: { vacuna: 1, version: 1, territorio: 1 } },
+      { projection: { vacuna: 1, version: 1, territorio: 1, incluir_por_defecto: 1 } },
     )
     .toArray();
   const nacionales = new Map();
@@ -218,6 +220,7 @@ export async function esquemasDelPeriodo(codigosVacuna, ddrissCodigo, fecha) {
     (doc.territorio.nivel === NACIONAL ? nacionales : deLaDdriss).set(doc.vacuna.codigo, {
       id: doc._id.toString(),
       version: doc.version,
+      incluirPorDefecto: doc.incluir_por_defecto ?? true,
     });
   }
   return new Map([...nacionales, ...deLaDdriss]);
@@ -582,6 +585,13 @@ async function estadoDeLaVacuna(codigoVacuna, ddriss) {
   };
 }
 
+// Opcional en el POST y el PUT: undefined si no viene.
+function leerIncluirPorDefecto(valor) {
+  if (valor === undefined) return undefined;
+  if (typeof valor !== 'boolean') throw entradaInvalida('incluirPorDefecto debe ser true o false.');
+  return valor;
+}
+
 function basadoEnDeLaCopia(base) {
   if (!base) return null;
   if (base.territorio.nivel === NACIONAL) return { esquema_id: base._id, version: new Int32(Number(base.version)) };
@@ -590,10 +600,11 @@ function basadoEnDeLaCopia(base) {
 
 // Siempre un BORRADOR de la DDRISS del usuario, vacío o como copia del vigente que aplica (copiaDe).
 export async function crearEsquema(cuerpo, contexto, usuario) {
-  revisarCampos(cuerpo, ['vacunaId', 'copiaDe', 'procedencia', 'dosis', 'desagregacion', 'secciones']);
+  revisarCampos(cuerpo, ['vacunaId', 'copiaDe', 'procedencia', 'dosis', 'desagregacion', 'secciones', 'incluirPorDefecto']);
   const vacunaId = leerVacunaId(cuerpo.vacunaId);
   const copiaDe = leerCopiaDe(cuerpo.copiaDe);
   const contenido = leerContenido(cuerpo);
+  const incluirPedido = leerIncluirPorDefecto(cuerpo.incluirPorDefecto);
 
   const [referencias, ddriss] = await Promise.all([cargarReferencias(vacunaId), codigoDdriss(usuario.ddrissId)]);
   if (ddriss === null) throw errores.sinDdriss();
@@ -615,6 +626,8 @@ export async function crearEsquema(cuerpo, contexto, usuario) {
     basado_en: basadoEnDeLaCopia(base),
     dimensiones: partes.dimensiones,
     secciones: partes.secciones,
+    // Uno vacío no entra en los reportes nuevos salvo que se marque; una copia toma la marca de su base.
+    incluir_por_defecto: incluirPedido ?? (base ? (base.incluir_por_defecto ?? true) : false),
     campos_adicionales: base?.campos_adicionales ?? [],
     reglas: base ? base.reglas : await reglasBasicas(),
     presentacion: deducirPresentacion(partes, base?.presentacion),
@@ -650,19 +663,22 @@ async function buscarBorradorPropio(id, usuario, error = errores.noEditable) {
   return doc;
 }
 
-const CAMPOS_EDITABLES = ['procedencia', 'dosis', 'desagregacion', 'secciones', 'presentacion'];
+const CAMPOS_EDITABLES = ['procedencia', 'dosis', 'desagregacion', 'secciones', 'presentacion', 'incluirPorDefecto'];
 const editables = (esquema) => Object.fromEntries(CAMPOS_EDITABLES.map((campo) => [campo, esquema[campo]]));
 
 // basado_en, reglas, campos adicionales, vigencia y auditoria no cambian: solo el contenido que arma el editor.
 export async function editarEsquema(id, cuerpo, contexto, usuario) {
-  revisarCampos(cuerpo, ['procedencia', 'dosis', 'desagregacion', 'secciones']);
+  revisarCampos(cuerpo, ['procedencia', 'dosis', 'desagregacion', 'secciones', 'incluirPorDefecto']);
   const contenido = leerContenido(cuerpo);
+  const incluirPedido = leerIncluirPorDefecto(cuerpo.incluirPorDefecto);
   const doc = await buscarBorradorPropio(id, usuario);
   const partes = revisarCoherencia(contenido, await cargarReferencias(doc.vacuna.id));
   const cambio = {
     dimensiones: partes.dimensiones,
     secciones: partes.secciones,
     presentacion: deducirPresentacion(partes, doc.presentacion),
+    // Si no viene, se conserva.
+    ...(incluirPedido !== undefined && { incluir_por_defecto: incluirPedido }),
   };
 
   const cambios = diferencias(editables(aEsquema(doc)), editables(aEsquema({ ...doc, ...cambio })));

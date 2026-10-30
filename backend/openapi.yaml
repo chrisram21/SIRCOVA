@@ -5049,6 +5049,7 @@ components:
         secciones:
           allOf: [{ $ref: "#/components/schemas/EsquemaCaptura/properties/secciones" }]
           description: "`[]` en una versión anterior a la v0.4 del modelo (Hexavalente v1): se deducen de `grupo_edad`"
+        incluirPorDefecto: { $ref: "#/components/schemas/EsquemaCaptura/properties/incluirPorDefecto" }
         camposAdicionales:
           type: array
           items:

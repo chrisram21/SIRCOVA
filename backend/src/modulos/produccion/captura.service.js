@@ -127,6 +127,8 @@ function aVacunaDeFormulario(fila, esquemas, celdas, procedencias) {
   const esquema = esquemas.get(fila.esquema_mongo_id) ?? null;
   return {
     vacunaId: fila.vacuna_id,
+    // Como en GET /reportes/{id}: sin el documento, o sin la marca, la vacuna cuenta como base.
+    base: esquema?.incluirPorDefecto ?? true,
     esquema,
     procedenciasPermitidas: procedenciasPermitidas(esquema, procedencias),
     celdas: celdas.filter((c) => c.reporteVacunaId === fila.id).map(aCelda),

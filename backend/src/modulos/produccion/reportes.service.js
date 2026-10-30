@@ -82,7 +82,9 @@ async function conEtiquetas(vacunas) {
   const db = await obtenerDb();
   const ids = vacunas.map((v) => v.esquema.id).filter((id) => /^[0-9a-f]{24}$/i.test(id)).map((id) => new ObjectId(id));
   const [documentos, [dosis]] = await Promise.all([
-    db.collection('esquemas_captura').find({ _id: { $in: ids } }, { projection: { dimensiones: 1, secciones: 1 } }).toArray(),
+    db.collection('esquemas_captura')
+      .find({ _id: { $in: ids } }, { projection: { dimensiones: 1, secciones: 1, incluir_por_defecto: 1 } })
+      .toArray(),
     pool.query('SELECT vacuna_id, codigo, nombre, orden, activa FROM dosis WHERE vacuna_id IN (?) ORDER BY orden', [
       vacunas.map((v) => v.vacuna.id),
     ]),
@@ -95,7 +97,8 @@ async function conEtiquetas(vacunas) {
 
   return vacunas.map((v) => {
     const esquema = usadasPorEsquema.get(v.esquema.id);
-    if (!esquema) return { ...v, dosis: [], dimensiones: [] };
+    // Base (SPEC 31): la versión fijada está marcada, o es anterior a la v0.8 o ya no está; no se quita del reporte.
+    if (!esquema) return { ...v, base: true, dosis: [], dimensiones: [] };
     const delEsquema = new Set(esquema.doc.dimensiones.dosis.map((d) => d.codigo));
     const dimensiones = [...esquema.usadas]
       .filter(([codigo]) => catalogo.has(codigo))
@@ -115,6 +118,7 @@ async function conEtiquetas(vacunas) {
       .sort((a, b) => (b.codigo === GRUPO_EDAD) - (a.codigo === GRUPO_EDAD) || a.nombre.localeCompare(b.nombre, 'es'));
     return {
       ...v,
+      base: esquema.doc.incluir_por_defecto ?? true,
       dosis: dosis
         .filter((d) => d.vacuna_id === v.vacuna.id && delEsquema.has(d.codigo))
         .map((d) => ({ codigo: d.codigo, nombre: d.nombre, orden: d.orden, activa: Boolean(d.activa) })),
@@ -279,8 +283,9 @@ async function establecimientoDe(usuario) {
   return fila;
 }
 
-// Las vacunas activas con el esquema que cubre el día 1 del mes; las que no tienen uno se omiten.
-async function vacunasConEsquema(periodo, ddrissCodigo) {
+// Las vacunas activas con el esquema que cubre el día 1 del mes, cada una con su incluirPorDefecto; las que no
+// tienen uno se omiten. También dice qué vacunas se pueden agregar a un reporte (SPEC 31).
+export async function vacunasConEsquema(periodo, ddrissCodigo) {
   const [vacunas] = await pool.query('SELECT id, codigo FROM vacuna WHERE activa = TRUE');
   const fecha = new Date(Date.UTC(periodo.anio, periodo.mes - 1, 1));
   const esquemas = await esquemasDelPeriodo(vacunas.map((v) => v.codigo), ddrissCodigo, fecha);
@@ -293,7 +298,9 @@ export async function crearReporte(cuerpo, usuario, contexto) {
   const establecimiento = await establecimientoDe(usuario);
   const [[periodo]] = await pool.query('SELECT id, anio, mes FROM periodo WHERE id = ?', [periodoId]);
   if (!periodo) throw errores.periodoNoEncontrado();
-  const vacunas = await vacunasConEsquema(periodo, establecimiento.ddriss_codigo);
+  const conEsquema = await vacunasConEsquema(periodo, establecimiento.ddriss_codigo);
+  // Solo las marcadas (SPEC 31); las demás las agrega el establecimiento con POST /reportes/{id}/vacunas.
+  const vacunas = conEsquema.filter((v) => v.incluirPorDefecto);
 
   let reporteId;
   try {
@@ -309,17 +316,20 @@ export async function crearReporte(cuerpo, usuario, contexto) {
         [establecimiento.id, periodo.id],
       );
       if (existente) throw errores.reporteExistente();
-      if (vacunas.length === 0) throw errores.sinEsquemas();
+      if (conEsquema.length === 0) throw errores.sinEsquemas();
 
       const [resultado] = await conexion.query(
         'INSERT INTO reporte_produccion (establecimiento_id, periodo_id, creado_por) VALUES (?, ?, ?)',
         [establecimiento.id, periodo.id, contexto.usuarioId],
       );
       const id = resultado.insertId;
-      await conexion.query(
-        'INSERT INTO reporte_vacuna (reporte_id, vacuna_id, esquema_mongo_id, esquema_version) VALUES ?',
-        [vacunas.map((v) => [id, v.vacunaId, v.id, v.version])],
-      );
+      // Si ninguna está marcada, el reporte nace sin vacunas.
+      if (vacunas.length > 0) {
+        await conexion.query(
+          'INSERT INTO reporte_vacuna (reporte_id, vacuna_id, esquema_mongo_id, esquema_version) VALUES ?',
+          [vacunas.map((v) => [id, v.vacunaId, v.id, v.version])],
+        );
+      }
       await conexion.query(
         "INSERT INTO historial_estado_reporte (reporte_id, estado_anterior, estado_nuevo, usuario_id) VALUES (?, NULL, 'BORRADOR', ?)",
         [id, contexto.usuarioId],
