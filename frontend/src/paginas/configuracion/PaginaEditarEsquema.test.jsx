@@ -142,6 +142,7 @@ test('carga el borrador, guarda con editarEsquema y vuelve a la pestaña con el 
       { titulo: 'Menores de 1 año', grupoEdad: 'MENOR_1', dosis: ['D1'] },
       { titulo: 'De 1 a < 6 años', grupoEdad: '1_A_5', dosis: ['D1', 'R1'] },
     ],
+    incluirPorDefecto: true,
   })
   // Vuelve sin state.aviso: el aviso va en un toast.
   await waitFor(() => expect(screen.getByTestId('pestana').textContent).toBe('|'))

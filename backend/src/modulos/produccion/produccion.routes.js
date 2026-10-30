@@ -14,6 +14,19 @@ router.get(
   requierePermiso('REPORTE_CONSULTAR'),
   produccionController.obtenerFormulario,
 );
+router.get(
+  '/reportes/:id/vacunas-disponibles',
+  autenticar,
+  requierePermiso('REPORTE_EDITAR'),
+  produccionController.listarVacunasDisponibles,
+);
+router.post('/reportes/:id/vacunas', autenticar, requierePermiso('REPORTE_EDITAR'), produccionController.agregarVacuna);
+router.delete(
+  '/reportes/:id/vacunas/:vacunaId',
+  autenticar,
+  requierePermiso('REPORTE_EDITAR'),
+  produccionController.quitarVacuna,
+);
 router.put(
   '/reportes/:id/vacunas/:vacunaId',
   autenticar,

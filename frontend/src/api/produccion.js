@@ -29,3 +29,18 @@ export function obtenerFormulario(id) {
 export function guardarVacuna(reporteId, vacunaId, cuerpo) {
   return solicitar(`/reportes/${reporteId}/vacunas/${vacunaId}`, { metodo: 'PUT', cuerpo })
 }
+
+// SPEC 31: las vacunas activas con esquema para el mes que el reporte todavía no tiene.
+export function listarVacunasDisponibles(reporteId) {
+  return solicitar(`/reportes/${reporteId}/vacunas-disponibles`)
+}
+
+// Responde { versionFila, orden, vacuna, formulario }: la vacuna en la forma del detalle y del formulario.
+export function agregarVacuna(reporteId, { vacunaId, versionFila }) {
+  return solicitar(`/reportes/${reporteId}/vacunas`, { metodo: 'POST', cuerpo: { vacunaId, versionFila } })
+}
+
+// Borra la vacuna y sus cantidades; responde { versionFila }.
+export function quitarVacuna(reporteId, vacunaId, versionFila) {
+  return solicitar(`/reportes/${reporteId}/vacunas/${vacunaId}?versionFila=${versionFila}`, { metodo: 'DELETE' })
+}

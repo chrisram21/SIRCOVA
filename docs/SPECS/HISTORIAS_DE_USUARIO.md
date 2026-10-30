@@ -396,6 +396,8 @@ Ajuste del sprint 3 (`specs/30-publicar-con-vista-previa-y-menu-administracion.m
 
 **Nota (2026-10-24, spec 18):** El esquema solo usa dimensiones y valores activos (`GET /dimensiones?activa=true`, SPEC 18); un esquema VIGENTE o BORRADOR impide desactivarlos. Los códigos de dimensión y de valor llegan a 30 caracteres: el esquema debe revisar que la combinación quepa en los 255 de `clave_combinacion`.
 
+**Nota (2026-10-29, spec 31):** el esquema lleva la marca `incluir_por_defecto` (MongoDB v0.8; en la API, `incluirPorDefecto`): marcada, la vacuna entra en cada reporte nuevo del mes que cubre la versión. El editor la muestra como la casilla «Incluir en los reportes nuevos», en la tarjeta «Reportes». Un borrador vacío empieza sin marcar y una copia la hereda; un esquema anterior a la v0.8, sin el campo, cuenta como marcado, así que no hubo migración ni se tocó ninguna versión publicada. Detalle en `specs/31-vacunas-base-y-agregadas-al-reporte.md`.
+
 #### HU-17. Versionar y publicar esquemas
 
 > **Como** administrador, **quiero** publicar una nueva versión de un esquema con fecha de vigencia, **para** adaptarme a cambios del esquema nacional sin alterar los reportes ya capturados.
@@ -530,6 +532,8 @@ El reporte 287 queda en Borrador y sirve para HU-20.
 
 **Nota (2026-10-25, spec 23):** la parte de las dosis inactivas se cumplió en HU-20: el formulario oculta una dosis inactiva salvo que el reporte ya tenga filas de ella, y `PUT /reportes/{id}/vacunas/{vacunaId}` la rechaza con 422 en el mismo caso.
 
+Ajuste del sprint 3 (`specs/31-vacunas-base-y-agregadas-al-reporte.md`): el reporte nuevo ya no lleva todas las vacunas con esquema para el mes, sino solo las que su esquema del mes (el de la DDRISS o, si no hay, el nacional) marca con `incluirPorDefecto`. Si hay vacunas con esquema pero ninguna marcada, el reporte se crea sin vacunas; 422 `SIN_ESQUEMAS` queda para cuando ninguna vacuna tiene esquema para el mes. Mientras el reporte está en Borrador, el Personal agrega las demás vacunas con esquema (`GET /reportes/{id}/vacunas-disponibles` y `POST /reportes/{id}/vacunas`) y quita las que no son base (`DELETE /reportes/{id}/vacunas/{vacunaId}?versionFila=`), con `REPORTE_EDITAR`. Una vacuna es base si la versión fijada en su `reporte_vacuna` está marcada (o no trae la marca); no se quita (409 `VACUNA_BASE`), y tampoco una con observaciones del revisor (409 `VACUNA_CON_OBSERVACIONES`). Quitar borra sus cantidades y deja en la bitácora una `ELIMINAR` con la fila y todas sus celdas; agregar deja una `CREAR`. En los reportes creados antes de este spec ninguna vacuna se puede quitar, porque sus esquemas no traen la marca. Verificado contra la API real el 2026-10-29, con la vacuna de prueba manual `ZVM_HU31` y un mes de prueba (enero de 2088, creado y borrado por SQL): el Administrador publicó su versión 1 sin marcar (la vista previa dijo «El establecimiento la agrega al reporte si la aplica.»); como Personal del establecimiento (Concepción Tutuapa), el reporte nuevo trajo las 9 vacunas con esquema marcado, sin `ZVM_HU31` y sin «Quitar» en ninguna; se agregó `ZVM_HU31` sin perder una cantidad sin guardar de BCG, se guardaron las dos sin 409 y se quitó con el aviso de que se borraban sus cantidades. La base quedó sin sus filas de detalle y la bitácora con su `CREAR` y su `ELIMINAR` (con la celda borrada). En el reporte real de octubre de 2026 ninguna vacuna ofrece «Quitar». Al terminar se borraron el reporte y el mes, se desactivó `ZVM_HU31`, y en MongoDB solo su versión tiene `incluir_por_defecto`.
+
 #### HU-20. Capturar la producción con el formulario dinámico
 
 > **Como** personal del establecimiento, **quiero** llenar la producción por vacuna, dosis y grupo de edad, y por sexo u otra dimensión solo en las vacunas que la usan, en un formulario generado desde el esquema vigente, **para** reemplazar el proceso físico de envio del formulario 5C físico y la digitación posterior en Excel.
@@ -589,6 +593,8 @@ Las cantidades del reporte 287 quedan para HU-21, HU-22 y HU-25.
 - `GET /reportes/{id}` ya trae, de la versión del reporte, los nombres de las dosis (con `activa`) y las etiquetas de las dimensiones de cada vacuna (`vacunas[].dosis` y `vacunas[].dimensiones`), porque el Personal no tiene `DIMENSION_CONSULTAR` ni `VACUNA_CONSULTAR`. Esto responde la nota del spec 18.
 - `GET /reportes/{id}/formulario` agrega el contenido del esquema y las cantidades guardadas.
 - `esquemasDelPeriodo` (`esquemas.service.js`) resuelve el esquema por fecha, y la `etiqueta` de cada desagregación ya está en `GET /esquemas-captura/{id}`.
+
+**Nota (2026-10-29, spec 31):** con el reporte editable, la captura tiene «Agregar vacuna» al final de las pestañas y «Quitar vacuna» en la tarjeta A de cada vacuna que no es base. La vacuna agregada se une a las demás con lo que responde el `POST`, en el orden del catálogo, sin recargar: lo que no se ha guardado en las otras pestañas se conserva y el siguiente guardado usa la `versionFila` nueva. Quitar una vacuna con cantidades (guardadas o sin guardar) pide confirmación y avisa que se borran. Un reporte sin vacunas lo dice y ofrece agregarlas.
 
 #### HU-21. Registrar el municipio de procedencia
 
@@ -798,6 +804,8 @@ Verificado contra la API real el 2026-10-26, con `cs1201`, en el reporte 287 (oc
 - [ ] Veo cada observación junto a la vacuna a la que se refiere.
 - [ ] Al reenviar, el sistema vuelve a validar el reporte.
 - [ ] El historial guarda cada envío y cada devolución.
+
+**Nota (2026-10-29, spec 31):** agregar y quitar vacunas del reporte solo se permite en Borrador. Esta historia debe decidir si también se permite cuando el reporte vuelve por Corrección solicitada, y qué pasa al quitar una vacuna con observaciones del revisor: hoy responde 409 `VACUNA_CON_OBSERVACIONES`, porque la llave de `observacion_revision` la dejaría en `NULL`. Detalle en `specs/31-vacunas-base-y-agregadas-al-reporte.md`.
 
 #### HU-30. Aprobar un reporte
 

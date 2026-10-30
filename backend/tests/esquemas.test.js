@@ -417,6 +417,45 @@ describe('POST /esquemas-captura', () => {
     ],
   });
 
+  describe('incluirPorDefecto (SPEC 31)', () => {
+    it('un borrador vacío empieza en false, y lo guarda como booleano', async () => {
+      const res = await enviar('post', '/esquemas-captura', vacio());
+      expect(res.status).toBe(201);
+      expect(res.body.incluirPorDefecto).toBe(false);
+      expect((await documentoCrudo(res.body.id)).incluir_por_defecto).toBe(false);
+    });
+
+    it('uno vacío con incluirPorDefecto: true queda marcado', async () => {
+      const res = await enviar('post', '/esquemas-captura', { ...vacio(), incluirPorDefecto: true });
+      expect(res.status).toBe(201);
+      expect(res.body.incluirPorDefecto).toBe(true);
+    });
+
+    it('una copia de un vigente sin el campo (anterior a la v0.8) hereda true', async () => {
+      const base = await documentoCrudo(ids.vigenteNacional.toString());
+      expect(base.incluir_por_defecto).toBeUndefined();
+      const vigente = await enviar('get', `/esquemas-captura/${ids.vigenteNacional}`);
+      expect(vigente.body.incluirPorDefecto).toBe(true);
+
+      const res = await enviar('post', '/esquemas-captura', copia());
+      expect(res.status).toBe(201);
+      expect(res.body.incluirPorDefecto).toBe(true);
+      expect((await documentoCrudo(res.body.id)).incluir_por_defecto).toBe(true);
+    });
+
+    it('una copia con incluirPorDefecto: false no hereda la marca', async () => {
+      const res = await enviar('post', '/esquemas-captura', { ...copia(), incluirPorDefecto: false });
+      expect(res.status).toBe(201);
+      expect(res.body.incluirPorDefecto).toBe(false);
+    });
+
+    it('un incluirPorDefecto que no es booleano responde 400', async () => {
+      const res = await enviar('post', '/esquemas-captura', { ...vacio(), incluirPorDefecto: 'si' });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toEqual({ codigo: 'ENTRADA_INVALIDA', mensaje: 'incluirPorDefecto debe ser true o false.' });
+    });
+  });
+
   it('crea un borrador vacío de la DDRISS con lo que calcula el backend y una fila CREAR', async () => {
     const res = await enviar('post', '/esquemas-captura', vacio());
     expect(res.status).toBe(201);
@@ -619,6 +658,23 @@ describe('PUT y DELETE /esquemas-captura/{id}', () => {
         { titulo: 'De 1 a < 6 años', grupoEdad: '1_A_5', dosis: ['D2'] },
       ],
     });
+
+  it('un PUT con incluirPorDefecto lo cambia y deja ACTUALIZAR solo con ese campo; sin él, se conserva (SPEC 31)', async () => {
+    const id = await crear();
+    const marcar = await enviar('put', `/esquemas-captura/${id}`, { ...contenido(), incluirPorDefecto: true });
+    expect(marcar.status).toBe(200);
+    expect(marcar.body.incluirPorDefecto).toBe(true);
+
+    const filas = await filasBitacora(id);
+    expect(filas.map((f) => f.accion)).toEqual(['CREAR', 'ACTUALIZAR']);
+    expect(filas[1].anteriores).toEqual({ incluirPorDefecto: false });
+    expect(filas[1].nuevos).toEqual({ incluirPorDefecto: true });
+
+    const sinCampo = await enviar('put', `/esquemas-captura/${id}`, otroTitulo());
+    expect(sinCampo.status).toBe(200);
+    expect(sinCampo.body.incluirPorDefecto).toBe(true);
+    expect((await documentoCrudo(id)).incluir_por_defecto).toBe(true);
+  });
 
   it('un PUT que cambia una sección deja ACTUALIZAR y no toca basadoEn, reglas, auditoría ni la vigencia', async () => {
     const id = await crear();

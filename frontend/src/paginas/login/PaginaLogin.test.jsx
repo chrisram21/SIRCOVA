@@ -296,6 +296,13 @@ describe('aviso de sesión cerrada', () => {
 })
 
 describe('acceso rápido (solo en desarrollo)', () => {
+  // Vitest carga el .env.local de quien corre las pruebas: cada una parte sin credenciales y pone las suyas.
+  beforeEach(() => {
+    for (const rol of ['ADMIN', 'ESTABLECIMIENTO']) {
+      vi.stubEnv(`VITE_ACCESO_RAPIDO_${rol}_USUARIO`, '')
+      vi.stubEnv(`VITE_ACCESO_RAPIDO_${rol}_CONTRASENA`, '')
+    }
+  })
   afterEach(() => vi.unstubAllEnvs())
 
   test('sin las variables de .env.local, los botones están deshabilitados y se explica qué falta', async () => {

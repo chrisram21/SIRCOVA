@@ -1,7 +1,14 @@
 // =============================================================================
 //  Plataforma web de producción de vacunación — DDRISS San Marcos (MSPAS)
 //  Diseño preliminar de colecciones MongoDB (MongoDB 7.x, ejecutar con mongosh)
-//  Versión: 0.7 (propuesta para revisión)   Fecha: 2026-10-23
+//  Versión: 0.8 (propuesta para revisión)   Fecha: 2026-10-29
+//  Cambios v0.8 (MySQL sigue en v0.10, SPEC 31): esquemas_captura agrega
+//  "incluir_por_defecto" (bool, opcional). Marcada, la vacuna entra en cada
+//  reporte nuevo del mes que cubre la versión; sin marcar, el establecimiento
+//  la agrega al reporte si la aplica. Si falta (documentos anteriores a la
+//  v0.8), el backend la toma como true, así que no hay migración ni se tocan
+//  versiones publicadas. Es parte de la versión: para cambiarla se publica
+//  una versión nueva.
 //  Cambios v0.7 (MySQL sigue en v0.9): esquemas_captura agrega "territorio"
 //  y "basado_en". Una DDRISS puede publicar su propio formulario a partir del
 //  nacional: se copia en un documento nuevo con territorio DDRISS y basado_en
@@ -283,6 +290,10 @@ db_.createCollection("esquemas_captura", {
           }
         },
         presentacion: { bsonType: "object" },
+        incluir_por_defecto: {
+          bsonType: "bool",
+          description: "v0.8: true, la vacuna entra en los reportes nuevos del mes que cubre esta versión. Si falta, el backend la toma como true"
+        },
         auditoria: auditoria
       }
     }

@@ -25,6 +25,8 @@ function contenidoVacio(dosis) {
       .map((d) => ({ codigo: d.codigo, desagregacion: null })),
     desagregacion: [],
     secciones: [{ titulo: '', grupoEdad: null, dosis: [] }],
+    // Una vacuna nueva no entra en los reportes nuevos salvo que se marque (SPEC 31).
+    incluirPorDefecto: false,
   }
 }
 
@@ -50,6 +52,7 @@ function contenidoDeCopia(esquema, dosis, dimensiones) {
   const grupos = desagregacion.find((d) => d.dimension === 'grupo_edad')?.valores ?? []
   const contenido = {
     procedencia: esquema.procedencia,
+    incluirPorDefecto: esquema.incluirPorDefecto ?? true,
     dosis: esquema.dosis
       .filter((d) => dosisActivas.has(d.codigo))
       .map((d) => ({ codigo: d.codigo, desagregacion: d.desagregacion === null ? null : filtrar(d.desagregacion) })),

@@ -229,24 +229,24 @@ describe('esquemasDelPeriodo', () => {
 
   it('antes del esquema de la DDRISS, da el nacional que cubre la fecha aunque sea HISTORICO', async () => {
     const esquemas = await resolver('2022-02-01');
-    expect(esquemas.get(VACUNA)).toEqual({ id: ids.nacionalV1.toString(), version: 1 });
+    expect(esquemas.get(VACUNA)).toEqual({ id: ids.nacionalV1.toString(), version: 1, incluirPorDefecto: true });
   });
 
   it('con un esquema de la DDRISS que cubre la fecha, gana sobre el nacional', async () => {
-    expect((await resolver('2022-04-01')).get(VACUNA)).toEqual({ id: ids.ddrissV3.toString(), version: 3 });
-    expect((await resolver('2022-07-01')).get(VACUNA)).toEqual({ id: ids.ddrissV3.toString(), version: 3 });
+    expect((await resolver('2022-04-01')).get(VACUNA)).toEqual({ id: ids.ddrissV3.toString(), version: 3, incluirPorDefecto: true });
+    expect((await resolver('2022-07-01')).get(VACUNA)).toEqual({ id: ids.ddrissV3.toString(), version: 3, incluirPorDefecto: true });
   });
 
   it('sin DDRISS, o con otra, da el nacional de la fecha', async () => {
-    expect((await resolver('2022-07-01', null)).get(VACUNA)).toEqual({ id: ids.nacionalV2.toString(), version: 2 });
-    expect((await resolver('2022-03-01', 'ZVT_OTRA')).get(VACUNA)).toEqual({ id: ids.nacionalV1.toString(), version: 1 });
+    expect((await resolver('2022-07-01', null)).get(VACUNA)).toEqual({ id: ids.nacionalV2.toString(), version: 2, incluirPorDefecto: true });
+    expect((await resolver('2022-03-01', 'ZVT_OTRA')).get(VACUNA)).toEqual({ id: ids.nacionalV1.toString(), version: 1, incluirPorDefecto: true });
   });
 
   it('una vacuna sin esquema, o con su primer desde posterior a la fecha, no aparece', async () => {
     const febrero = await resolver('2022-02-01');
     expect(febrero.has('ZVT_HU19S')).toBe(false);
     expect(febrero.has(VACUNA_TARDIA)).toBe(false);
-    expect((await resolver('2022-09-01')).get(VACUNA_TARDIA)).toEqual({ id: ids.tardia.toString(), version: 1 });
+    expect((await resolver('2022-09-01')).get(VACUNA_TARDIA)).toEqual({ id: ids.tardia.toString(), version: 1, incluirPorDefecto: true });
   });
 
   it('antes de cualquier vigencia no da nada, y sin vacunas devuelve un Map vacío', async () => {
@@ -478,6 +478,8 @@ describe('GET /reportes y GET /reportes/{id}', () => {
         id: expect.any(Number),
         vacuna: { id: vacunaIds[VACUNA], codigo: VACUNA, nombre: `vitest-hu19 ${VACUNA}` },
         esquema: { id: ids.nacionalV1.toString(), version: 1 },
+        // El esquema de prueba no trae incluir_por_defecto (anterior a la v0.8): cuenta como base (SPEC 31).
+        base: true,
         dosis: expect.any(Array),
         dimensiones: expect.any(Array),
       },
