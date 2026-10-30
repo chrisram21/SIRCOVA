@@ -5,7 +5,7 @@ import { consultarPoblacion, guardarPoblacion, listarPeriodos } from '@/api/cata
 import { ErrorApi } from '@/api/cliente.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
-import PaginaConfiguracion from './PaginaConfiguracion.jsx'
+import PaginaPoblacion from './PaginaPoblacion.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
 vi.mock('@/api/catalogos.js', () => ({
@@ -89,14 +89,14 @@ function montar(ruta, permisos = PERMISOS) {
   render(
     <MemoryRouter initialEntries={[ruta]}>
       <ProveedorSesion>
-        <PaginaConfiguracion />
+        <PaginaPoblacion />
         <Ubicacion />
       </ProveedorSesion>
     </MemoryRouter>,
   )
 }
 
-async function abrir(ruta = '/configuracion?pestana=poblacion', permisos = PERMISOS) {
+async function abrir(ruta = '/administracion/poblacion', permisos = PERMISOS) {
   montar(ruta, permisos)
   await waitFor(() => expect(screen.queryByLabelText('Cargando población')).toBeNull())
 }
@@ -152,18 +152,18 @@ test('cambiar el año pide la población de ese año y queda en la URL', async (
 
   await waitFor(() => expect(textoDe('San Marcos')[1]).toBe('1,400'))
   expect(consultarPoblacion).toHaveBeenLastCalledWith(2025)
-  expect(ubicacion()).toBe('?pestana=poblacion&anio=2025')
+  expect(ubicacion()).toBe('?anio=2025')
   expect(listarPeriodos).toHaveBeenCalledTimes(1)
 })
 
 test('el año de la URL se aplica al abrir', async () => {
-  await abrir('/configuracion?pestana=poblacion&anio=2027')
+  await abrir('/administracion/poblacion?anio=2027')
   expect(selectAnio().value).toBe('2027')
   expect(consultarPoblacion).toHaveBeenCalledWith(2027)
 })
 
 test('con un año de la URL que no está en el calendario se elige el actual', async () => {
-  await abrir('/configuracion?pestana=poblacion&anio=2019')
+  await abrir('/administracion/poblacion?anio=2019')
 
   expect(selectAnio().value).toBe('2026')
   expect(consultarPoblacion).not.toHaveBeenCalledWith(2019)
@@ -174,19 +174,19 @@ test('sin años en el calendario lo dice y no pide la población', async () => {
 
   await abrir()
 
-  expect(screen.getByText('No hay años en el calendario. Créelos en la pestaña Periodos.')).toBeTruthy()
+  expect(screen.getByText('No hay años en el calendario. Créelos en «Administración › Periodos».')).toBeTruthy()
   expect(screen.queryByRole('table')).toBeNull()
   expect(consultarPoblacion).not.toHaveBeenCalled()
 })
 
-test('sin años y con PERIODO_CREAR, el aviso lleva a la pestaña Periodos', async () => {
+test('sin años y con PERIODO_CREAR, el aviso lleva a Periodos', async () => {
   listarPeriodos.mockResolvedValue([])
 
   await abrir(undefined, [...PERMISOS, 'PERIODO_CREAR'])
 
-  const vacio = screen.getByText('No hay años en el calendario. Créelos en la pestaña Periodos.').parentElement
+  const vacio = screen.getByText('No hay años en el calendario. Créelos en «Administración › Periodos».').parentElement
   expect(within(vacio).getByRole('link', { name: 'Ir a Periodos' }).getAttribute('href')).toBe(
-    '/configuracion?pestana=periodos',
+    '/administracion/periodos',
   )
 })
 
@@ -222,25 +222,11 @@ test('si falla la petición muestra el aviso, y "Reintentar" vuelve a pedir', as
   expect(consultarPoblacion).toHaveBeenCalledTimes(2)
 })
 
-test('sin POBLACION_CONSULTAR no aparece la pestaña', () => {
-  montar('/configuracion?pestana=poblacion', ['CONFIGURACION_CONSULTAR', 'PERIODO_CONSULTAR'])
-
-  expect(screen.queryByRole('tab', { name: 'Población' })).toBeNull()
-  expect(consultarPoblacion).not.toHaveBeenCalled()
-})
-
-test('sin PERIODO_CONSULTAR tampoco aparece, porque los años salen del calendario', () => {
-  montar('/configuracion?pestana=poblacion', ['CONFIGURACION_CONSULTAR', 'POBLACION_CONSULTAR'])
-
-  expect(screen.queryByRole('tab', { name: 'Población' })).toBeNull()
-  expect(consultarPoblacion).not.toHaveBeenCalled()
-})
-
-test('la pestaña Población va después de Periodos', async () => {
+test('la pantalla Población lleva su encabezado', async () => {
   await abrir()
 
-  expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Periodos', 'Población'])
-  expect(screen.getByRole('tab', { name: 'Población' }).getAttribute('aria-selected')).toBe('true')
+  expect(screen.getByRole('heading', { level: 1, name: 'Población' })).toBeTruthy()
+  expect(screen.getByText('Administración')).toBeTruthy()
 })
 
 describe('Editar la población de un municipio', () => {

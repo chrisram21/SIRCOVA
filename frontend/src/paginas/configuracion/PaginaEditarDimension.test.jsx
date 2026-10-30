@@ -89,8 +89,8 @@ function montar(ruta) {
           </ProveedorSesion>
         ),
         children: [
-          { path: '/configuracion/dimensiones/:codigo/editar', element: <PaginaEditarDimension /> },
-          { path: '/configuracion', element: <p>Pestaña</p> },
+          { path: '/administracion/dimensiones/:codigo/editar', element: <PaginaEditarDimension /> },
+          { path: '/administracion/dimensiones', element: <p>Pestaña</p> },
         ],
       },
     ],
@@ -102,7 +102,7 @@ const ubicacion = () => screen.getByTestId('ubicacion').textContent
 
 async function abrir(dimension = VIA) {
   obtenerDimension.mockResolvedValue(dimension)
-  montar(`/configuracion/dimensiones/${dimension.codigo}/editar`)
+  montar(`/administracion/dimensiones/${dimension.codigo}/editar`)
   await waitFor(() => expect(screen.queryByLabelText('Cargando dimensión')).toBeNull())
 }
 
@@ -145,7 +145,7 @@ test('guardar el nombre llama a editarDimension solo con lo que cambió, muestra
 
   // Lo guardado ya no cuenta como cambio: «Volver» sale sin preguntar.
   fireEvent.click(screen.getByRole('link', { name: 'Volver' }))
-  await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=dimensiones'))
+  await waitFor(() => expect(ubicacion()).toBe('/administracion/dimensiones'))
   expect(screen.queryByRole('alertdialog')).toBeNull()
 })
 
@@ -180,14 +180,14 @@ test('con el nombre cambiado, "Volver" pide confirmación y "Seguir editando" se
   fireEvent.click(within(dialogo).getByRole('button', { name: 'Seguir editando' }))
 
   await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
-  expect(ubicacion()).toBe('/configuracion/dimensiones/via/editar')
+  expect(ubicacion()).toBe('/administracion/dimensiones/via/editar')
   expect(screen.getByLabelText(/^Nombre\*?$/).value).toBe('Vía')
 })
 
 test('si falla la carga muestra el aviso, y "Reintentar" vuelve a pedir la dimensión', async () => {
   obtenerDimension.mockRejectedValueOnce(new ErrorApi(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.'))
   obtenerDimension.mockResolvedValue(VIA)
-  montar('/configuracion/dimensiones/via/editar')
+  montar('/administracion/dimensiones/via/editar')
 
   expect(await screen.findByText('No se pudo cargar la dimensión: No se pudo conectar con el servidor.')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
@@ -365,11 +365,11 @@ describe('desactivar y editar valores', () => {
 
 test('un código que no existe muestra "La dimensión no existe." con el enlace a la pestaña', async () => {
   obtenerDimension.mockRejectedValue(new ErrorApi(404, 'NO_ENCONTRADO', 'El recurso solicitado no existe.'))
-  montar('/configuracion/dimensiones/no_existe/editar')
+  montar('/administracion/dimensiones/no_existe/editar')
 
   expect(await screen.findByText(/La dimensión no existe\./)).toBeTruthy()
   expect(screen.getByRole('link', { name: 'Volver a las dimensiones' }).getAttribute('href')).toBe(
-    '/configuracion?pestana=dimensiones',
+    '/administracion/dimensiones',
   )
 })
 

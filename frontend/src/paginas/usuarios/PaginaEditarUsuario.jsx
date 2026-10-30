@@ -62,7 +62,7 @@ export default function PaginaEditarUsuario() {
   const navegar = useNavigate()
   const { sesion } = useSesion()
   // La lista manda sus filtros y su página para volver a ellos.
-  const volverA = state?.volverA?.pathname ? state.volverA : '/usuarios'
+  const volverA = state?.volverA?.pathname ? state.volverA : '/administracion/usuarios'
 
   const [cuenta, setCuenta] = useState(null)
   const [catalogos, setCatalogos] = useState(null)
@@ -115,7 +115,7 @@ export default function PaginaEditarUsuario() {
   if (cuenta && !cuenta.activo) {
     return (
       <section className="flex max-w-3xl flex-col gap-6 p-6">
-        <EncabezadoPagina titulo="Editar usuario" />
+        <EncabezadoPagina antetitulo="Administración" titulo="Editar usuario" />
         <AvisoError>La cuenta {cuenta.nombreUsuario} está desactivada; restáurela para editarla.</AvisoError>
         <div>
           <Button variant="outline" asChild>
@@ -204,6 +204,7 @@ export default function PaginaEditarUsuario() {
   return (
     <section className="flex max-w-3xl flex-col gap-6 p-6">
       <EncabezadoPagina
+        antetitulo="Administración"
         titulo="Editar usuario"
         descripcion={cuenta ? `${cuenta.empleado.nombres} ${cuenta.empleado.apellidos} · ${cuenta.nombreUsuario}` : undefined}
         volverA={volverA}

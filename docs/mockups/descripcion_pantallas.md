@@ -21,7 +21,7 @@ Plataforma web de la DDRISS San Marcos (MSPAS, Guatemala) para registrar, revisa
 - A la derecha, un formulario centrado: título "Iniciar sesión", alerta roja "Usuario o contraseña incorrectos. Intente de nuevo.", campos Usuario o correo institucional y Contraseña (este con borde rojo), casilla "Recordar este equipo", enlace "¿Olvidó su contraseña?", botón "Ingresar" y la nota "¿No tiene cuenta? El administrador registra a cada usuario y le asigna su rol."
 
 ## Pantalla 2. Inicio (resumen ligero; ejemplo con el rol Epidemiología)
-Menú: Inicio (activo), Registro de producción, Revisión y cierre (insignia 6), Indicadores, Mapa territorial, Informes, Alertas (insignia 5), Auditoría, Configuración. Las gráficas de análisis no van aquí: están en Indicadores (pantalla 3) y en Mapa territorial.
+Menú: Inicio (activo), Registro de producción, Revisión y cierre (insignia 6), Indicadores, Mapa territorial, Informes, Alertas (insignia 5), Auditoría, Administración (desplegable: Usuarios, Territorio, Establecimientos, Vacunas, Dimensiones, Esquemas, Periodos, Población, Roles y permisos). Las gráficas de análisis no van aquí: están en Indicadores (pantalla 3) y en Mapa territorial.
 
 **Encabezado:** "Buenos días" y debajo "Resumen del departamento de San Marcos · enero a agosto de 2026". A la derecha: "Datos de periodos cerrados · actualizado 28/09/2026".
 

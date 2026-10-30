@@ -5,7 +5,7 @@ import { desactivarDimension, listarDimensiones, reactivarDimension } from '@/ap
 import { ErrorApi } from '@/api/cliente.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
-import PaginaConfiguracion from './PaginaConfiguracion.jsx'
+import PaginaDimensiones from './PaginaDimensiones.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
 vi.mock('@/api/catalogos.js', () => ({ listarVacunas: vi.fn() }))
@@ -73,14 +73,14 @@ function montar(ruta, permisos) {
   render(
     <MemoryRouter initialEntries={[ruta]}>
       <ProveedorSesion>
-        <PaginaConfiguracion />
+        <PaginaDimensiones />
         <Ubicacion />
       </ProveedorSesion>
     </MemoryRouter>,
   )
 }
 
-async function abrir(ruta = '/configuracion?pestana=dimensiones', permisos = CONSULTAR) {
+async function abrir(ruta = '/administracion/dimensiones', permisos = CONSULTAR) {
   montar(ruta, permisos)
   await waitFor(() => expect(screen.queryByLabelText('Cargando dimensiones')).toBeNull())
 }
@@ -98,21 +98,14 @@ beforeEach(() => {
   listarDimensiones.mockResolvedValue(DIMENSIONES)
 })
 
-test('la pestaña Dimensiones aparece con DIMENSION_CONSULTAR y pide la lista sin filtro', async () => {
-  await abrir('/configuracion', CONSULTAR)
+test('la pantalla Dimensiones pide la lista sin filtro', async () => {
+  await abrir('/administracion/dimensiones', CONSULTAR)
 
-  expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Dimensiones'])
+  expect(screen.getByRole('heading', { level: 1, name: 'Dimensiones' })).toBeTruthy()
   expect(listarDimensiones).toHaveBeenCalledTimes(1)
   expect(listarDimensiones).toHaveBeenCalledWith({})
   expect(screen.getByText('Dimensiones de desagregación')).toBeTruthy()
   expect(codigos()).toEqual(['estado_embarazo', 'grupo_edad', 'via', 'pueblo'])
-})
-
-test('sin DIMENSION_CONSULTAR no aparece la pestaña', () => {
-  montar('/configuracion?pestana=dimensiones', ['CONFIGURACION_CONSULTAR'])
-
-  expect(screen.queryByRole('tab', { name: 'Dimensiones' })).toBeNull()
-  expect(listarDimensiones).not.toHaveBeenCalled()
 })
 
 test('la tabla muestra el tipo, los valores activos en orden, "+N inactivos" y el estado', async () => {
@@ -139,15 +132,15 @@ test('cambiar el estado pide la lista con activa y lo deja en la URL; al abrir c
   fireEvent.change(document.querySelector('select[name="activa"]'), { target: { value: 'false' } })
   await waitFor(() => expect(codigos()).toEqual(['pueblo']))
   expect(listarDimensiones).toHaveBeenLastCalledWith({ activa: false })
-  expect(ubicacion()).toBe('?pestana=dimensiones&activa=false')
+  expect(ubicacion()).toBe('?activa=false')
 
   fireEvent.change(document.querySelector('select[name="activa"]'), { target: { value: 'todas' } })
   await waitFor(() => expect(listarDimensiones).toHaveBeenLastCalledWith({}))
-  expect(ubicacion()).toBe('?pestana=dimensiones')
+  expect(ubicacion()).toBe('')
 })
 
 test('con activa=true en la URL pide solo las activas', async () => {
-  await abrir('/configuracion?pestana=dimensiones&activa=true')
+  await abrir('/administracion/dimensiones?activa=true')
   expect(listarDimensiones).toHaveBeenCalledWith({ activa: true })
 })
 
@@ -180,9 +173,9 @@ describe('acciones', () => {
   test('con los permisos aparecen "Nueva dimensión" y los enlaces de edición', async () => {
     await abrir(undefined, TODOS)
 
-    expect(screen.getByRole('link', { name: /Nueva dimensión/ }).getAttribute('href')).toBe('/configuracion/dimensiones/nueva')
+    expect(screen.getByRole('link', { name: /Nueva dimensión/ }).getAttribute('href')).toBe('/administracion/dimensiones/nueva')
     expect(screen.getByRole('link', { name: 'Editar grupo_edad' }).getAttribute('href')).toBe(
-      '/configuracion/dimensiones/grupo_edad/editar',
+      '/administracion/dimensiones/grupo_edad/editar',
     )
   })
 

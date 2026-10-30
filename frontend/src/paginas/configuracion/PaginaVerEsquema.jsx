@@ -9,9 +9,9 @@ import { ErrorApi, mensajeDeError } from '@/api/cliente.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
-import EditorEsquema, { cargarReferencias, contenidoDe, PESTANA_ESQUEMAS } from './EditorEsquema.jsx'
+import EditorEsquema, { cargarReferencias, contenidoDe, RUTA_ESQUEMAS } from './EditorEsquema.jsx'
 import { ESTADOS, textoPublicacion, textoVigencia } from './PaginaHistorialEsquemas.jsx'
-import { territorioDe } from './PestanaEsquemas.jsx'
+import { territorioDe } from './PaginaEsquemas.jsx'
 import VistaPreviaEsquema from './VistaPreviaEsquema.jsx'
 
 const NO_EXISTE = 'NO_EXISTE'
@@ -30,7 +30,8 @@ export default function PaginaVerEsquema() {
   const { id } = useParams()
   const { state } = useLocation()
   const { tienePermiso } = useSesion()
-  const pestana = state?.volverA || PESTANA_ESQUEMAS
+  // Los filtros de la lista de esquemas, que viajan al historial y de vuelta.
+  const filtros = state?.volverA ?? ''
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
   const [vistaPrevia, setVistaPrevia] = useState(false)
@@ -60,7 +61,7 @@ export default function PaginaVerEsquema() {
   }
 
   const esquema = datos?.esquema
-  const historial = esquema ? `/configuracion/esquemas/historial/${esquema.vacuna.id}` : `/configuracion${pestana}`
+  const historial = esquema ? `/administracion/esquemas/historial/${esquema.vacuna.id}` : `${RUTA_ESQUEMAS}${filtros}`
   const editable =
     esquema?.estado === 'BORRADOR' && esquema.territorio.nivel === 'DDRISS' && tienePermiso('ESQUEMA_EDITAR')
   const origen = esquema?.basadoEn ? `Basado en la versión ${esquema.basadoEn.version} nacional` : 'Esquema nuevo'
@@ -68,15 +69,15 @@ export default function PaginaVerEsquema() {
   return (
     <section className="flex max-w-5xl flex-col gap-6 p-6">
       <EncabezadoPagina
-        antetitulo="Configuración"
+        antetitulo="Administración"
         titulo={esquema ? `${esquema.vacuna.nombre} · versión ${esquema.version}` : 'Versión del esquema'}
         volverA={historial}
-        estadoVolver={{ volverA: pestana }}
+        estadoVolver={{ volverA: filtros }}
         textoVolver={esquema ? 'Volver al historial' : 'Volver'}
         acciones={
           editable && (
             <Button asChild>
-              <Link to={`/configuracion/esquemas/${esquema.id}/editar`} state={{ volverA: pestana }}>
+              <Link to={`/administracion/esquemas/${esquema.id}/editar`} state={{ volverA: filtros }}>
                 Editar borrador
               </Link>
             </Button>
@@ -88,7 +89,7 @@ export default function PaginaVerEsquema() {
         <AvisoError>
           <span>
             El esquema no existe.{' '}
-            <Link to={`/configuracion${pestana}`} className="underline">
+            <Link to={`${RUTA_ESQUEMAS}${filtros}`} className="underline">
               Volver a los esquemas
             </Link>
           </span>

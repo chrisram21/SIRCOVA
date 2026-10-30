@@ -23,10 +23,10 @@ const MUNICIPIOS = [{ id: 1, nombre: 'San Marcos' }]
 function montar({ volverA } = {}) {
   const router = createMemoryRouter(
     [
-      { path: '/usuarios/nuevo', element: <PaginaRegistrarPersonal /> },
-      { path: '/usuarios', element: <h1>Lista de usuarios</h1> },
+      { path: '/administracion/usuarios/nuevo', element: <PaginaRegistrarPersonal /> },
+      { path: '/administracion/usuarios', element: <h1>Lista de usuarios</h1> },
     ],
-    { initialEntries: [{ pathname: '/usuarios/nuevo', state: volverA ? { volverA } : null }] },
+    { initialEntries: [{ pathname: '/administracion/usuarios/nuevo', state: volverA ? { volverA } : null }] },
   )
   render(<RouterProvider router={router} />)
   return router
@@ -311,7 +311,7 @@ test('con cuenta, registra al empleado, crea la cuenta con su id y muestra los d
   expect(screen.getByText('Se registró a Ana López.')).toBeTruthy()
   expect(document.body.textContent).not.toContain(CONTRASENA_GENERADA)
   expect(JSON.stringify({ ...sessionStorage })).not.toContain(CONTRASENA_GENERADA)
-  expect(screen.getByRole('link', { name: 'Volver a Usuarios' }).getAttribute('href')).toBe('/usuarios')
+  expect(screen.getByRole('link', { name: 'Volver a Usuarios' }).getAttribute('href')).toBe('/administracion/usuarios')
 })
 
 test('si falla la cuenta, muestra el aviso parcial y "Crear cuenta" reintenta solo la cuenta', async () => {
@@ -390,12 +390,12 @@ test('el error de la API se muestra junto a los botones, debajo del formulario',
 })
 
 describe('volver a la lista', () => {
-  const volverA = { pathname: '/usuarios', search: '?estado=ACTIVA&pagina=2' }
+  const volverA = { pathname: '/administracion/usuarios', search: '?estado=ACTIVA&pagina=2' }
 
-  test('«Volver a Usuarios» y «Cancelar» conservan los filtros de la lista; sin ellos, van a /usuarios', async () => {
+  test('«Volver a Usuarios» y «Cancelar» conservan los filtros de la lista; sin ellos, van a /administracion/usuarios', async () => {
     await abrir({ volverA })
-    expect(screen.getByRole('link', { name: 'Volver a Usuarios' }).getAttribute('href')).toBe('/usuarios?estado=ACTIVA&pagina=2')
-    expect(screen.getByRole('link', { name: 'Cancelar' }).getAttribute('href')).toBe('/usuarios?estado=ACTIVA&pagina=2')
+    expect(screen.getByRole('link', { name: 'Volver a Usuarios' }).getAttribute('href')).toBe('/administracion/usuarios?estado=ACTIVA&pagina=2')
+    expect(screen.getByRole('link', { name: 'Cancelar' }).getAttribute('href')).toBe('/administracion/usuarios?estado=ACTIVA&pagina=2')
   })
 
   test('después de registrar, «Volver a Usuarios» conserva los filtros', async () => {
@@ -404,7 +404,7 @@ describe('volver a la lista', () => {
     fireEvent.click(botonRegistrar())
 
     await screen.findByText('Se registró a Ana López.')
-    expect(screen.getByRole('link', { name: 'Volver a Usuarios' }).getAttribute('href')).toBe('/usuarios?estado=ACTIVA&pagina=2')
+    expect(screen.getByRole('link', { name: 'Volver a Usuarios' }).getAttribute('href')).toBe('/administracion/usuarios?estado=ACTIVA&pagina=2')
   })
 })
 
@@ -413,7 +413,7 @@ describe('cambios sin guardar', () => {
     const router = await abrir()
     fireEvent.click(screen.getByRole('link', { name: 'Cancelar' }))
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/usuarios'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/administracion/usuarios'))
     expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 
@@ -427,12 +427,12 @@ describe('cambios sin guardar', () => {
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Seguir editando' }))
 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
-    expect(router.state.location.pathname).toBe('/usuarios/nuevo')
+    expect(router.state.location.pathname).toBe('/administracion/usuarios/nuevo')
     expect(screen.getByLabelText(/^Nombres/).value).toBe('Ana')
 
     fireEvent.click(screen.getByRole('link', { name: 'Cancelar' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Salir sin guardar' }))
-    await waitFor(() => expect(router.state.location.pathname).toBe('/usuarios'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/administracion/usuarios'))
   })
 
   test('después de registrar, «Volver a Usuarios» sale sin preguntar', async () => {
@@ -442,7 +442,7 @@ describe('cambios sin guardar', () => {
     await screen.findByText('Se registró a Ana López.')
 
     fireEvent.click(screen.getByRole('link', { name: 'Volver a Usuarios' }))
-    await waitFor(() => expect(router.state.location.pathname).toBe('/usuarios'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/administracion/usuarios'))
     expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 })

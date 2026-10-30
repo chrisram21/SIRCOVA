@@ -5,7 +5,7 @@ import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from './ProveedorSesion.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn(), cambiarContrasena: vi.fn() }))
-// /usuarios pide la lista al montar; aquí solo importa la ruta, no la API.
+// /administracion/usuarios pide la lista al montar; aquí solo importa la ruta, no la API.
 vi.mock('@/api/usuarios.js', () => ({ listarUsuarios: vi.fn(() => new Promise(() => {})) }))
 
 function crearSesion(debeCambiarContrasena) {
@@ -39,7 +39,7 @@ beforeEach(() => {
   sessionStorage.clear()
 })
 
-test.each([['/inicio'], ['/usuarios'], ['/ruta-que-no-existe']])(
+test.each([['/inicio'], ['/administracion/usuarios'], ['/ruta-que-no-existe']])(
   'con debeCambiarContrasena, %s lleva a la pantalla de cambio sin menú',
   (ruta) => {
     abrir(ruta, true)
@@ -49,7 +49,7 @@ test.each([['/inicio'], ['/usuarios'], ['/ruta-que-no-existe']])(
   },
 )
 
-test.each([['/inicio'], ['/usuarios']])('sin debeCambiarContrasena, %s abre normal', (ruta) => {
+test.each([['/inicio'], ['/administracion/usuarios']])('sin debeCambiarContrasena, %s abre normal', (ruta) => {
   abrir(ruta, false)
 
   expect(screen.queryByLabelText('Contraseña actual')).toBeNull()
@@ -93,25 +93,25 @@ describe('al recargar (sin sesión en memoria)', () => {
   })
 
   test('mientras recupera la sesión muestra la pantalla de carga y no redirige', () => {
-    abrirSinSesion('/usuarios?estado=ACTIVA')
+    abrirSinSesion('/administracion/usuarios?estado=ACTIVA')
 
     expect(screen.getByRole('status', { name: 'Recuperando la sesión' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Iniciar sesión' })).toBeNull()
-    expect(screen.getByTestId('ubicacion').textContent).toBe('/usuarios?estado=ACTIVA')
+    expect(screen.getByTestId('ubicacion').textContent).toBe('/administracion/usuarios?estado=ACTIVA')
   })
 
   test('al recuperar la sesión se queda en la ruta pedida, con su búsqueda', async () => {
-    const responder = abrirSinSesion('/usuarios?estado=ACTIVA')
+    const responder = abrirSinSesion('/administracion/usuarios?estado=ACTIVA')
 
     await responder(200, crearSesion(false))
 
     expect(await screen.findByRole('navigation', { name: 'Menú principal' })).toBeTruthy()
     expect(screen.queryByRole('status', { name: 'Recuperando la sesión' })).toBeNull()
-    expect(screen.getByTestId('ubicacion').textContent).toBe('/usuarios?estado=ACTIVA')
+    expect(screen.getByTestId('ubicacion').textContent).toBe('/administracion/usuarios?estado=ACTIVA')
   })
 
   test('sin cookie termina en el login, sin aviso', async () => {
-    const responder = abrirSinSesion('/usuarios')
+    const responder = abrirSinSesion('/administracion/usuarios')
 
     await responder(401, { error: { codigo: 'NO_AUTENTICADO', mensaje: 'Debe iniciar sesión.' } })
 

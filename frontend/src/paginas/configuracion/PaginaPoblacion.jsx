@@ -12,6 +12,7 @@ import { mensajeDeError } from '@/api/cliente.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import DialogoPoblacion from './DialogoPoblacion.jsx'
+import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 
 const formatoCantidad = new Intl.NumberFormat('es-GT')
 
@@ -46,7 +47,7 @@ function Cargando() {
   )
 }
 
-export default function PestanaPoblacion() {
+function ContenidoPoblacion() {
   const { tienePermiso } = useSesion()
   const puedeRegistrar = tienePermiso('POBLACION_REGISTRAR')
   const puedeCrearAnio = tienePermiso('PERIODO_CREAR')
@@ -107,7 +108,7 @@ export default function PestanaPoblacion() {
     toast.success(`Población de ${guardado.nombre} guardada.`)
   }
 
-  // El año va en la URL junto a la pestaña, para que siga elegido al recargar o volver.
+  // El año va en la URL, para que siga elegido al recargar o volver.
   function elegirAnio(valor) {
     setParametros(
       (actuales) => {
@@ -137,10 +138,10 @@ export default function PestanaPoblacion() {
         <CardContent className="flex flex-col gap-4">
           {anios.length === 0 ? (
             <div className="flex flex-wrap items-center gap-3">
-              <p className="text-muted-foreground">No hay años en el calendario. Créelos en la pestaña Periodos.</p>
+              <p className="text-muted-foreground">No hay años en el calendario. Créelos en «Administración › Periodos».</p>
               {puedeCrearAnio && (
                 <Button asChild variant="outline">
-                  <Link to="/configuracion?pestana=periodos">
+                  <Link to="/administracion/periodos">
                     <CalendarPlus />
                     Ir a Periodos
                   </Link>
@@ -215,5 +216,14 @@ export default function PestanaPoblacion() {
         />
       )}
     </div>
+  )
+}
+
+export default function PaginaPoblacion() {
+  return (
+    <section className="flex flex-col gap-6 p-6">
+      <EncabezadoPagina antetitulo="Administración" titulo="Población" />
+      <ContenidoPoblacion />
+    </section>
   )
 }

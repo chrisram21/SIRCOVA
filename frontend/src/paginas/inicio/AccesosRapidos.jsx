@@ -3,11 +3,14 @@ import { Link } from 'react-router-dom'
 import { Card, CardHeader } from '@/components/ui/card'
 import { seguirPuntero } from '@/componentes/efectos.js'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
-import opcionesMenu from '@/componentes/layout/opcionesMenu.js'
+import opcionesMenu, { puedeVer } from '@/componentes/layout/opcionesMenu.js'
 
 export default function AccesosRapidos() {
   const { tienePermiso } = useSesion()
-  const accesos = opcionesMenu.filter((opcion) => opcion.permiso && tienePermiso(opcion.permiso))
+  // Un padre del menú no tiene acceso propio: van sus hijos, en su lugar y en su orden. Inicio no lleva acceso.
+  const accesos = opcionesMenu
+    .flatMap((opcion) => opcion.hijos ?? (opcion.permiso ? [opcion] : []))
+    .filter((pantalla) => puedeVer(pantalla, tienePermiso))
   if (accesos.length === 0) return null
 
   return (

@@ -5,7 +5,7 @@ import { abrirPeriodo, cambiarFechaLimite, crearAnioPeriodos, listarPeriodos } f
 import { ErrorApi } from '@/api/cliente.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
-import PaginaConfiguracion from './PaginaConfiguracion.jsx'
+import PaginaPeriodos from './PaginaPeriodos.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
 vi.mock('@/api/catalogos.js', () => ({
@@ -89,14 +89,14 @@ function montar(ruta, permisos = PERMISOS) {
   render(
     <MemoryRouter initialEntries={[ruta]}>
       <ProveedorSesion>
-        <PaginaConfiguracion />
+        <PaginaPeriodos />
         <Ubicacion />
       </ProveedorSesion>
     </MemoryRouter>,
   )
 }
 
-async function abrir(ruta = '/configuracion?pestana=periodos', permisos = PERMISOS) {
+async function abrir(ruta = '/administracion/periodos', permisos = PERMISOS) {
   montar(ruta, permisos)
   await waitFor(() => expect(screen.queryByLabelText('Cargando periodos')).toBeNull())
 }
@@ -148,18 +148,18 @@ test('cambiar el año cambia la tabla sin pedir de nuevo y queda en la URL', asy
   fireEvent.change(selectAnio(), { target: { value: '2027' } })
 
   await waitFor(() => expect(textoDe(filas()[0])[1]).toBe('01/01/2027 – 31/01/2027'))
-  expect(ubicacion()).toBe('?pestana=periodos&anio=2027')
+  expect(ubicacion()).toBe('?anio=2027')
   expect(listarPeriodos).toHaveBeenCalledTimes(1)
 })
 
 test('el año de la URL se aplica al abrir', async () => {
-  await abrir('/configuracion?pestana=periodos&anio=2025')
+  await abrir('/administracion/periodos?anio=2025')
   expect(selectAnio().value).toBe('2025')
   expect(textoDe(filas()[1])[1]).toBe('01/02/2025 – 28/02/2025')
 })
 
 test('con un año de la URL que no está se elige el actual', async () => {
-  await abrir('/configuracion?pestana=periodos&anio=2019')
+  await abrir('/administracion/periodos?anio=2019')
 
   expect(selectAnio().value).toBe('2026')
 })
@@ -193,18 +193,10 @@ test('si falla la petición muestra el aviso, y "Reintentar" vuelve a pedir', as
   expect(listarPeriodos).toHaveBeenCalledTimes(2)
 })
 
-test('sin PERIODO_CONSULTAR no aparece la pestaña', () => {
-  montar('/configuracion?pestana=periodos', ['CONFIGURACION_CONSULTAR'])
+test('con los permisos del Revisor se ve la pantalla Periodos', async () => {
+  await abrir('/administracion/periodos', PERMISOS_REVISOR)
 
-  expect(screen.queryByRole('tab', { name: 'Periodos' })).toBeNull()
-  expect(listarPeriodos).not.toHaveBeenCalled()
-})
-
-test('con los permisos del Revisor aparecen las pestañas Vacunas y Periodos', async () => {
-  await abrir('/configuracion?pestana=periodos', PERMISOS_REVISOR)
-
-  expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Vacunas', 'Periodos'])
-  expect(screen.getByRole('tab', { name: 'Periodos' }).getAttribute('aria-selected')).toBe('true')
+  expect(screen.getByRole('heading', { level: 1, name: 'Periodos' })).toBeTruthy()
 })
 
 describe('Crear año', () => {
@@ -240,7 +232,7 @@ describe('Crear año', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
     // Radix actualiza su <select> nativo en un efecto, después del render.
     await waitFor(() => expect(selectAnio().value).toBe('2023'))
-    expect(ubicacion()).toBe('?pestana=periodos&anio=2023')
+    expect(ubicacion()).toBe('?anio=2023')
     expect(textoDe(filas()[0])).toEqual(['Enero', '01/01/2023 – 31/01/2023', '—', 'Sin abrir'])
     expect(listarPeriodos).toHaveBeenCalledTimes(1)
   })

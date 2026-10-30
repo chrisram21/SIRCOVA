@@ -14,7 +14,7 @@ import {
 import { ErrorApi } from '@/api/cliente.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
-import PaginaConfiguracion from './PaginaConfiguracion.jsx'
+import PaginaEstablecimientos from './PaginaEstablecimientos.jsx'
 import PaginaEditarEstablecimiento from './PaginaEditarEstablecimiento.jsx'
 import PaginaRegistrarEstablecimiento from './PaginaRegistrarEstablecimiento.jsx'
 
@@ -93,9 +93,9 @@ function montar(ruta, permisos = PERMISOS) {
           </ProveedorSesion>
         ),
         children: [
-          { path: '/configuracion', element: <PaginaConfiguracion /> },
-          { path: '/configuracion/establecimientos/nuevo', element: <PaginaRegistrarEstablecimiento /> },
-          { path: '/configuracion/establecimientos/:id/editar', element: <PaginaEditarEstablecimiento /> },
+          { path: '/administracion/establecimientos', element: <PaginaEstablecimientos /> },
+          { path: '/administracion/establecimientos/nuevo', element: <PaginaRegistrarEstablecimiento /> },
+          { path: '/administracion/establecimientos/:id/editar', element: <PaginaEditarEstablecimiento /> },
         ],
       },
     ],
@@ -105,7 +105,7 @@ function montar(ruta, permisos = PERMISOS) {
 }
 
 async function abrirFormulario() {
-  montar('/configuracion/establecimientos/nuevo')
+  montar('/administracion/establecimientos/nuevo')
   await waitFor(() => expect(screen.getByLabelText(/^Nombre\b/).disabled).toBe(false))
 }
 
@@ -208,7 +208,7 @@ test('registra uno de la sede con su distrito y vuelve a la pestaña con el avis
 
   guardar()
 
-  await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=establecimientos'))
+  await waitFor(() => expect(ubicacion()).toBe('/administracion/establecimientos'))
   expect(crearEstablecimiento).toHaveBeenCalledWith({
     tipoEstablecimientoId: 4,
     municipioId: 9,
@@ -252,12 +252,12 @@ test('un 409 de la API se muestra junto a los botones y el formulario conserva l
   // Va dentro del formulario, justo antes de la fila de botones.
   expect(aviso.parentElement.nextElementSibling.contains(screen.getByRole('button', { name: 'Registrar establecimiento' }))).toBe(true)
   expect(screen.getByLabelText(/^Nombre\b/).value).toBe('Puesto de Salud Aldea Tochab')
-  expect(ubicacion()).toBe('/configuracion/establecimientos/nuevo')
+  expect(ubicacion()).toBe('/administracion/establecimientos/nuevo')
 })
 
 test('si falla la carga de los catálogos no se puede guardar, y "Reintentar" los vuelve a pedir', async () => {
   listarTiposEstablecimiento.mockRejectedValueOnce(new ErrorApi(500, 'ERROR_INESPERADO', 'Ocurrió un error inesperado.'))
-  montar('/configuracion/establecimientos/nuevo')
+  montar('/administracion/establecimientos/nuevo')
 
   expect(
     await screen.findByText('No se pudieron cargar los datos del formulario: Ocurrió un error inesperado.'),
@@ -292,7 +292,7 @@ describe('cambios sin guardar', () => {
     expect(dialogo.textContent).toContain('Si sale ahora, se pierden los cambios del establecimiento.')
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Seguir editando' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
-    expect(ubicacion()).toBe('/configuracion/establecimientos/nuevo')
+    expect(ubicacion()).toBe('/administracion/establecimientos/nuevo')
     expect(screen.getByLabelText(/^Nombre\b/).value).toBe('Puesto de Salud Aldea Tochab')
   })
 
@@ -303,25 +303,25 @@ describe('cambios sin guardar', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Volver' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Salir sin guardar' }))
 
-    await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=establecimientos'))
+    await waitFor(() => expect(ubicacion()).toBe('/administracion/establecimientos'))
     expect(crearEstablecimiento).not.toHaveBeenCalled()
   })
 })
 
 test('el botón de la pestaña lleva al formulario, y "Cancelar" vuelve con los mismos filtros', async () => {
-  montar('/configuracion?pestana=establecimientos&estado=activos')
+  montar('/administracion/establecimientos?estado=activos')
   // Con la lista vacía, el enlace también aparece junto al mensaje: cualquiera de los dos sirve.
   fireEvent.click((await screen.findAllByRole('link', { name: 'Registrar establecimiento' }))[0])
   await waitFor(() => expect(screen.getByLabelText(/^Nombre\b/).disabled).toBe(false))
 
   fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
 
-  await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=establecimientos&estado=activos'))
+  await waitFor(() => expect(ubicacion()).toBe('/administracion/establecimientos?estado=activos'))
   expect(crearEstablecimiento).not.toHaveBeenCalled()
 })
 
 test('sin ESTABLECIMIENTO_CREAR no aparece el botón "Registrar establecimiento"', async () => {
-  montar('/configuracion?pestana=establecimientos', ['CONFIGURACION_CONSULTAR', 'ESTABLECIMIENTO_CONSULTAR'])
+  montar('/administracion/establecimientos', ['CONFIGURACION_CONSULTAR', 'ESTABLECIMIENTO_CONSULTAR'])
 
   expect(await screen.findByText('No hay establecimientos registrados.')).toBeTruthy()
   expect(screen.queryByRole('link', { name: 'Registrar establecimiento' })).toBeNull()
@@ -357,7 +357,7 @@ describe('editar', () => {
 
   async function abrirEdicion() {
     obtenerEstablecimiento.mockResolvedValue(GUARDADO)
-    montar('/configuracion/establecimientos/33/editar')
+    montar('/administracion/establecimientos/33/editar')
     await waitFor(() => expect(screen.getByLabelText(/^Nombre\b/).value).toBe(GUARDADO.nombre))
   }
 
@@ -399,7 +399,7 @@ describe('editar', () => {
     // Al dejarlo como estaba ya no hay cambios.
     escribir(/^Teléfono/, '1234')
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
-    await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=establecimientos'))
+    await waitFor(() => expect(ubicacion()).toBe('/administracion/establecimientos'))
     expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 
@@ -412,7 +412,7 @@ describe('editar', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
 
-    await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=establecimientos'))
+    await waitFor(() => expect(ubicacion()).toBe('/administracion/establecimientos'))
     expect(editarEstablecimiento).toHaveBeenCalledWith('33', {
       nombre: 'Puesto de Salud Las Lagunas',
       nombreContacto: null,
@@ -436,16 +436,16 @@ describe('editar', () => {
   test('"Editar" en la pestaña abre la subruta, y "Cancelar" vuelve con los mismos filtros', async () => {
     obtenerEstablecimiento.mockResolvedValue(GUARDADO)
     listarEstablecimientos.mockResolvedValue([GUARDADO])
-    montar('/configuracion?pestana=establecimientos&estado=activos', [...PERMISOS, 'ESTABLECIMIENTO_EDITAR'])
+    montar('/administracion/establecimientos?estado=activos', [...PERMISOS, 'ESTABLECIMIENTO_EDITAR'])
     // Radix abre el menú con Enter sobre el botón; su contenido va en un portal, fuera de la fila.
     fireEvent.keyDown(await screen.findByRole('button', { name: 'Acciones de PS-1201-33' }), { key: 'Enter' })
     fireEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Editar' }))
 
-    await waitFor(() => expect(ubicacion()).toBe('/configuracion/establecimientos/33/editar'))
+    await waitFor(() => expect(ubicacion()).toBe('/administracion/establecimientos/33/editar'))
     await waitFor(() => expect(screen.getByLabelText(/^Nombre\b/).value).toBe(GUARDADO.nombre))
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
 
-    await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=establecimientos&estado=activos'))
+    await waitFor(() => expect(ubicacion()).toBe('/administracion/establecimientos?estado=activos'))
     expect(editarEstablecimiento).not.toHaveBeenCalled()
   })
 
@@ -457,7 +457,7 @@ describe('editar', () => {
       distritoSaludCodigo: null,
       distritoSaludNombre: null,
     })
-    montar('/configuracion/establecimientos/33/editar')
+    montar('/administracion/establecimientos/33/editar')
 
     expect(await screen.findByText('Establecimiento externo: no lleva distrito de salud.')).toBeTruthy()
   })

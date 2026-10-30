@@ -79,10 +79,10 @@ function Pestana() {
 function montar(ruta) {
   const router = createMemoryRouter(
     [
-      { path: '/configuracion/esquemas/nuevo', element: <PaginaRegistrarEsquema /> },
-      { path: '/configuracion', element: <Pestana /> },
+      { path: '/administracion/esquemas/nuevo', element: <PaginaRegistrarEsquema /> },
+      { path: '/administracion/esquemas', element: <Pestana /> },
     ],
-    { initialEntries: [{ pathname: '/configuracion/esquemas/nuevo', search: ruta, state: { volverA: '?pestana=esquemas' } }] },
+    { initialEntries: [{ pathname: '/administracion/esquemas/nuevo', search: ruta, state: { volverA: '' } }] },
   )
   render(<RouterProvider router={router} />)
 }
@@ -135,7 +135,7 @@ test('con origen=copia precarga el vigente sin lo inactivo, lo avisa y guarda co
     secciones: [{ titulo: '< 1 año', grupoEdad: 'MENOR_1', dosis: ['D1', 'R1'] }],
   })
   // Vuelve sin state.aviso: el aviso va en un toast.
-  await waitFor(() => expect(screen.getByTestId('pestana').textContent).toBe('?pestana=esquemas|'))
+  await waitFor(() => expect(screen.getByTestId('pestana').textContent).toBe('|'))
   expect(toast.success).toHaveBeenCalledWith('Borrador de Vacuna de prueba guardado (versión 3).')
 })
 
@@ -145,7 +145,7 @@ test('con un cambio guardado, vuelve sin pedir confirmación', async () => {
   fireEvent.change(screen.getByRole('textbox', { name: 'Título de la sección 1' }), { target: { value: 'Menores de 1 año' } })
   fireEvent.click(screen.getByRole('button', { name: 'Guardar borrador' }))
 
-  await waitFor(() => expect(screen.getByTestId('pestana').textContent).toBe('?pestana=esquemas|'))
+  await waitFor(() => expect(screen.getByTestId('pestana').textContent).toBe('|'))
   expect(screen.queryByRole('alertdialog')).toBeNull()
 })
 
@@ -162,7 +162,7 @@ test('con cambios, "Cancelar" pide confirmación; "Seguir editando" se queda y "
 
   fireEvent.click(screen.getByRole('link', { name: 'Volver' }))
   fireEvent.click(await screen.findByRole('button', { name: 'Salir sin guardar' }))
-  await waitFor(() => expect(screen.getByTestId('pestana').textContent).toBe('?pestana=esquemas|'))
+  await waitFor(() => expect(screen.getByTestId('pestana').textContent).toBe('|'))
   expect(crearEsquema).not.toHaveBeenCalled()
 })
 
@@ -240,6 +240,6 @@ test.each([
   await abrir(ruta)
 
   expect(screen.getByText(/No se puede crear el borrador de esta vacuna\./)).toBeTruthy()
-  expect(screen.getByRole('link', { name: 'Volver a los esquemas' }).getAttribute('href')).toBe('/configuracion?pestana=esquemas')
+  expect(screen.getByRole('link', { name: 'Volver a los esquemas' }).getAttribute('href')).toBe('/administracion/esquemas')
   expect(screen.queryByRole('button', { name: 'Guardar borrador' })).toBeNull()
 })

@@ -29,6 +29,7 @@ import { desactivarEstablecimiento, listarEstablecimientos, reactivarEstablecimi
 import { mensajeDeError } from '@/api/cliente.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
+import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 
 // Radix Select no acepta '' como valor de una opción; "todos" equivale a no filtrar.
 const TODOS = 'todos'
@@ -83,7 +84,7 @@ function Marcas({ establecimiento: e }) {
   )
 }
 
-export default function PestanaEstablecimientos() {
+function ContenidoEstablecimientos() {
   const { tienePermiso } = useSesion()
   const puedeCrear = tienePermiso('ESTABLECIMIENTO_CREAR')
   const puedeEditar = tienePermiso('ESTABLECIMIENTO_EDITAR')
@@ -119,9 +120,9 @@ export default function PestanaEstablecimientos() {
     }
   }, [])
 
-  // Los filtros viajan al formulario para volver a la pestaña con los mismos.
+  // Los filtros viajan al formulario para volver a la lista con los mismos.
   const abrirEdicion = (establecimiento) =>
-    navigate(`/configuracion/establecimientos/${establecimiento.id}/editar`, { state: { volverA: search } })
+    navigate(`/administracion/establecimientos/${establecimiento.id}/editar`, { state: { volverA: search } })
 
   async function confirmarCambio(evento) {
     // Radix cierra el diálogo al pulsar; se cierra a mano al terminar, para mostrar el progreso mientras tanto.
@@ -144,7 +145,7 @@ export default function PestanaEstablecimientos() {
     }
   }
 
-  // Los filtros van en la URL junto a la pestaña, para que sigan puestos al volver de un formulario.
+  // Los filtros van en la URL, para que sigan puestos al volver de un formulario.
   function cambiarFiltro(nombre, valor) {
     setParametros(
       (actuales) => {
@@ -207,9 +208,9 @@ export default function PestanaEstablecimientos() {
           <CardDescription>Envían el 5C: {envian5c} establecimientos activos.</CardDescription>
           {puedeCrear && (
             <CardAction>
-              {/* Los filtros viajan al formulario para volver a la pestaña con los mismos. */}
+              {/* Los filtros viajan al formulario para volver a la lista con los mismos. */}
               <Button asChild>
-                <Link to="/configuracion/establecimientos/nuevo" state={{ volverA: search }}>
+                <Link to="/administracion/establecimientos/nuevo" state={{ volverA: search }}>
                   <Plus />
                   Registrar establecimiento
                 </Link>
@@ -260,7 +261,7 @@ export default function PestanaEstablecimientos() {
               <p className="text-muted-foreground">No hay establecimientos registrados.</p>
               {puedeCrear && (
                 <Button asChild variant="outline">
-                  <Link to="/configuracion/establecimientos/nuevo" state={{ volverA: search }}>
+                  <Link to="/administracion/establecimientos/nuevo" state={{ volverA: search }}>
                     <Plus />
                     Registrar establecimiento
                   </Link>
@@ -364,5 +365,14 @@ export default function PestanaEstablecimientos() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  )
+}
+
+export default function PaginaEstablecimientos() {
+  return (
+    <section className="flex flex-col gap-6 p-6">
+      <EncabezadoPagina antetitulo="Administración" titulo="Establecimientos" />
+      <ContenidoEstablecimientos />
+    </section>
   )
 }

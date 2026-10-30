@@ -35,7 +35,7 @@ export const contenidoDe = (esquema) => ({
   secciones: esquema.secciones.map(({ titulo, grupoEdad, dosis }) => ({ titulo, grupoEdad, dosis })),
 })
 
-export const PESTANA_ESQUEMAS = '?pestana=esquemas'
+export const RUTA_ESQUEMAS = '/administracion/esquemas'
 
 const MODOS = [
   { valor: 'MUNICIPIO_DETALLADO', etiqueta: 'Por municipio de procedencia' },

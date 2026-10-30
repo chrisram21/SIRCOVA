@@ -23,6 +23,7 @@ import { desactivarDimension, listarDimensiones, reactivarDimension } from '@/ap
 import { mensajeDeError } from '@/api/cliente.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
+import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 
 // Radix Select no acepta '' como valor de una opción; "todas" equivale a no filtrar.
 const TODAS = 'todas'
@@ -50,7 +51,7 @@ function ValoresActivos({ dimension }) {
   )
 }
 
-export default function PestanaDimensiones() {
+function ContenidoDimensiones() {
   const { tienePermiso } = useSesion()
   const puedeCrear = tienePermiso('DIMENSION_CREAR')
   const puedeEditar = tienePermiso('DIMENSION_EDITAR')
@@ -87,7 +88,7 @@ export default function PestanaDimensiones() {
     }
   }, [filtroEstado])
 
-  // El filtro va en la URL junto a la pestaña, para que siga puesto al volver de un formulario.
+  // El filtro va en la URL, para que siga puesto al volver de un formulario.
   function cambiarEstado(valor) {
     setParametros(
       (actuales) => {
@@ -137,9 +138,9 @@ export default function PestanaDimensiones() {
           </CardDescription>
           {puedeCrear && (
             <CardAction>
-              {/* El filtro viaja al formulario para volver a la pestaña con el mismo. */}
+              {/* El filtro viaja al formulario para volver a la lista con el mismo. */}
               <Button asChild>
-                <Link to="/configuracion/dimensiones/nueva" state={{ volverA: search }}>
+                <Link to="/administracion/dimensiones/nueva" state={{ volverA: search }}>
                   <Plus />
                   Nueva dimensión
                 </Link>
@@ -206,7 +207,7 @@ export default function PestanaDimensiones() {
                             <div className="flex justify-end gap-2">
                               <Button asChild variant="outline" size="sm">
                                 <Link
-                                  to={`/configuracion/dimensiones/${encodeURIComponent(d.codigo)}/editar`}
+                                  to={`/administracion/dimensiones/${encodeURIComponent(d.codigo)}/editar`}
                                   state={{ volverA: search }}
                                   aria-label={`Editar ${d.codigo}`}
                                 >
@@ -282,5 +283,14 @@ export default function PestanaDimensiones() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  )
+}
+
+export default function PaginaDimensiones() {
+  return (
+    <section className="flex flex-col gap-6 p-6">
+      <EncabezadoPagina antetitulo="Administración" titulo="Dimensiones" />
+      <ContenidoDimensiones />
+    </section>
   )
 }

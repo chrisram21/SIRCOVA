@@ -1,11 +1,15 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { listarPeriodos } from '@/api/catalogos.js'
-import { publicarEsquema } from '@/api/configuracion.js'
+import { listarPeriodos, obtenerVacuna } from '@/api/catalogos.js'
+import { listarDimensiones, obtenerEsquema, publicarEsquema } from '@/api/configuracion.js'
 import { ErrorApi } from '@/api/cliente.js'
 import DialogoPublicarEsquema, { mesesValidos } from './DialogoPublicarEsquema.jsx'
 
-vi.mock('@/api/catalogos.js', () => ({ listarPeriodos: vi.fn() }))
-vi.mock('@/api/configuracion.js', () => ({ publicarEsquema: vi.fn() }))
+vi.mock('@/api/catalogos.js', () => ({ listarPeriodos: vi.fn(), obtenerVacuna: vi.fn() }))
+vi.mock('@/api/configuracion.js', () => ({
+  listarDimensiones: vi.fn(),
+  obtenerEsquema: vi.fn(),
+  publicarEsquema: vi.fn(),
+}))
 
 const NACIONAL = { nivel: 'NACIONAL', ddrissCodigo: null }
 const SAN_MARCOS = { nivel: 'DDRISS', ddrissCodigo: 'DDRISS_SM' }
@@ -13,6 +17,30 @@ const VACUNA = { id: 2, codigo: 'HEXA', nombre: 'Hexavalente' }
 const BORRADOR = { id: 'b-hexa', version: 5 }
 const VIGENTE_DDRISS = { id: 'v-sm', version: 4, territorio: SAN_MARCOS, vigenciaDesde: '2026-11-01' }
 const VIGENTE_NACIONAL = { id: 'v-nac', version: 2, territorio: NACIONAL, vigenciaDesde: '2026-01-01' }
+const VACUNA_CON_DOSIS = {
+  ...VACUNA,
+  dosis: [
+    { codigo: 'D1', nombre: '1.ª dosis', orden: 1, activa: true },
+    { codigo: 'D2', nombre: '2.ª dosis', orden: 2, activa: true },
+  ],
+}
+const DIMENSIONES = [
+  { codigo: 'sexo', nombre: 'Sexo', activa: true, valores: [{ codigo: 'M', etiqueta: 'Masculino', orden: 1, activo: true }] },
+]
+const esquemaGuardado = (dosis = ['D1', 'D2']) => ({
+  id: 'b-hexa',
+  version: 5,
+  estado: 'BORRADOR',
+  vigencia: null,
+  vacuna: { id: 2, codigo: 'HEXA', nombre: 'Hexavalente' },
+  territorio: SAN_MARCOS,
+  procedencia: { modo: 'PROPIO_Y_OTROS', permiteNoEspecificado: false },
+  dosis: dosis.map((codigo) => ({ codigo, desagregacion: null })),
+  desagregacion: [{ dimension: 'sexo', valores: ['M'] }],
+  secciones: [{ titulo: 'Hexavalente', grupoEdad: null, dosis }],
+  camposAdicionales: [],
+  reglas: [],
+})
 
 const mes = (anio, numero) => ({
   id: anio * 100 + numero,
@@ -40,15 +68,26 @@ function montar(vigente) {
   )
 }
 
+// El diálogo del paso 1 y el Sheet del paso 2 tienen los dos el rol dialog.
 const dialogo = () => screen.getByRole('dialog')
 const select = () => document.querySelector('select[name="vigenciaDesde"]')
 const opciones = () => [...select().querySelectorAll('option')].filter((o) => o.value !== '').map((o) => o.value)
-const botonPublicar = () => within(dialogo()).getByRole('button', { name: 'Publicar' })
+const boton = (nombre) => within(dialogo()).getByRole('button', { name: nombre })
+const botonContinuar = () => boton('Continuar')
 const motivo = () => within(dialogo()).getByLabelText('Motivo del cambio')
 
 async function montarConMeses(vigente) {
   montar(vigente)
   await waitFor(() => expect(select().disabled).toBe(false))
+}
+
+// Elige el mes y el motivo y pasa al paso 2.
+async function llegarAVistaPrevia(texto = 'Cambio del esquema nacional') {
+  await montarConMeses(VIGENTE_NACIONAL)
+  fireEvent.change(select(), { target: { value: '2026-11-01' } })
+  fireEvent.change(motivo(), { target: { value: `  ${texto}  ` } })
+  fireEvent.click(botonContinuar())
+  await screen.findByRole('heading', { name: 'Vista previa · Hexavalente, versión 5' })
 }
 
 beforeEach(() => {
@@ -57,6 +96,9 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date('2026-10-24T12:00:00-06:00'))
   listarPeriodos.mockImplementation(async ({ anio }) => CALENDARIO[anio] ?? [])
+  obtenerEsquema.mockResolvedValue(esquemaGuardado())
+  obtenerVacuna.mockResolvedValue(VACUNA_CON_DOSIS)
+  listarDimensiones.mockResolvedValue(DIMENSIONES)
 })
 
 afterEach(() => {
@@ -115,15 +157,16 @@ test('sin vigente, el aviso dice que la DDRISS empezará a usar esta versión', 
   expect(within(dialogo()).getByText(/^Desde esa fecha, su DDRISS usará esta versión\. Los reportes/)).toBeTruthy()
 })
 
-test('sin meses disponibles, lo avisa y no deja publicar', async () => {
+test('sin meses disponibles, lo avisa y no deja continuar', async () => {
   listarPeriodos.mockResolvedValue([mes(2026, 9)])
   montar(VIGENTE_NACIONAL)
 
   expect(
-    await within(dialogo()).findByText('No hay meses disponibles en el calendario; agréguelos en la pestaña «Periodos».'),
+    await within(dialogo()).findByText('No hay meses disponibles en el calendario; agréguelos en «Administración › Periodos».'),
   ).toBeTruthy()
   fireEvent.change(motivo(), { target: { value: 'Cambio' } })
-  fireEvent.click(botonPublicar())
+  fireEvent.click(botonContinuar())
+  expect(obtenerEsquema).not.toHaveBeenCalled()
   expect(publicarEsquema).not.toHaveBeenCalled()
 })
 
@@ -134,18 +177,18 @@ test('si falla la carga del calendario, lo avisa, y "Reintentar" vuelve a pedir 
   expect(
     await within(dialogo()).findByText('No se pudieron cargar los meses: No se pudo conectar con el servidor.'),
   ).toBeTruthy()
-  fireEvent.click(within(dialogo()).getByRole('button', { name: 'Reintentar' }))
+  fireEvent.click(boton('Reintentar'))
 
   await waitFor(() => expect(select().disabled).toBe(false))
   expect(opciones()[0]).toBe('2026-10-01')
   expect(within(dialogo()).queryByText(/No se pudieron cargar los meses/)).toBeNull()
 })
 
-test('"Publicar" pide un mes y un motivo válido: muestra los errores y lleva el foco al primero', async () => {
+test('"Continuar" pide un mes y un motivo válido: muestra los errores y lleva el foco al primero', async () => {
   await montarConMeses(VIGENTE_NACIONAL)
-  expect(botonPublicar().disabled).toBe(false)
+  expect(botonContinuar().disabled).toBe(false)
 
-  fireEvent.click(botonPublicar())
+  fireEvent.click(botonContinuar())
   expect(within(dialogo()).getByText('Elija el mes desde el que rige la versión.')).toBeTruthy()
   expect(within(dialogo()).getByText('El motivo del cambio debe tener entre 1 y 300 caracteres.')).toBeTruthy()
   await waitFor(() => expect(document.activeElement).toBe(within(dialogo()).getByRole('combobox', { name: 'Vigente desde' })))
@@ -153,27 +196,82 @@ test('"Publicar" pide un mes y un motivo válido: muestra los errores y lleva el
   fireEvent.change(select(), { target: { value: '2026-11-01' } })
   await waitFor(() => expect(select().value).toBe('2026-11-01'))
   fireEvent.change(motivo(), { target: { value: '   ' } })
-  fireEvent.click(botonPublicar())
+  fireEvent.click(botonContinuar())
   await waitFor(() => expect(document.activeElement).toBe(motivo()))
   expect(within(dialogo()).queryByText('Elija el mes desde el que rige la versión.')).toBeNull()
 
   // Uno demasiado largo se avisa al escribir.
   fireEvent.change(motivo(), { target: { value: 'a'.repeat(301) } })
   expect(within(dialogo()).getByText('El motivo del cambio debe tener entre 1 y 300 caracteres.')).toBeTruthy()
-  expect(publicarEsquema).not.toHaveBeenCalled()
+  expect(obtenerEsquema).not.toHaveBeenCalled()
 
   fireEvent.change(motivo(), { target: { value: '  Cambio del esquema nacional  ' } })
   expect(within(dialogo()).queryByText('El motivo del cambio debe tener entre 1 y 300 caracteres.')).toBeNull()
 })
 
-test('publica con el mes y el motivo recortado y entrega el esquema publicado', async () => {
+test('"Continuar" carga lo guardado y abre la vista previa, sin publicar', async () => {
+  await llegarAVistaPrevia()
+
+  expect(obtenerEsquema).toHaveBeenCalledWith('b-hexa')
+  expect(obtenerVacuna).toHaveBeenCalledWith(2)
+  expect(listarDimensiones).toHaveBeenCalledWith({ activa: true })
+  within(dialogo()).getByText('Vigente desde Noviembre 2026. Motivo: Cambio del esquema nacional.')
+  expect(boton('Confirmar publicación').disabled).toBe(false)
+  expect(publicarEsquema).not.toHaveBeenCalled()
+})
+
+test('si falla la carga de la vista previa, lo avisa sin perder lo elegido, y "Reintentar" la abre', async () => {
+  obtenerEsquema.mockRejectedValueOnce(new ErrorApi(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.'))
+  await montarConMeses(VIGENTE_NACIONAL)
+  fireEvent.change(select(), { target: { value: '2026-11-01' } })
+  fireEvent.change(motivo(), { target: { value: 'Cambio' } })
+  fireEvent.click(botonContinuar())
+
+  expect(
+    await within(dialogo()).findByText('No se pudo cargar la vista previa: No se pudo conectar con el servidor.'),
+  ).toBeTruthy()
+  expect(select().value).toBe('2026-11-01')
+  expect(motivo().value).toBe('Cambio')
+
+  fireEvent.click(boton('Reintentar'))
+  await screen.findByRole('heading', { name: 'Vista previa · Hexavalente, versión 5' })
+  expect(obtenerEsquema).toHaveBeenCalledTimes(2)
+})
+
+test('"Volver a los datos" vuelve al diálogo con el mes y el motivo elegidos', async () => {
+  await llegarAVistaPrevia()
+  fireEvent.click(boton('Volver a los datos'))
+
+  await waitFor(() => expect(select().value).toBe('2026-11-01'))
+  expect(motivo().value).toBe('  Cambio del esquema nacional  ')
+  expect(within(dialogo()).getByText('Publicar la versión 5 de Hexavalente')).toBeTruthy()
+  expect(alCerrar).not.toHaveBeenCalled()
+})
+
+test.each([
+  ['"Cancelar"', () => fireEvent.click(boton('Cancelar'))],
+  ['Esc', () => fireEvent.keyDown(dialogo(), { key: 'Escape' })],
+])('%s en la vista previa cierra todo sin publicar', async (_, cerrar) => {
+  await llegarAVistaPrevia()
+  cerrar()
+  expect(alCerrar).toHaveBeenCalled()
+  expect(publicarEsquema).not.toHaveBeenCalled()
+})
+
+test('con problemas de coherencia, "Confirmar publicación" queda deshabilitado', async () => {
+  obtenerEsquema.mockResolvedValue(esquemaGuardado(['D1', 'D3']))
+  await llegarAVistaPrevia()
+
+  expect(within(dialogo()).getByRole('list', { name: 'Problemas del borrador' })).toBeTruthy()
+  expect(boton('Confirmar publicación').disabled).toBe(true)
+  within(dialogo()).getByText('Corrija los problemas del borrador antes de publicarlo.')
+})
+
+test('"Confirmar publicación" publica con el mes y el motivo recortado y entrega el esquema publicado', async () => {
   const publicado = { id: 'b-hexa', version: 5, estado: 'VIGENTE' }
   publicarEsquema.mockResolvedValue(publicado)
-  await montarConMeses(VIGENTE_NACIONAL)
-
-  fireEvent.change(select(), { target: { value: '2026-11-01' } })
-  fireEvent.change(motivo(), { target: { value: '  Cambio del esquema nacional  ' } })
-  fireEvent.click(botonPublicar())
+  await llegarAVistaPrevia()
+  fireEvent.click(boton('Confirmar publicación'))
 
   await waitFor(() => expect(alPublicar).toHaveBeenCalledWith(publicado))
   expect(publicarEsquema).toHaveBeenCalledWith('b-hexa', {
@@ -182,24 +280,19 @@ test('publica con el mes y el motivo recortado y entrega el esquema publicado', 
   })
 })
 
-test('un 422 se muestra en un Alert dentro del diálogo, que sigue abierto', async () => {
-  publicarEsquema.mockRejectedValue(
-    new ErrorApi(422, 'ESQUEMA_INVALIDO', 'La dosis D3 no es una dosis activa de HEXA.'),
-  )
-  await montarConMeses(VIGENTE_NACIONAL)
-
-  fireEvent.change(select(), { target: { value: '2026-11-01' } })
-  fireEvent.change(motivo(), { target: { value: 'Cambio' } })
-  fireEvent.click(botonPublicar())
+test('un error al confirmar se muestra en la vista previa, que sigue abierta con lo elegido', async () => {
+  publicarEsquema.mockRejectedValue(new ErrorApi(422, 'ESQUEMA_INVALIDO', 'La dosis D3 no es una dosis activa de HEXA.'))
+  await llegarAVistaPrevia('Cambio')
+  fireEvent.click(boton('Confirmar publicación'))
 
   expect(await within(dialogo()).findByText('La dosis D3 no es una dosis activa de HEXA.')).toBeTruthy()
   expect(alPublicar).not.toHaveBeenCalled()
-  expect(motivo().value).toBe('Cambio')
-  expect(botonPublicar().disabled).toBe(false)
+  within(dialogo()).getByText('Vigente desde Noviembre 2026. Motivo: Cambio.')
+  expect(boton('Confirmar publicación').disabled).toBe(false)
 })
 
 test('"Cancelar" cierra el diálogo', async () => {
   await montarConMeses(VIGENTE_NACIONAL)
-  fireEvent.click(within(dialogo()).getByRole('button', { name: 'Cancelar' }))
+  fireEvent.click(boton('Cancelar'))
   expect(alCerrar).toHaveBeenCalled()
 })

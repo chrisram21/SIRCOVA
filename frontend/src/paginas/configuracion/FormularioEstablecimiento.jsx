@@ -38,8 +38,7 @@ import {
 import { Campo, CampoTexto } from '../usuarios/CamposEmpleado.jsx'
 
 const MIGRANTES = '9999'
-// Ruta de la pestaña si se llegó al formulario sin pasar por ella (p. ej. con la dirección escrita a mano).
-const PESTANA = '?pestana=establecimientos'
+const LISTA = '/administracion/establecimientos'
 
 const TEXTOS = ['nombre', 'direccion', 'telefono', 'correo', 'nombreContacto']
 const MARCAS = ['reportaProduccion', 'reporta5c', 'soloCobertura']
@@ -183,8 +182,8 @@ export default function FormularioEstablecimiento({ id }) {
   const editando = id !== undefined
   const navigate = useNavigate()
   const { state } = useLocation()
-  // La pestaña manda sus filtros al abrir el formulario, para volver a ella con los mismos.
-  const volverA = `/configuracion${state?.volverA || PESTANA}`
+  // La lista manda sus filtros al abrir el formulario, para volver a ella con los mismos.
+  const volverA = `${LISTA}${state?.volverA ?? ''}`
 
   const [catalogos, setCatalogos] = useState(null)
   // Al editar, lo guardado en el backend; los cambios se calculan contra esto.
@@ -320,7 +319,7 @@ export default function FormularioEstablecimiento({ id }) {
 
   return (
     <section className="flex max-w-3xl flex-col gap-6 p-6">
-      <EncabezadoPagina antetitulo="Configuración" titulo={titulo} volverA={volverA} />
+      <EncabezadoPagina antetitulo="Administración" titulo={titulo} volverA={volverA} />
 
       {errorCarga && (
         <AvisoError onReintentar={reintentarCarga}>

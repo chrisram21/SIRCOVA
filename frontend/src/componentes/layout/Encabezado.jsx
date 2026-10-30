@@ -13,18 +13,21 @@ import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { tituloDeRuta, ubicarRuta } from './ubicarRuta.js'
 
-// Dónde está el usuario: la opción del menú y, en una subruta, el enlace para volver a ella. Si la pantalla llegó con
-// state.volverA (la lista con sus filtros), la miga vuelve ahí, como su botón «Volver».
+// Dónde está el usuario: el padre del menú (sin enlace, no tiene pantalla), la opción y, en una subruta, el enlace para
+// volver a ella. Si la pantalla llegó con state.volverA, la miga vuelve como su botón «Volver»: a la lista con sus
+// filtros, que son la búsqueda (catálogos) o { pathname, search } (usuarios).
 function migasDe(pathname, volverA) {
   const ubicada = ubicarRuta(pathname)
-  if (ubicada?.subruta) {
-    return [
-      { titulo: ubicada.opcion.titulo, ruta: volverA ?? ubicada.opcion.ruta },
-      { titulo: ubicada.subruta.titulo },
-    ]
+  if (!ubicada) {
+    const titulo = tituloDeRuta(pathname)
+    return titulo ? [{ titulo }] : []
   }
-  const titulo = tituloDeRuta(pathname)
-  return titulo ? [{ titulo }] : []
+  const { opcion, hijo, subruta } = ubicada
+  const pantalla = hijo ?? opcion
+  const migas = hijo ? [{ titulo: opcion.titulo, sinPantalla: true }] : []
+  if (!subruta) return [...migas, { titulo: pantalla.titulo }]
+  const vuelta = typeof volverA === 'string' ? `${pantalla.ruta}${volverA}` : (volverA ?? pantalla.ruta)
+  return [...migas, { titulo: pantalla.titulo, ruta: vuelta }, { titulo: subruta.titulo }]
 }
 
 const FECHA_LARGA = new Intl.DateTimeFormat('es-GT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
@@ -49,6 +52,8 @@ export default function Encabezado() {
                       <BreadcrumbLink asChild>
                         <Link to={miga.ruta}>{miga.titulo}</Link>
                       </BreadcrumbLink>
+                    ) : miga.sinPantalla ? (
+                      <span>{miga.titulo}</span>
                     ) : (
                       <BreadcrumbPage>{miga.titulo}</BreadcrumbPage>
                     )}

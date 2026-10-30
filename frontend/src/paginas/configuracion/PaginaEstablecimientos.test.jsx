@@ -5,7 +5,7 @@ import { desactivarEstablecimiento, listarEstablecimientos, reactivarEstablecimi
 import { ErrorApi } from '@/api/cliente.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
-import PaginaConfiguracion from './PaginaConfiguracion.jsx'
+import PaginaEstablecimientos from './PaginaEstablecimientos.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
 vi.mock('@/api/catalogos.js', () => ({
@@ -94,12 +94,12 @@ function Ubicacion() {
 }
 const ubicacion = () => screen.getByTestId('ubicacion').textContent
 
-async function abrir(ruta = '/configuracion?pestana=establecimientos', permisos = ['CONFIGURACION_CONSULTAR', 'ESTABLECIMIENTO_CONSULTAR']) {
+async function abrir(ruta = '/administracion/establecimientos', permisos = ['CONFIGURACION_CONSULTAR', 'ESTABLECIMIENTO_CONSULTAR']) {
   guardarSesion(crearSesion(permisos))
   render(
     <MemoryRouter initialEntries={[ruta]}>
       <ProveedorSesion>
-        <PaginaConfiguracion />
+        <PaginaEstablecimientos />
         <Ubicacion />
       </ProveedorSesion>
     </MemoryRouter>,
@@ -121,29 +121,13 @@ beforeEach(() => {
   listarEstablecimientos.mockResolvedValue(ESTABLECIMIENTOS)
 })
 
-test('con solo ESTABLECIMIENTO_CONSULTAR se ve la pestaña Establecimientos, que pide la lista una vez', async () => {
-  await abrir('/configuracion')
+test('con solo ESTABLECIMIENTO_CONSULTAR se ve la pantalla Establecimientos, que pide la lista una vez', async () => {
+  await abrir('/administracion/establecimientos')
 
-  expect(screen.getByRole('tab', { name: 'Establecimientos' }).getAttribute('aria-selected')).toBe('true')
-  expect(screen.queryByRole('tab', { name: 'Territorio' })).toBeNull()
+  expect(screen.getByRole('heading', { level: 1, name: 'Establecimientos' })).toBeTruthy()
   expect(listarEstablecimientos).toHaveBeenCalledTimes(1)
   expect(listarEstablecimientos).toHaveBeenCalledWith()
   expect(filas()).toHaveLength(ESTABLECIMIENTOS.length)
-})
-
-test('sin ESTABLECIMIENTO_CONSULTAR no aparece la pestaña', async () => {
-  guardarSesion(crearSesion(['CONFIGURACION_CONSULTAR']))
-  render(
-    <MemoryRouter initialEntries={['/configuracion?pestana=establecimientos']}>
-      <ProveedorSesion>
-        <PaginaConfiguracion />
-      </ProveedorSesion>
-    </MemoryRouter>,
-  )
-
-  expect(screen.queryByRole('tab', { name: 'Establecimientos' })).toBeNull()
-  expect(screen.getByText('No tiene acceso a ningún catálogo.')).toBeTruthy()
-  expect(listarEstablecimientos).not.toHaveBeenCalled()
 })
 
 test('muestra las marcas como Badge y "—" en el distrito del externo', async () => {
@@ -180,7 +164,7 @@ test('la búsqueda y los filtros reducen la tabla sin pedir de nuevo y quedan en
     target: { value: 'tacana' },
   })
   await waitFor(() => expect(codigos()).toEqual(['CS-1207']))
-  expect(ubicacion()).toBe('?pestana=establecimientos&q=tacana')
+  expect(ubicacion()).toBe('?q=tacana')
 
   fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar por código o nombre' }), { target: { value: '' } })
   elegirFiltro('municipio', 7)
@@ -191,16 +175,16 @@ test('la búsqueda y los filtros reducen la tabla sin pedir de nuevo y quedan en
 
   elegirFiltro('estado', 'activos')
   expect(await screen.findByText('No hay establecimientos que coincidan con los filtros.')).toBeTruthy()
-  expect(ubicacion()).toBe('?pestana=establecimientos&municipio=7&tipo=4&estado=activos')
+  expect(ubicacion()).toBe('?municipio=7&tipo=4&estado=activos')
 
   elegirFiltro('municipio', 'todos')
-  await waitFor(() => expect(ubicacion()).toBe('?pestana=establecimientos&tipo=4&estado=activos'))
+  await waitFor(() => expect(ubicacion()).toBe('?tipo=4&estado=activos'))
   expect(codigos()).toEqual(['PS-1201-33'])
   expect(listarEstablecimientos).toHaveBeenCalledTimes(1)
 })
 
 test('los filtros de la URL se aplican al abrir, y la búsqueda encuentra por código', async () => {
-  await abrir('/configuracion?pestana=establecimientos&q=hosp-&estado=activos')
+  await abrir('/administracion/establecimientos?q=hosp-&estado=activos')
 
   expect(codigos()).toEqual(['HOSP-SM'])
   expect(screen.getByRole('searchbox', { name: 'Buscar por código o nombre' }).value).toBe('hosp-')
@@ -229,7 +213,7 @@ test('sin establecimientos y con ESTABLECIMIENTO_CREAR, el aviso trae el enlace 
 
   const vacio = screen.getByText('No hay establecimientos registrados.').parentElement
   expect(within(vacio).getByRole('link', { name: 'Registrar establecimiento' }).getAttribute('href')).toBe(
-    '/configuracion/establecimientos/nuevo',
+    '/administracion/establecimientos/nuevo',
   )
 })
 

@@ -34,6 +34,7 @@ import { mensajeDeError } from '@/api/cliente.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import DialogoDistrito from './DialogoDistrito.jsx'
+import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 
 const MIGRANTES = '9999'
 // Radix Select no acepta '' como valor de una opción; "todos" equivale a no filtrar.
@@ -80,7 +81,7 @@ function CardCargando({ titulo }) {
   )
 }
 
-export default function PestanaTerritorio() {
+function ContenidoTerritorio() {
   const { tienePermiso } = useSesion()
   const puedeCrear = tienePermiso('DISTRITO_CREAR')
   const puedeEditar = tienePermiso('DISTRITO_EDITAR')
@@ -382,5 +383,14 @@ export default function PestanaTerritorio() {
         />
       )}
     </div>
+  )
+}
+
+export default function PaginaTerritorio() {
+  return (
+    <section className="flex flex-col gap-6 p-6">
+      <EncabezadoPagina antetitulo="Administración" titulo="Territorio" />
+      <ContenidoTerritorio />
+    </section>
   )
 }

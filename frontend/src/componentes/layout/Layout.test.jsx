@@ -12,7 +12,31 @@ import opcionesMenu from './opcionesMenu.js'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
 
-const TODOS_LOS_PERMISOS = opcionesMenu.map((opcion) => opcion.permiso).filter(Boolean)
+const TODOS_LOS_PERMISOS = [
+  ...new Set(
+    opcionesMenu.flatMap((opcion) => [opcion.permiso, ...(opcion.hijos ?? []).flatMap((hijo) => hijo.permisos)]),
+  ),
+].filter(Boolean)
+// Los del Revisor en 05_permisos_mysql.sql que piden los hijos de «Administración».
+const PERMISOS_REVISOR = [
+  'CONFIGURACION_CONSULTAR',
+  'VACUNA_CONSULTAR',
+  'DIMENSION_CONSULTAR',
+  'ESQUEMA_CONSULTAR',
+  'PERIODO_CONSULTAR',
+  'POBLACION_CONSULTAR',
+]
+const HIJOS_ADMINISTRACION = [
+  'Usuarios',
+  'Territorio',
+  'Establecimientos',
+  'Vacunas',
+  'Dimensiones',
+  'Esquemas',
+  'Periodos',
+  'Población',
+  'Roles y permisos',
+]
 
 function crearSesion({ permisos = [], rolNombre = 'Administrador' } = {}) {
   const codificar = (objeto) => btoa(JSON.stringify(objeto)).replace(/=+$/, '')
@@ -42,7 +66,14 @@ function abrir(ruta, opciones) {
 }
 
 const menu = () => within(screen.getByRole('navigation', { name: 'Menú principal' }))
-const opcionesVisibles = () => menu().getAllByRole('link').map((enlace) => enlace.textContent)
+// Los enlaces y el disparador de cada padre, en el orden del menú.
+const opcionesVisibles = () =>
+  [...screen.getByRole('navigation', { name: 'Menú principal' }).querySelectorAll('a, button')].map((e) => e.textContent)
+const padre = () => menu().getByRole('button', { name: 'Administración' })
+const hijosVisibles = () =>
+  [...screen.getByRole('navigation', { name: 'Menú principal' }).querySelectorAll('[data-sidebar="menu-sub"] a')].map(
+    (enlace) => enlace.textContent,
+  )
 const botonCuenta = () => screen.getByRole('button', { name: /^Cuenta de / })
 
 // Radix abre el menú con Enter sobre el botón; su contenido va en un portal.
@@ -70,10 +101,9 @@ test('con INDICADOR_CONSULTAR y BITACORA_CONSULTAR ve Inicio, Indicadores y Audi
   expect(menu().queryByRole('link', { name: 'Registro de producción' })).toBeNull()
 })
 
-test('con los 11 permisos ve las 12 opciones en el orden de la tabla', () => {
+test('con todos los permisos ve las 10 opciones en el orden de la tabla; «Administración» empieza plegada', () => {
   abrir('/inicio', { permisos: TODOS_LOS_PERMISOS })
 
-  expect(TODOS_LOS_PERMISOS).toHaveLength(11)
   expect(opcionesVisibles()).toEqual([
     'Inicio',
     'Registro de producción',
@@ -84,10 +114,83 @@ test('con los 11 permisos ve las 12 opciones en el orden de la tabla', () => {
     'Informes',
     'Alertas',
     'Auditoría',
-    'Usuarios',
-    'Configuración',
-    'Roles y permisos',
+    'Administración',
   ])
+  expect(padre().getAttribute('aria-expanded')).toBe('false')
+  expect(hijosVisibles()).toEqual([])
+})
+
+test('un clic en «Administración» despliega sus nueve hijos en orden, y otro la pliega', () => {
+  abrir('/inicio', { permisos: TODOS_LOS_PERMISOS })
+
+  fireEvent.click(padre())
+  expect(padre().getAttribute('aria-expanded')).toBe('true')
+  expect(hijosVisibles()).toEqual(HIJOS_ADMINISTRACION)
+  expect(menu().getByRole('link', { name: 'Vacunas' }).getAttribute('href')).toBe('/administracion/vacunas')
+
+  fireEvent.click(padre())
+  expect(padre().getAttribute('aria-expanded')).toBe('false')
+  expect(hijosVisibles()).toEqual([])
+})
+
+test('con los permisos del Revisor, «Administración» muestra solo sus hijos', () => {
+  abrir('/inicio', { permisos: PERMISOS_REVISOR })
+
+  fireEvent.click(padre())
+  expect(hijosVisibles()).toEqual(['Vacunas', 'Dimensiones', 'Esquemas', 'Periodos', 'Población'])
+})
+
+test('un catálogo pide CONFIGURACION_CONSULTAR además de sus permisos', () => {
+  abrir('/inicio', { permisos: ['CONFIGURACION_CONSULTAR', 'VACUNA_CONSULTAR', 'USUARIO_CONSULTAR'] })
+  fireEvent.click(padre())
+  expect(hijosVisibles()).toEqual(['Usuarios', 'Vacunas'])
+})
+
+test('sin ningún hijo visible, «Administración» no aparece', () => {
+  // Personal del establecimiento: lee vacunas y periodos para capturar, sin CONFIGURACION_CONSULTAR.
+  abrir('/inicio', { permisos: ['REPORTE_CONSULTAR', 'VACUNA_CONSULTAR', 'PERIODO_CONSULTAR'] })
+
+  expect(opcionesVisibles()).toEqual(['Inicio', 'Registro de producción', 'Mis reportes'])
+  expect(menu().queryByRole('button', { name: 'Administración' })).toBeNull()
+})
+
+test('en una subruta de un hijo, «Administración» está desplegada y el hijo, activo', () => {
+  abrir('/administracion/vacunas/nueva', { permisos: [...PERMISOS_REVISOR, 'VACUNA_CREAR'] })
+
+  expect(padre().getAttribute('aria-expanded')).toBe('true')
+  expect(menu().getByRole('link', { name: 'Vacunas' }).getAttribute('data-active')).toBe('true')
+  expect(menu().getByRole('link', { name: 'Periodos' }).getAttribute('data-active')).toBe('false')
+})
+
+// Como main.jsx: un data router, que necesitan las pantallas con el aviso de cambios sin guardar (useBlocker).
+function abrirConDataRouter(entrada, permisos) {
+  guardarSesion(crearSesion({ permisos }))
+  const router = createMemoryRouter(
+    [
+      {
+        path: '*',
+        element: (
+          <ProveedorSesion>
+            <App />
+          </ProveedorSesion>
+        ),
+      },
+    ],
+    { initialEntries: [entrada] },
+  )
+  render(<RouterProvider router={router} />)
+  return router
+}
+
+test('plegada a mano, «Administración» se vuelve a desplegar al entrar en otra de sus pantallas', async () => {
+  const router = abrirConDataRouter('/administracion/usuarios/nuevo', ['USUARIO_CONSULTAR', 'EMPLEADO_CREAR'])
+  expect(padre().getAttribute('aria-expanded')).toBe('true')
+  fireEvent.click(padre())
+  expect(padre().getAttribute('aria-expanded')).toBe('false')
+
+  fireEvent.click(within(screen.getByRole('navigation', { name: 'Ubicación' })).getByRole('link', { name: 'Usuarios' }))
+  await vi.waitFor(() => expect(router.state.location.pathname).toBe('/administracion/usuarios'))
+  expect(padre().getAttribute('aria-expanded')).toBe('true')
 })
 
 test('la opción de la ruta actual está marcada como activa', () => {
@@ -100,21 +203,23 @@ test('la opción de la ruta actual está marcada como activa', () => {
   expect(inicio.getAttribute('data-active')).toBe('false')
 })
 
-test('"Usuarios" sigue activa en su subruta /usuarios/nuevo, que no aparece en el menú', () => {
-  abrir('/usuarios/nuevo', { permisos: ['USUARIO_CONSULTAR', 'EMPLEADO_CREAR'] })
+test('"Usuarios" sigue activa en su subruta /administracion/usuarios/nuevo, que no aparece en el menú', () => {
+  abrir('/administracion/usuarios/nuevo', { permisos: ['USUARIO_CONSULTAR', 'EMPLEADO_CREAR'] })
 
   expect(menu().getByRole('link', { name: 'Usuarios' }).getAttribute('data-active')).toBe('true')
-  expect(opcionesVisibles()).toEqual(['Inicio', 'Usuarios'])
+  expect(opcionesVisibles()).toEqual(['Inicio', 'Administración', 'Usuarios'])
 })
 
 // Las pantallas se cargan al entrar en ellas (lazy): se esperan con findBy.
-test('/usuarios muestra "Registrar personal" solo con EMPLEADO_CREAR', async () => {
-  abrir('/usuarios', { permisos: ['USUARIO_CONSULTAR', 'EMPLEADO_CREAR'] })
-  expect((await screen.findByRole('link', { name: 'Registrar personal' })).getAttribute('href')).toBe('/usuarios/nuevo')
+test('/administracion/usuarios muestra "Registrar personal" solo con EMPLEADO_CREAR', async () => {
+  abrir('/administracion/usuarios', { permisos: ['USUARIO_CONSULTAR', 'EMPLEADO_CREAR'] })
+  expect((await screen.findByRole('link', { name: 'Registrar personal' })).getAttribute('href')).toBe(
+    '/administracion/usuarios/nuevo',
+  )
 })
 
-test('/usuarios sin EMPLEADO_CREAR no muestra "Registrar personal"', async () => {
-  abrir('/usuarios', { permisos: ['USUARIO_CONSULTAR'] })
+test('/administracion/usuarios sin EMPLEADO_CREAR no muestra "Registrar personal"', async () => {
+  abrir('/administracion/usuarios', { permisos: ['USUARIO_CONSULTAR'] })
 
   expect(await screen.findByRole('heading', { name: 'Usuarios' })).toBeTruthy()
   expect(screen.queryByRole('link', { name: 'Registrar personal' })).toBeNull()
@@ -143,20 +248,36 @@ test('"Cambiar contraseña" del menú de la cuenta abre la pantalla de cambio de
   expect(screen.getByRole('navigation', { name: 'Menú principal' })).toBeTruthy()
 })
 
-test('el encabezado muestra dónde se está: la opción del menú y, en una subruta, el enlace para volver a ella', async () => {
-  abrir('/usuarios/nuevo', { permisos: ['USUARIO_CONSULTAR', 'EMPLEADO_CREAR'] })
+const migas = () => within(screen.getByRole('navigation', { name: 'Ubicación' }))
+const textoDeMigas = () => screen.getByRole('navigation', { name: 'Ubicación' }).querySelector('ol').textContent
 
-  const ubicacion = within(screen.getByRole('navigation', { name: 'Ubicación' }))
-  expect(ubicacion.getByRole('link', { name: 'Usuarios' }).getAttribute('href')).toBe('/usuarios')
-  expect(ubicacion.getByText('Registrar personal').getAttribute('aria-current')).toBe('page')
+test('el encabezado muestra dónde se está: el padre, la opción y, en una subruta, el enlace para volver a ella', async () => {
+  abrir('/administracion/usuarios/nuevo', { permisos: ['USUARIO_CONSULTAR', 'EMPLEADO_CREAR'] })
+
+  expect(migas().queryByRole('link', { name: 'Administración' })).toBeNull()
+  expect(migas().getByText('Administración').getAttribute('aria-current')).toBeNull()
+  expect(migas().getByRole('link', { name: 'Usuarios' }).getAttribute('href')).toBe('/administracion/usuarios')
+  expect(migas().getByText('Registrar personal').getAttribute('aria-current')).toBe('page')
   expect(await screen.findByRole('heading', { name: 'Registrar personal' })).toBeTruthy()
+})
+
+test('en un hijo, las migas dicen «Administración › Vacunas», con el hijo como página actual', () => {
+  abrir('/administracion/vacunas', { permisos: PERMISOS_REVISOR })
+
+  expect(textoDeMigas()).toBe('AdministraciónVacunas')
+  expect(migas().getByText('Vacunas').getAttribute('aria-current')).toBe('page')
 })
 
 test('en una subruta abierta desde la lista con filtros, la miga vuelve a la lista con ellos', () => {
   guardarSesion(crearSesion({ permisos: ['USUARIO_CONSULTAR', 'EMPLEADO_CREAR'] }))
   render(
     <MemoryRouter
-      initialEntries={[{ pathname: '/usuarios/nuevo', state: { volverA: { pathname: '/usuarios', search: '?estado=ACTIVA' } } }]}
+      initialEntries={[
+        {
+          pathname: '/administracion/usuarios/nuevo',
+          state: { volverA: { pathname: '/administracion/usuarios', search: '?estado=ACTIVA' } },
+        },
+      ]}
     >
       <ProveedorSesion>
         <App />
@@ -164,13 +285,24 @@ test('en una subruta abierta desde la lista con filtros, la miga vuelve a la lis
     </MemoryRouter>,
   )
 
-  const ubicacion = within(screen.getByRole('navigation', { name: 'Ubicación' }))
-  expect(ubicacion.getByRole('link', { name: 'Usuarios' }).getAttribute('href')).toBe('/usuarios?estado=ACTIVA')
+  expect(migas().getByRole('link', { name: 'Usuarios' }).getAttribute('href')).toBe('/administracion/usuarios?estado=ACTIVA')
+})
+
+test('en la subruta de un catálogo, la miga vuelve a la lista con los filtros de state.volverA', () => {
+  abrirConDataRouter({ pathname: '/administracion/vacunas/nueva', state: { volverA: '?q=hexa' } }, [
+    ...PERMISOS_REVISOR,
+    'VACUNA_CREAR',
+  ])
+
+  expect(migas().getByRole('link', { name: 'Vacunas' }).getAttribute('href')).toBe('/administracion/vacunas?q=hexa')
 })
 
 test('el título de la pestaña del navegador sigue a la pantalla', async () => {
-  abrir('/usuarios/nuevo', { permisos: ['USUARIO_CONSULTAR', 'EMPLEADO_CREAR'] })
+  abrir('/administracion/usuarios/nuevo', { permisos: ['USUARIO_CONSULTAR', 'EMPLEADO_CREAR'] })
   expect(document.title).toBe('Registrar personal · SIRCOVA')
+
+  fireEvent.click(menu().getByRole('link', { name: 'Usuarios' }))
+  expect(document.title).toBe('Administración › Usuarios · SIRCOVA')
 
   fireEvent.click(menu().getByRole('link', { name: 'Inicio' }))
   expect(document.title).toBe('Inicio · SIRCOVA')

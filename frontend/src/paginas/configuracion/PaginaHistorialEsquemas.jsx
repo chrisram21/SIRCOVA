@@ -10,8 +10,8 @@ import { ErrorApi, mensajeDeError } from '@/api/cliente.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { aDiaMesAnio } from './DialogoPublicarEsquema.jsx'
-import { PESTANA_ESQUEMAS } from './EditorEsquema.jsx'
-import { territorioDe } from './PestanaEsquemas.jsx'
+import { RUTA_ESQUEMAS } from './EditorEsquema.jsx'
+import { territorioDe } from './PaginaEsquemas.jsx'
 
 const NO_EXISTE = 'NO_EXISTE'
 
@@ -40,8 +40,9 @@ export function textoPublicacion({ publicadoEn, publicadoPor }) {
 export default function PaginaHistorialEsquemas() {
   const { vacunaId } = useParams()
   const { state } = useLocation()
-  const pestana = state?.volverA || PESTANA_ESQUEMAS
-  const volverA = `/configuracion${pestana}`
+  // Los filtros de la lista de esquemas, para volver a ella con los mismos.
+  const filtros = state?.volverA ?? ''
+  const volverA = `${RUTA_ESQUEMAS}${filtros}`
   const [historial, setHistorial] = useState(null)
   const [error, setError] = useState(null)
   // Cada carga tiene su número; una respuesta que llega después de otra carga se descarta.
@@ -71,7 +72,7 @@ export default function PaginaHistorialEsquemas() {
   return (
     <section className="flex max-w-6xl flex-col gap-6 p-6">
       <EncabezadoPagina
-        antetitulo="Configuración"
+        antetitulo="Administración"
         titulo={historial ? `Historial de ${historial.vacuna.nombre}` : 'Historial del esquema'}
         descripcion={historial && !historial.vacuna.activa && <Badge variant="outline">Inactiva</Badge>}
         volverA={volverA}
@@ -140,8 +141,8 @@ export default function PaginaHistorialEsquemas() {
                           <div className="flex justify-end">
                             <Button asChild variant="outline" size="sm">
                               <Link
-                                to={`/configuracion/esquemas/${v.id}`}
-                                state={{ volverA: pestana }}
+                                to={`/administracion/esquemas/${v.id}`}
+                                state={{ volverA: filtros }}
                                 aria-label={`Ver la versión ${v.version}`}
                               >
                                 Ver

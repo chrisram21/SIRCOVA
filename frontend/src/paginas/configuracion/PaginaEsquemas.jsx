@@ -23,10 +23,11 @@ import { mensajeDeError } from '@/api/cliente.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import DialogoPublicarEsquema, { aDiaMesAnio, avisoDePublicacion } from './DialogoPublicarEsquema.jsx'
+import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 
 export const territorioDe = (territorio) => (territorio.nivel === 'NACIONAL' ? 'Nacional' : territorio.ddrissCodigo)
 
-export default function PestanaEsquemas() {
+function ContenidoEsquemas() {
   const { tienePermiso } = useSesion()
   const puedeCrear = tienePermiso('ESQUEMA_CREAR')
   const puedeEditar = tienePermiso('ESQUEMA_EDITAR')
@@ -65,9 +66,9 @@ export default function PestanaEsquemas() {
     }
   }, [])
 
-  // La pestaña viaja al editor para volver a ella al guardar.
+  // Los filtros viajan al editor para volver con ellos a la lista al guardar.
   const crearBorrador = (vacuna, origen) =>
-    navigate(`/configuracion/esquemas/nuevo?vacuna=${vacuna.id}&origen=${origen}`, { state: { volverA: search } })
+    navigate(`/administracion/esquemas/nuevo?vacuna=${vacuna.id}&origen=${origen}`, { state: { volverA: search } })
 
   async function confirmarDescarte(evento) {
     // Radix cierra el diálogo al pulsar; se cierra a mano al terminar, para mostrar el progreso mientras tanto.
@@ -181,7 +182,7 @@ export default function PestanaEsquemas() {
                           {borrador && puedeEditar && vacuna.activa && (
                             <Button asChild variant="outline" size="sm">
                               <Link
-                                to={`/configuracion/esquemas/${borrador.id}/editar`}
+                                to={`/administracion/esquemas/${borrador.id}/editar`}
                                 state={{ volverA: search }}
                                 aria-label={`Editar borrador de ${vacuna.codigo}`}
                               >
@@ -211,7 +212,7 @@ export default function PestanaEsquemas() {
                           {(vigente || borrador) && (
                             <Button asChild variant="ghost" size="sm">
                               <Link
-                                to={`/configuracion/esquemas/historial/${vacuna.id}`}
+                                to={`/administracion/esquemas/historial/${vacuna.id}`}
                                 state={{ volverA: search }}
                                 aria-label={`Historial de ${vacuna.codigo}`}
                               >
@@ -260,5 +261,14 @@ export default function PestanaEsquemas() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  )
+}
+
+export default function PaginaEsquemas() {
+  return (
+    <section className="flex flex-col gap-6 p-6">
+      <EncabezadoPagina antetitulo="Administración" titulo="Esquemas" />
+      <ContenidoEsquemas />
+    </section>
   )
 }

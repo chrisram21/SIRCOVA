@@ -5,7 +5,7 @@ import { crearVacuna, listarVacunas } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
-import PaginaConfiguracion from './PaginaConfiguracion.jsx'
+import PaginaVacunas from './PaginaVacunas.jsx'
 import PaginaRegistrarVacuna from './PaginaRegistrarVacuna.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
@@ -54,8 +54,8 @@ function montar(ruta, permisos = PERMISOS) {
           </ProveedorSesion>
         ),
         children: [
-          { path: '/configuracion', element: <PaginaConfiguracion /> },
-          { path: '/configuracion/vacunas/nueva', element: <PaginaRegistrarVacuna /> },
+          { path: '/administracion/vacunas', element: <PaginaVacunas /> },
+          { path: '/administracion/vacunas/nueva', element: <PaginaRegistrarVacuna /> },
         ],
       },
     ],
@@ -103,7 +103,7 @@ beforeEach(() => {
 })
 
 test('agregar filas muestra D1, D2 y R1 con la marca en D2; subir R1 muestra el error de secuencia y no llama a la API', async () => {
-  montar('/configuracion/vacunas/nueva')
+  montar('/administracion/vacunas/nueva')
   llenarVacuna()
 
   expect([1, 2, 3].map(codigoDeDosis)).toEqual(['D1', 'D2', 'R1'])
@@ -121,7 +121,7 @@ test('agregar filas muestra D1, D2 y R1 con la marca en D2; subir R1 muestra el 
 })
 
 test('UNICA con DOSIS muestra su error de secuencia; con solo refuerzos marca el último', () => {
-  montar('/configuracion/vacunas/nueva')
+  montar('/administracion/vacunas/nueva')
 
   elegirTipo(1, 'UNICA')
   agregarFila()
@@ -136,7 +136,7 @@ test('UNICA con DOSIS muestra su error de secuencia; con solo refuerzos marca el
 })
 
 test('elegir el tipo llena el nombre sugerido sin pisar uno escrito a mano', () => {
-  montar('/configuracion/vacunas/nueva')
+  montar('/administracion/vacunas/nueva')
 
   elegirTipo(1, 'UNICA')
   expect(nombreDeDosis(1).value).toBe('Dosis única')
@@ -149,7 +149,7 @@ test('elegir el tipo llena el nombre sugerido sin pisar uno escrito a mano', () 
 })
 
 test('quitar una fila recalcula los códigos; la única fila no se puede quitar', () => {
-  montar('/configuracion/vacunas/nueva')
+  montar('/administracion/vacunas/nueva')
   llenarTresDosis()
 
   fireEvent.click(screen.getByRole('button', { name: 'Quitar la dosis 1' }))
@@ -160,7 +160,7 @@ test('quitar una fila recalcula los códigos; la única fila no se puede quitar'
 })
 
 test('un código con "-" o un nombre de 2 caracteres muestran el error de la regla y no llaman a la API', async () => {
-  montar('/configuracion/vacunas/nueva')
+  montar('/administracion/vacunas/nueva')
   llenarVacuna()
   escribir(/^Código\*?$/, 'MP-OX')
   escribir(/^Nombre\*?$/, 'Mp')
@@ -179,7 +179,7 @@ test('un código con "-" o un nombre de 2 caracteres muestran el error de la reg
 })
 
 test('una fila sin tipo avisa qué falta y no llama a la API', async () => {
-  montar('/configuracion/vacunas/nueva')
+  montar('/administracion/vacunas/nueva')
   escribir(/^Código\*?$/, 'MPOX')
   escribir(/^Nombre\*?$/, 'Viruela símica (Mpox)')
   fireEvent.change(nombreDeDosis(1), { target: { value: 'Primera dosis' } })
@@ -192,7 +192,7 @@ test('una fila sin tipo avisa qué falta y no llama a la API', async () => {
 
 test('registrar envía tipo, nombre y esTrazadora de cada dosis, sin código ni orden, y vuelve sin pedir confirmación con el aviso del esquema', async () => {
   crearVacuna.mockResolvedValue({ id: 22, codigo: 'MPOX' })
-  montar('/configuracion?pestana=vacunas&q=mp')
+  montar('/administracion/vacunas?q=mp')
   await abrirDesdeLaPestana()
   llenarVacuna()
   escribir(/^Orden en el informe/, '23')
@@ -200,7 +200,7 @@ test('registrar envía tipo, nombre y esTrazadora de cada dosis, sin código ni 
 
   guardar()
 
-  await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=vacunas&q=mp'))
+  await waitFor(() => expect(ubicacion()).toBe('/administracion/vacunas?q=mp'))
   expect(crearVacuna).toHaveBeenCalledWith({
     codigo: 'mpox',
     nombre: 'Viruela símica (Mpox)',
@@ -220,7 +220,7 @@ test('registrar envía tipo, nombre y esTrazadora de cada dosis, sin código ni 
 
 test('un 409 se muestra junto a los botones y el formulario conserva lo escrito', async () => {
   crearVacuna.mockRejectedValue(new ErrorApi(409, 'VACUNA_DUPLICADA', 'Ya hay una vacuna con ese código.'))
-  montar('/configuracion/vacunas/nueva')
+  montar('/administracion/vacunas/nueva')
   llenarVacuna()
 
   guardar()
@@ -229,28 +229,28 @@ test('un 409 se muestra junto a los botones y el formulario conserva lo escrito'
   expect(aviso.parentElement.nextElementSibling.contains(screen.getByRole('button', { name: 'Registrar vacuna' }))).toBe(true)
   expect(screen.getByLabelText(/^Código\*?$/).value).toBe('mpox')
   expect(nombreDeDosis(3).value).toBe('Primer refuerzo')
-  expect(ubicacion()).toBe('/configuracion/vacunas/nueva')
+  expect(ubicacion()).toBe('/administracion/vacunas/nueva')
 })
 
 test('"Cancelar" vuelve a la pestaña con sus filtros sin guardar', async () => {
-  montar('/configuracion?pestana=vacunas&estado=inactivas')
+  montar('/administracion/vacunas?estado=inactivas')
   await abrirDesdeLaPestana()
 
   fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
 
-  await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=vacunas&estado=inactivas'))
+  await waitFor(() => expect(ubicacion()).toBe('/administracion/vacunas?estado=inactivas'))
   expect(crearVacuna).not.toHaveBeenCalled()
 })
 
 test('sin VACUNA_CREAR no aparece el botón "Registrar vacuna"', async () => {
-  montar('/configuracion?pestana=vacunas', ['CONFIGURACION_CONSULTAR', 'VACUNA_CONSULTAR'])
+  montar('/administracion/vacunas', ['CONFIGURACION_CONSULTAR', 'VACUNA_CONSULTAR'])
 
   await waitFor(() => expect(screen.queryByLabelText('Cargando vacunas')).toBeNull())
   expect(screen.queryByRole('link', { name: 'Registrar vacuna' })).toBeNull()
 })
 
 test('al guardar con errores, el foco va al primer campo inválido', async () => {
-  montar('/configuracion/vacunas/nueva')
+  montar('/administracion/vacunas/nueva')
   escribir(/^Nombre\*?$/, 'Viruela símica (Mpox)')
 
   guardar()
@@ -261,7 +261,7 @@ test('al guardar con errores, el foco va al primer campo inválido', async () =>
 
 describe('cambios sin guardar', () => {
   test('con algo escrito, "Cancelar" pide confirmación; "Seguir editando" conserva lo escrito', async () => {
-    montar('/configuracion?pestana=vacunas&q=mp')
+    montar('/administracion/vacunas?q=mp')
     await abrirDesdeLaPestana()
     escribir(/^Código\*?$/, 'mpox')
 
@@ -271,17 +271,17 @@ describe('cambios sin guardar', () => {
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Seguir editando' }))
 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
-    expect(ubicacion()).toBe('/configuracion/vacunas/nueva')
+    expect(ubicacion()).toBe('/administracion/vacunas/nueva')
     expect(screen.getByLabelText(/^Código\*?$/).value).toBe('mpox')
 
     fireEvent.click(screen.getByRole('link', { name: 'Volver' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Salir sin guardar' }))
-    await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=vacunas&q=mp'))
+    await waitFor(() => expect(ubicacion()).toBe('/administracion/vacunas?q=mp'))
     expect(crearVacuna).not.toHaveBeenCalled()
   })
 
   test('agregar una dosis también cuenta como cambio', async () => {
-    montar('/configuracion?pestana=vacunas')
+    montar('/administracion/vacunas')
     await abrirDesdeLaPestana()
     agregarFila()
 

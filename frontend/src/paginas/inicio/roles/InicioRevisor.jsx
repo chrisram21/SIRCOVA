@@ -16,7 +16,7 @@ function TarjetaPeriodos({ titulo, tono }) {
       titulo={titulo}
       tono={tono}
       consulta={consulta}
-      enlace={{ a: '/configuracion?pestana=periodos', texto: 'Ver periodos' }}
+      enlace={{ a: '/administracion/periodos', texto: 'Ver periodos' }}
     >
       {(abiertos) => {
         if (abiertos.length === 0) return <Cifra valor={0}>Ningún mes abierto.</Cifra>
