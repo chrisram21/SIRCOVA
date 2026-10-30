@@ -86,3 +86,35 @@ export function publicarEsquema(id, { vigenciaDesde, motivoCambio }) {
 export function historialEsquemas(vacunaId) {
   return solicitar(`/esquemas-captura/historial?vacunaId=${encodeURIComponent(vacunaId)}`)
 }
+
+// Reglas de validación: una fila por código, con la versión que aplica a la DDRISS del usuario (la de su DDRISS
+// antes que la nacional). Cada escritura publica una versión nueva de la DDRISS al momento; no hay borradores.
+const rutaRegla = (codigo) => `/reglas-validacion/${encodeURIComponent(codigo)}`
+
+export function listarReglas() {
+  return solicitar('/reglas-validacion')
+}
+
+export function historialRegla(codigo) {
+  return solicitar(`${rutaRegla(codigo)}/historial`)
+}
+
+// El código lo genera el backend ({TIPO}_{NN}); solo se crean los tipos con parámetros.
+export function crearRegla(datos) {
+  return solicitar('/reglas-validacion', { metodo: 'POST', cuerpo: datos })
+}
+
+// datos.versionBase es la versión que se cargó en el editor; si cambió, responde 409.
+export function publicarVersionRegla(codigo, datos) {
+  return solicitar(`${rutaRegla(codigo)}/versiones`, { metodo: 'POST', cuerpo: datos })
+}
+
+// { version, motivoCambio }: la del VIGENTE de la DDRISS. Responde la fila actualizada.
+export function desactivarRegla(codigo, datos) {
+  return solicitar(`${rutaRegla(codigo)}/desactivar`, { metodo: 'POST', cuerpo: datos })
+}
+
+// { version, motivoCambio }: la de su última versión de la DDRISS. Responde la versión publicada.
+export function activarRegla(codigo, datos) {
+  return solicitar(`${rutaRegla(codigo)}/activar`, { metodo: 'POST', cuerpo: datos })
+}

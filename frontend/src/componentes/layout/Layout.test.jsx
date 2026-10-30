@@ -33,6 +33,7 @@ const HIJOS_ADMINISTRACION = [
   'Vacunas',
   'Dimensiones',
   'Esquemas',
+  'Reglas de validación',
   'Periodos',
   'Población',
   'Roles y permisos',
@@ -120,7 +121,7 @@ test('con todos los permisos ve las 10 opciones en el orden de la tabla; «Admin
   expect(hijosVisibles()).toEqual([])
 })
 
-test('un clic en «Administración» despliega sus nueve hijos en orden, y otro la pliega', () => {
+test('un clic en «Administración» despliega sus diez hijos en orden, y otro la pliega', () => {
   abrir('/inicio', { permisos: TODOS_LOS_PERMISOS })
 
   fireEvent.click(padre())
@@ -137,7 +138,13 @@ test('con los permisos del Revisor, «Administración» muestra solo sus hijos',
   abrir('/inicio', { permisos: PERMISOS_REVISOR })
 
   fireEvent.click(padre())
+  // Sin REGLA_CONSULTAR (SPEC 32: solo el Administrador), «Reglas de validación» no aparece.
   expect(hijosVisibles()).toEqual(['Vacunas', 'Dimensiones', 'Esquemas', 'Periodos', 'Población'])
+})
+
+test('«Reglas de validación» pide REGLA_CONSULTAR y VACUNA_CONSULTAR', () => {
+  abrir('/inicio', { permisos: ['CONFIGURACION_CONSULTAR', 'REGLA_CONSULTAR'] })
+  expect(menu().queryByRole('button', { name: 'Administración' })).toBeNull()
 })
 
 test('un catálogo pide CONFIGURACION_CONSULTAR además de sus permisos', () => {

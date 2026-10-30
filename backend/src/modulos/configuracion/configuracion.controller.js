@@ -1,5 +1,6 @@
 import * as dimensionesService from './dimensiones.service.js';
 import * as esquemasService from './esquemas.service.js';
+import * as reglasService from './reglas.service.js';
 import { contextoAuditoria } from '../auditoria/auditoria.service.js';
 
 export async function listarDimensiones(req, res) {
@@ -74,4 +75,30 @@ export async function publicarEsquema(req, res) {
 export async function descartarEsquema(req, res) {
   await esquemasService.descartarEsquema(req.params.id, contextoAuditoria(req), req.usuario);
   res.status(204).end();
+}
+
+export async function listarReglas(req, res) {
+  res.json(await reglasService.listarReglas(req.query, req.usuario));
+}
+
+export async function crearRegla(req, res) {
+  res.status(201).json(await reglasService.crearRegla(req.body, contextoAuditoria(req), req.usuario));
+}
+
+export async function publicarVersionRegla(req, res) {
+  const { codigo } = req.params;
+  res.status(201).json(await reglasService.publicarVersionRegla(codigo, req.body, contextoAuditoria(req), req.usuario));
+}
+
+export async function desactivarRegla(req, res) {
+  res.json(await reglasService.desactivarRegla(req.params.codigo, req.body, contextoAuditoria(req), req.usuario));
+}
+
+export async function activarRegla(req, res) {
+  const { codigo } = req.params;
+  res.status(201).json(await reglasService.activarRegla(codigo, req.body, contextoAuditoria(req), req.usuario));
+}
+
+export async function historialRegla(req, res) {
+  res.json(await reglasService.historialRegla(req.params.codigo, req.query, req.usuario));
 }

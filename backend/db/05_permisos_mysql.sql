@@ -119,6 +119,12 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
 INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('REPORTE_EDITAR',            'PRODUCCION',              'Capturar y guardar las cantidades del reporte de su establecimiento en borrador');
 
+-- SPEC 32 (HU-24): reglas de validación de la DDRISS (MongoDB)
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('REGLA_CONSULTAR',           'CONFIGURACION_CATALOGOS', 'Consultar las reglas de validación que aplican a su DDRISS y su historial'),
+ ('REGLA_CREAR',               'CONFIGURACION_CATALOGOS', 'Crear reglas de validación para su DDRISS'),
+ ('REGLA_EDITAR',              'CONFIGURACION_CATALOGOS', 'Publicar versiones de las reglas de validación para su DDRISS, y activar y desactivar las suyas');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -211,6 +217,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'ESTABLECIMIENTO'
    AND p.codigo = 'REPORTE_EDITAR';
+
+-- SPEC 32 (HU-24): solo el Administrador gestiona las reglas de validación
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'ADMINISTRADOR'
+   AND p.codigo IN ('REGLA_CONSULTAR', 'REGLA_CREAR', 'REGLA_EDITAR');
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

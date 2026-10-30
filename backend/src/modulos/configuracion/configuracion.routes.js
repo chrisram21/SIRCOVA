@@ -104,5 +104,36 @@ router.post(
   requierePermiso('ESQUEMA_PUBLICAR'),
   configuracionController.publicarEsquema,
 );
+router.get(
+  '/reglas-validacion',
+  autenticar,
+  requierePermiso('REGLA_CONSULTAR'),
+  configuracionController.listarReglas,
+);
+router.post('/reglas-validacion', autenticar, requierePermiso('REGLA_CREAR'), configuracionController.crearRegla);
+router.post(
+  '/reglas-validacion/:codigo/versiones',
+  autenticar,
+  requierePermiso('REGLA_EDITAR'),
+  configuracionController.publicarVersionRegla,
+);
+router.post(
+  '/reglas-validacion/:codigo/desactivar',
+  autenticar,
+  requierePermiso('REGLA_EDITAR'),
+  configuracionController.desactivarRegla,
+);
+router.post(
+  '/reglas-validacion/:codigo/activar',
+  autenticar,
+  requierePermiso('REGLA_EDITAR'),
+  configuracionController.activarRegla,
+);
+router.get(
+  '/reglas-validacion/:codigo/historial',
+  autenticar,
+  requierePermiso('REGLA_CONSULTAR'),
+  configuracionController.historialRegla,
+);
 
 export default router;

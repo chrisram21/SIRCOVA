@@ -714,9 +714,19 @@ Verificado contra la API real el 2026-10-26, con `cs1201`, en el reporte 287 (oc
 **Cómo se hará:** Colección `reglas_validacion` en MongoDB con reglas declarativas (tipo, parámetros, severidad, territorio) y versión.
 
 **Criterios de aceptación:**
-- [ ] Puedo crear reglas de tipo error (bloquean el envío) o advertencia (solo avisan).
-- [ ] Puedo activar o desactivar una regla.
-- [ ] Cada regla tiene versión y queda en el historial de configuración.
+- [x] Puedo crear reglas de tipo error (bloquean el envío) o advertencia (solo avisan).
+- [x] Puedo activar o desactivar una regla.
+- [x] Cada regla tiene versión y queda en el historial de configuración.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 32 a `main`. Backend y frontend, en `specs/32-hu-24-reglas-de-validacion.md`: la pantalla «Reglas de validación» (`/administracion/reglas`, hijo de «Administración») y seis endpoints bajo `/reglas-validacion` con los permisos `REGLA_CONSULTAR`, `REGLA_CREAR` y `REGLA_EDITAR`, solo del Administrador. Diferencias con la historia, decididas por el equipo:
+
+- El Administrador maneja solo las reglas de su DDRISS. Una versión de la DDRISS reemplaza a la nacional del mismo código; las nacionales se ven, se les publica una versión de la DDRISS, pero no se apagan.
+- Solo se crean códigos nuevos de los tipos con parámetros (`RANGO`, `SECUENCIA_DOSIS`, `VARIACION_HISTORICA`, `TOTAL_CUADRA`). El backend genera el código `{TIPO}_{NN}`. El catálogo de tipos (parámetros, rangos, marcadores) está en `tiposRegla.js`, en el backend y en el frontend.
+- Publicación directa, sin borradores, con un motivo obligatorio. Cada cambio es una versión nueva: la `VIGENTE` anterior de la DDRISS pasa a `HISTORICO`. Una versión igual a la que aplica responde 422.
+- Desactivar pasa la `VIGENTE` de la DDRISS a `HISTORICO` sin reemplazo (vuelve a aplicar la nacional, si hay). Activar publica una versión nueva con el contenido de la última. El motivo de una desactivación queda en la bitácora y el historial lo muestra.
+- «Por vacuna»: cada versión aplica a todas las vacunas o a las elegidas (`aplica_a.vacunas`), solo activas.
+
+Verificado contra la API real el 2026-10-30, como Administrador: se creó `RANGO_01` «Prueba manual HU-24» (BCG, advertencia), se le publicó la v2, se desactivó, se activó (v3) y se dejó desactivada, con sus filas `CREAR`, `ACTUALIZAR`, `DESACTIVAR` y `REACTIVAR` en la bitácora. Se abrió «Nueva versión» de `SECUENCIA_DOSIS` sin publicarla. Las reglas de la semilla no cambiaron.
 
 #### HU-25. Validar automáticamente el reporte
 
@@ -738,6 +748,8 @@ Verificado contra la API real el 2026-10-26, con `cs1201`, en el reporte 287 (oc
 - **Total.** `reporte_vacuna.total_declarado` lo calcula el backend: es la suma del detalle, no un dato que escribe el Personal. El campo adicional `total_dosis_declarado` de Hexavalente v2 sigue en esa versión publicada, que no se edita: quitarlo pide publicar otra.
 - **Obligatorio.** Un campo adicional con `requerido` no impide guardar el borrador; lo exige la validación.
 - **Ya garantizado por el `PUT`.** Las cantidades negativas, las celdas que no son del esquema y las repetidas ya no se pueden guardar (400 y 422).
+
+**Nota (2026-10-30, spec 32):** las reglas que se ejecutan son las que aplican a la DDRISS del establecimiento al validar (SPEC 32: la `VIGENTE` de la DDRISS antes que la nacional del mismo código), con `aplica_a.vacunas` que incluya la vacuna o `*`; `esquemas_captura.reglas[]` y `severidad_override` ya no deciden. Los parámetros y marcadores de cada tipo están en `tiposRegla.js`. Una regla `CAMPOS_COMPLETOS` o `NO_NEGATIVO` puede no aplicar si la DDRISS la desactivó.
 
 **Nota (2026-10-26, spec 24):**
 - Las filas de la tarjeta B solo existen en la pantalla. Para el backend, una fila es (procedencia, dosis, sección) con al menos una celda guardada, y sus celdas que faltan son vacías. Así debe revisar `CAMPOS_COMPLETOS` la tarjeta B, nunca combinaciones de municipios sin filas. La sección de una celda se deduce de su `grupo_edad` (o es la única sección).
