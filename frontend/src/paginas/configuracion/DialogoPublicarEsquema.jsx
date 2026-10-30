@@ -13,9 +13,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { listarPeriodos } from '@/api/catalogos.js'
 import { mensajeDeError } from '@/api/cliente.js'
-import { publicarEsquema } from '@/api/configuracion.js'
+import { obtenerEsquema, publicarEsquema } from '@/api/configuracion.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import { validarMotivoCambio } from '@/validaciones/campos.js'
+import { problemasDeCoherencia } from './coherenciaEsquema.js'
+import { cargarReferencias, contenidoDe } from './EditorEsquema.jsx'
+import VistaPreviaEsquema from './VistaPreviaEsquema.jsx'
 
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -48,8 +51,15 @@ export function mesesValidos(periodos, vigente, hoy = hoyGuatemala()) {
     .sort((a, b) => a.fechaInicio.localeCompare(b.fechaInicio))
 }
 
-// Quien lo abre lo monta de nuevo en cada apertura, así empieza vacío y vuelve a pedir los meses.
+// Publicar en dos pasos (SPEC 30): este diálogo pide la vigencia y el motivo, y «Continuar» abre la vista previa de lo
+// guardado, que es la única que publica. Quien lo abre lo monta de nuevo en cada apertura, así empieza vacío y vuelve
+// a pedir los meses.
 export default function DialogoPublicarEsquema({ vacuna, borrador, vigente, alPublicar, alCerrar }) {
+  const [paso, setPaso] = useState('datos')
+  // { esquema, vacuna, dimensiones, contenido, problemas }: lo que muestra el paso 2.
+  const [previa, setPrevia] = useState(null)
+  const [cargandoPrevia, setCargandoPrevia] = useState(false)
+  const [errorPrevia, setErrorPrevia] = useState(null)
   const [meses, setMeses] = useState(null)
   const [errorMeses, setErrorMeses] = useState(null)
   const [desde, setDesde] = useState('')
@@ -93,20 +103,40 @@ export default function DialogoPublicarEsquema({ vacuna, borrador, vigente, alPu
     setIntentoMeses((n) => n + 1)
   }
 
-  async function confirmar(evento) {
+  // También es el «Reintentar» de la carga: su botón está dentro del form, y preventDefault evita que además lo envíe.
+  async function continuar(evento) {
     evento.preventDefault()
-    if (publicando) return
+    if (cargandoPrevia) return
     setIntentado(true)
     if (desde === '' || motivoRevisado.error) {
       setRevisar((n) => n + 1)
       return
     }
+    setCargandoPrevia(true)
+    setErrorPrevia(null)
+    try {
+      const esquema = await obtenerEsquema(borrador.id)
+      const referencias = await cargarReferencias(esquema.vacuna.id)
+      const contenido = contenidoDe(esquema)
+      const problemas = problemasDeCoherencia(contenido, { ...referencias, dosis: referencias.vacuna.dosis })
+      setPrevia({ esquema, ...referencias, contenido, problemas })
+      setErrorApi(null)
+      setPaso('vista')
+    } catch (err) {
+      setErrorPrevia(mensajeDeError(err))
+    } finally {
+      setCargandoPrevia(false)
+    }
+  }
+
+  async function confirmar() {
+    if (publicando) return
     setPublicando(true)
     setErrorApi(null)
     try {
       alPublicar(await publicarEsquema(borrador.id, { vigenciaDesde: desde, motivoCambio: motivoRevisado.valor }))
     } catch (err) {
-      // El Dialog sigue abierto y conserva lo elegido.
+      // La vista previa sigue abierta y conserva lo elegido.
       setErrorApi(mensajeDeError(err))
       setPublicando(false)
     }
@@ -123,10 +153,33 @@ export default function DialogoPublicarEsquema({ vacuna, borrador, vigente, alPu
     reemplazo = 'Desde esa fecha, su DDRISS usará esta versión.'
   }
 
+  if (paso === 'vista') {
+    const elegido = meses?.find((p) => p.fechaInicio === desde)
+    return (
+      <VistaPreviaEsquema
+        abierta
+        alCambiarAbierta={(abierta) => !abierta && alCerrar()}
+        esquema={previa.esquema}
+        contenido={previa.contenido}
+        vacuna={previa.vacuna}
+        dimensiones={previa.dimensiones}
+        problemas={previa.problemas}
+        publicacion={{
+          vigencia: elegido ? `${MESES[elegido.mes - 1]} ${elegido.anio}` : aDiaMesAnio(desde),
+          motivo: motivoRevisado.valor,
+          publicando,
+          errorApi,
+          alVolver: () => setPaso('datos'),
+          alConfirmar: confirmar,
+        }}
+      />
+    )
+  }
+
   return (
-    <Dialog open onOpenChange={(abierto) => !abierto && !publicando && alCerrar()}>
+    <Dialog open onOpenChange={(abierto) => !abierto && !cargandoPrevia && alCerrar()}>
       <DialogContent>
-        <form ref={formulario} className="flex flex-col gap-4" onSubmit={confirmar} noValidate>
+        <form ref={formulario} className="flex flex-col gap-4" onSubmit={continuar} noValidate>
           <DialogHeader>
             <DialogTitle>
               Publicar la versión {borrador.version} de {vacuna.nombre}
@@ -136,8 +189,6 @@ export default function DialogoPublicarEsquema({ vacuna, borrador, vigente, alPu
               ni descartar.
             </DialogDescription>
           </DialogHeader>
-
-          {errorApi && <AvisoError>{errorApi}</AvisoError>}
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="publicar-vigencia" className="font-semibold">
@@ -151,7 +202,7 @@ export default function DialogoPublicarEsquema({ vacuna, borrador, vigente, alPu
               </p>
             ) : (
               <>
-                <Select name="vigenciaDesde" value={desde} onValueChange={setDesde} disabled={meses === null || publicando}>
+                <Select name="vigenciaDesde" value={desde} onValueChange={setDesde} disabled={meses === null || cargandoPrevia}>
                   <SelectTrigger
                     id="publicar-vigencia"
                     className="w-full"
@@ -185,7 +236,7 @@ export default function DialogoPublicarEsquema({ vacuna, borrador, vigente, alPu
               id="publicar-motivo"
               value={motivo}
               onChange={(evento) => setMotivo(evento.target.value)}
-              disabled={publicando}
+              disabled={cargandoPrevia}
               aria-invalid={errorMotivo ? true : undefined}
               aria-describedby={errorMotivo ? 'publicar-motivo-error' : undefined}
             />
@@ -196,12 +247,16 @@ export default function DialogoPublicarEsquema({ vacuna, borrador, vigente, alPu
             )}
           </div>
 
+          {errorPrevia && (
+            <AvisoError onReintentar={continuar}>No se pudo cargar la vista previa: {errorPrevia}</AvisoError>
+          )}
+
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={alCerrar} disabled={publicando}>
+            <Button type="button" variant="outline" onClick={alCerrar} disabled={cargandoPrevia}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={publicando}>
-              {publicando ? 'Publicando…' : 'Publicar'}
+            <Button type="submit" disabled={cargandoPrevia}>
+              {cargandoPrevia ? 'Cargando vista previa…' : 'Continuar'}
             </Button>
           </DialogFooter>
         </form>

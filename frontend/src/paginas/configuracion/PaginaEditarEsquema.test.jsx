@@ -337,6 +337,29 @@ describe('publicar desde el editor', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
+  test('cancelar en la vista previa después de guardar deja el borrador guardado y la pantalla abierta', async () => {
+    await abrir('b-1', PUBLICAR)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Título de la sección 1' }), {
+      target: { value: 'Menores de 1 año' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar y publicar' }))
+
+    const dialogo = await screen.findByRole('dialog')
+    await waitFor(() => expect(select().disabled).toBe(false))
+    fireEvent.change(select(), { target: { value: '2026-11-01' } })
+    fireEvent.change(within(dialogo).getByLabelText('Motivo del cambio'), { target: { value: 'Cambio de prueba' } })
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Continuar' }))
+    await screen.findByRole('button', { name: 'Confirmar publicación' })
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(editarEsquema).toHaveBeenCalledTimes(1)
+    expect(publicarEsquema).not.toHaveBeenCalled()
+    // Ya sin cambios pendientes, el botón vuelve a decir «Publicar» y la pantalla sigue abierta.
+    expect(screen.getByRole('button', { name: 'Publicar' })).toBeTruthy()
+    expect(screen.queryByTestId('pestana')).toBeNull()
+  })
+
   test('al publicar vuelve a la pestaña con el aviso', async () => {
     publicarEsquema.mockResolvedValue({
       ...BORRADOR,
@@ -350,7 +373,8 @@ describe('publicar desde el editor', () => {
     await waitFor(() => expect(select().disabled).toBe(false))
     fireEvent.change(select(), { target: { value: '2026-11-01' } })
     fireEvent.change(within(dialogo).getByLabelText('Motivo del cambio'), { target: { value: 'Cambio de prueba' } })
-    fireEvent.click(within(dialogo).getByRole('button', { name: 'Publicar' }))
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Continuar' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmar publicación' }))
 
     await waitFor(() => expect(screen.getByTestId('pestana').textContent).toBe('?pestana=esquemas|'))
     expect(toast.success).toHaveBeenCalledWith('Versión 3 de Vacuna de prueba publicada; vigente desde 01/11/2026.')
@@ -380,7 +404,8 @@ test('tras "Guardar y publicar" y publicar, vuelve sin pedir confirmación', asy
     await waitFor(() => expect(select().disabled).toBe(false))
     fireEvent.change(select(), { target: { value: '2026-11-01' } })
     fireEvent.change(within(dialogo).getByLabelText('Motivo del cambio'), { target: { value: 'Cambio de prueba' } })
-    fireEvent.click(within(dialogo).getByRole('button', { name: 'Publicar' }))
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Continuar' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmar publicación' }))
 
     await waitFor(() => expect(screen.getByTestId('pestana').textContent).toBe('?pestana=esquemas|'))
     expect(screen.queryByRole('alertdialog')).toBeNull()

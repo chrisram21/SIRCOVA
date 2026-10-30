@@ -8,7 +8,7 @@ import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHe
 import { armarFormulario } from '@/componentes/formulario/armarFormulario.js'
 import FormularioCaptura, { CamposAdicionales } from '@/componentes/formulario/FormularioCaptura.jsx'
 import { AvisoError } from '@/componentes/Avisos.jsx'
-import { aDiaMesAnio } from './DialogoPublicarEsquema.jsx'
+import { aDiaMesAnio } from '@/lib/fechas.js'
 import { ESTADOS } from './PaginaHistorialEsquemas.jsx'
 
 const PROCEDENCIA = {

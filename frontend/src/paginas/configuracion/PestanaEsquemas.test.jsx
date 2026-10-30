@@ -1,18 +1,19 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { toast } from 'sonner'
 import { MemoryRouter, useLocation } from 'react-router-dom'
-import { listarPeriodos, listarVacunas } from '@/api/catalogos.js'
-import { descartarEsquema, listarDimensiones, listarEsquemas, publicarEsquema } from '@/api/configuracion.js'
+import { listarPeriodos, listarVacunas, obtenerVacuna } from '@/api/catalogos.js'
+import { descartarEsquema, listarDimensiones, listarEsquemas, obtenerEsquema, publicarEsquema } from '@/api/configuracion.js'
 import { ErrorApi } from '@/api/cliente.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 import PaginaConfiguracion from './PaginaConfiguracion.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
-vi.mock('@/api/catalogos.js', () => ({ listarVacunas: vi.fn(), listarPeriodos: vi.fn() }))
+vi.mock('@/api/catalogos.js', () => ({ listarVacunas: vi.fn(), listarPeriodos: vi.fn(), obtenerVacuna: vi.fn() }))
 vi.mock('@/api/configuracion.js', () => ({
   listarDimensiones: vi.fn(),
   listarEsquemas: vi.fn(),
+  obtenerEsquema: vi.fn(),
   descartarEsquema: vi.fn(),
   publicarEsquema: vi.fn(),
 }))
@@ -286,6 +287,27 @@ describe('publicar un borrador', () => {
       estado: 'VIGENTE',
       vigencia: { desde: '2026-12-01', hasta: null },
     })
+    // Lo que carga «Continuar» para la vista previa.
+    obtenerEsquema.mockResolvedValue({
+      id: 'b-hexa',
+      version: 3,
+      vacuna: { id: 2, codigo: 'HEXA', nombre: 'Hexavalente' },
+      territorio: SAN_MARCOS,
+      estado: 'BORRADOR',
+      vigencia: null,
+      procedencia: { modo: 'PROPIO_Y_OTROS', permiteNoEspecificado: false },
+      dosis: [{ codigo: 'D1', desagregacion: null }],
+      desagregacion: [],
+      secciones: [{ titulo: 'Hexavalente', grupoEdad: null, dosis: ['D1'] }],
+      camposAdicionales: [],
+      reglas: [],
+    })
+    obtenerVacuna.mockResolvedValue({
+      id: 2,
+      codigo: 'HEXA',
+      nombre: 'Hexavalente',
+      dosis: [{ codigo: 'D1', nombre: '1.ª dosis', orden: 1, activa: true }],
+    })
     await abrir(PUBLICAR)
 
     fireEvent.click(screen.getByRole('button', { name: 'Publicar borrador de HEXA' }))
@@ -298,7 +320,11 @@ describe('publicar un borrador', () => {
     fireEvent.change(within(dialogo).getByLabelText('Motivo del cambio'), {
       target: { value: 'Se agrega la dimensión pueblo.' },
     })
-    fireEvent.click(within(dialogo).getByRole('button', { name: 'Publicar' }))
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Continuar' }))
+    const confirmar = await screen.findByRole('button', { name: 'Confirmar publicación' })
+    expect(obtenerEsquema).toHaveBeenCalledWith('b-hexa')
+    expect(publicarEsquema).not.toHaveBeenCalled()
+    fireEvent.click(confirmar)
 
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Versión 3 de Hexavalente publicada; vigente desde 01/12/2026.'))
     expect(publicarEsquema).toHaveBeenCalledWith('b-hexa', {
