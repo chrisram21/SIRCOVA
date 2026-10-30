@@ -10,8 +10,8 @@ import { ErrorApi, mensajeDeError } from '@/api/cliente.js'
 import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
-import EditorEsquema, { cargarReferencias, PESTANA_ESQUEMAS } from './EditorEsquema.jsx'
-import { territorioDe } from './PestanaEsquemas.jsx'
+import EditorEsquema, { cargarReferencias, RUTA_ESQUEMAS } from './EditorEsquema.jsx'
+import { territorioDe } from './PaginaEsquemas.jsx'
 
 const NO_SE_PUEDE = 'NO_SE_PUEDE'
 
@@ -67,7 +67,7 @@ export default function PaginaRegistrarEsquema() {
   const navigate = useNavigate()
   const { state } = useLocation()
   const [parametros] = useSearchParams()
-  const volverA = `/configuracion${state?.volverA || PESTANA_ESQUEMAS}`
+  const volverA = `${RUTA_ESQUEMAS}${state?.volverA ?? ''}`
   const vacunaId = /^\d+$/.test(parametros.get('vacuna') ?? '') ? Number(parametros.get('vacuna')) : null
   const origen = parametros.get('origen')
 
@@ -130,7 +130,7 @@ export default function PaginaRegistrarEsquema() {
 
   return (
     <section className="flex max-w-5xl flex-col gap-6 p-6">
-      <EncabezadoPagina antetitulo="Configuración" titulo="Nuevo borrador de esquema" volverA={volverA} />
+      <EncabezadoPagina antetitulo="Administración" titulo="Nuevo borrador de esquema" volverA={volverA} />
 
       {error === NO_SE_PUEDE && (
         <AvisoError>

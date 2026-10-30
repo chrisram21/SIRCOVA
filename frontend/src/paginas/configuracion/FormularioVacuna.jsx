@@ -25,8 +25,7 @@ import {
 import { Campo, CampoTexto } from '../usuarios/CamposEmpleado.jsx'
 import { codigosDeLista, errorDeSecuencia, nombreSugerido, queCompleta, TIPOS_DOSIS } from './secuenciaDosis.js'
 
-// Ruta de la pestaña si se llegó al formulario sin pasar por ella (p. ej. con la dirección escrita a mano).
-const PESTANA = '?pestana=vacunas'
+const LISTA = '/administracion/vacunas'
 export const ORDEN_INFORME_MAXIMO = 65535
 export const MENSAJE_ORDEN = `El orden en el informe debe ser un número entero entre 0 y ${ORDEN_INFORME_MAXIMO}.`
 
@@ -183,8 +182,8 @@ function FilaDosis({ fila, numero, codigo, completa, primera, ultima, unica, err
 export default function FormularioVacuna() {
   const navigate = useNavigate()
   const { state } = useLocation()
-  // La pestaña manda sus filtros al abrir el formulario, para volver a ella con los mismos.
-  const volverA = `/configuracion${state?.volverA || PESTANA}`
+  // La lista manda sus filtros al abrir el formulario, para volver a ella con los mismos.
+  const volverA = `${LISTA}${state?.volverA ?? ''}`
 
   const siguienteClave = useRef(1)
   const filaNueva = () => ({ clave: siguienteClave.current++, tipo: '', nombre: '', esTrazadora: false })
@@ -284,7 +283,7 @@ export default function FormularioVacuna() {
 
   return (
     <section className="flex max-w-3xl flex-col gap-6 p-6">
-      <EncabezadoPagina antetitulo="Configuración" titulo="Registrar vacuna" volverA={volverA} />
+      <EncabezadoPagina antetitulo="Administración" titulo="Registrar vacuna" volverA={volverA} />
 
       <form ref={formulario} onSubmit={enviar} noValidate className="flex flex-col gap-6">
         <Card>

@@ -110,7 +110,7 @@ function Ubicacion() {
 }
 const ubicacion = () => screen.getByTestId('ubicacion').textContent
 
-async function abrir(permisos = TODOS_LOS_PERMISOS, ruta = '/usuarios') {
+async function abrir(permisos = TODOS_LOS_PERMISOS, ruta = '/administracion/usuarios') {
   guardarSesion(crearSesion(permisos))
   render(
     <MemoryRouter initialEntries={[ruta]}>
@@ -180,7 +180,7 @@ test('Editar queda a la vista; la fila propia no tiene menú y una desactivada s
   expect(await opcionesDe('alopez')).toEqual(['Desactivar', 'Restablecer contraseña'])
   expect(enlacesDe('mruiz')).toEqual([])
   expect(await opcionesDe('mruiz')).toEqual(['Restaurar'])
-  expect(within(fila('alopez')).getByRole('link', { name: 'Editar' }).getAttribute('href')).toBe('/usuarios/8/editar')
+  expect(within(fila('alopez')).getByRole('link', { name: 'Editar' }).getAttribute('href')).toBe('/administracion/usuarios/8/editar')
 })
 
 test('sin USUARIO_DESACTIVAR no aparecen "Desactivar" ni "Restaurar"', async () => {
@@ -393,17 +393,17 @@ test('si falla la carga, se muestra el error y «Reintentar» vuelve a pedir las
 })
 
 test('«Editar» y «Registrar personal» llevan los filtros y la página para volver a ellos', async () => {
-  const volverA = { pathname: '/usuarios', search: '?estado=ACTIVA&pagina=2' }
-  await abrir(TODOS_LOS_PERMISOS, '/usuarios?estado=ACTIVA&pagina=2')
+  const volverA = { pathname: '/administracion/usuarios', search: '?estado=ACTIVA&pagina=2' }
+  await abrir(TODOS_LOS_PERMISOS, '/administracion/usuarios?estado=ACTIVA&pagina=2')
 
   fireEvent.click(within(fila('alopez')).getByRole('link', { name: 'Editar' }))
-  expect(screen.getByTestId('ruta').textContent).toBe('/usuarios/8/editar')
+  expect(screen.getByTestId('ruta').textContent).toBe('/administracion/usuarios/8/editar')
   expect(JSON.parse(screen.getByTestId('estado').textContent)).toEqual({ volverA })
   cleanup()
 
-  await abrir(TODOS_LOS_PERMISOS, '/usuarios?estado=ACTIVA&pagina=2')
+  await abrir(TODOS_LOS_PERMISOS, '/administracion/usuarios?estado=ACTIVA&pagina=2')
   fireEvent.click(screen.getByRole('link', { name: 'Registrar personal' }))
-  expect(screen.getByTestId('ruta').textContent).toBe('/usuarios/nuevo')
+  expect(screen.getByTestId('ruta').textContent).toBe('/administracion/usuarios/nuevo')
   expect(JSON.parse(screen.getByTestId('estado').textContent)).toEqual({ volverA })
 })
 
@@ -433,7 +433,7 @@ describe('HU-07: paginación', () => {
     expect(paginasVisibles(12, 12)).toEqual([1, null, 11, 12])
   })
 
-  test('al cargar /usuarios pide la página 1 de 20 filas', async () => {
+  test('al cargar /administracion/usuarios pide la página 1 de 20 filas', async () => {
     await abrir()
     expect(listarUsuarios).toHaveBeenCalledTimes(1)
     expect(listarUsuarios).toHaveBeenCalledWith({ pagina: 1, porPagina: 20 })
@@ -447,7 +447,7 @@ describe('HU-07: paginación', () => {
     const paginacion = screen.getByRole('navigation', { name: 'Paginación' })
     expect(within(paginacion).getAllByRole('link').map((a) => a.textContent)).toEqual(['Anterior', '1', '2', '3', 'Siguiente'])
     expect(enlace('Página 1').getAttribute('aria-current')).toBe('page')
-    expect(enlace('Siguiente').getAttribute('href')).toBe('/usuarios?pagina=2')
+    expect(enlace('Siguiente').getAttribute('href')).toBe('/administracion/usuarios?pagina=2')
 
     fireEvent.click(enlace('Siguiente'))
 
@@ -459,11 +459,11 @@ describe('HU-07: paginación', () => {
 
   test('"Anterior" está deshabilitado en la página 1 y "Siguiente" en la última', async () => {
     conTotal(57)
-    await abrir(TODOS_LOS_PERMISOS, '/usuarios?pagina=3')
+    await abrir(TODOS_LOS_PERMISOS, '/administracion/usuarios?pagina=3')
 
     expect(screen.getByText('Mostrando 41 a 57 de 57')).toBeTruthy()
     expect(enlace('Siguiente').getAttribute('aria-disabled')).toBe('true')
-    expect(enlace('Siguiente').getAttribute('href')).toBe('/usuarios?pagina=3')
+    expect(enlace('Siguiente').getAttribute('href')).toBe('/administracion/usuarios?pagina=3')
     expect(enlace('Anterior').getAttribute('aria-disabled')).toBeNull()
 
     fireEvent.click(enlace('Página 1'))
@@ -484,7 +484,7 @@ describe('HU-07: paginación', () => {
 
   test('cambiar "Filas por página" a 50 pide porPagina 50 y vuelve a la página 1', async () => {
     conTotal(57)
-    await abrir(TODOS_LOS_PERMISOS, '/usuarios?pagina=2')
+    await abrir(TODOS_LOS_PERMISOS, '/administracion/usuarios?pagina=2')
 
     // Radix Select deja un <select> nativo oculto dentro del formulario; cambiarlo actualiza el valor del Select.
     fireEvent.change(document.querySelector('select[name="porPagina"]'), { target: { value: '50' } })
@@ -495,7 +495,7 @@ describe('HU-07: paginación', () => {
   })
 
   test('un valor inválido en la URL no llega a la API: se usa el valor por defecto', async () => {
-    await abrir(TODOS_LOS_PERMISOS, '/usuarios?pagina=abc&porPagina=30&estado=OTRO&rolId=-1&establecimientoId=x')
+    await abrir(TODOS_LOS_PERMISOS, '/administracion/usuarios?pagina=abc&porPagina=30&estado=OTRO&rolId=-1&establecimientoId=x')
     expect(listarUsuarios).toHaveBeenCalledWith({ pagina: 1, porPagina: 20 })
   })
 
@@ -503,7 +503,7 @@ describe('HU-07: paginación', () => {
     listarUsuarios.mockImplementation(async ({ pagina, porPagina }) =>
       pagina > 3 ? respuesta([], { total: 57, pagina, porPagina }) : respuesta(CUENTAS, { total: 57, pagina, porPagina }),
     )
-    await abrir(TODOS_LOS_PERMISOS, '/usuarios?pagina=9')
+    await abrir(TODOS_LOS_PERMISOS, '/administracion/usuarios?pagina=9')
 
     expect(await screen.findByText('Mostrando 41 a 57 de 57')).toBeTruthy()
     expect(listarUsuarios).toHaveBeenLastCalledWith({ pagina: 3, porPagina: 20 })
@@ -539,7 +539,7 @@ describe('HU-07: búsqueda y filtros', () => {
   const busqueda = () => screen.getByRole('searchbox', { name: 'Buscar por nombre o usuario' })
 
   test('la búsqueda espera 300 ms después de la última tecla y pide una sola vez, en la página 1', async () => {
-    await abrir(TODOS_LOS_PERMISOS, '/usuarios?pagina=2')
+    await abrir(TODOS_LOS_PERMISOS, '/administracion/usuarios?pagina=2')
     vi.useFakeTimers({ shouldAdvanceTime: true })
     listarUsuarios.mockClear()
 
@@ -558,7 +558,7 @@ describe('HU-07: búsqueda y filtros', () => {
   })
 
   test('elegir un rol, "Sede de la DDRISS" o "Bloqueadas" pide con ese filtro y vuelve a la página 1', async () => {
-    await abrir(TODOS_LOS_PERMISOS, '/usuarios?pagina=2')
+    await abrir(TODOS_LOS_PERMISOS, '/administracion/usuarios?pagina=2')
     await waitFor(() => expect(nativo('rolId').options).toHaveLength(3))
 
     expect([...nativo('establecimientoId').options].map((o) => o.textContent)).toEqual([
@@ -594,14 +594,14 @@ describe('HU-07: búsqueda y filtros', () => {
   })
 
   test('con filtros en la URL, los controles los muestran y se pide con ellos', async () => {
-    await abrir(TODOS_LOS_PERMISOS, '/usuarios?estado=DESACTIVADA&busqueda=ana')
+    await abrir(TODOS_LOS_PERMISOS, '/administracion/usuarios?estado=DESACTIVADA&busqueda=ana')
 
     expect(listarUsuarios).toHaveBeenCalledWith({ busqueda: 'ana', estado: 'DESACTIVADA', pagina: 1, porPagina: 20 })
     expect(busqueda().value).toBe('ana')
     expect(nativo('estado').value).toBe('DESACTIVADA')
   })
 
-  test('"Limpiar filtros" aparece solo con un filtro activo y deja la URL en /usuarios', async () => {
+  test('"Limpiar filtros" aparece solo con un filtro activo y deja la URL en /administracion/usuarios', async () => {
     await abrir()
     expect(screen.queryByRole('button', { name: 'Limpiar filtros' })).toBeNull()
 
@@ -613,7 +613,7 @@ describe('HU-07: búsqueda y filtros', () => {
   })
 
   test('"Limpiar filtros" también vacía el campo de búsqueda', async () => {
-    await abrir(TODOS_LOS_PERMISOS, '/usuarios?busqueda=ana&estado=ACTIVA')
+    await abrir(TODOS_LOS_PERMISOS, '/administracion/usuarios?busqueda=ana&estado=ACTIVA')
 
     fireEvent.click(screen.getByRole('button', { name: 'Limpiar filtros' }))
 
@@ -624,7 +624,7 @@ describe('HU-07: búsqueda y filtros', () => {
 
   test('sin resultados con filtros, muestra el aviso con "Limpiar filtros"', async () => {
     listarUsuarios.mockResolvedValue(respuesta([]))
-    await abrir(TODOS_LOS_PERMISOS, '/usuarios?busqueda=zzz')
+    await abrir(TODOS_LOS_PERMISOS, '/administracion/usuarios?busqueda=zzz')
 
     expect(screen.getByText('No hay cuentas que coincidan con la búsqueda o los filtros.')).toBeTruthy()
     expect(screen.queryByText('No hay cuentas registradas en su DDRISS.')).toBeNull()
@@ -665,7 +665,7 @@ describe('HU-07: búsqueda y filtros', () => {
 
   test('con el filtro "Activas", una cuenta bloqueada muestra "Activa" y "Bloqueada", y otra solo "Activa"', async () => {
     listarUsuarios.mockResolvedValue(respuesta([CUENTAS[1], CUENTAS[3]]))
-    await abrir(TODOS_LOS_PERMISOS, '/usuarios?estado=ACTIVA')
+    await abrir(TODOS_LOS_PERMISOS, '/administracion/usuarios?estado=ACTIVA')
 
     expect(listarUsuarios).toHaveBeenCalledWith({ estado: 'ACTIVA', pagina: 1, porPagina: 20 })
     expect(within(fila('rgomez')).getByText('Activa')).toBeTruthy()
@@ -676,7 +676,7 @@ describe('HU-07: búsqueda y filtros', () => {
 
   test('después de desactivar con el filtro "Activas", la fila sigue visible y no se vuelve a pedir la página', async () => {
     desactivarCuenta.mockResolvedValue({ ...CUENTAS[1], activo: false })
-    await abrir(TODOS_LOS_PERMISOS, '/usuarios?estado=ACTIVA')
+    await abrir(TODOS_LOS_PERMISOS, '/administracion/usuarios?estado=ACTIVA')
     expect(listarUsuarios).toHaveBeenCalledTimes(1)
 
     await elegir('alopez', 'Desactivar')

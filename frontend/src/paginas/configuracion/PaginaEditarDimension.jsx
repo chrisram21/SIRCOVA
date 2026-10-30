@@ -48,8 +48,7 @@ import {
 import { Campo, CampoTexto } from '../usuarios/CamposEmpleado.jsx'
 import DialogoValorDimension from './DialogoValorDimension.jsx'
 
-// Ruta de la pestaña si se llegó a la página sin pasar por ella (p. ej. con la dirección escrita a mano).
-const PESTANA = '?pestana=dimensiones'
+const LISTA = '/administracion/dimensiones'
 const TIPOS = { CATEGORICA: 'Categórica', RANGO_EDAD: 'Rango de edad' }
 const SIN_GRUPOS = 'Todos los grupos de la clasificación de población ya están en esta dimensión.'
 
@@ -270,8 +269,8 @@ function TablaValores({ dimension, ocupado, alMover, alEditar, alCambiarEstado }
 export default function PaginaEditarDimension() {
   const { codigo } = useParams()
   const { state } = useLocation()
-  // La pestaña manda su filtro al abrir la página, para volver a ella con el mismo.
-  const volverA = `/configuracion${state?.volverA || PESTANA}`
+  // La lista manda su filtro al abrir la página, para volver a ella con el mismo.
+  const volverA = `${LISTA}${state?.volverA ?? ''}`
 
   // La dimensión como la devuelve el backend; cada acción la reemplaza con su respuesta.
   const [dimension, setDimension] = useState(null)
@@ -413,7 +412,7 @@ export default function PaginaEditarDimension() {
 
   return (
     <section className="flex max-w-5xl flex-col gap-6 p-6">
-      <EncabezadoPagina antetitulo="Configuración" titulo="Editar dimensión" volverA={volverA} />
+      <EncabezadoPagina antetitulo="Administración" titulo="Editar dimensión" volverA={volverA} />
 
       {noExiste && (
         <AvisoError>

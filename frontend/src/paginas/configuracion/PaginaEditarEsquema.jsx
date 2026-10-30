@@ -10,7 +10,7 @@ import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import DialogoPublicarEsquema, { avisoDePublicacion } from './DialogoPublicarEsquema.jsx'
-import EditorEsquema, { cargarReferencias, contenidoDe, PESTANA_ESQUEMAS } from './EditorEsquema.jsx'
+import EditorEsquema, { cargarReferencias, contenidoDe, RUTA_ESQUEMAS } from './EditorEsquema.jsx'
 import VistaPreviaEsquema from './VistaPreviaEsquema.jsx'
 
 const NO_EXISTE = 'NO_EXISTE'
@@ -23,7 +23,7 @@ export default function PaginaEditarEsquema() {
   const { tienePermiso } = useSesion()
   // El diálogo de publicar elige el mes en el calendario de periodos.
   const puedePublicar = tienePermiso('ESQUEMA_PUBLICAR') && tienePermiso('PERIODO_CONSULTAR')
-  const volverA = `/configuracion${state?.volverA || PESTANA_ESQUEMAS}`
+  const volverA = `${RUTA_ESQUEMAS}${state?.volverA ?? ''}`
   const [datos, setDatos] = useState(null)
   const [error, setError] = useState(null)
   // La fila de la vacuna en GET /esquemas-captura (con su vigente que aplica), mientras el diálogo está abierto.
@@ -93,7 +93,7 @@ export default function PaginaEditarEsquema() {
 
   return (
     <section className="flex max-w-5xl flex-col gap-6 p-6">
-      <EncabezadoPagina antetitulo="Configuración" titulo="Editar borrador de esquema" volverA={volverA} />
+      <EncabezadoPagina antetitulo="Administración" titulo="Editar borrador de esquema" volverA={volverA} />
 
       {(error === NO_EXISTE || error === NO_EDITABLE) && (
         <AvisoError>

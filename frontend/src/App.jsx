@@ -5,7 +5,7 @@ import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import RutaConPermiso from '@/componentes/RutaConPermiso.jsx'
 import RutaProtegida, { RUTA_CAMBIO_CONTRASENA, RUTA_PERFIL } from '@/componentes/RutaProtegida.jsx'
 import Layout from '@/componentes/layout/Layout.jsx'
-import opcionesMenu from '@/componentes/layout/opcionesMenu.js'
+import { rutasDelMenu } from '@/componentes/layout/opcionesMenu.js'
 import { tituloDeRuta } from '@/componentes/layout/ubicarRuta.js'
 import PaginaCambiarContrasena from '@/paginas/cuenta/PaginaCambiarContrasena.jsx'
 import PaginaEnConstruccion from '@/paginas/en-construccion/PaginaEnConstruccion.jsx'
@@ -13,10 +13,11 @@ import PaginaLogin from '@/paginas/login/PaginaLogin.jsx'
 
 const PaginaMiPerfil = lazy(() => import('@/paginas/cuenta/PaginaMiPerfil.jsx'))
 
-function elementoDe({ titulo, permiso, pagina: Pagina = PaginaEnConstruccion }) {
+// Un hijo de un padre del menú pide todos sus `permisos`; una opción o una subruta, su `permiso`.
+function elementoDe({ titulo, permiso, permisos = permiso ? [permiso] : [], pagina: Pagina = PaginaEnConstruccion }) {
   const contenido = <Pagina titulo={titulo} />
-  if (!permiso) return contenido
-  return <RutaConPermiso permiso={permiso}>{contenido}</RutaConPermiso>
+  if (permisos.length === 0) return contenido
+  return <RutaConPermiso permisos={permisos}>{contenido}</RutaConPermiso>
 }
 
 // El título de la pestaña del navegador sigue a la pantalla, y cada pantalla nueva empieza arriba.
@@ -59,11 +60,9 @@ export default function App() {
       >
         {!debeCambiar && <Route path={RUTA_CAMBIO_CONTRASENA} element={<PaginaCambiarContrasena />} />}
         <Route path={RUTA_PERFIL} element={<PaginaMiPerfil />} />
-        {opcionesMenu
-          .flatMap((opcion) => [opcion, ...(opcion.subrutas ?? [])])
-          .map((ruta) => (
-            <Route key={ruta.ruta} path={ruta.ruta} element={elementoDe(ruta)} />
-          ))}
+        {rutasDelMenu().map((ruta) => (
+          <Route key={ruta.ruta} path={ruta.ruta} element={elementoDe(ruta)} />
+        ))}
       </Route>
       <Route path="*" element={<Navigate to="/inicio" replace />} />
     </Routes>

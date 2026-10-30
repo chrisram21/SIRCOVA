@@ -5,7 +5,7 @@ import { desactivarVacuna, listarVacunas, reactivarVacuna } from '@/api/catalogo
 import { ErrorApi } from '@/api/cliente.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
-import PaginaConfiguracion from './PaginaConfiguracion.jsx'
+import PaginaVacunas from './PaginaVacunas.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
 vi.mock('@/api/catalogos.js', () => ({
@@ -87,14 +87,14 @@ function montar(ruta, permisos) {
   render(
     <MemoryRouter initialEntries={[ruta]}>
       <ProveedorSesion>
-        <PaginaConfiguracion />
+        <PaginaVacunas />
         <Ubicacion />
       </ProveedorSesion>
     </MemoryRouter>,
   )
 }
 
-async function abrir(ruta = '/configuracion?pestana=vacunas', permisos = ['CONFIGURACION_CONSULTAR', 'VACUNA_CONSULTAR']) {
+async function abrir(ruta = '/administracion/vacunas', permisos = ['CONFIGURACION_CONSULTAR', 'VACUNA_CONSULTAR']) {
   montar(ruta, permisos)
   await waitFor(() => expect(screen.queryByLabelText('Cargando vacunas')).toBeNull())
 }
@@ -112,23 +112,14 @@ beforeEach(() => {
   listarVacunas.mockResolvedValue(VACUNAS)
 })
 
-test('con los permisos del Revisor solo aparece la pestaña Vacunas, que pide la lista una vez', async () => {
-  await abrir('/configuracion', PERMISOS_REVISOR)
+test('con los permisos del Revisor se ve la pantalla Vacunas, que pide la lista una vez', async () => {
+  await abrir('/administracion/vacunas', PERMISOS_REVISOR)
 
-  expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Vacunas'])
-  expect(screen.getByRole('tab', { name: 'Vacunas' }).getAttribute('aria-selected')).toBe('true')
+  expect(screen.getByRole('heading', { level: 1, name: 'Vacunas' })).toBeTruthy()
   expect(listarVacunas).toHaveBeenCalledTimes(1)
   expect(listarVacunas).toHaveBeenCalledWith()
   expect(screen.getByText('Catálogo nacional: los cambios aplican a todas las DDRISS.')).toBeTruthy()
   expect(codigos()).toEqual(['HEPB', 'HEXA', 'SPR', 'DPT'])
-})
-
-test('sin VACUNA_CONSULTAR no aparece la pestaña', () => {
-  montar('/configuracion?pestana=vacunas', ['CONFIGURACION_CONSULTAR'])
-
-  expect(screen.queryByRole('tab', { name: 'Vacunas' })).toBeNull()
-  expect(screen.getByText('No tiene acceso a ningún catálogo.')).toBeTruthy()
-  expect(listarVacunas).not.toHaveBeenCalled()
 })
 
 test('la tabla muestra el orden, el estado y un Badge por dosis activa, con la marca de la que completa', async () => {
@@ -159,23 +150,23 @@ test('la búsqueda y el filtro de estado reducen la tabla sin pedir de nuevo y q
     target: { value: 'sarampion' },
   })
   await waitFor(() => expect(codigos()).toEqual(['SPR']))
-  expect(ubicacion()).toBe('?pestana=vacunas&q=sarampion')
+  expect(ubicacion()).toBe('?q=sarampion')
 
   fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar por código o nombre' }), { target: { value: 'he' } })
   await waitFor(() => expect(codigos()).toEqual(['HEPB', 'HEXA']))
 
   fireEvent.change(document.querySelector('select[name="estado"]'), { target: { value: 'inactivas' } })
   expect(await screen.findByText('No hay vacunas que coincidan con los filtros.')).toBeTruthy()
-  expect(ubicacion()).toBe('?pestana=vacunas&q=he&estado=inactivas')
+  expect(ubicacion()).toBe('?q=he&estado=inactivas')
 
   fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar por código o nombre' }), { target: { value: '' } })
   await waitFor(() => expect(codigos()).toEqual(['DPT']))
-  expect(ubicacion()).toBe('?pestana=vacunas&estado=inactivas')
+  expect(ubicacion()).toBe('?estado=inactivas')
   expect(listarVacunas).toHaveBeenCalledTimes(1)
 })
 
 test('los filtros de la URL se aplican al abrir', async () => {
-  await abrir('/configuracion?pestana=vacunas&q=hexa&estado=activas')
+  await abrir('/administracion/vacunas?q=hexa&estado=activas')
 
   expect(codigos()).toEqual(['HEXA'])
   expect(screen.getByRole('searchbox', { name: 'Buscar por código o nombre' }).value).toBe('hexa')
@@ -196,7 +187,7 @@ test('sin vacunas y con VACUNA_CREAR, el aviso trae el enlace de registro', asyn
 
   const vacio = screen.getByText('No hay vacunas registradas.').parentElement
   expect(within(vacio).getByRole('link', { name: 'Registrar vacuna' }).getAttribute('href')).toBe(
-    '/configuracion/vacunas/nueva',
+    '/administracion/vacunas/nueva',
   )
 })
 

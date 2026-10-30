@@ -219,11 +219,12 @@ export default function PaginaUsuarios() {
   return (
     <section className="flex flex-col gap-6 p-6">
       <EncabezadoPagina
+        antetitulo="Administración"
         titulo="Usuarios"
         acciones={
           tienePermiso('EMPLEADO_CREAR') && (
             <Button asChild>
-              <Link to="/usuarios/nuevo" state={estadoVolver}>
+              <Link to="/administracion/usuarios/nuevo" state={estadoVolver}>
                 <UserPlus />
                 Registrar personal
               </Link>
@@ -304,7 +305,7 @@ export default function PaginaUsuarios() {
                           )}
                           {cuenta.activo && puedeEditar && (
                             <Button variant="outline" size="sm" asChild>
-                              <Link to={`/usuarios/${cuenta.id}/editar`} state={estadoVolver}>
+                              <Link to={`/administracion/usuarios/${cuenta.id}/editar`} state={estadoVolver}>
                                 Editar
                               </Link>
                             </Button>

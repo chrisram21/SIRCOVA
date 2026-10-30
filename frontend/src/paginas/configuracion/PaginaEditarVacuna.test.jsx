@@ -12,7 +12,7 @@ import {
 import { ErrorApi } from '@/api/cliente.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
-import PaginaConfiguracion from './PaginaConfiguracion.jsx'
+import PaginaVacunas from './PaginaVacunas.jsx'
 import PaginaEditarVacuna from './PaginaEditarVacuna.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
@@ -104,8 +104,8 @@ function montar(entrada) {
           </ProveedorSesion>
         ),
         children: [
-          { path: '/configuracion', element: <PaginaConfiguracion /> },
-          { path: '/configuracion/vacunas/:id/editar', element: <PaginaEditarVacuna /> },
+          { path: '/administracion/vacunas', element: <PaginaVacunas /> },
+          { path: '/administracion/vacunas/:id/editar', element: <PaginaEditarVacuna /> },
         ],
       },
     ],
@@ -116,7 +116,7 @@ function montar(entrada) {
 
 async function abrir(vacuna = HEXA) {
   obtenerVacuna.mockResolvedValue(vacuna)
-  montar(`/configuracion/vacunas/${vacuna.id}/editar`)
+  montar(`/administracion/vacunas/${vacuna.id}/editar`)
   await screen.findByRole('table', { name: 'Dosis' })
 }
 
@@ -162,7 +162,7 @@ test('"Guardar cambios" envía solo los campos que cambiaron y vuelve a la pesta
   fireEvent.change(screen.getByLabelText(/^Descripción/), { target: { value: '' } })
   fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
 
-  await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=vacunas'))
+  await waitFor(() => expect(ubicacion()).toBe('/administracion/vacunas'))
   expect(editarVacuna).toHaveBeenCalledWith(2, { nombre: 'Hexavalente acelular' })
   expect(toast.success).toHaveBeenCalledWith('Vacuna HEXA actualizada.')
   expect(screen.queryByRole('alertdialog')).toBeNull()
@@ -300,18 +300,18 @@ test('desactivar una dosis muestra la marca recalculada que trae la respuesta', 
 
 test('"Volver" regresa a la pestaña con los filtros que traía', async () => {
   obtenerVacuna.mockResolvedValue(HEXA)
-  montar({ pathname: '/configuracion/vacunas/2/editar', state: { volverA: '?pestana=vacunas&q=hexa' } })
+  montar({ pathname: '/administracion/vacunas/2/editar', state: { volverA: '?q=hexa' } })
   await screen.findByRole('table', { name: 'Dosis' })
 
   fireEvent.click(screen.getByRole('link', { name: 'Volver' }))
 
-  await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=vacunas&q=hexa'))
+  await waitFor(() => expect(ubicacion()).toBe('/administracion/vacunas?q=hexa'))
 })
 
 test('si falla la carga muestra el aviso, y "Reintentar" vuelve a pedir la vacuna', async () => {
   obtenerVacuna.mockRejectedValueOnce(new ErrorApi(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.'))
   obtenerVacuna.mockResolvedValue(HEXA)
-  montar('/configuracion/vacunas/2/editar')
+  montar('/administracion/vacunas/2/editar')
 
   expect(await screen.findByText('No se pudo cargar la vacuna: No se pudo conectar con el servidor.')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
@@ -343,7 +343,7 @@ describe('cambios sin guardar', () => {
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Seguir editando' }))
 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
-    expect(ubicacion()).toBe('/configuracion/vacunas/2/editar')
+    expect(ubicacion()).toBe('/administracion/vacunas/2/editar')
     expect(screen.getByLabelText(/^Nombre/).value).toBe('Hexavalente acelular')
   })
 
@@ -362,7 +362,7 @@ describe('cambios sin guardar', () => {
 
     fireEvent.click(screen.getByRole('link', { name: 'Volver' }))
 
-    await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=vacunas'))
+    await waitFor(() => expect(ubicacion()).toBe('/administracion/vacunas'))
     expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 })

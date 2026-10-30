@@ -15,7 +15,7 @@ async function consultarUsuarios() {
 function TarjetaUsuarios({ titulo, tono }) {
   const consulta = useConsulta(consultarUsuarios)
   return (
-    <TarjetaResumen titulo={titulo} tono={tono} consulta={consulta} enlace={{ a: '/usuarios', texto: 'Ver usuarios' }}>
+    <TarjetaResumen titulo={titulo} tono={tono} consulta={consulta} enlace={{ a: '/administracion/usuarios', texto: 'Ver usuarios' }}>
       {({ activas, bloqueadas }) => (
         <Cifra valor={activas}>
           {bloqueadas === 0 ? 'Ninguna cuenta bloqueada' : `${bloqueadas} ${bloqueadas === 1 ? 'bloqueada' : 'bloqueadas'} por intentos fallidos`}
@@ -43,7 +43,7 @@ function TarjetaEsquemas({ titulo, tono }) {
       titulo={titulo}
       tono={tono}
       consulta={consulta}
-      enlace={{ a: '/configuracion?pestana=esquemas', texto: 'Ver esquemas' }}
+      enlace={{ a: '/administracion/esquemas', texto: 'Ver esquemas' }}
     >
       {({ activas, conVigente, borradores }) => {
         const sinEsquema = activas - conVigente

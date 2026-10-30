@@ -91,12 +91,12 @@ async function abrir(id = 8, { volverA } = {}) {
           </ProveedorSesion>
         ),
         children: [
-          { path: '/usuarios/:id/editar', element: <PaginaEditarUsuario /> },
-          { path: '/usuarios', element: <h1>Lista de usuarios</h1> },
+          { path: '/administracion/usuarios/:id/editar', element: <PaginaEditarUsuario /> },
+          { path: '/administracion/usuarios', element: <h1>Lista de usuarios</h1> },
         ],
       },
     ],
-    { initialEntries: [{ pathname: `/usuarios/${id}/editar`, state: volverA ? { volverA } : null }] },
+    { initialEntries: [{ pathname: `/administracion/usuarios/${id}/editar`, state: volverA ? { volverA } : null }] },
   )
   render(<RouterProvider router={router} />)
   await waitFor(() => expect(obtenerUsuario).toHaveBeenCalled())
@@ -306,7 +306,7 @@ test('cambiar solo el cargo llama solo a editarEmpleado, con { cargo }, avisa co
   expect(cambiarRol).not.toHaveBeenCalled()
   // El formulario quedó igual a lo guardado: vuelve sin preguntar por cambios sin guardar.
   expect(await screen.findByRole('heading', { name: 'Lista de usuarios' })).toBeTruthy()
-  expect(router.state.location.pathname).toBe('/usuarios')
+  expect(router.state.location.pathname).toBe('/administracion/usuarios')
   expect(screen.queryByRole('alertdialog')).toBeNull()
 })
 
@@ -431,18 +431,18 @@ test('el error de la API se muestra junto a los botones, debajo del formulario',
 })
 
 describe('volver a la lista con sus filtros', () => {
-  const volverA = { pathname: '/usuarios', search: '?estado=ACTIVA&pagina=2' }
+  const volverA = { pathname: '/administracion/usuarios', search: '?estado=ACTIVA&pagina=2' }
 
-  test('«Volver a Usuarios» y «Cancelar» llevan a la lista con los filtros; sin ellos, a /usuarios', async () => {
+  test('«Volver a Usuarios» y «Cancelar» llevan a la lista con los filtros; sin ellos, a /administracion/usuarios', async () => {
     await abrir(8, { volverA })
     await esperarFormulario()
-    expect(screen.getByRole('link', { name: 'Volver a Usuarios' }).getAttribute('href')).toBe('/usuarios?estado=ACTIVA&pagina=2')
-    expect(screen.getByRole('link', { name: 'Cancelar' }).getAttribute('href')).toBe('/usuarios?estado=ACTIVA&pagina=2')
+    expect(screen.getByRole('link', { name: 'Volver a Usuarios' }).getAttribute('href')).toBe('/administracion/usuarios?estado=ACTIVA&pagina=2')
+    expect(screen.getByRole('link', { name: 'Cancelar' }).getAttribute('href')).toBe('/administracion/usuarios?estado=ACTIVA&pagina=2')
     cleanup()
 
     await abrir()
     await esperarFormulario()
-    expect(screen.getByRole('link', { name: 'Cancelar' }).getAttribute('href')).toBe('/usuarios')
+    expect(screen.getByRole('link', { name: 'Cancelar' }).getAttribute('href')).toBe('/administracion/usuarios')
   })
 
   test('después de guardar vuelve a la lista con los filtros', async () => {
@@ -452,7 +452,7 @@ describe('volver a la lista con sus filtros', () => {
     escribir(/^Cargo/, 'Epidemióloga')
     fireEvent.click(botonGuardar())
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/usuarios'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/administracion/usuarios'))
     expect(router.state.location.search).toBe('?estado=ACTIVA&pagina=2')
   })
 
@@ -461,7 +461,7 @@ describe('volver a la lista con sus filtros', () => {
     await abrir(8, { volverA })
 
     expect((await screen.findByRole('link', { name: 'Volver a Usuarios' })).getAttribute('href')).toBe(
-      '/usuarios?estado=ACTIVA&pagina=2',
+      '/administracion/usuarios?estado=ACTIVA&pagina=2',
     )
   })
 })
@@ -473,7 +473,7 @@ describe('cambios sin guardar', () => {
 
     fireEvent.click(screen.getByRole('link', { name: 'Cancelar' }))
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/usuarios'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/administracion/usuarios'))
     expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 
@@ -488,12 +488,12 @@ describe('cambios sin guardar', () => {
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Seguir editando' }))
 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
-    expect(router.state.location.pathname).toBe('/usuarios/8/editar')
+    expect(router.state.location.pathname).toBe('/administracion/usuarios/8/editar')
     expect(screen.getByLabelText(/^Cargo/).value).toBe('Epidemióloga')
 
     fireEvent.click(screen.getByRole('link', { name: 'Cancelar' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Salir sin guardar' }))
-    await waitFor(() => expect(router.state.location.pathname).toBe('/usuarios'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/administracion/usuarios'))
     expect(editarEmpleado).not.toHaveBeenCalled()
   })
 

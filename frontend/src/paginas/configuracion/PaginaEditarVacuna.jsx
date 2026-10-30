@@ -53,8 +53,7 @@ import { Campo, CampoTexto } from '../usuarios/CamposEmpleado.jsx'
 import { MENSAJE_ORDEN, ORDEN_INFORME_MAXIMO, validarOrdenInforme } from './FormularioVacuna.jsx'
 import { nombreSugerido, siguienteCodigo, tiposAdmitidos, TIPOS_DOSIS } from './secuenciaDosis.js'
 
-// Ruta de la pestaña si se llegó a la página sin pasar por ella (p. ej. con la dirección escrita a mano).
-const PESTANA = '?pestana=vacunas'
+const LISTA = '/administracion/vacunas'
 
 // Al editar, el orden en el informe no puede quedar vacío: PATCH /vacunas/{id} exige un número.
 const REGLAS = {
@@ -318,8 +317,8 @@ export default function PaginaEditarVacuna() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { state } = useLocation()
-  // La pestaña manda sus filtros al abrir la página, para volver a ella con los mismos.
-  const volverA = `/configuracion${state?.volverA || PESTANA}`
+  // La lista manda sus filtros al abrir la página, para volver a ella con los mismos.
+  const volverA = `${LISTA}${state?.volverA ?? ''}`
 
   // La vacuna como la devuelve el backend; cada acción de una dosis la reemplaza con su respuesta.
   const [vacuna, setVacuna] = useState(null)
@@ -456,7 +455,7 @@ export default function PaginaEditarVacuna() {
 
   return (
     <section className="flex max-w-4xl flex-col gap-6 p-6">
-      <EncabezadoPagina antetitulo="Configuración" titulo="Editar vacuna" volverA={volverA} />
+      <EncabezadoPagina antetitulo="Administración" titulo="Editar vacuna" volverA={volverA} />
 
       {errorCarga && <AvisoError onReintentar={reintentarCarga}>No se pudo cargar la vacuna: {errorCarga}</AvisoError>}
 

@@ -86,10 +86,10 @@ function crearSesion(permisos) {
 function montar(id = 'v-1', permisos = ['ESQUEMA_CONSULTAR', 'ESQUEMA_EDITAR']) {
   guardarSesion(crearSesion(permisos))
   render(
-    <MemoryRouter initialEntries={[`/configuracion/esquemas/${id}`]}>
+    <MemoryRouter initialEntries={[`/administracion/esquemas/${id}`]}>
       <ProveedorSesion>
         <Routes>
-          <Route path="/configuracion/esquemas/:id" element={<PaginaVerEsquema />} />
+          <Route path="/administracion/esquemas/:id" element={<PaginaVerEsquema />} />
         </Routes>
       </ProveedorSesion>
     </MemoryRouter>,
@@ -133,7 +133,7 @@ test('muestra los datos de la versión y su contenido sin dejar editarlo', async
 test('un borrador de la DDRISS ofrece "Editar borrador" con ESQUEMA_EDITAR', async () => {
   await abrir('b-3')
 
-  expect(screen.getByRole('link', { name: 'Editar borrador' }).getAttribute('href')).toBe('/configuracion/esquemas/b-3/editar')
+  expect(screen.getByRole('link', { name: 'Editar borrador' }).getAttribute('href')).toBe('/administracion/esquemas/b-3/editar')
   expect(screen.getByText('Basado en la versión 2 nacional')).toBeTruthy()
 })
 
@@ -174,7 +174,7 @@ test('"Volver al historial" lleva al historial de la vacuna', async () => {
   await abrir()
 
   expect(screen.getByRole('link', { name: 'Volver al historial' }).getAttribute('href')).toBe(
-    '/configuracion/esquemas/historial/2',
+    '/administracion/esquemas/historial/2',
   )
 })
 

@@ -45,9 +45,9 @@ function Ubicacion() {
 
 function montar(vacunaId = '2') {
   render(
-    <MemoryRouter initialEntries={[{ pathname: `/configuracion/esquemas/historial/${vacunaId}`, state: { volverA: '?pestana=esquemas' } }]}>
+    <MemoryRouter initialEntries={[{ pathname: `/administracion/esquemas/historial/${vacunaId}`, state: { volverA: '' } }]}>
       <Routes>
-        <Route path="/configuracion/esquemas/historial/:vacunaId" element={<PaginaHistorialEsquemas />} />
+        <Route path="/administracion/esquemas/historial/:vacunaId" element={<PaginaHistorialEsquemas />} />
         <Route path="*" element={<Ubicacion />} />
       </Routes>
     </MemoryRouter>,
@@ -83,7 +83,7 @@ test('"Ver" lleva a la versión y conserva la pestaña de vuelta', async () => {
   await abrir()
 
   fireEvent.click(screen.getByRole('link', { name: 'Ver la versión 1' }))
-  await waitFor(() => expect(screen.getByTestId('ubicacion').textContent).toBe('/configuracion/esquemas/v-1|?pestana=esquemas'))
+  await waitFor(() => expect(screen.getByTestId('ubicacion').textContent).toBe('/administracion/esquemas/v-1|'))
 })
 
 test('una vacuna inactiva lleva su insignia', async () => {
@@ -103,7 +103,7 @@ test('una vacuna que no existe muestra "La vacuna no existe."', async () => {
   montar('999')
 
   expect(await screen.findByText(/La vacuna no existe\./)).toBeTruthy()
-  expect(screen.getByRole('link', { name: 'Volver a los esquemas' }).getAttribute('href')).toBe('/configuracion?pestana=esquemas')
+  expect(screen.getByRole('link', { name: 'Volver a los esquemas' }).getAttribute('href')).toBe('/administracion/esquemas')
 })
 
 test('si falla la carga muestra el aviso, y "Reintentar" vuelve a pedir', async () => {
@@ -122,5 +122,5 @@ test('"Volver" regresa a la pestaña de la que se llegó', async () => {
 
   fireEvent.click(screen.getByRole('link', { name: 'Volver' }))
 
-  await waitFor(() => expect(screen.getByTestId('ubicacion').textContent).toBe('/configuracion?pestana=esquemas|'))
+  await waitFor(() => expect(screen.getByTestId('ubicacion').textContent).toBe('/administracion/esquemas|'))
 })

@@ -21,8 +21,7 @@ import {
 } from '@/validaciones/campos.js'
 import { Campo, CampoTexto } from '../usuarios/CamposEmpleado.jsx'
 
-// Ruta de la pestaña si se llegó al formulario sin pasar por ella (p. ej. con la dirección escrita a mano).
-const PESTANA = '?pestana=dimensiones'
+const LISTA = '/administracion/dimensiones'
 const SIN_VALORES = 'Indique al menos un valor.'
 
 const REGLAS = { codigo: validarCodigoDimension, nombre: validarNombreDimension, descripcion: validarDescripcionDimension }
@@ -122,8 +121,8 @@ function FilaValor({ fila, numero, errorCodigo, errorEtiqueta, acciones, deshabi
 export default function PaginaRegistrarDimension() {
   const navigate = useNavigate()
   const { state } = useLocation()
-  // La pestaña manda su filtro al abrir el formulario, para volver a ella con el mismo.
-  const volverA = `/configuracion${state?.volverA || PESTANA}`
+  // La lista manda su filtro al abrir el formulario, para volver a ella con el mismo.
+  const volverA = `${LISTA}${state?.volverA ?? ''}`
 
   const siguienteClave = useRef(1)
   const filaNueva = () => ({ clave: siguienteClave.current++, codigo: '', etiqueta: '' })
@@ -200,7 +199,7 @@ export default function PaginaRegistrarDimension() {
 
   return (
     <section className="flex max-w-3xl flex-col gap-6 p-6">
-      <EncabezadoPagina antetitulo="Configuración" titulo="Registrar dimensión" volverA={volverA} />
+      <EncabezadoPagina antetitulo="Administración" titulo="Registrar dimensión" volverA={volverA} />
 
       <form ref={formulario} onSubmit={enviar} noValidate className="flex flex-col gap-6">
         <Card>

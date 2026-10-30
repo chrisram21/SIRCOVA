@@ -13,7 +13,7 @@ import {
 import { ErrorApi } from '@/api/cliente.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
-import PaginaConfiguracion from './PaginaConfiguracion.jsx'
+import PaginaTerritorio from './PaginaTerritorio.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
 vi.mock('@/api/catalogos.js', () => ({
@@ -87,12 +87,12 @@ function crearSesion(permisos) {
   }
 }
 
-async function abrir(permisos = TODOS_LOS_PERMISOS, ruta = '/configuracion') {
+async function abrir(permisos = TODOS_LOS_PERMISOS, ruta = '/administracion/territorio') {
   guardarSesion(crearSesion(permisos))
   render(
     <MemoryRouter initialEntries={[ruta]}>
       <ProveedorSesion>
-        <PaginaConfiguracion />
+        <PaginaTerritorio />
       </ProveedorSesion>
     </MemoryRouter>,
   )
@@ -124,13 +124,11 @@ beforeEach(() => {
   listarDistritos.mockResolvedValue(DISTRITOS)
 })
 
-test('abre la pestaña Territorio y pide los municipios de procedencia, incluidos los inactivos', async () => {
+test('abre la pantalla Territorio y pide los municipios de procedencia, incluidos los inactivos', async () => {
   await abrir()
 
-  expect(screen.getByRole('heading', { name: 'Catálogos del sistema' })).toBeTruthy()
-  expect(screen.getByText('Configuración')).toBeTruthy()
-  expect(screen.getByRole('tablist').getAttribute('data-variant')).toBe('line')
-  expect(screen.getByRole('tab', { name: 'Territorio' }).getAttribute('aria-selected')).toBe('true')
+  expect(screen.getByRole('heading', { level: 1, name: 'Territorio' })).toBeTruthy()
+  expect(screen.getByText('Administración')).toBeTruthy()
   expect(listarMunicipios).toHaveBeenCalledWith({ alcance: 'procedencia', incluirInactivos: true })
   expect(listarDdriss).toHaveBeenCalledTimes(1)
   expect(listarDistritos).toHaveBeenCalledTimes(1)
@@ -232,27 +230,6 @@ test('un error que no es de la API muestra el mensaje genérico', async () => {
     ),
   ).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Reintentar' })).toBeTruthy()
-})
-
-test('sin DISTRITO_CONSULTAR no aparece la pestaña', async () => {
-  await abrir(['CONFIGURACION_CONSULTAR', 'MUNICIPIO_CONSULTAR'])
-
-  expect(screen.queryByRole('tab', { name: 'Territorio' })).toBeNull()
-  expect(screen.getByText('No tiene acceso a ningún catálogo.')).toBeTruthy()
-  expect(listarDistritos).not.toHaveBeenCalled()
-})
-
-test('sin DDRISS_CONSULTAR tampoco aparece, porque la pestaña pide GET /ddriss', async () => {
-  await abrir(['CONFIGURACION_CONSULTAR', 'MUNICIPIO_CONSULTAR', 'DISTRITO_CONSULTAR'])
-
-  expect(screen.queryByRole('tab', { name: 'Territorio' })).toBeNull()
-  expect(listarDdriss).not.toHaveBeenCalled()
-})
-
-test('una pestaña desconocida en la URL abre la primera visible', async () => {
-  await abrir(TODOS_LOS_PERMISOS, '/configuracion?pestana=otra')
-
-  expect(screen.getByRole('tab', { name: 'Territorio' }).getAttribute('aria-selected')).toBe('true')
 })
 
 describe('registrar y renombrar', () => {

@@ -201,7 +201,7 @@ describe('tarjetas con datos', () => {
     const esquemas = within(tarjeta('Esquemas de captura vigentes o por vencer'))
     expect((await esquemas.findByText('de 2')).parentElement.textContent).toBe('1 de 2')
     expect(esquemas.getByText('1 sin esquema vigente · 2 borradores por publicar')).toBeTruthy()
-    expect(esquemas.getByRole('link', { name: 'Ver esquemas' }).getAttribute('href')).toBe('/configuracion?pestana=esquemas')
+    expect(esquemas.getByRole('link', { name: 'Ver esquemas' }).getAttribute('href')).toBe('/administracion/esquemas')
   })
 
   test('REVISOR ve cuántos meses tiene abiertos y el plazo del más antiguo', async () => {

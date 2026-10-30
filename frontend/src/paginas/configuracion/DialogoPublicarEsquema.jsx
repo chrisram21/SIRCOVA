@@ -31,7 +31,7 @@ const hoyGuatemala = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America
 // AAAA-MM-DD → DD/MM/AAAA.
 export const aDiaMesAnio = (fecha) => fecha.split('-').reverse().join('/')
 
-// El aviso con que vuelven a la pestaña la fila y el editor.
+// El aviso con que vuelven a la lista la fila y el editor.
 export const avisoDePublicacion = (esquema) =>
   `Versión ${esquema.version} de ${esquema.vacuna.nombre} publicada; vigente desde ${aDiaMesAnio(esquema.vigencia.desde)}.`
 
@@ -198,7 +198,7 @@ export default function DialogoPublicarEsquema({ vacuna, borrador, vigente, alPu
               <AvisoError onReintentar={reintentarMeses}>No se pudieron cargar los meses: {errorMeses}</AvisoError>
             ) : meses !== null && meses.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No hay meses disponibles en el calendario; agréguelos en la pestaña «Periodos».
+                No hay meses disponibles en el calendario; agréguelos en «Administración › Periodos».
               </p>
             ) : (
               <>

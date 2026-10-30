@@ -22,6 +22,7 @@ import { mensajeDeError } from '@/api/cliente.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import DialogoFechaLimite from './DialogoFechaLimite.jsx'
+import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 
 const PRIMER_ANIO = 2020
 
@@ -131,7 +132,7 @@ function DialogoCrearAnio({ anios, alGuardar, alCerrar }) {
   )
 }
 
-export default function PestanaPeriodos() {
+function ContenidoPeriodos() {
   const { tienePermiso } = useSesion()
   const puedeCrear = tienePermiso('PERIODO_CREAR')
   const puedeEditar = tienePermiso('PERIODO_EDITAR')
@@ -164,7 +165,7 @@ export default function PestanaPeriodos() {
     }
   }, [])
 
-  // El año va en la URL junto a la pestaña, para que siga elegido al recargar o volver.
+  // El año va en la URL, para que siga elegido al recargar o volver.
   function elegirAnio(anio) {
     setParametros(
       (actuales) => {
@@ -328,5 +329,14 @@ export default function PestanaPeriodos() {
         <DialogoCrearAnio anios={porCrear} alGuardar={alCrearAnio} alCerrar={() => setCreandoAnio(false)} />
       )}
     </div>
+  )
+}
+
+export default function PaginaPeriodos() {
+  return (
+    <section className="flex flex-col gap-6 p-6">
+      <EncabezadoPagina antetitulo="Administración" titulo="Periodos" />
+      <ContenidoPeriodos />
+    </section>
   )
 }

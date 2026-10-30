@@ -6,7 +6,7 @@ import { descartarEsquema, listarDimensiones, listarEsquemas, obtenerEsquema, pu
 import { ErrorApi } from '@/api/cliente.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
-import PaginaConfiguracion from './PaginaConfiguracion.jsx'
+import PaginaEsquemas from './PaginaEsquemas.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
 vi.mock('@/api/catalogos.js', () => ({ listarVacunas: vi.fn(), listarPeriodos: vi.fn(), obtenerVacuna: vi.fn() }))
@@ -62,7 +62,7 @@ function montar(ruta, permisos) {
   render(
     <MemoryRouter initialEntries={[ruta]}>
       <ProveedorSesion>
-        <PaginaConfiguracion />
+        <PaginaEsquemas />
         <Ubicacion />
       </ProveedorSesion>
     </MemoryRouter>,
@@ -70,7 +70,7 @@ function montar(ruta, permisos) {
 }
 
 async function abrir(permisos = CONSULTAR) {
-  montar('/configuracion?pestana=esquemas', permisos)
+  montar('/administracion/esquemas', permisos)
   await waitFor(() => expect(screen.queryByLabelText('Cargando esquemas')).toBeNull())
 }
 
@@ -87,23 +87,13 @@ beforeEach(() => {
   listarDimensiones.mockResolvedValue([])
 })
 
-test('la pestaña Esquemas aparece con sus tres permisos de consulta y pide la lista una vez', async () => {
+test('la pantalla Esquemas pide la lista una vez', async () => {
   await abrir()
 
-  expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Vacunas', 'Dimensiones', 'Esquemas'])
+  expect(screen.getByRole('heading', { level: 1, name: 'Esquemas' })).toBeTruthy()
   expect(listarEsquemas).toHaveBeenCalledTimes(1)
   expect(screen.getByText('Esquemas de captura')).toBeTruthy()
   expect(within(tabla()).getAllByRole('row')).toHaveLength(FILAS.length + 1)
-})
-
-test.each([
-  ['ESQUEMA_CONSULTAR', ['CONFIGURACION_CONSULTAR', 'VACUNA_CONSULTAR', 'DIMENSION_CONSULTAR']],
-  ['DIMENSION_CONSULTAR', ['CONFIGURACION_CONSULTAR', 'ESQUEMA_CONSULTAR', 'VACUNA_CONSULTAR']],
-])('sin %s no aparece la pestaña', (_, permisos) => {
-  montar('/configuracion?pestana=esquemas', permisos)
-
-  expect(screen.queryByRole('tab', { name: 'Esquemas' })).toBeNull()
-  expect(listarEsquemas).not.toHaveBeenCalled()
 })
 
 test('la tabla muestra el vigente que aplica con su territorio y su inicio, "Sin esquema", el borrador y las vacunas inactivas', async () => {
@@ -154,19 +144,19 @@ describe('crear un borrador', () => {
   test('con vigente, "Copiar la versión vigente" va al editor con origen=copia', async () => {
     await abrir(TODOS)
     await elegir('TD', 'Copiar la versión vigente')
-    await waitFor(() => expect(ubicacion()).toBe('/configuracion/esquemas/nuevo?vacuna=4&origen=copia'))
+    await waitFor(() => expect(ubicacion()).toBe('/administracion/esquemas/nuevo?vacuna=4&origen=copia'))
   })
 
   test('con vigente, "Empezar vacío" va al editor con origen=vacio', async () => {
     await abrir(TODOS)
     await elegir('TD', 'Empezar vacío')
-    await waitFor(() => expect(ubicacion()).toBe('/configuracion/esquemas/nuevo?vacuna=4&origen=vacio'))
+    await waitFor(() => expect(ubicacion()).toBe('/administracion/esquemas/nuevo?vacuna=4&origen=vacio'))
   })
 
   test('sin vigente, "Crear borrador" va directo a vacío', async () => {
     await abrir(TODOS)
     fireEvent.click(screen.getByRole('button', { name: 'Crear borrador de NUEVA' }))
-    await waitFor(() => expect(ubicacion()).toBe('/configuracion/esquemas/nuevo?vacuna=30&origen=vacio'))
+    await waitFor(() => expect(ubicacion()).toBe('/administracion/esquemas/nuevo?vacuna=30&origen=vacio'))
   })
 
   test('una vacuna con borrador no ofrece crear otro, y una inactiva solo ofrece descartar el suyo', async () => {
@@ -174,7 +164,7 @@ describe('crear un borrador', () => {
 
     expect(screen.queryByRole('button', { name: 'Crear borrador de HEXA' })).toBeNull()
     expect(screen.getByRole('link', { name: 'Editar borrador de HEXA' }).getAttribute('href')).toBe(
-      '/configuracion/esquemas/b-hexa/editar',
+      '/administracion/esquemas/b-hexa/editar',
     )
     expect(screen.queryByRole('link', { name: 'Editar borrador de VIEJA' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Descartar borrador de VIEJA' })).toBeTruthy()
@@ -221,7 +211,7 @@ describe('descartar un borrador', () => {
 
 test('si falla la carga muestra el aviso, y "Reintentar" vuelve a pedir', async () => {
   listarEsquemas.mockRejectedValueOnce(new ErrorApi(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.'))
-  montar('/configuracion?pestana=esquemas', CONSULTAR)
+  montar('/administracion/esquemas', CONSULTAR)
 
   expect(await screen.findByText('No se pudieron cargar los esquemas: No se pudo conectar con el servidor.')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
@@ -235,10 +225,10 @@ describe('historial', () => {
     await abrir()
 
     expect(screen.getByRole('link', { name: 'Historial de HEXA' }).getAttribute('href')).toBe(
-      '/configuracion/esquemas/historial/2',
+      '/administracion/esquemas/historial/2',
     )
     expect(screen.getByRole('link', { name: 'Historial de TD' }).getAttribute('href')).toBe(
-      '/configuracion/esquemas/historial/4',
+      '/administracion/esquemas/historial/4',
     )
     expect(screen.getByRole('link', { name: 'Historial de VIEJA' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Historial de NUEVA' })).toBeNull()

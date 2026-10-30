@@ -56,7 +56,7 @@ function montar(datos = inicial()) {
         inicial={datos}
         onGuardar={onGuardar}
         onCambios={onCambios}
-        volverA="/configuracion?pestana=esquemas"
+        volverA="/administracion/esquemas"
       />
     </MemoryRouter>,
   )
@@ -314,7 +314,7 @@ test('en solo lectura los controles están deshabilitados y no hay problemas ni 
         dosisVacuna={DOSIS}
         dimensiones={DIMENSIONES}
         inicial={inicial()}
-        volverA="/configuracion/esquemas/historial/2"
+        volverA="/administracion/esquemas/historial/2"
         soloLectura
       />
     </MemoryRouter>,
@@ -344,7 +344,7 @@ test('con onPublicar, el botón dice "Publicar" sin cambios y "Guardar y publica
         inicial={inicial()}
         onGuardar={onGuardar}
         onPublicar={onPublicar}
-        volverA="/configuracion?pestana=esquemas"
+        volverA="/administracion/esquemas"
       />
     </MemoryRouter>,
   )

@@ -48,7 +48,7 @@ function armarEmpleado(datos) {
 export default function PaginaRegistrarPersonal() {
   const { state } = useLocation()
   // La lista manda sus filtros y su página para volver a ellos.
-  const volverA = state?.volverA?.pathname ? state.volverA : '/usuarios'
+  const volverA = state?.volverA?.pathname ? state.volverA : '/administracion/usuarios'
 
   const [catalogos, setCatalogos] = useState(null)
   const [errorCarga, setErrorCarga] = useState(null)
@@ -182,7 +182,7 @@ export default function PaginaRegistrarPersonal() {
   if (resultado) {
     return (
       <section className="flex max-w-3xl flex-col gap-6 p-6">
-        <EncabezadoPagina titulo="Registrar personal" />
+        <EncabezadoPagina antetitulo="Administración" titulo="Registrar personal" />
         <AvisoExito>
           <p>
             Se registró a {resultado.empleado.nombres} {resultado.empleado.apellidos}.
@@ -205,6 +205,7 @@ export default function PaginaRegistrarPersonal() {
   return (
     <section className="flex max-w-3xl flex-col gap-6 p-6">
       <EncabezadoPagina
+        antetitulo="Administración"
         titulo="Registrar personal"
         descripcion="Registre al empleado y, si lo necesita, su cuenta de acceso. Los campos con * son obligatorios."
         volverA={volverA}

@@ -5,7 +5,7 @@ import { crearDimension, listarDimensiones } from '@/api/configuracion.js'
 import { ErrorApi } from '@/api/cliente.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
-import PaginaConfiguracion from './PaginaConfiguracion.jsx'
+import PaginaDimensiones from './PaginaDimensiones.jsx'
 import PaginaRegistrarDimension from './PaginaRegistrarDimension.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
@@ -48,8 +48,8 @@ function montar(entrada) {
           </ProveedorSesion>
         ),
         children: [
-          { path: '/configuracion', element: <PaginaConfiguracion /> },
-          { path: '/configuracion/dimensiones/nueva', element: <PaginaRegistrarDimension /> },
+          { path: '/administracion/dimensiones', element: <PaginaDimensiones /> },
+          { path: '/administracion/dimensiones/nueva', element: <PaginaRegistrarDimension /> },
         ],
       },
     ],
@@ -80,13 +80,13 @@ beforeEach(() => {
 
 test('guardar manda los valores en orden y vuelve a la pestaña con su filtro y el aviso, sin pedir confirmación', async () => {
   crearDimension.mockResolvedValue({ codigo: 'via', nombre: 'Vía de aplicación' })
-  montar({ pathname: '/configuracion/dimensiones/nueva', state: { volverA: '?pestana=dimensiones&activa=true' } })
+  montar({ pathname: '/administracion/dimensiones/nueva', state: { volverA: '?activa=true' } })
 
   llenar()
   escribir('Descripción', '  Cómo se aplicó la dosis. ')
   guardar()
 
-  await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=dimensiones&activa=true'))
+  await waitFor(() => expect(ubicacion()).toBe('/administracion/dimensiones?activa=true'))
   expect(toast.success).toHaveBeenCalledWith('Dimensión Vía de aplicación registrada.')
   expect(screen.queryByRole('alertdialog')).toBeNull()
   expect(crearDimension).toHaveBeenCalledWith({
@@ -98,22 +98,22 @@ test('guardar manda los valores en orden y vuelve a la pestaña con su filtro y 
       { codigo: 'SC', etiqueta: 'Subcutánea' },
     ],
   })
-  expect(ubicacion()).toBe('/configuracion?pestana=dimensiones&activa=true')
+  expect(ubicacion()).toBe('/administracion/dimensiones?activa=true')
 })
 
 test('sin descripción no la manda, y sin filtro vuelve a la pestaña Dimensiones', async () => {
   crearDimension.mockResolvedValue({ codigo: 'via', nombre: 'Vía de aplicación' })
-  montar('/configuracion/dimensiones/nueva')
+  montar('/administracion/dimensiones/nueva')
 
   llenar()
   guardar()
 
-  await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=dimensiones'))
+  await waitFor(() => expect(ubicacion()).toBe('/administracion/dimensiones'))
   expect(crearDimension.mock.calls[0][0]).not.toHaveProperty('descripcion')
 })
 
 test('un código inválido muestra su error y no llama a la API', () => {
-  montar('/configuracion/dimensiones/nueva')
+  montar('/administracion/dimensiones/nueva')
 
   llenar()
   escribir(/^Código\*?$/, 'Via')
@@ -126,7 +126,7 @@ test('un código inválido muestra su error y no llama a la API', () => {
 })
 
 test('un código de valor repetido (sin importar mayúsculas) muestra su error y no llama a la API', () => {
-  montar('/configuracion/dimensiones/nueva')
+  montar('/administracion/dimensiones/nueva')
 
   llenar()
   escribir('Código del valor 2', 'IM')
@@ -137,7 +137,7 @@ test('un código de valor repetido (sin importar mayúsculas) muestra su error y
 })
 
 test('quitar todos los valores avisa que falta al menos uno', () => {
-  montar('/configuracion/dimensiones/nueva')
+  montar('/administracion/dimensiones/nueva')
 
   escribir(/^Código\*?$/, 'via')
   escribir(/^Nombre\*?$/, 'Vía de aplicación')
@@ -150,7 +150,7 @@ test('quitar todos los valores avisa que falta al menos uno', () => {
 })
 
 test('una etiqueta vacía muestra su error al salir del campo', () => {
-  montar('/configuracion/dimensiones/nueva')
+  montar('/administracion/dimensiones/nueva')
 
   fireEvent.blur(screen.getByLabelText('Etiqueta del valor 1'))
 
@@ -161,7 +161,7 @@ test('un 409 se muestra junto a los botones y conserva lo escrito', async () => 
   crearDimension.mockRejectedValue(
     new ErrorApi(409, 'DIMENSION_DUPLICADA', 'Ya existe una dimensión con el código via.'),
   )
-  montar('/configuracion/dimensiones/nueva')
+  montar('/administracion/dimensiones/nueva')
 
   llenar()
   guardar()
@@ -172,20 +172,20 @@ test('un 409 se muestra junto a los botones y conserva lo escrito', async () => 
   const lista = screen.getByRole('list', { name: 'Valores de la dimensión' })
   expect(within(lista).getAllByRole('listitem')).toHaveLength(2)
   expect(screen.getByLabelText('Etiqueta del valor 2').value).toBe('Subcutánea')
-  expect(ubicacion()).toBe('/configuracion/dimensiones/nueva')
+  expect(ubicacion()).toBe('/administracion/dimensiones/nueva')
 })
 
 test('"Cancelar" vuelve a la pestaña sin guardar', async () => {
-  montar('/configuracion/dimensiones/nueva')
+  montar('/administracion/dimensiones/nueva')
 
   fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
 
-  await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=dimensiones'))
+  await waitFor(() => expect(ubicacion()).toBe('/administracion/dimensiones'))
   expect(crearDimension).not.toHaveBeenCalled()
 })
 
 test('al guardar con errores, el foco va al primer campo inválido', async () => {
-  montar('/configuracion/dimensiones/nueva')
+  montar('/administracion/dimensiones/nueva')
   escribir(/^Código\*?$/, 'via')
   escribir(/^Nombre\*?$/, 'Vía de aplicación')
 
@@ -197,7 +197,7 @@ test('al guardar con errores, el foco va al primer campo inválido', async () =>
 
 describe('cambios sin guardar', () => {
   test('con algo escrito, "Cancelar" pide confirmación; "Seguir editando" se queda y "Salir sin guardar" vuelve', async () => {
-    montar('/configuracion/dimensiones/nueva')
+    montar('/administracion/dimensiones/nueva')
     escribir(/^Nombre\*?$/, 'Vía de aplicación')
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
@@ -205,12 +205,12 @@ describe('cambios sin guardar', () => {
     expect(dialogo.textContent).toContain('Si sale ahora, se pierden los datos de la dimensión.')
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Seguir editando' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
-    expect(ubicacion()).toBe('/configuracion/dimensiones/nueva')
+    expect(ubicacion()).toBe('/administracion/dimensiones/nueva')
     expect(screen.getByLabelText(/^Nombre\*?$/).value).toBe('Vía de aplicación')
 
     fireEvent.click(screen.getByRole('link', { name: 'Volver' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Salir sin guardar' }))
-    await waitFor(() => expect(ubicacion()).toBe('/configuracion?pestana=dimensiones'))
+    await waitFor(() => expect(ubicacion()).toBe('/administracion/dimensiones'))
     expect(crearDimension).not.toHaveBeenCalled()
   })
 })

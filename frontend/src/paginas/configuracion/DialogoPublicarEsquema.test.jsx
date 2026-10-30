@@ -162,7 +162,7 @@ test('sin meses disponibles, lo avisa y no deja continuar', async () => {
   montar(VIGENTE_NACIONAL)
 
   expect(
-    await within(dialogo()).findByText('No hay meses disponibles en el calendario; agréguelos en la pestaña «Periodos».'),
+    await within(dialogo()).findByText('No hay meses disponibles en el calendario; agréguelos en «Administración › Periodos».'),
   ).toBeTruthy()
   fireEvent.change(motivo(), { target: { value: 'Cambio' } })
   fireEvent.click(botonContinuar())

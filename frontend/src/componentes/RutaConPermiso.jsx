@@ -1,8 +1,9 @@
 import { Navigate } from 'react-router-dom'
 import { useSesion } from './ProveedorSesion.jsx'
 
-export default function RutaConPermiso({ permiso, children }) {
+// Exige todos los permisos; sin alguno, lleva a /inicio.
+export default function RutaConPermiso({ permisos, children }) {
   const { tienePermiso } = useSesion()
-  if (!tienePermiso(permiso)) return <Navigate to="/inicio" replace />
+  if (!permisos.every(tienePermiso)) return <Navigate to="/inicio" replace />
   return children
 }

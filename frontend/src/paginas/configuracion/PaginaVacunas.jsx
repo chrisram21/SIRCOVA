@@ -29,6 +29,7 @@ import { desactivarVacuna, listarVacunas, reactivarVacuna } from '@/api/catalogo
 import { mensajeDeError } from '@/api/cliente.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
+import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 
 // Radix Select no acepta '' como valor de una opción; "todos" equivale a no filtrar.
 const TODOS = 'todos'
@@ -67,7 +68,7 @@ function DosisActivas({ vacuna }) {
   )
 }
 
-export default function PestanaVacunas() {
+function ContenidoVacunas() {
   const { tienePermiso } = useSesion()
   const puedeCrear = tienePermiso('VACUNA_CREAR')
   const puedeEditar = tienePermiso('VACUNA_EDITAR')
@@ -103,8 +104,8 @@ export default function PestanaVacunas() {
     }
   }, [])
 
-  // Los filtros viajan al formulario para volver a la pestaña con los mismos.
-  const abrirEdicion = (vacuna) => navigate(`/configuracion/vacunas/${vacuna.id}/editar`, { state: { volverA: search } })
+  // Los filtros viajan al formulario para volver a la lista con los mismos.
+  const abrirEdicion = (vacuna) => navigate(`/administracion/vacunas/${vacuna.id}/editar`, { state: { volverA: search } })
 
   async function confirmarCambio(evento) {
     // Radix cierra el diálogo al pulsar; se cierra a mano al terminar, para mostrar el progreso mientras tanto.
@@ -125,7 +126,7 @@ export default function PestanaVacunas() {
     }
   }
 
-  // Los filtros van en la URL junto a la pestaña, para que sigan puestos al volver de un formulario.
+  // Los filtros van en la URL, para que sigan puestos al volver de un formulario.
   function cambiarFiltro(nombre, valor) {
     setParametros(
       (actuales) => {
@@ -176,9 +177,9 @@ export default function PestanaVacunas() {
           <CardDescription>Catálogo nacional: los cambios aplican a todas las DDRISS.</CardDescription>
           {puedeCrear && (
             <CardAction>
-              {/* Los filtros viajan al formulario para volver a la pestaña con los mismos. */}
+              {/* Los filtros viajan al formulario para volver a la lista con los mismos. */}
               <Button asChild>
-                <Link to="/configuracion/vacunas/nueva" state={{ volverA: search }}>
+                <Link to="/administracion/vacunas/nueva" state={{ volverA: search }}>
                   <Plus />
                   Registrar vacuna
                 </Link>
@@ -220,7 +221,7 @@ export default function PestanaVacunas() {
               <p className="text-muted-foreground">No hay vacunas registradas.</p>
               {puedeCrear && (
                 <Button asChild variant="outline">
-                  <Link to="/configuracion/vacunas/nueva" state={{ volverA: search }}>
+                  <Link to="/administracion/vacunas/nueva" state={{ volverA: search }}>
                     <Plus />
                     Registrar vacuna
                   </Link>
@@ -307,5 +308,14 @@ export default function PestanaVacunas() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  )
+}
+
+export default function PaginaVacunas() {
+  return (
+    <section className="flex flex-col gap-6 p-6">
+      <EncabezadoPagina antetitulo="Administración" titulo="Vacunas" />
+      <ContenidoVacunas />
+    </section>
   )
 }
