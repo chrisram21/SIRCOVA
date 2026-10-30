@@ -16,6 +16,8 @@ const PROCEDENCIA = {
   PROPIO_Y_OTROS: 'Las dosis a personas de otros municipios se registran juntas, como en el 5C.',
 }
 const SEVERIDAD = { ERROR: 'Error', ADVERTENCIA: 'Advertencia' }
+// Un motivo que ya termina en punto (o en ? o !) no lleva otro.
+const conPunto = (texto) => (/[.!?…]$/.test(texto) ? texto : `${texto}.`)
 
 // Muestra el formulario del esquema como lo verá el establecimiento. No llama a la API: las cantidades y los campos
 // adicionales viven en el estado del formulario y se pierden al cerrar, porque el Sheet desmonta su contenido.
@@ -62,7 +64,7 @@ export default function VistaPreviaEsquema({
           <SheetDescription>Así verá el formulario el establecimiento.</SheetDescription>
           {publicacion && (
             <p className="text-sm text-muted-foreground">
-              Vigente desde {publicacion.vigencia}. Motivo: {publicacion.motivo}.
+              Vigente desde {publicacion.vigencia}. Motivo: {conPunto(publicacion.motivo)}
             </p>
           )}
         </SheetHeader>

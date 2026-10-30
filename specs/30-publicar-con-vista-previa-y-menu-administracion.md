@@ -372,30 +372,30 @@ En cada paso se corren solo las pruebas que toca; las dos suites completas, al f
 
 ## Criterios de aceptación
 
-- [ ] Desde la fila y desde el editor, ninguna acción llama a `POST /esquemas-captura/{id}/publicar` antes de «Confirmar publicación» en la vista previa.
-- [ ] «Volver a los datos» conserva la vigencia y el motivo.
-- [ ] Con problemas de coherencia, «Confirmar publicación» está deshabilitado.
-- [ ] Un error de la API al confirmar se muestra encima de los botones y la vista previa sigue abierta.
-- [ ] Al publicar se ve el mismo aviso de hoy («Versión N de … publicada; vigente desde …»).
-- [ ] Los botones «Vista previa» del editor y de la versión de un esquema siguen funcionando sin publicar.
-- [ ] El sidebar muestra «Administración» como padre desplegable con los hijos que permite el rol, y no la muestra si no hay ninguno.
-- [ ] En un hijo o en su subruta, el padre está desplegado y el hijo, activo.
-- [ ] La página `/configuracion` con pestañas ya no existe: cada hijo tiene su ruta bajo `/administracion`.
-- [ ] Las rutas viejas (`/configuracion?pestana=…`, `/configuracion/…`, `/usuarios/…`, `/permisos`) llevan a las nuevas.
-- [ ] Las migas y el título de un hijo dicen «Administración › {hijo}».
-- [ ] Los accesos rápidos del Inicio muestran los hijos según los permisos y no muestran «Administración».
-- [ ] Al volver de una subruta, la lista conserva sus filtros.
-- [ ] Los archivos que cambia este spec no tienen colores escritos a mano (`#…`, `rgb(…)`), y `index.css` no cambió.
-- [ ] A mano, con Playwright: el padre, los hijos, una pantalla de catálogo, los accesos del Inicio y los dos pasos de publicar se ven con la misma línea que el resto de la app, en escritorio y a 360 px. Con movimiento reducido, nada se anima.
-- [ ] `backend/`, `openapi.yaml`, `backend/db/` y los `package.json` no cambiaron.
-- [ ] Las dos suites pasan (`npm test` en `backend/` y en `frontend/`) y `vite build` termina sin errores.
-- [ ] **A mano, contra la API real:**
+- [x] Desde la fila y desde el editor, ninguna acción llama a `POST /esquemas-captura/{id}/publicar` antes de «Confirmar publicación» en la vista previa.
+- [x] «Volver a los datos» conserva la vigencia y el motivo.
+- [x] Con problemas de coherencia, «Confirmar publicación» está deshabilitado.
+- [x] Un error de la API al confirmar se muestra encima de los botones y la vista previa sigue abierta.
+- [x] Al publicar se ve el mismo aviso de hoy («Versión N de … publicada; vigente desde …»).
+- [x] Los botones «Vista previa» del editor y de la versión de un esquema siguen funcionando sin publicar.
+- [x] El sidebar muestra «Administración» como padre desplegable con los hijos que permite el rol, y no la muestra si no hay ninguno.
+- [x] En un hijo o en su subruta, el padre está desplegado y el hijo, activo.
+- [x] La página `/configuracion` con pestañas ya no existe: cada hijo tiene su ruta bajo `/administracion`.
+- [x] Las rutas viejas (`/configuracion?pestana=…`, `/configuracion/…`, `/usuarios/…`, `/permisos`) llevan a las nuevas.
+- [x] Las migas y el título de un hijo dicen «Administración › {hijo}».
+- [x] Los accesos rápidos del Inicio muestran los hijos según los permisos y no muestran «Administración».
+- [x] Al volver de una subruta, la lista conserva sus filtros.
+- [x] Los archivos que cambia este spec no tienen colores escritos a mano (`#…`, `rgb(…)`), y `index.css` no cambió.
+- [x] A mano, con Playwright: el padre, los hijos, una pantalla de catálogo, los accesos del Inicio y los dos pasos de publicar se ven con la misma línea que el resto de la app, en escritorio y a 360 px. Con movimiento reducido, nada se anima.
+- [x] `backend/`, `openapi.yaml`, `backend/db/` y los `package.json` no cambiaron.
+- [x] Las dos suites pasan (`npm test` en `backend/` y en `frontend/`) y `vite build` termina sin errores.
+- [x] **A mano, contra la API real:**
   - con una vacuna de prueba manual registrada para esto (nunca una real), se publica un borrador desde la fila y otro desde el editor, los dos pasando por la vista previa;
   - se prueba «Volver a los datos» y «Cancelar»;
   - al terminar, la vacuna de prueba se desactiva;
   - se navega como Administrador, Revisor y Personal del establecimiento, y cada uno ve solo sus hijos, o no ve el padre.
-- [ ] El «Avance» de HU-11, HU-17 y HU-18 y las «Notas de contexto» de `CLAUDE.md` están actualizados.
-- [ ] `descripcion_pantallas.md` y los 7 HTML de `docs/mockups/pantallas/` dicen «Administración» en el menú. En `docs/mockups/`, «Configuración» solo queda en las dos menciones de la bitácora.
+- [x] El «Avance» de HU-11, HU-17 y HU-18 y las «Notas de contexto» de `CLAUDE.md` están actualizados.
+- [x] `descripcion_pantallas.md` y los 7 HTML de `docs/mockups/pantallas/` dicen «Administración» en el menú. En `docs/mockups/`, «Configuración» solo queda en las dos menciones de la bitácora.
 
 ## Decisiones
 

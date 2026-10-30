@@ -200,6 +200,11 @@ it('con publicacion muestra lo elegido y sus tres botones', () => {
   expect(alCambiarAbierta).toHaveBeenCalledWith(false)
 })
 
+it('un motivo que ya termina en punto no lleva otro en el resumen', () => {
+  montar({ esquema: BORRADOR, publicacion: publicacion({ motivo: 'Ajuste del esquema nacional.' }) })
+  within(hoja()).getByText('Vigente desde Noviembre 2026. Motivo: Ajuste del esquema nacional.')
+})
+
 it('con problemas, «Confirmar publicación» está deshabilitado y dice por qué', () => {
   const datos = publicacion()
   montar({ esquema: BORRADOR, problemas: ['Indique al menos una sección.'], publicacion: datos })
