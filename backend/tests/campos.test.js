@@ -27,6 +27,9 @@ import {
   validarEdadMeses,
   validarTituloSeccion,
   validarMotivoCambio,
+  validarNombreRegla,
+  validarDescripcionRegla,
+  validarMensajeRegla,
 } from '../src/validaciones/campos.js';
 
 // La misma lista está en frontend/src/validaciones/campos.test.js: si cambia una, se cambia la otra.
@@ -466,6 +469,50 @@ const CASOS = {
       ['a'.repeat(301), MENSAJES.motivoCambio],
     ],
   },
+  validarNombreRegla: {
+    validos: [
+      ['Rango mensual de BCG', 'Rango mensual de BCG'],
+      ['  Variación atípica   (San Marcos) ', 'Variación atípica (San Marcos)'],
+      ['abc', 'abc'],
+      ['a'.repeat(100), 'a'.repeat(100)],
+    ],
+    invalidos: [
+      ['', MENSAJES.nombreRegla],
+      ['   ', MENSAJES.nombreRegla],
+      [null, MENSAJES.nombreRegla],
+      ['ab', MENSAJES.nombreRegla],
+      ['a'.repeat(101), MENSAJES.nombreRegla],
+    ],
+  },
+  validarDescripcionRegla: {
+    validos: [
+      ['Advierte cuando una celda supera 300 dosis.', 'Advierte cuando una celda supera 300 dosis.'],
+      ['  Solo   para San Marcos ', 'Solo para San Marcos'],
+      ['a'.repeat(300), 'a'.repeat(300)],
+      ['', null],
+      ['   ', null],
+      [null, null],
+    ],
+    invalidos: [
+      ['a'.repeat(301), MENSAJES.descripcionRegla],
+    ],
+  },
+  validarMensajeRegla: {
+    validos: [
+      ['{vacuna} {dosis}: {valor} dosis está fuera del rango esperado ({minimo} a {maximo}).',
+        '{vacuna} {dosis}: {valor} dosis está fuera del rango esperado ({minimo} a {maximo}).'],
+      ['  Revise   {vacuna}. ', 'Revise {vacuna}.'],
+      ['a'.repeat(10), 'a'.repeat(10)],
+      ['a'.repeat(300), 'a'.repeat(300)],
+    ],
+    invalidos: [
+      ['', MENSAJES.mensajeRegla],
+      ['   ', MENSAJES.mensajeRegla],
+      [null, MENSAJES.mensajeRegla],
+      ['a'.repeat(9), MENSAJES.mensajeRegla],
+      ['a'.repeat(301), MENSAJES.mensajeRegla],
+    ],
+  },
 };
 
 const REGLAS = {
@@ -473,7 +520,8 @@ const REGLAS = {
   validarNombreDistrito, validarNombreEstablecimiento, validarDireccion, validarNombreContacto, validarCodigoVacuna,
   validarNombreVacuna, validarDescripcionVacuna, validarNombreDosis, validarCantidadPoblacion, validarFuentePoblacion,
   validarCodigoDimension, validarCodigoValorDimension, validarNombreDimension, validarDescripcionDimension,
-  validarEtiquetaValorDimension, validarEdadMeses, validarTituloSeccion, validarMotivoCambio,
+  validarEtiquetaValorDimension, validarEdadMeses, validarTituloSeccion, validarMotivoCambio, validarNombreRegla,
+  validarDescripcionRegla, validarMensajeRegla,
 };
 
 describe.each(Object.entries(CASOS))('%s', (nombre, { validos, invalidos }) => {
@@ -514,6 +562,9 @@ describe('valores que no son texto', () => {
     expect(validarEdadMeses({})).toEqual({ error: MENSAJES.edadMeses });
     expect(validarTituloSeccion(5)).toEqual({ error: MENSAJES.tituloSeccion });
     expect(validarMotivoCambio(5)).toEqual({ error: MENSAJES.motivoCambio });
+    expect(validarNombreRegla(5)).toEqual({ error: MENSAJES.nombreRegla });
+    expect(validarDescripcionRegla({})).toEqual({ error: MENSAJES.descripcionRegla });
+    expect(validarMensajeRegla(['{vacuna} sin datos'])).toEqual({ error: MENSAJES.mensajeRegla });
   });
 });
 

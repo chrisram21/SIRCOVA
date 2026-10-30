@@ -2741,6 +2741,250 @@ paths:
                   value:
                     error: { codigo: VIGENCIA_INVALIDA, mensaje: "La vigencia debe empezar después del 01/12/2026, cuando empezó la versión 4 de su DDRISS." }
 
+  /reglas-validacion:
+    get:
+      tags: [Configuración]
+      summary: Reglas de validación visibles para la DDRISS del usuario, una fila por código
+      description: |
+        Una fila por código que tenga al menos una versión `VIGENTE` o `HISTORICO` `NACIONAL` o de la DDRISS del
+        usuario. Los códigos que solo tienen borradores y los de otras DDRISS no aparecen.
+
+        - `aplica`: la versión que aplica a la DDRISS: su `VIGENTE` si existe; si no, el `VIGENTE` nacional del
+          mismo código; si no, null (la regla está inactiva en la DDRISS).
+        - `ultimaDdriss`: la versión más reciente de la DDRISS, `VIGENTE` o `HISTORICO`, o null.
+        - `vigenteNacional`: la versión del `VIGENTE` nacional, o null.
+
+        Ordenadas por el `nombre` de la primera que exista de `aplica`, `ultimaDdriss` o la última nacional.
+        Sin parámetros (uno desconocido responde 400) y sin paginar.
+
+        Estas son también las reglas que ejecuta la validación de un reporte (HU-25): las que aplican a la DDRISS
+        del establecimiento en el momento de validar, cuyo `vacunas` contiene la vacuna o `*`.
+        `esquemas_captura.reglas` ya no decide qué reglas se ejecutan.
+      x-permiso: REGLA_CONSULTAR
+      responses:
+        "200":
+          description: Las reglas de la DDRISS
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ReglaPorCodigo" }
+        "400":
+          description: Parámetro no permitido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: tipo." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+    post:
+      tags: [Configuración]
+      summary: Crear una regla de validación de la DDRISS (código generado, versión 1)
+      description: |
+        Solo de los tipos con parámetros: `RANGO`, `SECUENCIA_DOSIS`, `VARIACION_HISTORICA` y `TOTAL_CUADRA`.
+        El backend genera el código `{TIPO}_{NN}`: `NN` es el siguiente consecutivo del tipo en todo el país, con
+        dos dígitos como mínimo, contando los códigos de ese tipo con ese formato en cualquier territorio y
+        estado (los que no lo siguen, como `VARIACION_HISTORICA` o `RANGO_DOSIS_MES`, no cuentan). El ámbito
+        lo fija el tipo.
+
+        Guarda la versión 1 `VIGENTE` con el territorio de la DDRISS del usuario y `vigencia.desde` = el instante
+        de la publicación. Se revisa, en este orden: el cuerpo (400) y las vacunas (422 `REGLA_INVALIDA`). Si
+        dos altas chocan en el código, la segunda responde 409 `REGLA_DESACTUALIZADA`.
+
+        Bitácora (módulo `CONFIGURACION`, entidad `reglas_validacion`, `entidadId` el ObjectId): `CREAR` con el
+        documento completo.
+      x-permiso: REGLA_CREAR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReglaCrear" }
+      responses:
+        "201":
+          description: Regla creada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReglaValidacion" }
+        "400": { $ref: "#/components/responses/ReglaEntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "409": { $ref: "#/components/responses/ReglaDesactualizada" }
+        "422": { $ref: "#/components/responses/ReglaInvalida" }
+
+  /reglas-validacion/{codigo}/historial:
+    get:
+      tags: [Configuración]
+      summary: Historial de versiones de una regla de validación
+      description: |
+        Las versiones `NACIONAL` y de la DDRISS del usuario del código, sin borradores, de la más reciente a la
+        más antigua. `desactivacion` sale de la fila `DESACTIVAR` de la bitácora de esa versión, o es null.
+        Sin parámetros (uno desconocido responde 400) y sin paginar.
+      x-permiso: REGLA_CONSULTAR
+      parameters:
+        - { $ref: "#/components/parameters/CodigoRegla" }
+      responses:
+        "200":
+          description: Las versiones de la regla
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ReglaEnHistorial" }
+        "400":
+          description: Parámetro no permitido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: estado." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+
+  /reglas-validacion/{codigo}/versiones:
+    post:
+      tags: [Configuración]
+      summary: Publicar una versión nueva de la regla para la DDRISS
+      description: |
+        Guarda una versión `VIGENTE` de la DDRISS del usuario con `version` = la mayor del código en todo el país
+        + 1. El código, el tipo y el ámbito no cambian. Si la DDRISS tenía un `VIGENTE` del código, pasa a
+        `HISTORICO` con `vigencia.hasta` = el instante de la publicación; solo cambian su `estado` y su
+        `vigencia.hasta`. El `VIGENTE` nacional no cambia: la versión de la DDRISS lo reemplaza solo en ella.
+
+        `versionBase` es la versión que cargó el editor: la de `aplica`, o si no hay, la de `ultimaDdriss`, o si
+        no hay, la última nacional (la fila de `GET /reglas-validacion`). Se revisa, en este orden: que el código
+        sea visible (404), el cuerpo (400), `versionBase` (409 `REGLA_DESACTUALIZADA`), las vacunas
+        (422 `REGLA_INVALIDA`) y que el contenido cambie algo de la versión que aplica (422 `REGLA_SIN_CAMBIOS`).
+
+        Los dos documentos se escriben en una transacción de MongoDB. Si otra escritura ganó la carrera,
+        responde 409 `REGLA_DESACTUALIZADA` y no cambia nada.
+
+        Bitácora: `CREAR` de la versión nueva y, si reemplaza a otra de la DDRISS, `ACTUALIZAR` de esa versión.
+      x-permiso: REGLA_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/CodigoRegla" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReglaVersion" }
+      responses:
+        "201":
+          description: Versión publicada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReglaValidacion" }
+        "400": { $ref: "#/components/responses/ReglaEntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409": { $ref: "#/components/responses/ReglaDesactualizada" }
+        "422":
+          description: Una vacuna inexistente o inactiva, o la versión no cambia nada de la que aplica
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                vacuna:
+                  value:
+                    error: { codigo: REGLA_INVALIDA, mensaje: La vacuna BCG no existe o está inactiva. }
+                sinCambios:
+                  value:
+                    error: { codigo: REGLA_SIN_CAMBIOS, mensaje: La versión no cambia nada de la que aplica. }
+
+  /reglas-validacion/{codigo}/desactivar:
+    post:
+      tags: [Configuración]
+      summary: Desactivar la versión de la DDRISS (pasa a HISTORICO sin reemplazo)
+      description: |
+        El `VIGENTE` de la DDRISS del usuario pasa a `HISTORICO` con `vigencia.hasta` = el instante del cambio;
+        solo cambian su `estado` y su `vigencia.hasta`. Si hay un `VIGENTE` nacional del mismo código, vuelve a
+        aplicar ese; si no, la regla queda inactiva en la DDRISS. Una regla nacional no se desactiva.
+
+        `version` es la del `VIGENTE` de la DDRISS que se ve. Se revisa, en este orden: que el código sea visible
+        (404), el cuerpo (400), que la DDRISS tenga un `VIGENTE` del código (409 `REGLA_SIN_VERSION_PROPIA`) y
+        que sea `version` (409 `REGLA_DESACTUALIZADA`). La escritura lleva la condición `estado: VIGENTE`.
+
+        Bitácora: `DESACTIVAR` de la versión, con `estado`, `vigencia.hasta` y `motivoCambio` en `valoresNuevos`.
+      x-permiso: REGLA_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/CodigoRegla" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReglaEstado" }
+      responses:
+        "200":
+          description: Regla desactivada; la fila actualizada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReglaPorCodigo" }
+        "400": { $ref: "#/components/responses/ReglaEstadoInvalido" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: La DDRISS no tiene una versión activa del código, o la versión cambió mientras tanto
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                sinVersionPropia:
+                  value:
+                    error: { codigo: REGLA_SIN_VERSION_PROPIA, mensaje: Su DDRISS no tiene una versión activa de esta regla; las reglas nacionales no se desactivan. }
+                desactualizada:
+                  value:
+                    error: { codigo: REGLA_DESACTUALIZADA, mensaje: La regla VARIACION_HISTORICA cambió mientras la editaba; vuelva a abrirla. }
+
+  /reglas-validacion/{codigo}/activar:
+    post:
+      tags: [Configuración]
+      summary: Activar una regla de la DDRISS (publica una copia de su última versión)
+      description: |
+        Copia el contenido de la última versión de la DDRISS del usuario (que está en `HISTORICO`) en una versión
+        nueva `VIGENTE` de la DDRISS, con `version` = la mayor del código en todo el país + 1 y el motivo del
+        cuerpo.
+
+        `version` es la de `ultimaDdriss`. Se revisa, en este orden: que el código sea visible (404), el cuerpo
+        (400), que la DDRISS tenga versiones del código y ninguna `VIGENTE` (409 `REGLA_SIN_VERSION_PROPIA`),
+        que `version` sea su última versión (409 `REGLA_DESACTUALIZADA`) y que las vacunas de la copia sigan
+        activas (422 `REGLA_INVALIDA`).
+
+        Bitácora: `REACTIVAR` de la versión nueva, con el documento completo.
+      x-permiso: REGLA_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/CodigoRegla" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReglaEstado" }
+      responses:
+        "201":
+          description: Versión publicada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReglaValidacion" }
+        "400": { $ref: "#/components/responses/ReglaEstadoInvalido" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: La DDRISS ya tiene un `VIGENTE` del código o no tiene versiones, o la versión cambió mientras tanto
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                sinVersionPropia:
+                  value:
+                    error: { codigo: REGLA_SIN_VERSION_PROPIA, mensaje: Solo se activa una regla de su DDRISS que esté desactivada. }
+                desactualizada:
+                  value:
+                    error: { codigo: REGLA_DESACTUALIZADA, mensaje: La regla RANGO_01 cambió mientras la editaba; vuelva a abrirla. }
+        "422": { $ref: "#/components/responses/ReglaInvalida" }
+
   # ---------------------------------------------------------------- Producción
   /reportes:
     get:
@@ -3399,6 +3643,14 @@ components:
       required: true
       description: ObjectId del esquema en `esquemas_captura`; uno inválido responde 404
       schema: { type: string, example: 66f8a1c2e4b0a1b2c3d4e5f6 }
+    CodigoRegla:
+      name: codigo
+      in: path
+      required: true
+      description: |
+        Código de la regla en `reglas_validacion`: mayúsculas, dígitos y guion bajo, hasta 40 caracteres. Uno
+        con otro formato, inexistente o no visible para la DDRISS del usuario responde 404
+      schema: { type: string, pattern: "^[A-Z0-9_]{1,40}$", example: VARIACION_HISTORICA }
     Pagina:
       name: pagina
       in: query
@@ -3666,6 +3918,87 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
           example:
             error: { codigo: ESQUEMA_NO_EDITABLE, mensaje: Solo se edita un borrador de su DDRISS; para cambiar un esquema publicado, cree un borrador nuevo. }
+    ReglaEntradaInvalida:
+      description: |
+        El cuerpo de una regla no cumple el formato: campo faltante o no permitido, tipo que no se crea, severidad,
+        vacunas o parámetros mal formados, marcador desconocido en el mensaje, o nombre, descripción, mensaje o
+        motivo inválidos. Los parámetros y marcadores de cada tipo están en `ReglaValidacion`.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            campo:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: codigo." }
+            tipo:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: Solo se crean reglas de tipo RANGO, SECUENCIA_DOSIS, VARIACION_HISTORICA o TOTAL_CUADRA. }
+            severidad:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: La severidad debe ser ERROR o ADVERTENCIA. }
+            vacunas:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Indique * para todas las vacunas, o una lista de códigos sin repetir y sin *." }
+            parametroDeMas:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido en una regla de tipo RANGO: tolerancia." }
+            parametroFaltante:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Falta el parámetro maximo." }
+            parametroRango:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: El parámetro maximo debe ser un entero entre 1 y 100000. }
+            marcador:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "El mensaje usa el marcador {dosis}, que no existe en las reglas de tipo TOTAL_CUADRA." }
+            nombre:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: El nombre de la regla debe tener entre 3 y 100 caracteres. }
+            descripcion:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: La descripción de la regla debe tener como máximo 300 caracteres. }
+            mensaje:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: El mensaje de la regla debe tener entre 10 y 300 caracteres. }
+            motivo:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: El motivo del cambio debe tener entre 1 y 300 caracteres. }
+    ReglaEstadoInvalido:
+      description: Falta `version` o `motivoCambio`, son inválidos, o hay un campo no permitido
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            campo:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: severidad." }
+            version:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: version debe ser un número entero positivo. }
+            motivo:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: El motivo del cambio debe tener entre 1 y 300 caracteres. }
+    ReglaDesactualizada:
+      description: |
+        La versión que cargó el editor ya no es la actual (alguien publicó, activó o desactivó mientras tanto), o
+        dos escrituras chocaron en un índice único
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            desactualizada:
+              value:
+                error: { codigo: REGLA_DESACTUALIZADA, mensaje: La regla VARIACION_HISTORICA cambió mientras la editaba; vuelva a abrirla. }
+            altaSimultanea:
+              value:
+                error: { codigo: REGLA_DESACTUALIZADA, mensaje: Se creó otra regla del mismo tipo al mismo tiempo; intente de nuevo. }
+    ReglaInvalida:
+      description: Una vacuna de la regla no existe o está inactiva
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: REGLA_INVALIDA, mensaje: La vacuna BCG no existe o está inactiva. }
     Conflicto:
       description: Duplicado o versionFila desactualizada
       content:
@@ -4853,6 +5186,193 @@ components:
             publicadoEn: "2026-09-01T00:00:00.000Z"
             motivoCambio: null
             reportes: 6
+
+    TipoRegla:
+      type: string
+      description: |
+        El validador que ejecuta la regla. Solo se crean códigos nuevos de `RANGO`, `SECUENCIA_DOSIS`,
+        `VARIACION_HISTORICA` y `TOTAL_CUADRA`; los demás tienen solo las reglas de la semilla.
+      enum: [CAMPOS_COMPLETOS, NO_NEGATIVO, TOTAL_CUADRA, SIN_DUPLICADOS, SECUENCIA_DOSIS, VARIACION_HISTORICA,
+        RANGO, PROCEDENCIA_VALIDA, DIMENSIONES_VALIDAS]
+
+    SeveridadRegla:
+      type: string
+      description: "`ERROR` impide enviar el reporte; `ADVERTENCIA` solo avisa"
+      enum: [ERROR, ADVERTENCIA]
+
+    ParametrosRegla:
+      type: object
+      description: |
+        Los parámetros del tipo, con las claves en snake_case de la base (son datos de la regla, no campos de la
+        API). Todos son obligatorios y no se admiten otros. Los marcadores son los `{x}` que acepta `mensaje`.
+
+        | Tipo | Ámbito | Parámetros | Marcadores |
+        |---|---|---|---|
+        | `RANGO` | `DETALLE` | `minimo` (entero, 0 a 100000), `maximo` (entero, de `minimo` + 1 a 100000) | `vacuna`, `dosis`, `valor`, `minimo`, `maximo` |
+        | `SECUENCIA_DOSIS` | `VACUNA` | `exceso_permitido_pct` (entero, 0 a 1000) | `vacuna`, `dosis_anterior`, `dosis_posterior`, `exceso_permitido_pct` |
+        | `VARIACION_HISTORICA` | `VACUNA` | `meses_referencia` (entero, 1 a 12), `variacion_max_pct` (entero, 1 a 1000), `minimo_dosis` (entero, 0 a 100000) | `vacuna`, `variacion`, `meses_referencia`, `variacion_max_pct` |
+        | `TOTAL_CUADRA` | `VACUNA` | `tolerancia` (entero, 0 a 1000) | `vacuna`, `total`, `suma` |
+        | `CAMPOS_COMPLETOS` | `VACUNA` | `cero_explicito` (booleano) | `vacuna`, `n_faltantes` |
+        | `NO_NEGATIVO` | `DETALLE` | ninguno | `vacuna`, `dosis` |
+        | `DIMENSIONES_VALIDAS` | `DETALLE` | ninguno | `vacuna`, `dosis`, `version` |
+        | `PROCEDENCIA_VALIDA` | `DETALLE` | ninguno | `vacuna`, `dosis`, `municipio` |
+        | `SIN_DUPLICADOS` | `REPORTE` | ninguno | `establecimiento`, `periodo` |
+      additionalProperties: true
+      example: { meses_referencia: 3, variacion_max_pct: 40, minimo_dosis: 10 }
+
+    VacunasRegla:
+      type: array
+      minItems: 1
+      description: '`["*"]` = todas; si no, códigos de vacunas activas de MySQL, sin repetir. `*` no se combina con códigos'
+      items: { type: string }
+      example: ["*"]
+
+    ReglaValidacion:
+      type: object
+      description: Una versión de una regla de validación
+      required: [id, codigo, version, nombre, descripcion, tipo, ambito, severidad, vacunas, parametros, mensaje,
+        territorio, estado, vigencia, publicadoPor, publicadoEn, motivoCambio]
+      properties:
+        id: { type: string, description: ObjectId de la versión, example: 6722b0c1a2b3c4d5e6f70a01 }
+        codigo: { type: string, example: VARIACION_HISTORICA }
+        version: { type: integer, minimum: 1, example: 2 }
+        nombre: { type: string, example: Variación atípica frente al historial (San Marcos) }
+        descripcion: { type: string, nullable: true, example: null }
+        tipo: { $ref: "#/components/schemas/TipoRegla" }
+        ambito: { type: string, enum: [DETALLE, VACUNA, REPORTE], description: Lo fija el tipo }
+        severidad: { $ref: "#/components/schemas/SeveridadRegla" }
+        vacunas: { $ref: "#/components/schemas/VacunasRegla" }
+        parametros: { $ref: "#/components/schemas/ParametrosRegla" }
+        mensaje:
+          type: string
+          description: Plantilla con los marcadores del tipo
+          example: La producción de {vacuna} varía {variacion} % respecto al promedio de los últimos {meses_referencia} meses.
+        territorio: { $ref: "#/components/schemas/TerritorioEsquema" }
+        estado: { type: string, enum: [VIGENTE, HISTORICO] }
+        vigencia:
+          type: object
+          required: [desde, hasta]
+          description: "`desde` es el instante de la publicación; `hasta`, el instante en que la reemplazaron o la desactivaron"
+          properties:
+            desde: { type: string, format: date-time, example: "2026-10-01T06:00:00.000Z" }
+            hasta: { type: string, format: date-time, nullable: true, example: null }
+        publicadoPor: { $ref: "#/components/schemas/PublicadoPor" }
+        publicadoEn:
+          type: string
+          format: date-time
+          description: En las versiones de la semilla sin fecha de publicación, la de creación
+          example: "2026-10-01T06:00:00.000Z"
+        motivoCambio: { type: string, nullable: true, example: "Prueba: umbral de 40 % pedido por la DDRISS." }
+
+    ReglaPorCodigo:
+      type: object
+      required: [codigo, tipo, ambito, aplica, ultimaDdriss, vigenteNacional]
+      properties:
+        codigo: { type: string, example: VARIACION_HISTORICA }
+        tipo: { $ref: "#/components/schemas/TipoRegla" }
+        ambito: { type: string, enum: [DETALLE, VACUNA, REPORTE] }
+        aplica:
+          allOf: [{ $ref: "#/components/schemas/ReglaValidacion" }]
+          nullable: true
+          description: La versión que aplica a la DDRISS; null si la regla está inactiva en ella
+        ultimaDdriss:
+          allOf: [{ $ref: "#/components/schemas/ReglaValidacion" }]
+          nullable: true
+          description: La versión más reciente de la DDRISS, `VIGENTE` o `HISTORICO`; null si la DDRISS no tiene
+        vigenteNacional:
+          type: object
+          nullable: true
+          required: [version]
+          properties:
+            version: { type: integer, example: 1 }
+
+    ReglaEnHistorial:
+      allOf:
+        - $ref: "#/components/schemas/ReglaValidacion"
+        - type: object
+          required: [desactivacion]
+          properties:
+            desactivacion:
+              type: object
+              nullable: true
+              description: Si la versión se desactivó (fila `DESACTIVAR` de la bitácora); null si no
+              required: [en, por, motivo]
+              properties:
+                en: { type: string, format: date-time, example: "2026-10-30T16:40:00.000Z" }
+                por: { $ref: "#/components/schemas/PublicadoPor" }
+                motivo: { type: string, example: La DDRISS revisará este control a mano este mes. }
+
+    ContenidoRegla:
+      type: object
+      required: [nombre, severidad, vacunas, parametros, mensaje, motivoCambio]
+      properties:
+        nombre: { type: string, minLength: 3, maxLength: 100, description: Se recorta, example: Rango mensual de BCG }
+        descripcion:
+          type: string
+          nullable: true
+          maxLength: 300
+          description: Opcional; se recorta, y vacía o null no guarda descripción
+          example: Advierte cuando una celda supera 300 dosis.
+        severidad: { $ref: "#/components/schemas/SeveridadRegla" }
+        vacunas: { $ref: "#/components/schemas/VacunasRegla" }
+        parametros: { $ref: "#/components/schemas/ParametrosRegla" }
+        mensaje:
+          type: string
+          minLength: 10
+          maxLength: 300
+          description: Se recorta; solo los marcadores del tipo
+          example: "{vacuna} {dosis}: {valor} dosis está fuera del rango esperado ({minimo} a {maximo})."
+        motivoCambio: { type: string, minLength: 1, maxLength: 300, description: Se recorta, example: Control pedido por la DDRISS. }
+
+    ReglaCrear:
+      allOf:
+        - $ref: "#/components/schemas/ContenidoRegla"
+        - type: object
+          required: [tipo]
+          properties:
+            tipo: { type: string, enum: [RANGO, SECUENCIA_DOSIS, VARIACION_HISTORICA, TOTAL_CUADRA] }
+      description: No admite otros campos
+      example:
+        tipo: RANGO
+        nombre: Rango mensual de BCG
+        severidad: ADVERTENCIA
+        vacunas: [BCG]
+        parametros: { minimo: 0, maximo: 300 }
+        mensaje: "{vacuna} {dosis}: {valor} dosis está fuera del rango esperado ({minimo} a {maximo})."
+        motivoCambio: Control pedido por la DDRISS.
+
+    ReglaVersion:
+      allOf:
+        - $ref: "#/components/schemas/ContenidoRegla"
+        - type: object
+          required: [versionBase]
+          properties:
+            versionBase:
+              type: integer
+              minimum: 1
+              description: La versión que cargó el editor; si ya no es la base, responde 409 `REGLA_DESACTUALIZADA`
+              example: 1
+      description: No admite otros campos (ni `tipo` ni `codigo`)
+      example:
+        versionBase: 1
+        nombre: Coherencia entre dosis sucesivas (San Marcos)
+        severidad: ERROR
+        vacunas: [HEXA, SPR]
+        parametros: { exceso_permitido_pct: 10 }
+        mensaje: "{dosis_posterior} de {vacuna} supera a {dosis_anterior} en más de {exceso_permitido_pct} %."
+        motivoCambio: La DDRISS pide un umbral más estricto.
+
+    ReglaEstado:
+      type: object
+      required: [version, motivoCambio]
+      additionalProperties: false
+      properties:
+        version:
+          type: integer
+          minimum: 1
+          description: "Al desactivar, la del `VIGENTE` de la DDRISS; al activar, la de `ultimaDdriss`"
+          example: 2
+        motivoCambio: { type: string, minLength: 1, maxLength: 300, description: Se recorta, example: La DDRISS revisará este control a mano este mes. }
 
     ReporteNuevo:
       type: object

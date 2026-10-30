@@ -8,6 +8,7 @@ export const LARGOS = {
   nombreDimension: 60, descripcionDimension: 255, etiquetaValorDimension: 60,
   tituloSeccion: 60,
   motivoCambio: 300,
+  nombreRegla: 100, descripcionRegla: 300, mensajeRegla: 300,
 }
 
 export const MENSAJES = {
@@ -57,6 +58,9 @@ export const MENSAJES = {
   edadMeses: 'La edad debe ser un número entero de meses entre 0 y 1,200.',
   tituloSeccion: 'El título de la sección debe tener entre 1 y 60 caracteres.',
   motivoCambio: 'El motivo del cambio debe tener entre 1 y 300 caracteres.',
+  nombreRegla: 'El nombre de la regla debe tener entre 3 y 100 caracteres.',
+  descripcionRegla: 'La descripción de la regla debe tener como máximo 300 caracteres.',
+  mensajeRegla: 'El mensaje de la regla debe tener entre 10 y 300 caracteres.',
 }
 
 const demasiadoLargo = (campo, largo) => `${campo}: como máximo ${largo} caracteres.`
@@ -308,5 +312,25 @@ export function validarTituloSeccion(valor) {
 export function validarMotivoCambio(valor) {
   const texto = limpiar(valor)
   if (!texto || texto.length > LARGOS.motivoCambio) return { error: MENSAJES.motivoCambio }
+  return { valor: texto }
+}
+
+export function validarNombreRegla(valor) {
+  const texto = limpiar(valor)
+  if (!texto || texto.length < 3 || texto.length > LARGOS.nombreRegla) return { error: MENSAJES.nombreRegla }
+  return { valor: texto }
+}
+
+export function validarDescripcionRegla(valor) {
+  const texto = limpiar(valor)
+  if (texto === '') return { valor: null }
+  if (texto === null || texto.length > LARGOS.descripcionRegla) return { error: MENSAJES.descripcionRegla }
+  return { valor: texto }
+}
+
+// Los marcadores {x} no se revisan aquí: dependen del tipo de la regla (tiposRegla.js).
+export function validarMensajeRegla(valor) {
+  const texto = limpiar(valor)
+  if (!texto || texto.length < 10 || texto.length > LARGOS.mensajeRegla) return { error: MENSAJES.mensajeRegla }
   return { valor: texto }
 }

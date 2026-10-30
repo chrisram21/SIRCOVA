@@ -71,7 +71,7 @@ const aCamel = (clave) => clave.replace(/_([a-z])/g, (_, letra) => letra.toUpper
 const clavesACamel = (objeto = {}) => Object.fromEntries(Object.entries(objeto).map(([k, v]) => [aCamel(k), v]));
 const aFecha = (fecha) => (fecha ? fecha.toISOString().slice(0, 10) : null);
 
-async function codigoDdriss(ddrissId) {
+export async function codigoDdriss(ddrissId) {
   if (ddrissId === null || ddrissId === undefined) return null;
   const [[fila]] = await pool.query('SELECT codigo FROM ddriss WHERE id = ?', [ddrissId]);
   return fila?.codigo ?? null;
