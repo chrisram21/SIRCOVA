@@ -297,7 +297,7 @@ Mecánica de versionado, común a las tres últimas:
 - `dimensiones.procedencia.modo`: `MUNICIPIO_DETALLADO` o `PROPIO_Y_OTROS` (réplica del 5C).
 - `dimensiones.desagregacion[]`: qué dimensiones usa la vacuna y con qué subconjunto de valores.
 - `secciones[]` (v0.4 del script): encabezados del 5C con `codigo`, `titulo` ("< 1 año"), `orden`, `grupo_edad` y `dosis[]`. La misma dosis puede estar en varias secciones; si la vacuna no desagrega por edad, `grupo_edad` es null.
-- `campos_adicionales[]`, `reglas[]` (código y versión de cada regla), `presentacion`.
+- `campos_adicionales[]`, `reglas[]` (código y versión de cada regla), `presentacion`. Desde el SPEC 32, `reglas[]` (y su `severidad_override`) es solo informativo: las reglas que se ejecutan se eligen por territorio y vacuna en `reglas_validacion`. El 02 conserva la descripción anterior («las reglas que aplica esta versión») hasta que se autorice cambiarlo.
 - `incluir_por_defecto` (script v0.8, opcional): `true` si la vacuna entra en cada reporte nuevo del mes que cubre la versión. Si falta, el backend la toma como `true`. Es parte de la versión: para cambiarla se publica una nueva. Un borrador vacío empieza en `false` y una copia la hereda.
 - Las celdas del formulario son las dosis × los valores de cada dimensión; con secciones, una celda existe solo si su dosis está en la sección de su grupo de edad.
 
@@ -375,7 +375,7 @@ No hay llaves foráneas entre motores. Los vínculos son estos:
 **Flujos principales:**
 1. **Abrir un formulario.** El backend lee el esquema VIGENTE de la vacuna para la DDRISS del establecimiento (o el NACIONAL si la DDRISS no tiene uno) y el catálogo de dimensiones, y genera las celdas. Si el reporte ya existe, usa la versión guardada en `reporte_vacuna`.
 2. **Guardar.** Cada celda se escribe en `detalle_produccion` y `detalle_dimension` dentro de una misma transacción.
-3. **Enviar.** Se ejecutan las reglas del esquema y se guardan en `resultado_validacion`. Si quedan errores abiertos, el envío se rechaza.
+3. **Enviar.** Se ejecutan las reglas que aplican a la DDRISS del establecimiento en ese momento (por código, la `VIGENTE` de la DDRISS antes que la nacional) cuyo `aplica_a.vacunas` incluye la vacuna o `*`, y los resultados se guardan en `resultado_validacion` con el código y la versión de cada regla. Si quedan errores abiertos, el envío se rechaza. Si la DDRISS desactivó su versión, vuelve a aplicar la nacional del mismo código; sin nacional, la regla no se ejecuta.
 4. **Revisar y cerrar.** Cada transición se valida contra `transicion_estado` y se registra en `historial_estado_reporte` y en `bitacora`.
 5. **Calcular indicadores.** Al cerrar un periodo o aplicar una rectificación, se crea una `corrida_calculo`, se leen las configuraciones vigentes, se traducen los `filtros_dimension` a condiciones sobre `detalle_dimension` y se escriben `resultado_indicador` y `alerta`.
 

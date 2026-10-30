@@ -1,6 +1,6 @@
 # SPEC 32 — Reglas de validación por DDRISS, con versiones y activación
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-24
 > **Depende de:** SPEC 04, SPEC 05, SPEC 06, SPEC 15, SPEC 19, SPEC 20 y SPEC 30
 > **Fecha:** 2026-10-30
@@ -322,6 +322,7 @@ backend/
 ├── src/modulos/configuracion/
 │   ├── configuracion.routes.js                   ← rutas de reglas
 │   ├── configuracion.controller.js               ← controladores de reglas
+│   ├── esquemas.service.js                       ← exporta codigoDdriss (decidido al implementar)
 │   ├── tiposRegla.js                             ← nuevo: catálogo de tipos
 │   └── reglas.service.js                         ← nuevo: listar, historial, crear, publicar versión, desactivar, activar
 └── tests/
@@ -333,6 +334,7 @@ frontend/src/
 ├── validaciones/campos.js                        ← las tres reglas
 ├── validaciones/campos.test.js                   ← los mismos casos
 ├── componentes/layout/opcionesMenu.js            ← hijo «Reglas de validación»
+├── componentes/layout/Layout.test.jsx            ← el hijo nuevo en el menú (decidido al implementar)
 └── paginas/configuracion/
     ├── tiposRegla.js                             ← nuevo
     ├── tiposRegla.test.js                        ← nuevo
@@ -341,6 +343,7 @@ frontend/src/
     ├── PanelRegla.jsx                            ← nuevo
     ├── PanelRegla.test.jsx                       ← nuevo
     ├── PanelHistorialRegla.jsx                   ← nuevo
+    ├── presentacionRegla.jsx                     ← nuevo: severidad, territorio y vacunas (decidido al implementar)
     ├── DialogoEstadoRegla.jsx                    ← nuevo
     └── DialogoEstadoRegla.test.jsx               ← nuevo
 docs/SPECS/HISTORIAS_DE_USUARIO.md                ← avance y criterios de HU-24; nota en HU-25
@@ -439,20 +442,20 @@ CLAUDE.md                                         ← nota de reglas
 
 ## Criterios de aceptación
 
-- [ ] `backend/openapi.yaml` documenta las seis operaciones de `/reglas-validacion` con su `x-permiso`, y `/api/docs` carga sin errores.
-- [ ] `npm test` pasa en `backend/` y en `frontend/` sin desactivar ni quitar ninguna prueba, y las pruebas no dejan reglas `ZVT_HU24…` o `vitest-hu24-…` ni las vacunas de prueba.
-- [ ] `frontend/package.json` y `backend/package.json` no cambian, y nada en `backend/db/` cambia salvo `05_permisos_mysql.sql`.
-- [ ] Desde la pantalla, el Administrador crea una regla de tipo `RANGO`, `SECUENCIA_DOSIS`, `VARIACION_HISTORICA` o `TOTAL_CUADRA`, de error o de advertencia, para todas las vacunas o para algunas.
-- [ ] Una regla nueva queda con el código `{TIPO}_{NN}`, versión 1, `VIGENTE` y el territorio de la DDRISS del usuario.
-- [ ] Publicar una versión crea un documento nuevo con la versión siguiente; el `VIGENTE` anterior de la DDRISS pasa a `HISTORICO` sin cambiar su contenido, y el nacional no cambia.
-- [ ] Desactivar deja la regla sin versión de la DDRISS que aplique, y vuelve a aplicar la nacional del mismo código si existe. Activar publica una copia de la última versión de la DDRISS.
-- [ ] Una regla nacional no se puede desactivar (409), y las de otras DDRISS no se ven (404).
-- [ ] El backend rechaza parámetros fuera del tipo o de su rango, marcadores desconocidos (400) y vacunas inactivas (422).
-- [ ] El historial muestra todas las versiones nacionales y de la DDRISS del código, con quién y cuándo las publicó, su motivo y, si se desactivó, el motivo de la desactivación.
-- [ ] Cada escritura deja sus filas en la bitácora (`CREAR`, `ACTUALIZAR`, `DESACTIVAR`, `REACTIVAR`) con el módulo `CONFIGURACION` y el ObjectId como `entidad_id`, y un fallo de MongoDB no deja filas ni documentos a medias.
-- [ ] Sin `REGLA_CONSULTAR`, `REGLA_CREAR` o `REGLA_EDITAR`, sus endpoints responden 403 y la pantalla oculta la opción o las acciones. El Revisor no tiene esos permisos.
-- [ ] Ningún componente propio tiene colores escritos a mano ni llama a `fetch` directamente.
-- [ ] HU-24 tiene su avance y sus criterios marcados, HU-25 tiene su nota, y `CONTEXTO BD.md` y `CLAUDE.md` están actualizados.
+- [x] `backend/openapi.yaml` documenta las seis operaciones de `/reglas-validacion` con su `x-permiso`, y `/api/docs` carga sin errores.
+- [x] `npm test` pasa en `backend/` y en `frontend/` sin desactivar ni quitar ninguna prueba, y las pruebas no dejan reglas `ZVT_HU24…` o `vitest-hu24-…` ni las vacunas de prueba.
+- [x] `frontend/package.json` y `backend/package.json` no cambian, y nada en `backend/db/` cambia salvo `05_permisos_mysql.sql`.
+- [x] Desde la pantalla, el Administrador crea una regla de tipo `RANGO`, `SECUENCIA_DOSIS`, `VARIACION_HISTORICA` o `TOTAL_CUADRA`, de error o de advertencia, para todas las vacunas o para algunas.
+- [x] Una regla nueva queda con el código `{TIPO}_{NN}`, versión 1, `VIGENTE` y el territorio de la DDRISS del usuario.
+- [x] Publicar una versión crea un documento nuevo con la versión siguiente; el `VIGENTE` anterior de la DDRISS pasa a `HISTORICO` sin cambiar su contenido, y el nacional no cambia.
+- [x] Desactivar deja la regla sin versión de la DDRISS que aplique, y vuelve a aplicar la nacional del mismo código si existe. Activar publica una copia de la última versión de la DDRISS.
+- [x] Una regla nacional no se puede desactivar (409), y las de otras DDRISS no se ven (404).
+- [x] El backend rechaza parámetros fuera del tipo o de su rango, marcadores desconocidos (400) y vacunas inactivas (422).
+- [x] El historial muestra todas las versiones nacionales y de la DDRISS del código, con quién y cuándo las publicó, su motivo y, si se desactivó, el motivo de la desactivación.
+- [x] Cada escritura deja sus filas en la bitácora (`CREAR`, `ACTUALIZAR`, `DESACTIVAR`, `REACTIVAR`) con el módulo `CONFIGURACION` y el ObjectId como `entidad_id`, y un fallo de MongoDB no deja filas ni documentos a medias.
+- [x] Sin `REGLA_CONSULTAR`, `REGLA_CREAR` o `REGLA_EDITAR`, sus endpoints responden 403 y la pantalla oculta la opción o las acciones. El Revisor no tiene esos permisos.
+- [x] Ningún componente propio tiene colores escritos a mano ni llama a `fetch` directamente.
+- [x] HU-24 tiene su avance y sus criterios marcados, HU-25 tiene su nota, y `CONTEXTO BD.md` y `CLAUDE.md` están actualizados.
 
 ## Decisiones
 
@@ -471,6 +474,18 @@ CLAUDE.md                                         ← nota de reglas
 - **Sí:** `versionBase` en las versiones y `version` en activar y desactivar, con 409 `REGLA_DESACTUALIZADA`, como `copiaDe` en los esquemas. Decidido al escribir el spec.
 - **Sí:** una versión igual a la que aplica responde 422 `REGLA_SIN_CAMBIOS`, porque una versión vacía ensucia el historial. Decidido al escribir el spec.
 - **Sí:** las pruebas insertan sus propias reglas `ZVT_HU24*`, su DDRISS ficticia `ZVT_OTRA24` y sus vacunas, y nombran `vitest-hu24-…` las que crean con código generado, para borrarlas. Así no publican versiones de las reglas de la semilla.
+
+Decididas al implementar:
+
+- **Sí:** los mensajes 400 que el spec no fijaba: "Solo se crean reglas de tipo RANGO, SECUENCIA_DOSIS, VARIACION_HISTORICA o TOTAL_CUADRA.", "La severidad debe ser ERROR o ADVERTENCIA." y "Indique * para todas las vacunas, o una lista de códigos sin repetir y sin *." (paso 6).
+- **Sí:** dos altas simultáneas del mismo tipo responden 409 `REGLA_DESACTUALIZADA` con "Se creó otra regla del mismo tipo al mismo tiempo; intente de nuevo." (paso 6).
+- **Sí:** "ocho reglas publicadas de la semilla" son en realidad siete publicadas más un borrador (`RANGO_DOSIS_MES`). La prueba de `tiposRegla.test.js` revisa todas las de Atlas, salvo las de prueba `ZVT_`/`vitest-` (paso 4).
+- **Sí:** `codigoDdriss` de `esquemas.service.js` se exporta para que `reglas.service.js` lo reutilice (paso 5).
+- **Sí:** el diálogo de activar dice "Se publicará una versión nueva con el mismo contenido de la versión {n}.", sin el número de la nueva: la mayor versión del código puede ser de otra DDRISS, y solo el backend la conoce (paso 9).
+- **Sí:** el aviso de reemplazo dice "…solo en su DDRISS." en lugar del `ddrissCodigo`: si la DDRISS no tiene versiones del código, la pantalla no conoce su código, porque la sesión solo trae su id (paso 10).
+- **Sí:** la insignia de severidad y los textos del territorio y las vacunas van en `presentacionRegla.jsx`, que usan la lista y el historial; así `PanelHistorialRegla.jsx` no importa `PaginaReglas.jsx`, que lo importa a él (paso 10).
+- **Sí:** las pruebas del historial están en `PaginaReglas.test.jsx`, donde se abre, y esa prueba monta la página con `createMemoryRouter`, porque `PanelRegla` usa `useAvisoCambiosSinGuardar` (paso 10).
+- **Sí:** en las filas `CREAR` y `REACTIVAR` de la bitácora, `publicadoPor` es el id del usuario (`aReglaBitacora`), no `{ id, nombreUsuario }` como en la API. La verificación manual encontró que salía `null`, porque la fila se armaba sin buscar los nombres (paso 11). **No:** quitar el campo, que ya está en `bitacora.usuario_id`.
 
 ## Riesgos
 

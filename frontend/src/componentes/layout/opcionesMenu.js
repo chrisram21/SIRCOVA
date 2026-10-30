@@ -12,6 +12,7 @@ import {
   House,
   LandPlot,
   Layers,
+  ListChecks,
   MapIcon,
   ScrollText,
   Settings,
@@ -40,6 +41,7 @@ const PaginaRegistrarEsquema = lazy(() => import('@/paginas/configuracion/Pagina
 const PaginaEditarEsquema = lazy(() => import('@/paginas/configuracion/PaginaEditarEsquema.jsx'))
 const PaginaHistorialEsquemas = lazy(() => import('@/paginas/configuracion/PaginaHistorialEsquemas.jsx'))
 const PaginaVerEsquema = lazy(() => import('@/paginas/configuracion/PaginaVerEsquema.jsx'))
+const PaginaReglas = lazy(() => import('@/paginas/configuracion/PaginaReglas.jsx'))
 const PaginaEditarUsuario = lazy(() => import('@/paginas/usuarios/PaginaEditarUsuario.jsx'))
 const PaginaRegistrarPersonal = lazy(() => import('@/paginas/usuarios/PaginaRegistrarPersonal.jsx'))
 const PaginaUsuarios = lazy(() => import('@/paginas/usuarios/PaginaUsuarios.jsx'))
@@ -249,6 +251,15 @@ const opcionesMenu = [
             pagina: PaginaVerEsquema,
           },
         ],
+      },
+      {
+        titulo: 'Reglas de validación',
+        descripcion: 'Los controles de calidad que se revisan antes de enviar un reporte.',
+        ruta: '/administracion/reglas',
+        // El editor elige las vacunas a las que aplica cada regla.
+        permisos: ['CONFIGURACION_CONSULTAR', 'REGLA_CONSULTAR', 'VACUNA_CONSULTAR'],
+        icono: ListChecks,
+        pagina: PaginaReglas,
       },
       {
         titulo: 'Periodos',

@@ -117,6 +117,18 @@ router.post(
   requierePermiso('REGLA_EDITAR'),
   configuracionController.publicarVersionRegla,
 );
+router.post(
+  '/reglas-validacion/:codigo/desactivar',
+  autenticar,
+  requierePermiso('REGLA_EDITAR'),
+  configuracionController.desactivarRegla,
+);
+router.post(
+  '/reglas-validacion/:codigo/activar',
+  autenticar,
+  requierePermiso('REGLA_EDITAR'),
+  configuracionController.activarRegla,
+);
 router.get(
   '/reglas-validacion/:codigo/historial',
   autenticar,

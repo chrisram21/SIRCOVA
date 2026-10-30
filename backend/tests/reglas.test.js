@@ -343,7 +343,7 @@ describe('POST /reglas-validacion', () => {
     expect(filas[0]).toMatchObject({
       accion: 'CREAR',
       anteriores: null,
-      nuevos: { codigo, version: 1, estado: 'VIGENTE' },
+      nuevos: { codigo, version: 1, estado: 'VIGENTE', publicadoPor: doc.auditoria.publicado_por.value },
     });
 
     const lista = await consultar('/reglas-validacion');
@@ -587,5 +587,170 @@ describe('POST /reglas-validacion/{codigo}/versiones', () => {
   it('el Revisor recibe 403', async () => {
     const res = await publicar('ZVT_HU24_PROPIA', version(), tokenRevisor);
     expect(res.status).toBe(403);
+  });
+});
+
+describe('desactivar y activar', () => {
+  beforeEach(prepararReglas);
+
+  const MOTIVO = 'vitest-hu24 cambio de estado';
+  const desactivar = (codigo, cuerpo, credencial) =>
+    enviar(`/reglas-validacion/${codigo}/desactivar`, cuerpo, credencial);
+  const activar = (codigo, cuerpo, credencial) => enviar(`/reglas-validacion/${codigo}/activar`, cuerpo, credencial);
+
+  it('desactivar deja la regla propia sin versión que aplique y guarda el motivo en la bitácora', async () => {
+    const res = await desactivar('ZVT_HU24_PROPIA', { version: 2, motivoCambio: MOTIVO });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      codigo: 'ZVT_HU24_PROPIA',
+      aplica: null,
+      ultimaDdriss: { id: ids.propiaV2.toString(), version: 2, estado: 'HISTORICO' },
+      vigenteNacional: null,
+    });
+    const hasta = res.body.ultimaDdriss.vigencia.hasta;
+    expect(hasta).not.toBeNull();
+
+    const doc = await documentoCrudo(ids.propiaV2.toString());
+    expect(doc.estado).toBe('HISTORICO');
+    expect(doc.auditoria.motivo_cambio).toBe('vitest-hu24 v2');
+    expect(await filasBitacora(ids.propiaV2.toString())).toEqual([
+      {
+        accion: 'DESACTIVAR',
+        anteriores: { estado: 'VIGENTE', vigencia: { hasta: null } },
+        nuevos: { estado: 'HISTORICO', vigencia: { hasta }, motivoCambio: MOTIVO },
+      },
+    ]);
+
+    const historial = await consultar('/reglas-validacion/ZVT_HU24_PROPIA/historial');
+    expect(historial.body[0].desactivacion).toEqual({
+      en: expect.any(String),
+      por: { id: expect.any(Number), nombreUsuario: process.env.PRUEBA_USUARIO },
+      motivo: MOTIVO,
+    });
+    expect(Math.abs(new Date(historial.body[0].desactivacion.en) - new Date(hasta))).toBeLessThan(60_000);
+    expect(historial.body[1].desactivacion).toBeNull();
+  });
+
+  it('desactivar la versión de la DDRISS de una regla nacional vuelve a aplicar la nacional', async () => {
+    const publicada = await enviar('/reglas-validacion/ZVT_HU24_NAC/versiones', {
+      versionBase: 1,
+      nombre: 'vitest-hu24-nac-ddriss',
+      severidad: 'ERROR',
+      vacunas: ['*'],
+      parametros: { minimo: 0, maximo: 50 },
+      mensaje: '{vacuna} {dosis}: {valor} dosis está fuera del rango esperado ({minimo} a {maximo}).',
+      motivoCambio: MOTIVO,
+    });
+    expect(publicada.status).toBe(201);
+
+    const res = await desactivar('ZVT_HU24_NAC', { version: publicada.body.version, motivoCambio: MOTIVO });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      aplica: { id: ids.nacional.toString(), version: 1, territorio: { nivel: 'NACIONAL' } },
+      ultimaDdriss: { id: publicada.body.id, estado: 'HISTORICO' },
+      vigenteNacional: { version: 1 },
+    });
+  });
+
+  it('una regla nacional sin versión de la DDRISS no se desactiva', async () => {
+    const res = await desactivar('ZVT_HU24_NAC', { version: 1, motivoCambio: MOTIVO });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toEqual({
+      codigo: 'REGLA_SIN_VERSION_PROPIA',
+      mensaje: 'Su DDRISS no tiene una versión activa de esta regla; las reglas nacionales no se desactivan.',
+    });
+    expect((await documentoCrudo(ids.nacional.toString())).estado).toBe('VIGENTE');
+  });
+
+  it('desactivar con una versión que ya no es la vigente responde 409 REGLA_DESACTUALIZADA', async () => {
+    const res = await desactivar('ZVT_HU24_PROPIA', { version: 1, motivoCambio: MOTIVO });
+    expect(res.status).toBe(409);
+    expect(res.body.error.codigo).toBe('REGLA_DESACTUALIZADA');
+    expect((await documentoCrudo(ids.propiaV2.toString())).estado).toBe('VIGENTE');
+  });
+
+  it('si MongoDB falla al desactivar, la versión sigue VIGENTE y no queda la fila', async () => {
+    const actualizar = vi.spyOn(Collection.prototype, 'updateOne').mockRejectedValueOnce(new Error('Falla simulada'));
+    const registro = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await desactivar('ZVT_HU24_PROPIA', { version: 2, motivoCambio: MOTIVO });
+      expect(res.status).toBe(500);
+    } finally {
+      actualizar.mockRestore();
+      registro.mockRestore();
+    }
+    expect((await documentoCrudo(ids.propiaV2.toString())).estado).toBe('VIGENTE');
+    expect(await filasBitacora(ids.propiaV2.toString())).toEqual([]);
+  });
+
+  it('activar publica la versión siguiente con el contenido de la última y deja REACTIVAR', async () => {
+    expect((await desactivar('ZVT_HU24_PROPIA', { version: 2, motivoCambio: MOTIVO })).status).toBe(200);
+    const anterior = (await consultar('/reglas-validacion/ZVT_HU24_PROPIA/historial')).body[0];
+
+    const res = await activar('ZVT_HU24_PROPIA', { version: 2, motivoCambio: 'vitest-hu24 reactivación' });
+    expect(res.status).toBe(201);
+    const campos = [
+      'nombre', 'descripcion', 'tipo', 'ambito', 'severidad', 'vacunas', 'parametros', 'mensaje', 'territorio',
+    ];
+    for (const campo of campos) expect(res.body[campo], campo).toEqual(anterior[campo]);
+    expect(res.body).toMatchObject({ version: 3, estado: 'VIGENTE', motivoCambio: 'vitest-hu24 reactivación' });
+    expect((await filasBitacora(res.body.id)).map((f) => f.accion)).toEqual(['REACTIVAR']);
+    expect((await documentoCrudo(ids.propiaV2.toString())).estado).toBe('HISTORICO');
+
+    const otraVez = await activar('ZVT_HU24_PROPIA', { version: 3, motivoCambio: MOTIVO });
+    expect(otraVez.status).toBe(409);
+    expect(otraVez.body.error).toEqual({
+      codigo: 'REGLA_SIN_VERSION_PROPIA',
+      mensaje: 'Solo se activa una regla de su DDRISS que esté desactivada.',
+    });
+  });
+
+  it('activar con una versión que no es la última de la DDRISS responde 409 REGLA_DESACTUALIZADA', async () => {
+    await desactivar('ZVT_HU24_PROPIA', { version: 2, motivoCambio: MOTIVO });
+    const res = await activar('ZVT_HU24_PROPIA', { version: 1, motivoCambio: MOTIVO });
+    expect(res.status).toBe(409);
+    expect(res.body.error.codigo).toBe('REGLA_DESACTUALIZADA');
+  });
+
+  it('una regla sin versiones de la DDRISS no se activa', async () => {
+    const res = await activar('ZVT_HU24_NAC', { version: 1, motivoCambio: MOTIVO });
+    expect(res.status).toBe(409);
+    expect(res.body.error.codigo).toBe('REGLA_SIN_VERSION_PROPIA');
+  });
+
+  it('activar una copia con una vacuna que se desactivó después responde 422', async () => {
+    await desactivar('ZVT_HU24_PROPIA', { version: 2, motivoCambio: MOTIVO });
+    await pool.query('UPDATE vacuna SET activa = FALSE WHERE codigo = ?', [VACUNA]);
+    try {
+      const res = await activar('ZVT_HU24_PROPIA', { version: 2, motivoCambio: MOTIVO });
+      expect(res.status).toBe(422);
+      expect(res.body.error).toEqual({
+        codigo: 'REGLA_INVALIDA',
+        mensaje: `La vacuna ${VACUNA} no existe o está inactiva.`,
+      });
+    } finally {
+      await pool.query('UPDATE vacuna SET activa = TRUE WHERE codigo = ?', [VACUNA]);
+    }
+    expect(await (await reglas()).countDocuments({ codigo: 'ZVT_HU24_PROPIA' })).toBe(2);
+  });
+
+  it.each([
+    ['un campo no permitido', { version: 2, motivoCambio: MOTIVO, severidad: 'ERROR' },
+      'Campo no permitido: severidad.'],
+    ['sin version', { motivoCambio: MOTIVO }, 'version debe ser un número entero positivo.'],
+    ['sin motivo', { version: 2, motivoCambio: '' }, 'El motivo del cambio debe tener entre 1 y 300 caracteres.'],
+  ])('%s responde 400', async (_caso, cuerpo, mensaje) => {
+    for (const enviarCambio of [desactivar, activar]) {
+      const res = await enviarCambio('ZVT_HU24_PROPIA', cuerpo);
+      expect(res.status).toBe(400);
+      expect(res.body.error).toEqual({ codigo: 'ENTRADA_INVALIDA', mensaje });
+    }
+  });
+
+  it('una regla de otra DDRISS responde 404 y el Revisor recibe 403', async () => {
+    expect((await desactivar('ZVT_HU24_OTRA', { version: 1, motivoCambio: MOTIVO })).status).toBe(404);
+    expect((await activar('ZVT_HU24_OTRA', { version: 1, motivoCambio: MOTIVO })).status).toBe(404);
+    expect((await desactivar('ZVT_HU24_PROPIA', { version: 2, motivoCambio: MOTIVO }, tokenRevisor)).status).toBe(403);
+    expect((await activar('ZVT_HU24_PROPIA', { version: 2, motivoCambio: MOTIVO }, tokenRevisor)).status).toBe(403);
   });
 });

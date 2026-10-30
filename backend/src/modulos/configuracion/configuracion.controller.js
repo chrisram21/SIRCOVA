@@ -90,6 +90,15 @@ export async function publicarVersionRegla(req, res) {
   res.status(201).json(await reglasService.publicarVersionRegla(codigo, req.body, contextoAuditoria(req), req.usuario));
 }
 
+export async function desactivarRegla(req, res) {
+  res.json(await reglasService.desactivarRegla(req.params.codigo, req.body, contextoAuditoria(req), req.usuario));
+}
+
+export async function activarRegla(req, res) {
+  const { codigo } = req.params;
+  res.status(201).json(await reglasService.activarRegla(codigo, req.body, contextoAuditoria(req), req.usuario));
+}
+
 export async function historialRegla(req, res) {
   res.json(await reglasService.historialRegla(req.params.codigo, req.query, req.usuario));
 }

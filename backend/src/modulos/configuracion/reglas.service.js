@@ -43,6 +43,14 @@ const errores = {
   desactualizada: (codigo) =>
     new ErrorApi(409, 'REGLA_DESACTUALIZADA', `La regla ${codigo} cambió mientras la editaba; vuelva a abrirla.`),
   sinCambios: () => new ErrorApi(422, 'REGLA_SIN_CAMBIOS', 'La versión no cambia nada de la que aplica.'),
+  nadaQueDesactivar: () =>
+    new ErrorApi(
+      409,
+      'REGLA_SIN_VERSION_PROPIA',
+      'Su DDRISS no tiene una versión activa de esta regla; las reglas nacionales no se desactivan.',
+    ),
+  nadaQueActivar: () =>
+    new ErrorApi(409, 'REGLA_SIN_VERSION_PROPIA', 'Solo se activa una regla de su DDRISS que esté desactivada.'),
 };
 
 const coleccion = async () => (await obtenerDb()).collection(ENTIDAD);
@@ -93,6 +101,9 @@ export function aRegla(doc, usuarios = new Map()) {
     motivoCambio: auditoria.motivo_cambio ?? null,
   };
 }
+
+// En la bitácora, publicadoPor es el id: el nombre puede cambiar y la fila no.
+const aReglaBitacora = (doc) => ({ ...aRegla(doc), publicadoPor: aNumero(doc.auditoria.publicado_por) });
 
 const masReciente = (documentos) => documentos.reduce((a, b) => (b.version > a.version ? b : a), documentos[0]) ?? null;
 
@@ -284,7 +295,7 @@ export async function crearRegla(cuerpo, contexto, usuario) {
     await escribirConBitacora(
       ENTIDAD,
       contexto,
-      { accion: ACCIONES.CREAR, entidadId: doc._id.toString(), valoresNuevos: aRegla(doc) },
+      { accion: ACCIONES.CREAR, entidadId: doc._id.toString(), valoresNuevos: aReglaBitacora(doc) },
       (coleccionReglas) => coleccionReglas.insertOne(doc),
     );
   } catch (err) {
@@ -333,7 +344,7 @@ function mismoContenido(contenido, doc) {
 // transacción de MongoDB. Si otra escritura ganó la carrera, responde 409 y no cambia nada.
 async function publicarVersion({ doc, anterior, accion, contexto }) {
   const hasta = doc.vigencia.desde;
-  const filas = [{ accion, entidadId: doc._id.toString(), valoresNuevos: aRegla(doc) }];
+  const filas = [{ accion, entidadId: doc._id.toString(), valoresNuevos: aReglaBitacora(doc) }];
   if (anterior) {
     filas.push({
       accion: ACCIONES.ACTUALIZAR,
@@ -384,4 +395,78 @@ export async function publicarVersionRegla(codigo, cuerpo, contexto, usuario) {
   });
   const anterior = resumen.aplica && !esNacional(resumen.aplica) ? resumen.aplica : null;
   return publicarVersion({ doc, anterior, accion: ACCIONES.CREAR, contexto });
+}
+
+function leerCambioDeEstado(cuerpo) {
+  revisarCampos(cuerpo, ['version', 'motivoCambio']);
+  const version = leerVersion(cuerpo.version, 'version');
+  return { version, motivoCambio: valorO400(validarMotivoCambio(cuerpo.motivoCambio)) };
+}
+
+async function filaDelCodigo(codigo, ddriss) {
+  const documentos = await versionesVisibles({ codigo }, ddriss);
+  const usuarios = await nombresDeUsuario(documentos.map((d) => d.auditoria.publicado_por));
+  const { nombre, ...fila } = aFila(codigo, documentos, usuarios);
+  return fila;
+}
+
+// El VIGENTE de la DDRISS pasa a HISTORICO sin reemplazo; si hay un VIGENTE nacional del código, vuelve a aplicar
+// ese. El motivo queda solo en la bitácora: la versión no cambia más que su estado y vigencia.hasta.
+export async function desactivarRegla(codigo, cuerpo, contexto, usuario) {
+  const { ddriss, resumen } = await buscarCodigo(codigo, usuario);
+  const { version, motivoCambio } = leerCambioDeEstado(cuerpo);
+  const vigente = resumen.aplica && !esNacional(resumen.aplica) ? resumen.aplica : null;
+  if (!vigente) throw errores.nadaQueDesactivar();
+  if (version !== vigente.version) throw errores.desactualizada(codigo);
+
+  const hasta = new Date();
+  await escribirConBitacora(
+    ENTIDAD,
+    contexto,
+    {
+      accion: ACCIONES.DESACTIVAR,
+      entidadId: vigente._id.toString(),
+      valoresAnteriores: { estado: 'VIGENTE', vigencia: { hasta: null } },
+      valoresNuevos: { estado: 'HISTORICO', vigencia: { hasta: hasta.toISOString() }, motivoCambio },
+    },
+    async (coleccionReglas) => {
+      const { matchedCount } = await coleccionReglas.updateOne(
+        { _id: vigente._id, estado: 'VIGENTE' },
+        { $set: { estado: 'HISTORICO', 'vigencia.hasta': hasta } },
+      );
+      if (matchedCount === 0) throw errores.desactualizada(codigo);
+    },
+  );
+  return filaDelCodigo(codigo, ddriss);
+}
+
+// Una versión nueva de la DDRISS con el contenido de su última versión, que está en HISTORICO.
+export async function activarRegla(codigo, cuerpo, contexto, usuario) {
+  const { ddriss, resumen } = await buscarCodigo(codigo, usuario);
+  const { version, motivoCambio } = leerCambioDeEstado(cuerpo);
+  const ultima = resumen.ultimaDdriss;
+  if (!ultima || ultima.estado === 'VIGENTE') throw errores.nadaQueActivar();
+  if (version !== ultima.version) throw errores.desactualizada(codigo);
+
+  const contenido = {
+    nombre: ultima.nombre,
+    descripcion: ultima.descripcion ?? null,
+    severidad: ultima.severidad,
+    vacunas: [...(ultima.aplica_a?.vacunas ?? [TODAS])],
+    parametros: { ...(ultima.parametros ?? {}) },
+    mensaje: ultima.mensaje,
+    motivoCambio,
+  };
+  await revisarVacunas(contenido.vacunas);
+  const doc = nuevaVersion({
+    codigo,
+    version: (await mayorVersion(codigo)) + 1,
+    tipo: ultima.tipo,
+    ambito: ultima.ambito,
+    contenido,
+    ddriss,
+    usuarioId: contexto.usuarioId,
+  });
+  // Sin anterior: la DDRISS no tiene VIGENTE. Si otra activación ganó la carrera, uq_regla_vigente_territorio da 409.
+  return publicarVersion({ doc, anterior: null, accion: ACCIONES.REACTIVAR, contexto });
 }
