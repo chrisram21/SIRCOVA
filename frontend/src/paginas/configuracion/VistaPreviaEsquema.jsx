@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Info, TriangleAlert } from 'lucide-react'
+import { ArrowLeft, Info, TriangleAlert } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { armarFormulario } from '@/componentes/formulario/armarFormulario.js'
 import FormularioCaptura, { CamposAdicionales } from '@/componentes/formulario/FormularioCaptura.jsx'
+import { AvisoError } from '@/componentes/Avisos.jsx'
 import { aDiaMesAnio } from './DialogoPublicarEsquema.jsx'
 import { ESTADOS } from './PaginaHistorialEsquemas.jsx'
 
@@ -19,8 +20,18 @@ const SEVERIDAD = { ERROR: 'Error', ADVERTENCIA: 'Advertencia' }
 // Muestra el formulario del esquema como lo verá el establecimiento. No llama a la API: las cantidades y los campos
 // adicionales viven en el estado del formulario y se pierden al cerrar, porque el Sheet desmonta su contenido.
 // contenido: la forma de contenidoDe (la del editor, con cambios sin guardar, o la guardada). problemas: los de
-// problemasDeCoherencia, solo desde el editor.
-export default function VistaPreviaEsquema({ abierta, alCambiarAbierta, esquema, contenido, vacuna, dimensiones, problemas = [] }) {
+// problemasDeCoherencia. publicacion (SPEC 30), solo en el paso 2 de publicar: { vigencia (texto), motivo, publicando,
+// errorApi, alVolver, alConfirmar }; cerrar el panel equivale a cancelar.
+export default function VistaPreviaEsquema({
+  abierta,
+  alCambiarAbierta,
+  esquema,
+  contenido,
+  vacuna,
+  dimensiones,
+  problemas = [],
+  publicacion,
+}) {
   const formulario = useMemo(
     () =>
       armarFormulario({
@@ -36,9 +47,10 @@ export default function VistaPreviaEsquema({ abierta, alCambiarAbierta, esquema,
   const estado = ESTADOS[esquema.estado]
   const generado = `Formulario generado por el esquema de captura: ${vacuna.nombre}, versión ${esquema.version}`
   const { procedencia } = formulario
+  const publicando = publicacion?.publicando ?? false
 
   return (
-    <Sheet open={abierta} onOpenChange={alCambiarAbierta}>
+    <Sheet open={abierta} onOpenChange={(abrir) => !publicando && alCambiarAbierta(abrir)}>
       <SheetContent side="right" className="w-full overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-6xl">
         <SheetHeader>
           <div className="flex flex-wrap items-center gap-2 pr-8">
@@ -48,6 +60,11 @@ export default function VistaPreviaEsquema({ abierta, alCambiarAbierta, esquema,
             {estado && <Badge variant={estado.variante}>{estado.etiqueta}</Badge>}
           </div>
           <SheetDescription>Así verá el formulario el establecimiento.</SheetDescription>
+          {publicacion && (
+            <p className="text-sm text-muted-foreground">
+              Vigente desde {publicacion.vigencia}. Motivo: {publicacion.motivo}.
+            </p>
+          )}
         </SheetHeader>
 
         <div className="flex flex-col gap-4 px-4">
@@ -130,13 +147,42 @@ export default function VistaPreviaEsquema({ abierta, alCambiarAbierta, esquema,
           </Card>
         </div>
 
-        <SheetFooter>
-          <SheetClose asChild>
-            <Button type="button" variant="outline">
-              Cerrar
-            </Button>
-          </SheetClose>
-        </SheetFooter>
+        {publicacion ? (
+          <SheetFooter className="border-t">
+            {publicacion.errorApi && <AvisoError>{publicacion.errorApi}</AvisoError>}
+            {problemas.length > 0 && (
+              <p className="text-sm text-advertencia-foreground">Corrija los problemas del borrador antes de publicarlo.</p>
+            )}
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+              <Button type="button" variant="ghost" onClick={publicacion.alVolver} disabled={publicando}>
+                <ArrowLeft />
+                Volver a los datos
+              </Button>
+              <div className="flex flex-col-reverse gap-2 sm:ml-auto sm:flex-row">
+                <SheetClose asChild>
+                  <Button type="button" variant="outline" disabled={publicando}>
+                    Cancelar
+                  </Button>
+                </SheetClose>
+                <Button
+                  type="button"
+                  onClick={publicacion.alConfirmar}
+                  disabled={publicando || problemas.length > 0}
+                >
+                  {publicando ? 'Publicando…' : 'Confirmar publicación'}
+                </Button>
+              </div>
+            </div>
+          </SheetFooter>
+        ) : (
+          <SheetFooter>
+            <SheetClose asChild>
+              <Button type="button" variant="outline">
+                Cerrar
+              </Button>
+            </SheetClose>
+          </SheetFooter>
+        )}
       </SheetContent>
     </Sheet>
   )

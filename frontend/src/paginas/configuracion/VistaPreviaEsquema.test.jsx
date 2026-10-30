@@ -43,16 +43,17 @@ const VIGENTE = {
 }
 const BORRADOR = { ...VIGENTE, id: 'b-vph', version: 2, estado: 'BORRADOR', vigencia: null }
 
-const montar = ({ esquema = VIGENTE, c = contenido(), problemas } = {}) =>
+const montar = ({ esquema = VIGENTE, c = contenido(), problemas, publicacion, alCambiarAbierta = () => {} } = {}) =>
   render(
     <VistaPreviaEsquema
       abierta
-      alCambiarAbierta={() => {}}
+      alCambiarAbierta={alCambiarAbierta}
       esquema={esquema}
       contenido={c}
       vacuna={VACUNA}
       dimensiones={DIMENSIONES}
       problemas={problemas}
+      publicacion={publicacion}
     />,
   )
 const hoja = () => screen.getByRole('dialog')
@@ -164,4 +165,58 @@ it('no llama a la API al abrirla, escribir cantidades ni cerrarla, y al reabrirl
     for (const funcion of Object.values(api)) if (vi.isMockFunction(funcion)) expect(funcion).not.toHaveBeenCalled()
   }
   fetch.mockRestore()
+})
+
+const publicacion = (cambios = {}) => ({
+  vigencia: 'Noviembre 2026',
+  motivo: 'Ajuste del esquema nacional',
+  publicando: false,
+  errorApi: null,
+  alVolver: vi.fn(),
+  alConfirmar: vi.fn(),
+  ...cambios,
+})
+const boton = (nombre) => within(hoja()).getByRole('button', { name: nombre })
+
+it('sin publicacion solo tiene «Cerrar»', () => {
+  montar({ esquema: BORRADOR })
+  boton('Cerrar')
+  expect(within(hoja()).queryByRole('button', { name: 'Confirmar publicación' })).toBeNull()
+  expect(within(hoja()).queryByText(/Vigente desde/)).toBeNull()
+})
+
+it('con publicacion muestra lo elegido y sus tres botones', () => {
+  const datos = publicacion()
+  const alCambiarAbierta = vi.fn()
+  montar({ esquema: BORRADOR, publicacion: datos, alCambiarAbierta })
+  within(hoja()).getByText('Vigente desde Noviembre 2026. Motivo: Ajuste del esquema nacional.')
+  expect(within(hoja()).queryByRole('button', { name: 'Cerrar' })).toBeNull()
+
+  fireEvent.click(boton('Volver a los datos'))
+  expect(datos.alVolver).toHaveBeenCalledTimes(1)
+  fireEvent.click(boton('Confirmar publicación'))
+  expect(datos.alConfirmar).toHaveBeenCalledTimes(1)
+  fireEvent.click(boton('Cancelar'))
+  expect(alCambiarAbierta).toHaveBeenCalledWith(false)
+})
+
+it('con problemas, «Confirmar publicación» está deshabilitado y dice por qué', () => {
+  const datos = publicacion()
+  montar({ esquema: BORRADOR, problemas: ['Indique al menos una sección.'], publicacion: datos })
+  expect(boton('Confirmar publicación').disabled).toBe(true)
+  within(hoja()).getByText('Corrija los problemas del borrador antes de publicarlo.')
+})
+
+it('muestra el error de la API encima de los botones', () => {
+  montar({ esquema: BORRADOR, publicacion: publicacion({ errorApi: 'El mes ya no es válido.' }) })
+  within(hoja()).getByText('El mes ya no es válido.')
+  expect(boton('Confirmar publicación').disabled).toBe(false)
+})
+
+it('mientras publica, los botones están deshabilitados y Esc no cierra', () => {
+  const alCambiarAbierta = vi.fn()
+  montar({ esquema: BORRADOR, publicacion: publicacion({ publicando: true }), alCambiarAbierta })
+  for (const nombre of ['Volver a los datos', 'Cancelar', 'Publicando…']) expect(boton(nombre).disabled).toBe(true)
+  fireEvent.keyDown(hoja(), { key: 'Escape' })
+  expect(alCambiarAbierta).not.toHaveBeenCalled()
 })
