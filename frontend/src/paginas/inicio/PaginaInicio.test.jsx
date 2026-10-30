@@ -120,6 +120,28 @@ test('con INDICADOR_CONSULTAR aparece un acceso a Indicadores que lleva a /indic
   expect(screen.getByText('Esta pantalla está en construcción.')).toBeTruthy()
 })
 
+const titulosDeAccesos = () =>
+  within(screen.getByRole('region', { name: 'Accesos rápidos' }))
+    .getAllByRole('link')
+    .map((enlace) => within(enlace).getByRole('heading', { level: 3 }).textContent)
+
+test('los hijos de «Administración» van como accesos propios, en su lugar, y no hay un acceso al padre', () => {
+  abrirInicio({ permisos: ['BITACORA_CONSULTAR', 'USUARIO_CONSULTAR', 'CONFIGURACION_CONSULTAR', 'VACUNA_CONSULTAR'] })
+
+  expect(titulosDeAccesos()).toEqual(['Auditoría', 'Usuarios', 'Vacunas'])
+  const vacunas = screen.getByRole('link', { name: /^Vacunas/ })
+  expect(vacunas.getAttribute('href')).toBe('/administracion/vacunas')
+  expect(vacunas.textContent).toContain('Las vacunas y sus dosis.')
+  expect(screen.queryByRole('heading', { level: 3, name: 'Administración' })).toBeNull()
+})
+
+test('un hijo sin todos sus permisos no lleva acceso', () => {
+  // Personal del establecimiento: lee vacunas para capturar, sin CONFIGURACION_CONSULTAR.
+  abrirInicio({ rol: 'ESTABLECIMIENTO', permisos: ['REPORTE_CONSULTAR', 'VACUNA_CONSULTAR'] })
+
+  expect(titulosDeAccesos()).toEqual(['Registro de producción', 'Mis reportes'])
+})
+
 test.each([
   [8, 'Buenos días'],
   [15, 'Buenas tardes'],
