@@ -5,6 +5,7 @@ import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import RutaConPermiso from '@/componentes/RutaConPermiso.jsx'
 import RutaProtegida, { RUTA_CAMBIO_CONTRASENA, RUTA_PERFIL } from '@/componentes/RutaProtegida.jsx'
 import Layout from '@/componentes/layout/Layout.jsx'
+import RedireccionRutaVieja, { RUTAS_VIEJAS } from '@/componentes/layout/RedireccionRutaVieja.jsx'
 import { rutasDelMenu } from '@/componentes/layout/opcionesMenu.js'
 import { tituloDeRuta } from '@/componentes/layout/ubicarRuta.js'
 import PaginaCambiarContrasena from '@/paginas/cuenta/PaginaCambiarContrasena.jsx'
@@ -62,6 +63,9 @@ export default function App() {
         <Route path={RUTA_PERFIL} element={<PaginaMiPerfil />} />
         {rutasDelMenu().map((ruta) => (
           <Route key={ruta.ruta} path={ruta.ruta} element={elementoDe(ruta)} />
+        ))}
+        {RUTAS_VIEJAS.map((ruta) => (
+          <Route key={ruta} path={ruta} element={<RedireccionRutaVieja />} />
         ))}
       </Route>
       <Route path="*" element={<Navigate to="/inicio" replace />} />
