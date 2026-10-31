@@ -3496,8 +3496,24 @@ paths:
       tags: [Revisión]
       summary: Cambiar el estado del reporte (enviar, asignar, pedir corrección, aprobar, cerrar)
       description: |
-        Única vía para cambiar el estado. La transición se valida contra la tabla transicion_estado
-        según el rol del usuario. Pasar a ENVIADO ejecuta antes las reglas y se rechaza si quedan errores.
+        Única vía para cambiar el estado. El permiso depende del destino; por ahora solo está habilitado
+        `ENVIADO` (`REPORTE_ENVIAR`, solo el Personal del establecimiento), y cualquier otro destino responde
+        422 `TRANSICION_NO_DISPONIBLE`. Además del permiso, la transición (estado actual → destino) debe existir
+        en `transicion_estado` para el rol del usuario.
+
+        Todo va en una transacción de MySQL con el reporte bloqueado. Cada transición sube `versionFila`, deja
+        una fila en `historial_estado_reporte` (con el `comentario`, si viene) y una `CAMBIO_ESTADO` en la
+        bitácora (módulo `REVISION`, entidad `reporte_produccion`).
+
+        **ENVIADO:** solo con el mes de la DDRISS `ABIERTO` o `EN_CIERRE`, sin bloqueo por la fecha límite.
+        Antes de cambiar el estado ejecuta las reglas sobre lo guardado, como `POST /reportes/{id}/validar`
+        (con su fila `VALIDAR` si cambió algún resultado). Si quedan errores `ABIERTO`, los resultados quedan
+        escritos, el reporte sigue en `BORRADOR` y responde 422 `REPORTE_CON_ERRORES` con la validación. Sin
+        errores, el reporte pasa a `ENVIADO` con `enviadoEn`; las advertencias se envían y siguen `ABIERTO`.
+
+        Los errores se revisan en este orden: cuerpo, destino disponible, permiso, reporte, transición,
+        comentario, estado del mes, `versionFila` y validación.
+      x-permiso: REPORTE_ENVIAR
       parameters:
         - { $ref: "#/components/parameters/Id" }
       requestBody:
@@ -3506,17 +3522,86 @@ paths:
           application/json:
             schema:
               type: object
-              required: [estadoDestino]
+              required: [estadoDestino, versionFila]
+              additionalProperties: false
               properties:
                 estadoDestino: { $ref: "#/components/schemas/EstadoReporte" }
-                comentario: { type: string }
+                versionFila: { type: integer, description: La del reporte que se abrió, example: 4 }
+                comentario:
+                  type: string
+                  maxLength: 1000
+                  description: Opcional; se guarda en el historial. Ninguna transición habilitada lo exige.
+            example: { estadoDestino: ENVIADO, versionFila: 4 }
       responses:
         "200":
-          description: Estado actualizado
+          description: Estado actualizado; el reporte como en `GET /reportes/{id}`
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Reporte" }
-        "422": { $ref: "#/components/responses/ReglaNegocio" }
+        "400":
+          description: El id o el cuerpo no son válidos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                sinVersion:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "El campo versionFila es obligatorio." }
+                campoDeMas:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: motivo." }
+                destino:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "El estado destino no es válido." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404":
+          description: El reporte no existe o no es del ámbito del usuario
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: NO_ENCONTRADO, mensaje: El recurso solicitado no existe. }
+        "409":
+          description: El mes no está abierto ni en cierre, o el reporte cambió desde que se abrió
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                periodoCerrado:
+                  value:
+                    error: { codigo: PERIODO_CERRADO, mensaje: El mes ya está cerrado. }
+                desactualizado:
+                  value:
+                    error: { codigo: REPORTE_DESACTUALIZADO, mensaje: El reporte cambió desde que lo abrió; recárguelo. }
+        "422":
+          description: |
+            El destino no está habilitado, la transición no existe para el rol desde el estado actual, falta el
+            comentario que exige la transición o, al enviar, quedan errores de validación (con `validacion`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorConValidacion" }
+              examples:
+                noDisponible:
+                  value:
+                    error: { codigo: TRANSICION_NO_DISPONIBLE, mensaje: Esa transición todavía no está disponible. }
+                noPermitida:
+                  value:
+                    error: { codigo: TRANSICION_NO_PERMITIDA, mensaje: El reporte no puede pasar de Enviado a Enviado. }
+                comentario:
+                  value:
+                    error: { codigo: COMENTARIO_REQUERIDO, mensaje: Esta transición requiere un comentario. }
+                conErrores:
+                  value:
+                    error:
+                      codigo: REPORTE_CON_ERRORES
+                      mensaje: El reporte tiene 2 errores de validación. Corríjalos para poder enviarlo.
+                    validacion:
+                      validadoEn: "2026-10-30T15:42:10.000Z"
+                      errores: 2
+                      advertencias: 1
+                      corregidos: 0
+                      resultados: []
 
   /reportes/{id}/historial:
     get:
@@ -4067,6 +4152,14 @@ components:
             codigo: { type: string, example: TRANSICION_NO_PERMITIDA }
             mensaje: { type: string }
             detalles: { type: array, items: { type: object } }
+
+    ErrorConValidacion:
+      description: El error común; con `REPORTE_CON_ERRORES` trae además la validación de esa corrida
+      allOf:
+        - { $ref: "#/components/schemas/Error" }
+        - type: object
+          properties:
+            validacion: { $ref: "#/components/schemas/Validacion" }
 
     EstadoReporte:
       type: string

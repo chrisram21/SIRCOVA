@@ -242,6 +242,10 @@ export default function PaginaRegistro() {
               key={detalle.id}
               reporte={detalle}
               formularioPedido={formularioPedido?.reporteId === detalle.id ? formularioPedido.promesa : null}
+              alEnviar={(enviado) => {
+                anotarReporte(periodo.id, enviado)
+                setDetalle(enviado)
+              }}
             />
           )}
         </>

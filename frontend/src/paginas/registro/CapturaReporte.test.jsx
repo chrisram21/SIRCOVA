@@ -11,6 +11,7 @@ import {
   quitarVacuna,
   validarReporte,
 } from '@/api/produccion.js'
+import { cambiarEstadoReporte } from '@/api/revision.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 import CapturaReporte from './CapturaReporte.jsx'
@@ -25,6 +26,7 @@ vi.mock('@/api/produccion.js', () => ({
   quitarVacuna: vi.fn(),
   validarReporte: vi.fn(),
 }))
+vi.mock('@/api/revision.js', () => ({ cambiarEstadoReporte: vi.fn() }))
 
 // El aviso de guardado es un toast (sonner, simulado en preparar-pruebas.js).
 const borradorGuardado = () => waitFor(() => expect(toast.success).toHaveBeenCalledWith('Borrador guardado.'))
@@ -848,5 +850,95 @@ describe('validación automática (SPEC 33)', () => {
     expect(await screen.findByText('No se pudo validar.')).toBeTruthy()
     escribir('1.ª dosis · < 1 año', '80')
     expect(botonGuardar().disabled).toBe(false)
+  })
+
+  describe('enviar a revisión (SPEC 34)', () => {
+    const PERMISOS_PERSONAL = ['REPORTE_EDITAR', 'REPORTE_VALIDAR', 'REPORTE_ENVIAR']
+    const botonEnviar = () => screen.getByRole('button', { name: 'Enviar a revisión' })
+    // Solo la advertencia: el reporte se puede enviar.
+    const SIN_ERRORES = () => validacion([RESULTADOS[1]])
+
+    test('sin REPORTE_ENVIAR no se ve el botón y «Guardar borrador» sigue siendo el principal', async () => {
+      await montarConSesion()
+      await waitFor(() => expect(validarReporte).toHaveBeenCalledOnce())
+      expect(screen.queryByRole('button', { name: 'Enviar a revisión' })).toBeNull()
+    })
+
+    test('con errores queda deshabilitado con su nota', async () => {
+      await montarConSesion(formulario(), PERMISOS_PERSONAL)
+
+      expect(await screen.findByText('Corrija los errores para poder enviar.', { selector: '#motivo-sin-enviar' })).toBeTruthy()
+      expect(botonEnviar().disabled).toBe(true)
+      expect(botonEnviar().getAttribute('aria-describedby')).toBe('motivo-sin-enviar')
+    })
+
+    test('con cambios sin guardar queda deshabilitado con su nota', async () => {
+      validarReporte.mockResolvedValue(SIN_ERRORES())
+      await montarConSesion(formulario(), PERMISOS_PERSONAL)
+      await waitFor(() => expect(botonEnviar().disabled).toBe(false))
+
+      escribir('1.ª dosis · < 1 año', '80')
+
+      expect(botonEnviar().disabled).toBe(true)
+      expect(screen.getByText('Guarde los cambios antes de enviar.')).toBeTruthy()
+    })
+
+    test('sin errores, confirmar envía con la versionFila y el reporte vuelve en «Solo consulta» sin panel', async () => {
+      validarReporte.mockResolvedValue(SIN_ERRORES())
+      await montarConSesion(formulario(), PERMISOS_PERSONAL)
+      await waitFor(() => expect(botonEnviar().disabled).toBe(false))
+      const enviado = { ...REPORTE, estado: 'ENVIADO' }
+      cambiarEstadoReporte.mockResolvedValue(enviado)
+      obtenerFormulario.mockResolvedValue(formulario({ editable: false, versionFila: 4 }))
+      obtenerReporte.mockResolvedValue(enviado)
+
+      fireEvent.click(botonEnviar())
+      const dialogo = within(await screen.findByRole('alertdialog'))
+      expect(dialogo.getByText('Se enviará con 1 advertencia; la estadígrafa las verá.')).toBeTruthy()
+      fireEvent.click(dialogo.getByRole('button', { name: 'Enviar' }))
+
+      await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Reporte enviado a revisión.'))
+      expect(cambiarEstadoReporte).toHaveBeenCalledWith(7, { estadoDestino: 'ENVIADO', versionFila: 3 })
+      expect(await screen.findByText('Solo consulta')).toBeTruthy()
+      expect(screen.getByText('El reporte está en «Enviado»: solo se puede consultar.')).toBeTruthy()
+      expect(screen.queryByText('Validación automática')).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Enviar a revisión' })).toBeNull()
+      expect(screen.queryByRole('alertdialog')).toBeNull()
+    })
+
+    test('un 422 con la validación actualiza el panel y muestra el mensaje', async () => {
+      validarReporte.mockResolvedValue(SIN_ERRORES())
+      await montarConSesion(formulario(), PERMISOS_PERSONAL)
+      await waitFor(() => expect(botonEnviar().disabled).toBe(false))
+      const mensaje = 'El reporte tiene 2 errores de validación. Corríjalos para poder enviarlo.'
+      cambiarEstadoReporte.mockRejectedValue(
+        new ErrorApi(422, 'REPORTE_CON_ERRORES', mensaje, { validacion: validacion(RESULTADOS) }),
+      )
+
+      fireEvent.click(botonEnviar())
+      fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Enviar' }))
+
+      expect(await screen.findByText(mensaje)).toBeTruthy()
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+      expect(panelResultados().getAllByRole('listitem')).toHaveLength(3)
+      expect(botonEnviar().disabled).toBe(true)
+      expect(screen.queryByRole('button', { name: 'Recargar reporte' })).toBeNull()
+      expect(validarReporte).toHaveBeenCalledOnce()
+    })
+
+    test('un 409 muestra el mensaje con «Recargar reporte»', async () => {
+      validarReporte.mockResolvedValue(SIN_ERRORES())
+      await montarConSesion(formulario(), PERMISOS_PERSONAL)
+      await waitFor(() => expect(botonEnviar().disabled).toBe(false))
+      cambiarEstadoReporte.mockRejectedValue(
+        new ErrorApi(409, 'REPORTE_DESACTUALIZADO', 'El reporte cambió desde que lo abrió; recárguelo.'),
+      )
+
+      fireEvent.click(botonEnviar())
+      fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Enviar' }))
+
+      expect(await screen.findByText('El reporte cambió desde que lo abrió; recárguelo.')).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Recargar reporte' })).toBeTruthy()
+    })
   })
 })

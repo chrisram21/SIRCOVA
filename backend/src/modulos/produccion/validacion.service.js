@@ -33,7 +33,7 @@ function leerPedido(id, query, cuerpo) {
   return Number(id);
 }
 
-async function leerReporte(id, usuario) {
+export async function leerReporte(id, usuario) {
   const [[fila]] = await pool.query(
     `SELECT r.id, r.periodo_id, e.id AS establecimiento_id, e.nombre AS establecimiento, e.ddriss_id,
             e.municipio_id, d.codigo AS ddriss_codigo, p.anio, p.mes
@@ -252,6 +252,33 @@ const aResultado = (r) => ({
   campos: r.campos,
 });
 
+// La corrida con el reporte ya bloqueado en `conexion` y su estado y su mes ya revisados; `reporte` trae las
+// columnas de leerReporte. Escribe los resultados y su VALIDAR, y devuelve la validación del contrato.
+export async function corridaEnTransaccion(conexion, reporte, reglas, contexto) {
+  const resultados = unirPorLlave(ejecutarReglas(reglas, await armarReporte(conexion, reporte)));
+  const { actuales, conteo } = await compararYEscribir(conexion, reporte.id, resultados);
+  const cuantosErrores = actuales.filter((r) => r.severidad === 'ERROR').length;
+  const resumen = { errores: cuantosErrores, advertencias: actuales.length - cuantosErrores };
+
+  if (conteo.nuevos + conteo.actualizados + conteo.corregidos > 0) {
+    await registrarBitacora(conexion, {
+      ...contexto,
+      modulo: MODULOS.PRODUCCION,
+      accion: ACCIONES.VALIDAR,
+      entidad: 'reporte_produccion',
+      entidadId: reporte.id,
+      valoresNuevos: { ...resumen, ...conteo },
+    });
+  }
+
+  return {
+    validadoEn: new Date().toISOString(),
+    ...resumen,
+    corregidos: conteo.corregidos,
+    resultados: actuales.map(aResultado),
+  };
+}
+
 export async function validarReporte(id, query, cuerpo, usuario, contexto) {
   const reporte = await leerReporte(leerPedido(id, query, cuerpo), usuario);
   // Las versiones publicadas no cambian (regla 5): se pueden leer antes del bloqueo.
@@ -269,27 +296,6 @@ export async function validarReporte(id, query, cuerpo, usuario, contexto) {
     ]);
     if (!MESES_EDITABLES.includes(cierre?.estado)) throw errores.periodoCerrado();
 
-    const resultados = unirPorLlave(ejecutarReglas(reglas, await armarReporte(conexion, reporte)));
-    const { actuales, conteo } = await compararYEscribir(conexion, reporte.id, resultados);
-    const cuantosErrores = actuales.filter((r) => r.severidad === 'ERROR').length;
-    const resumen = { errores: cuantosErrores, advertencias: actuales.length - cuantosErrores };
-
-    if (conteo.nuevos + conteo.actualizados + conteo.corregidos > 0) {
-      await registrarBitacora(conexion, {
-        ...contexto,
-        modulo: MODULOS.PRODUCCION,
-        accion: ACCIONES.VALIDAR,
-        entidad: 'reporte_produccion',
-        entidadId: reporte.id,
-        valoresNuevos: { ...resumen, ...conteo },
-      });
-    }
-
-    return {
-      validadoEn: new Date().toISOString(),
-      ...resumen,
-      corregidos: conteo.corregidos,
-      resultados: actuales.map(aResultado),
-    };
+    return corridaEnTransaccion(conexion, reporte, reglas, contexto);
   });
 }

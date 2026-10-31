@@ -777,9 +777,19 @@ Verificado contra la API real el 2026-10-30, como Personal del establecimiento (
 **Cómo se hará:** Endpoint `POST /reportes/{id}/transiciones` con la acción ENVIAR; tabla `transicion_estado` define qué rol puede hacer cada cambio.
 
 **Criterios de aceptación:**
-- [ ] Solo puedo enviar si no hay errores de validación.
-- [ ] Puedo enviar con advertencias, pero quedan visibles para el revisor.
-- [ ] Al enviar, el reporte pasa a Enviado y ya no puedo editarlo.
+- [x] Solo puedo enviar si no hay errores de validación.
+- [x] Puedo enviar con advertencias, pero quedan visibles para el revisor.
+- [x] Al enviar, el reporte pasa a Enviado y ya no puedo editarlo.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 34 a `main`. Backend y frontend, en `specs/34-hu-26-enviar-reporte.md`: `POST /reportes/{id}/transiciones` en el módulo nuevo `modulos/revision/`, con el permiso nuevo `REPORTE_ENVIAR` (solo del Personal del establecimiento), y el botón «Enviar a revisión» con su diálogo de confirmación en la captura. Diferencias con la historia, decididas por el equipo:
+
+- El endpoint es el común de todas las transiciones (permiso según el destino, `transicion_estado` por el rol, `versionFila`, historial y `CAMBIO_ESTADO` en la bitácora), pero solo tiene habilitado `ENVIADO`; los demás destinos responden 422 `TRANSICION_NO_DISPONIBLE` hasta que HU-27, HU-28 y HU-29 los agreguen.
+- Al enviar, el backend vuelve a validar lo guardado en la misma transacción. Con errores responde 422 `REPORTE_CON_ERRORES` con la validación, que reemplaza la del panel; los resultados de esa corrida quedan escritos.
+- «Quedan visibles para el revisor»: las advertencias se envían tal cual y siguen `ABIERTO` en `resultado_validacion`. Mostrarlas en la revisión es de HU-28, y justificarlas queda fuera.
+- «Ya no puedo editarlo»: después de enviar, guardar, agregar o quitar una vacuna y validar responden 409 `REPORTE_NO_EDITABLE`, y la captura abre en «Solo consulta».
+- Se envía con el mes `ABIERTO` o `EN_CIERRE`, también después de la fecha límite. Con cambios sin guardar, el botón queda deshabilitado con una nota: el backend envía lo guardado.
+
+Verificado contra la API real el 2026-10-30, como Personal del establecimiento (`cs1209`), en el reporte de octubre de 2026 del Centro de Salud Tajumulco (id 524), creado para la prueba. Con los 9 errores de `CAMPOS_COMPLETOS`, el botón estaba deshabilitado con «Corrija los errores para poder enviar.»; con las casillas llenas sin guardar, con «Guarde los cambios antes de enviar.». Después de guardar, con una advertencia de `SECUENCIA_DOSIS` (Hexavalente), el diálogo dijo «Se enviará con 1 advertencia», el reporte pasó a «Enviado» en «Solo consulta» y en «Mis reportes». En la base quedaron `ENVIADO` con `enviado_en`, la fila `BORRADOR → ENVIADO` del historial, la advertencia `ABIERTO` y la `CAMBIO_ESTADO` con `{ errores: 0, advertencias: 1 }`. El Revisor (`revisor2`) recibe 403 y queda su `ACCESO_DENEGADO`.
 
 **Nota (2026-10-26, spec 25):** «Enviar a revisión» no debe enviar con cambios sin guardar: la validación y el envío leen lo guardado, no lo que se ve. `CapturaReporte.jsx` ya los calcula (`conCambios`, la misma regla que habilita «Guardar borrador» y el aviso al salir). El botón puede deshabilitarse con ellos o guardar antes de enviar.
 

@@ -5,12 +5,14 @@ const URL_BASE = import.meta.env.VITE_API_URL
 let manejadorSesionPerdida = null
 
 export class ErrorApi extends Error {
-  constructor(status, codigo, mensaje) {
+  // datos: lo que la respuesta trae además de `error`, como la `validacion` de un 422 REPORTE_CON_ERRORES.
+  constructor(status, codigo, mensaje, datos) {
     super(mensaje)
     this.name = 'ErrorApi'
     this.status = status
     this.codigo = codigo
     this.mensaje = mensaje
+    if (datos) this.datos = datos
   }
 }
 
@@ -34,7 +36,8 @@ function crearError(status, datos) {
   // Los 5xx no muestran el mensaje del backend, aunque venga en el formato común.
   const error = datos?.error
   if (status < 500 && typeof error?.codigo === 'string' && typeof error?.mensaje === 'string') {
-    return new ErrorApi(status, error.codigo, error.mensaje)
+    const { error: _error, ...resto } = datos
+    return new ErrorApi(status, error.codigo, error.mensaje, Object.keys(resto).length > 0 ? resto : undefined)
   }
   return new ErrorApi(status, 'ERROR_INESPERADO', MENSAJE_INESPERADO)
 }

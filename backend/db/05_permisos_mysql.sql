@@ -129,6 +129,10 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
 INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('REPORTE_VALIDAR',           'PRODUCCION',              'Ejecutar las reglas de validación sobre el reporte en borrador de su establecimiento');
 
+-- SPEC 34 (HU-26): envío del reporte a revisión
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('REPORTE_ENVIAR',            'PRODUCCION',              'Enviar a revisión el reporte en borrador de su establecimiento');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -233,6 +237,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'ESTABLECIMIENTO'
    AND p.codigo = 'REPORTE_VALIDAR';
+
+-- SPEC 34 (HU-26): el Personal de establecimiento envía sus reportes a revisión
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'ESTABLECIMIENTO'
+   AND p.codigo = 'REPORTE_ENVIAR';
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

@@ -1,6 +1,6 @@
 # SPEC 34 — Enviar el reporte a revisión
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-26
 > **Depende de:** SPEC 04, SPEC 05, SPEC 22, SPEC 23, SPEC 25 y SPEC 33
 > **Fecha:** 2026-10-30
