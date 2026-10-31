@@ -23,6 +23,24 @@ async function registrarAccesoDenegado(req, codigo, motivo) {
   }
 }
 
+// Lanza el 401 o el 403 (con su ACCESO_DENEGADO); la usan requierePermiso y los servicios cuyo permiso depende
+// del pedido, como las transiciones del reporte.
+export async function revisarPermiso(req, codigo) {
+  if (!req.usuario) throw new ErrorApi(401, 'NO_AUTENTICADO', 'Debe iniciar sesión.');
+
+  // AUTORIDAD es de solo consulta aunque se le asigne un permiso de escritura por error.
+  if (req.usuario.rol === 'AUTORIDAD' && !METODOS_CONSULTA.has(req.method)) {
+    await registrarAccesoDenegado(req, codigo, 'SOLO_CONSULTA');
+    throw sinPermiso();
+  }
+
+  const permisos = Array.isArray(req.usuario.permisos) ? req.usuario.permisos : [];
+  if (!permisos.includes(codigo)) {
+    await registrarAccesoDenegado(req, codigo, 'SIN_PERMISO');
+    throw sinPermiso();
+  }
+}
+
 // Se monta después de autenticar. Los permisos salen del token, así que un cambio en
 // rol_permiso aplica desde el siguiente inicio de sesión.
 export function requierePermiso(codigo) {
@@ -31,20 +49,11 @@ export function requierePermiso(codigo) {
   }
 
   return async (req, res, next) => {
-    if (!req.usuario) return next(new ErrorApi(401, 'NO_AUTENTICADO', 'Debe iniciar sesión.'));
-
-    // AUTORIDAD es de solo consulta aunque se le asigne un permiso de escritura por error.
-    if (req.usuario.rol === 'AUTORIDAD' && !METODOS_CONSULTA.has(req.method)) {
-      await registrarAccesoDenegado(req, codigo, 'SOLO_CONSULTA');
-      return next(sinPermiso());
+    try {
+      await revisarPermiso(req, codigo);
+    } catch (err) {
+      return next(err);
     }
-
-    const permisos = Array.isArray(req.usuario.permisos) ? req.usuario.permisos : [];
-    if (!permisos.includes(codigo)) {
-      await registrarAccesoDenegado(req, codigo, 'SIN_PERMISO');
-      return next(sinPermiso());
-    }
-
     next();
   };
 }
