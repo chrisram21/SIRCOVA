@@ -1,6 +1,6 @@
 # SPEC 33 — Validación automática del reporte en borrador
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-25
 > **Depende de:** SPEC 04, SPEC 05, SPEC 22, SPEC 23, SPEC 24, SPEC 25, SPEC 31 y SPEC 32
 > **Fecha:** 2026-10-30
