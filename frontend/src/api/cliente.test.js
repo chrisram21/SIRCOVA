@@ -63,6 +63,20 @@ test('un 401 sin sesión guardada (como el de /auth/login) no llama al manejador
   expect(manejador).not.toHaveBeenCalled()
 })
 
+test('un error con más datos que `error` los conserva en `datos`; sin ellos, no lo trae', async () => {
+  const validacion = { errores: 1, advertencias: 0, corregidos: 0, resultados: [] }
+  fetch.mockResolvedValueOnce(
+    respuestaJson(422, { error: { codigo: 'REPORTE_CON_ERRORES', mensaje: 'Tiene errores.' }, validacion }),
+  )
+  fetch.mockResolvedValueOnce(respuestaJson(409, { error: { codigo: 'PERIODO_CERRADO', mensaje: 'El mes ya está cerrado.' } }))
+
+  const conDatos = await solicitar('/reportes/1/transiciones', { metodo: 'POST', cuerpo: {} }).catch((e) => e)
+  const sinDatos = await solicitar('/reportes/1/transiciones', { metodo: 'POST', cuerpo: {} }).catch((e) => e)
+
+  expect(conDatos).toMatchObject({ status: 422, codigo: 'REPORTE_CON_ERRORES', datos: { validacion } })
+  expect(sinDatos.datos).toBeUndefined()
+})
+
 test('un 401 cuando el token guardado ya no es el que se envió no llama al manejador', async () => {
   guardarSesion(crearSesion('7'))
   const manejador = vi.fn()

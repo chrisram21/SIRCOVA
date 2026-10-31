@@ -242,6 +242,7 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 
 **`historial_estado_reporte`**: registro de cada transición de estado de un reporte.
 - Columnas: `id`, `reporte_id` → reporte_produccion, `estado_anterior` → estado_reporte, `estado_nuevo` → estado_reporte, `usuario_id` → usuario, `comentario`, `fecha`.
+- La primera fila de un reporte es su creación (`estado_anterior` NULL → `BORRADOR`). Las demás las escribe `POST /reportes/{id}/transiciones` (SPEC 34), en la misma transacción que cambia `reporte_produccion.estado`, sube `version_fila` y deja la `CAMBIO_ESTADO` en la bitácora; al pasar a `ENVIADO` también llena `enviado_en`. `historial_estado_reporte` tampoco cae en cascada con el reporte.
 
 **`observacion_revision`**: observaciones de la estadígrafa al solicitar correcciones. Pueden ser generales, de una vacuna o de una celda.
 - Columnas: `id`, `reporte_id` → reporte_produccion, `reporte_vacuna_id` → reporte_vacuna (opcional), `detalle_id` → detalle_produccion (opcional), `usuario_id` → usuario, `texto`, `atendida`, `atendida_en`, `creado_en`.
@@ -251,6 +252,7 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 - Regla y resultado: `regla_codigo` + `regla_version`, `severidad` (ERROR bloquea el envío; ADVERTENCIA exige revisión), `mensaje`, `estado` (ABIERTO, CORREGIDO, JUSTIFICADO), `justificacion`, `ejecutado_en`.
 - Cada validación (también en borrador, SPEC 33) se compara con los resultados `ABIERTO` y `JUSTIFICADO` del reporte por su llave: `regla_codigo`, `reporte_vacuna_id`, `detalle_id` y `mensaje`, sin la versión. Uno que se repite se conserva (se le actualizan `regla_version` y `severidad`), uno nuevo entra `ABIERTO` y uno que ya no aparece pasa a `CORREGIDO`, que no vuelve a `ABIERTO`. `ejecutado_en` es la primera vez que se detectó.
 - `fk_val_reporte` no borra en cascada: antes de borrar un reporte hay que borrar sus resultados. Los de una vacuna o una celda sí caen con ella.
+- Al enviar (SPEC 34), las advertencias viajan con el reporte y siguen `ABIERTO`: nada las pasa a `JUSTIFICADO` todavía. Un envío rechazado por errores deja escritos los resultados de esa corrida.
 
 **`solicitud_rectificacion`**: pedido justificado de cambiar un reporte **ya cerrado**.
 - Columnas: `id`, `reporte_id` → reporte_produccion, `solicitado_por` → usuario, `motivo`, `evidencia_ruta` (documento de respaldo, nunca datos de pacientes), `estado` (PENDIENTE, AUTORIZADA, RECHAZADA, APLICADA), `resuelto_por` → usuario, `comentario_resolucion`, `solicitado_en`, `resuelto_en`, `aplicado_en`.
@@ -377,7 +379,7 @@ No hay llaves foráneas entre motores. Los vínculos son estos:
 **Flujos principales:**
 1. **Abrir un formulario.** El backend lee el esquema VIGENTE de la vacuna para la DDRISS del establecimiento (o el NACIONAL si la DDRISS no tiene uno) y el catálogo de dimensiones, y genera las celdas. Si el reporte ya existe, usa la versión guardada en `reporte_vacuna`.
 2. **Guardar.** Cada celda se escribe en `detalle_produccion` y `detalle_dimension` dentro de una misma transacción.
-3. **Enviar.** Se ejecutan las reglas que aplican a la DDRISS del establecimiento en ese momento (por código, la `VIGENTE` de la DDRISS antes que la nacional) cuyo `aplica_a.vacunas` incluye la vacuna o `*`, y los resultados se guardan en `resultado_validacion` con el código y la versión de cada regla. Si quedan errores abiertos, el envío se rechaza. Si la DDRISS desactivó su versión, vuelve a aplicar la nacional del mismo código; sin nacional, la regla no se ejecuta. Las mismas reglas se ejecutan antes, en borrador, con `POST /reportes/{id}/validar` (SPEC 33), sobre lo guardado y con la versión del esquema fijada en `reporte_vacuna`.
+3. **Enviar.** Se ejecutan las reglas que aplican a la DDRISS del establecimiento en ese momento (por código, la `VIGENTE` de la DDRISS antes que la nacional) cuyo `aplica_a.vacunas` incluye la vacuna o `*`, y los resultados se guardan en `resultado_validacion` con el código y la versión de cada regla. Si quedan errores abiertos, el envío se rechaza (422 `REPORTE_CON_ERRORES`, con los resultados de esa corrida ya escritos); si no, en la misma transacción el reporte pasa a `ENVIADO` (SPEC 34). Si la DDRISS desactivó su versión, vuelve a aplicar la nacional del mismo código; sin nacional, la regla no se ejecuta. Las mismas reglas se ejecutan antes, en borrador, con `POST /reportes/{id}/validar` (SPEC 33), sobre lo guardado y con la versión del esquema fijada en `reporte_vacuna`.
 4. **Revisar y cerrar.** Cada transición se valida contra `transicion_estado` y se registra en `historial_estado_reporte` y en `bitacora`.
 5. **Calcular indicadores.** Al cerrar un periodo o aplicar una rectificación, se crea una `corrida_calculo`, se leen las configuraciones vigentes, se traducen los `filtros_dimension` a condiciones sobre `detalle_dimension` y se escriben `resultado_indicador` y `alerta`.
 

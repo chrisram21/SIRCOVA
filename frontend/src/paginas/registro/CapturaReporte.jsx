@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CircleAlert, CircleCheck, Info, Layers, Lock, Save, Trash2 } from 'lucide-react'
+import { CircleAlert, CircleCheck, Info, Layers, Lock, Save, Send, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -35,6 +35,7 @@ import {
   quitarVacuna,
   validarReporte,
 } from '@/api/produccion.js'
+import DialogoEnviarReporte from './DialogoEnviarReporte.jsx'
 import PanelValidacion from './PanelValidacion.jsx'
 import { AgregarVacuna, DialogoQuitarVacuna } from './VacunasDelReporte.jsx'
 
@@ -333,7 +334,8 @@ function PestanaVacuna({
 
 // reporte: GET /reportes/{id}, con las etiquetas de las dosis y de las dimensiones de cada vacuna. formularioPedido:
 // la promesa de GET /reportes/{id}/formulario si ya se pidió (PaginaRegistro la pide junto con el detalle).
-export default function CapturaReporte({ reporte, formularioPedido = null }) {
+// alEnviar: avisa a la página el reporte ya enviado, para que muestre su estado nuevo.
+export default function CapturaReporte({ reporte, formularioPedido = null, alEnviar }) {
   // formulario: GET /reportes/{id}/formulario; cantidades, otras, datos y firmas van por vacunaId. otras es la
   // tarjeta B: { filas, cantidades }.
   const [formulario, setFormulario] = useState(null)
@@ -359,7 +361,11 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
   const pedidoPendiente = useRef(formularioPedido)
   // SPEC 33: la última respuesta de POST /reportes/{id}/validar. Sin ProveedorSesion (las pruebas que montan la
   // captura sola) no se valida.
-  const puedeValidar = useSesion()?.tienePermiso('REPORTE_VALIDAR') ?? false
+  const sesion = useSesion()
+  const puedeValidar = sesion?.tienePermiso('REPORTE_VALIDAR') ?? false
+  // SPEC 34: el estado que dice el detalle de la última carga; cambia al enviar y recargar.
+  const [estado, setEstado] = useState(reporte.estado)
+  const [dialogoEnvio, setDialogoEnvio] = useState(false)
   const [validacion, setValidacion] = useState(null)
   const [validando, setValidando] = useState(false)
   const [errorValidacion, setErrorValidacion] = useState(null)
@@ -480,6 +486,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
         setDatos({})
         setFirmas({})
         setVacunasReporte(recibidoDetalle.vacunas)
+        setEstado(recibidoDetalle.estado)
         for (const captura of recibido.vacunas) {
           tomarVacuna(captura, recibido.municipioPropio.id, recibido.municipios, recibidoDetalle.vacunas)
         }
@@ -555,6 +562,27 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
     } finally {
       setOcupado(false)
     }
+  }
+
+  // El envío valida lo guardado en el backend: un 422 trae la validación de esa corrida y reemplaza la del panel.
+  function enviado(recibido) {
+    setDialogoEnvio(false)
+    toast.success('Reporte enviado a revisión.')
+    alEnviar?.(recibido)
+    cargar()
+  }
+
+  function envioFallido(err) {
+    setDialogoEnvio(false)
+    if (err.codigo === 'REPORTE_CON_ERRORES' && err.datos?.validacion) {
+      validacionActual.current += 1
+      setValidacion(err.datos.validacion)
+      setErrorValidacion(null)
+      setValidando(false)
+      setAviso({ mensaje: mensajeDeError(err), recargar: false })
+      return
+    }
+    setAviso({ mensaje: mensajeDeError(err), recargar: true })
   }
 
   const recargarDesdeDialogo = () => {
@@ -635,6 +663,12 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
   }
 
   const puedeGuardar = !soloLectura && !guardando && !ocupado && !invalidas && conCambios.length > 0
+  const muestraEnviar = !soloLectura && (sesion?.tienePermiso('REPORTE_ENVIAR') ?? false)
+  let motivoSinEnviar = null
+  if (conCambios.length > 0) motivoSinEnviar = 'Guarde los cambios antes de enviar.'
+  else if (validacion?.errores > 0) motivoSinEnviar = 'Corrija los errores para poder enviar.'
+  const puedeEnviar =
+    muestraEnviar && !motivoSinEnviar && validacion !== null && !validando && !guardando && !ocupado && !dialogoEnvio
   atajoGuardar.current = puedeGuardar ? guardar : null
   const idsConCambios = new Set(conCambios.map(({ vacuna }) => vacuna.id))
   // Una vacuna está completa cuando todas las casillas de su tarjeta A tienen un dato.
@@ -680,7 +714,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
         <Alert className="border-border bg-muted">
           <Lock />
           <AlertTitle>Solo consulta</AlertTitle>
-          <AlertDescription>{motivoSoloLectura(reporte.estado)}</AlertDescription>
+          <AlertDescription>{motivoSoloLectura(estado)}</AlertDescription>
         </Alert>
       )}
 
@@ -809,6 +843,11 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
             </span>
           </p>
           {invalidas && <p className="text-sm text-destructive">Corrija las cantidades marcadas para guardar.</p>}
+          {muestraEnviar && motivoSinEnviar && (
+            <p id="motivo-sin-enviar" className="text-sm text-muted-foreground">
+              {motivoSinEnviar}
+            </p>
+          )}
           {insignia && (
             <Badge
               variant="outline"
@@ -821,10 +860,23 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
               {insignia}
             </Badge>
           )}
-          <Button onClick={guardar} disabled={!puedeGuardar} title="Ctrl + S">
+          <Button variant={muestraEnviar ? 'outline' : 'default'} onClick={guardar} disabled={!puedeGuardar} title="Ctrl + S">
             <Save />
             {guardando ? 'Guardando…' : 'Guardar borrador'}
           </Button>
+          {muestraEnviar && (
+            <Button
+              onClick={() => {
+                setAviso(null)
+                setDialogoEnvio(true)
+              }}
+              disabled={!puedeEnviar}
+              aria-describedby={motivoSinEnviar ? 'motivo-sin-enviar' : undefined}
+            >
+              <Send />
+              Enviar a revisión
+            </Button>
+          )}
         </div>
       )}
 
@@ -835,6 +887,17 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
           alConfirmar={quitar}
           alCerrar={() => setPorQuitar(null)}
           alRecargar={recargarDesdeDialogo}
+        />
+      )}
+
+      {dialogoEnvio && (
+        <DialogoEnviarReporte
+          reporteId={reporte.id}
+          versionFila={formulario.versionFila}
+          advertencias={validacion?.advertencias ?? 0}
+          alEnviar={enviado}
+          alFallar={envioFallido}
+          alCerrar={() => setDialogoEnvio(false)}
         />
       )}
 

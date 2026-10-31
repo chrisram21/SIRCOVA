@@ -10,6 +10,7 @@ import usuariosRoutes from './modulos/usuarios/usuarios.routes.js';
 import catalogosRoutes from './modulos/catalogos/catalogos.routes.js';
 import configuracionRoutes from './modulos/configuracion/configuracion.routes.js';
 import produccionRoutes from './modulos/produccion/produccion.routes.js';
+import revisionRoutes from './modulos/revision/revision.routes.js';
 import { rutaNoEncontrada, manejarErrores } from './middlewares/errores.js';
 
 const app = express();
@@ -29,6 +30,7 @@ app.use('/api/v1', usuariosRoutes);
 app.use('/api/v1', catalogosRoutes);
 app.use('/api/v1', configuracionRoutes);
 app.use('/api/v1', produccionRoutes);
+app.use('/api/v1', revisionRoutes);
 
 app.use(rutaNoEncontrada);
 app.use(manejarErrores);

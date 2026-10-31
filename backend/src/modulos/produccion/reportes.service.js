@@ -7,7 +7,7 @@ import { registrarBitacora, MODULOS, ACCIONES } from '../auditoria/auditoria.ser
 import { entradaInvalida, revisarCampos, revisarParametros } from '../catalogos/catalogos.service.js';
 import { esquemasDelPeriodo } from '../configuracion/esquemas.service.js';
 
-const ESTADOS_REPORTE = [
+export const ESTADOS_REPORTE = [
   'BORRADOR', 'ENVIADO', 'EN_REVISION', 'CORRECCION_SOLICITADA', 'APROBADO', 'CERRADO', 'RECTIFICACION',
 ];
 

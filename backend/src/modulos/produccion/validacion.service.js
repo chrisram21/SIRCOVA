@@ -33,7 +33,7 @@ function leerPedido(id, query, cuerpo) {
   return Number(id);
 }
 
-async function leerReporte(id, usuario) {
+export async function leerReporte(id, usuario) {
   const [[fila]] = await pool.query(
     `SELECT r.id, r.periodo_id, e.id AS establecimiento_id, e.nombre AS establecimiento, e.ddriss_id,
             e.municipio_id, d.codigo AS ddriss_codigo, p.anio, p.mes

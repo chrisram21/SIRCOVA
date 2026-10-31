@@ -13,6 +13,7 @@ vi.mock('@/api/produccion.js', () => ({
   obtenerFormulario: vi.fn(),
   guardarVacuna: vi.fn(),
 }))
+vi.mock('@/api/revision.js', () => ({ cambiarEstadoReporte: vi.fn() }))
 
 const SEPTIEMBRE = { id: 9, anio: 2026, mes: 9, estado: 'ABIERTO', fechaLimiteEnvio: '2026-10-10' }
 const OCTUBRE = { id: 10, anio: 2026, mes: 10, estado: 'ABIERTO', fechaLimiteEnvio: '2026-11-10' }
