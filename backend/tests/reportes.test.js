@@ -193,6 +193,7 @@ async function tokenDe(condicion, valor) {
 
 let personal;
 let revisor;
+let administrador;
 
 const crear = (cuerpo, credencial = personal.token) =>
   request(app).post('/api/v1/reportes').set('Authorization', `Bearer ${credencial}`).send(cuerpo);
@@ -220,6 +221,7 @@ beforeAll(async () => {
   await preparar();
   personal = await tokenDe('u.nombre_usuario', 'cs1201');
   revisor = await tokenDe('r.codigo', 'REVISOR');
+  administrador = await tokenDe('r.codigo', 'ADMINISTRADOR');
 }, 60000);
 
 afterAll(limpiar, 60000);
@@ -491,10 +493,11 @@ describe('GET /reportes y GET /reportes/{id}', () => {
     expect(res.status).toBe(404);
   });
 
-  it('sin REPORTE_CONSULTAR (el Revisor) la lista y el detalle responden 403', async () => {
-    expect(revisor.permisos).not.toContain('REPORTE_CONSULTAR');
-    expect((await consultar('/reportes', revisor.token)).status).toBe(403);
-    expect((await consultar(`/reportes/${reporteId}`, revisor.token)).status).toBe(403);
+  // El Revisor tiene REPORTE_CONSULTAR desde el SPEC 36: el rol sin el permiso es el Administrador.
+  it('sin REPORTE_CONSULTAR (el Administrador) la lista y el detalle responden 403', async () => {
+    expect(administrador.permisos).not.toContain('REPORTE_CONSULTAR');
+    expect((await consultar('/reportes', administrador.token)).status).toBe(403);
+    expect((await consultar(`/reportes/${reporteId}`, administrador.token)).status).toBe(403);
   });
 });
 

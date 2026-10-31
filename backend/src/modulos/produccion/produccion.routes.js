@@ -39,5 +39,17 @@ router.put(
   requierePermiso('REPORTE_VALIDAR'),
   produccionController.validarReporte,
 );
+router.get(
+  '/reportes/:id/validacion',
+  autenticar,
+  requierePermiso('REPORTE_CONSULTAR'),
+  produccionController.obtenerValidacionGuardada,
+);
+router.get(
+  '/reportes/:id/observaciones',
+  autenticar,
+  requierePermiso('REPORTE_CONSULTAR'),
+  produccionController.listarObservaciones,
+);
 
 export default router;

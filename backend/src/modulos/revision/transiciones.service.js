@@ -10,8 +10,13 @@ import { corridaEnTransaccion, leerReporte } from '../produccion/validacion.serv
 import { revisorDeLaDdriss } from './bandeja.service.js';
 
 // Cada spec de revisión agrega su destino; uno que no está aquí responde 422 TRANSICION_NO_DISPONIBLE.
-const PERMISO_POR_DESTINO = { ENVIADO: 'REPORTE_ENVIAR', EN_REVISION: 'REPORTE_ASIGNAR' };
+const PERMISO_POR_DESTINO = {
+  ENVIADO: 'REPORTE_ENVIAR',
+  EN_REVISION: 'REPORTE_ASIGNAR',
+  CORRECCION_SOLICITADA: 'REPORTE_SOLICITAR_CORRECCION',
+};
 const LARGO_COMENTARIO = 1000;
+const LARGO_OBSERVACION = 1000; // observacion_revision.texto
 
 const errores = {
   noDisponible: () => new ErrorApi(422, 'TRANSICION_NO_DISPONIBLE', 'Esa transición todavía no está disponible.'),
@@ -23,12 +28,49 @@ const errores = {
     new ErrorApi(409, 'REPORTE_DESACTUALIZADO', 'El reporte cambió desde que lo abrió; recárguelo.'),
   revisorInvalido: () =>
     new ErrorApi(422, 'REVISOR_INVALIDO', 'El revisor elegido no es un revisor activo de la DDRISS del reporte.'),
+  noAsignado: () =>
+    new ErrorApi(403, 'NO_ES_REVISOR_ASIGNADO', 'Solo el revisor asignado puede devolver el reporte.'),
+  observacionRequerida: () =>
+    new ErrorApi(422, 'OBSERVACION_REQUERIDA', 'Escriba al menos una observación para devolver el reporte.'),
+  vacunaNoEnReporte: () =>
+    new ErrorApi(422, 'VACUNA_NO_EN_REPORTE', 'Una observación es de una vacuna que no está en el reporte.'),
 };
 
+// Una general (vacunaId null) y una por vacuna como máximo; que haya al menos una se revisa después (422).
+function leerObservaciones(observaciones) {
+  if (observaciones === undefined) {
+    throw entradaInvalida('El campo observaciones es obligatorio para solicitar la corrección.');
+  }
+  if (!Array.isArray(observaciones)) throw entradaInvalida('observaciones debe ser una lista.');
+  const vistas = new Set();
+  return observaciones.map((observacion) => {
+    if (observacion === null || typeof observacion !== 'object' || Array.isArray(observacion)) {
+      throw entradaInvalida('Cada observación debe ser un objeto con vacunaId y texto.');
+    }
+    revisarCampos(observacion, ['vacunaId', 'texto']);
+    const { vacunaId, texto } = observacion;
+    if (vacunaId === undefined) throw entradaInvalida('El campo vacunaId de cada observación es obligatorio.');
+    if (vacunaId !== null && (!Number.isInteger(vacunaId) || vacunaId <= 0)) {
+      throw entradaInvalida('vacunaId debe ser un número entero positivo o null.');
+    }
+    if (typeof texto !== 'string' || !texto.trim()) throw entradaInvalida('El texto de cada observación es obligatorio.');
+    if (texto.trim().length > LARGO_OBSERVACION) {
+      throw entradaInvalida(`El texto de una observación no puede tener más de ${LARGO_OBSERVACION} caracteres.`);
+    }
+    if (vistas.has(vacunaId)) {
+      throw entradaInvalida(
+        vacunaId === null ? 'Solo puede haber una observación general.' : 'Solo puede haber una observación por vacuna.',
+      );
+    }
+    vistas.add(vacunaId);
+    return { vacunaId, texto: texto.trim() };
+  });
+}
+
 function leerPedido(id, cuerpo) {
-  revisarCampos(cuerpo, ['estadoDestino', 'versionFila', 'comentario', 'revisorId']);
+  revisarCampos(cuerpo, ['estadoDestino', 'versionFila', 'comentario', 'revisorId', 'observaciones']);
   if (!/^\d+$/.test(String(id)) || Number(id) <= 0) throw entradaInvalida('id debe ser un número entero positivo.');
-  const { estadoDestino, versionFila, comentario, revisorId } = cuerpo;
+  const { estadoDestino, versionFila, comentario, revisorId, observaciones } = cuerpo;
   if (estadoDestino === undefined) throw entradaInvalida('El campo estadoDestino es obligatorio.');
   if (!ESTADOS_REPORTE.includes(estadoDestino)) throw entradaInvalida('El estado destino no es válido.');
   if (versionFila === undefined) throw entradaInvalida('El campo versionFila es obligatorio.');
@@ -46,7 +88,55 @@ function leerPedido(id, cuerpo) {
   } else if (revisorId !== undefined) {
     throw entradaInvalida('revisorId solo se usa al asignar el reporte (EN_REVISION).');
   }
-  return { id: Number(id), estadoDestino, versionFila, comentario: texto, revisorId: revisorId ?? null };
+  let leidas = null;
+  if (estadoDestino === 'CORRECCION_SOLICITADA') {
+    if (comentario !== undefined) {
+      throw entradaInvalida('comentario no se usa al solicitar la corrección: escriba las observaciones.');
+    }
+    leidas = leerObservaciones(observaciones);
+  } else if (observaciones !== undefined) {
+    throw entradaInvalida('observaciones solo se usa al solicitar la corrección (CORRECCION_SOLICITADA).');
+  }
+  return {
+    id: Number(id),
+    estadoDestino,
+    versionFila,
+    comentario: texto,
+    revisorId: revisorId ?? null,
+    observaciones: leidas,
+  };
+}
+
+// El comentario del historial (lo que muestra «Mis reportes»): la observación general o un resumen de las de vacuna.
+function comentarioDeObservaciones(observaciones, nombres) {
+  const general = observaciones.find((o) => o.vacunaId === null);
+  if (general) return general.texto;
+  const deVacuna = observaciones.map((o) => nombres.get(o.vacunaId));
+  const cuantas = deVacuna.length === 1 ? '1 observación' : `${deVacuna.length} observaciones`;
+  return `${cuantas} por vacuna: ${deVacuna.join(', ')}`.slice(0, LARGO_COMENTARIO);
+}
+
+// Valida las observaciones contra el reporte bloqueado y las inserta en un solo INSERT: así comparten creado_en,
+// que es lo que agrupa cada devolución en GET /reportes/{id}/observaciones.
+async function guardarObservaciones(conexion, reporteId, usuarioId, observaciones) {
+  if (observaciones.length === 0) throw errores.observacionRequerida();
+  const [filas] = await conexion.query(
+    `SELECT rv.id, rv.vacuna_id, v.nombre
+       FROM reporte_vacuna rv JOIN vacuna v ON v.id = rv.vacuna_id
+      WHERE rv.reporte_id = ?
+      ORDER BY v.orden_informe, v.nombre`,
+    [reporteId],
+  );
+  const porVacuna = new Map(filas.map((f, i) => [f.vacuna_id, { ...f, orden: i }]));
+  if (observaciones.some((o) => o.vacunaId !== null && !porVacuna.has(o.vacunaId))) throw errores.vacunaNoEnReporte();
+
+  const posicion = (o) => (o.vacunaId === null ? -1 : porVacuna.get(o.vacunaId).orden);
+  const ordenadas = [...observaciones].sort((a, b) => posicion(a) - posicion(b));
+  await conexion.query('INSERT INTO observacion_revision (reporte_id, reporte_vacuna_id, usuario_id, texto) VALUES ?', [
+    ordenadas.map((o) => [reporteId, o.vacunaId === null ? null : porVacuna.get(o.vacunaId).id, usuarioId, o.texto]),
+  ]);
+  const nombres = new Map(filas.map((f) => [f.vacuna_id, f.nombre]));
+  return { ordenadas, comentario: comentarioDeObservaciones(ordenadas, nombres) };
 }
 
 async function nombresDeEstados(conexion, codigos) {
@@ -73,13 +163,14 @@ export async function cambiarEstado(id, cuerpo, req) {
   const reporte = await leerReporte(pedido.id, usuario);
   const enviar = pedido.estadoDestino === 'ENVIADO';
   const asignar = pedido.estadoDestino === 'EN_REVISION';
+  const devolver = pedido.estadoDestino === 'CORRECCION_SOLICITADA';
   // Las versiones publicadas no cambian (regla 5): se pueden leer antes del bloqueo.
   const reglas = enviar ? await reglasQueAplican(reporte.ddriss_codigo) : null;
 
   const rechazo = await enTransaccion(async (conexion) => {
     // Primera consulta de la transacción (nota del 2026-10-23): un guardado o un envío del mismo reporte se ordenan aquí.
     const [[bloqueado]] = await conexion.query(
-      'SELECT estado, version_fila FROM reporte_produccion WHERE id = ? FOR UPDATE',
+      'SELECT estado, version_fila, revisor_id FROM reporte_produccion WHERE id = ? FOR UPDATE',
       [reporte.id],
     );
     const [[transicion]] = await conexion.query(
@@ -90,7 +181,8 @@ export async function cambiarEstado(id, cuerpo, req) {
     if (!transicion) {
       throw errores.noPermitida(...(await nombresDeEstados(conexion, [bloqueado.estado, pedido.estadoDestino])));
     }
-    if (transicion.requiere_comentario && !pedido.comentario) throw errores.comentarioRequerido();
+    // Al devolver, el comentario lo arman las observaciones.
+    if (transicion.requiere_comentario && !devolver && !pedido.comentario) throw errores.comentarioRequerido();
     if (enviar) {
       const [[cierre]] = await conexion.query(
         'SELECT estado FROM cierre_periodo WHERE periodo_id = ? AND ddriss_id = ?',
@@ -101,7 +193,14 @@ export async function cambiarEstado(id, cuerpo, req) {
     if (bloqueado.version_fila !== pedido.versionFila) throw errores.desactualizado();
 
     let resumen = {};
+    let comentario = pedido.comentario;
     const cambios = [];
+    if (devolver) {
+      if (bloqueado.revisor_id !== usuario.id) throw errores.noAsignado();
+      const guardadas = await guardarObservaciones(conexion, reporte.id, usuario.id, pedido.observaciones);
+      comentario = guardadas.comentario;
+      resumen = { observaciones: guardadas.ordenadas };
+    }
     if (asignar) {
       const revisor = await revisorDeLaDdriss(conexion, pedido.revisorId, reporte.ddriss_id);
       if (!revisor) throw errores.revisorInvalido();
@@ -124,7 +223,7 @@ export async function cambiarEstado(id, cuerpo, req) {
     await conexion.query(
       `INSERT INTO historial_estado_reporte (reporte_id, estado_anterior, estado_nuevo, usuario_id, comentario)
        VALUES (?, ?, ?, ?, ?)`,
-      [reporte.id, bloqueado.estado, pedido.estadoDestino, usuario.id, pedido.comentario],
+      [reporte.id, bloqueado.estado, pedido.estadoDestino, usuario.id, comentario],
     );
     await registrarBitacora(conexion, {
       ...contexto,

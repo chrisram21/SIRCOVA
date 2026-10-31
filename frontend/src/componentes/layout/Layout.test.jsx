@@ -155,10 +155,16 @@ test('un catálogo pide CONFIGURACION_CONSULTAR además de sus permisos', () => 
 
 test('sin ningún hijo visible, «Administración» no aparece', () => {
   // Personal del establecimiento: lee vacunas y periodos para capturar, sin CONFIGURACION_CONSULTAR.
-  abrir('/inicio', { permisos: ['REPORTE_CONSULTAR', 'VACUNA_CONSULTAR', 'PERIODO_CONSULTAR'] })
+  abrir('/inicio', { permisos: ['REPORTE_CREAR', 'REPORTE_CONSULTAR', 'VACUNA_CONSULTAR', 'PERIODO_CONSULTAR'] })
 
   expect(opcionesVisibles()).toEqual(['Inicio', 'Registro de producción', 'Mis reportes'])
   expect(menu().queryByRole('button', { name: 'Administración' })).toBeNull()
+})
+
+test('el Revisor, con REPORTE_CONSULTAR, no ve «Registro de producción» ni «Mis reportes»', () => {
+  abrir('/inicio', { permisos: ['REPORTE_CONSULTAR', 'REPORTE_REVISAR', 'REPORTE_ASIGNAR'] })
+
+  expect(opcionesVisibles()).toEqual(['Inicio', 'Revisión y cierre'])
 })
 
 test('en una subruta de un hijo, «Administración» está desplegada y el hijo, activo', () => {

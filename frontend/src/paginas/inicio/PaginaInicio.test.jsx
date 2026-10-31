@@ -137,7 +137,7 @@ test('los hijos de «Administración» van como accesos propios, en su lugar, y 
 
 test('un hijo sin todos sus permisos no lleva acceso', () => {
   // Personal del establecimiento: lee vacunas para capturar, sin CONFIGURACION_CONSULTAR.
-  abrirInicio({ rol: 'ESTABLECIMIENTO', permisos: ['REPORTE_CONSULTAR', 'VACUNA_CONSULTAR'] })
+  abrirInicio({ rol: 'ESTABLECIMIENTO', permisos: ['REPORTE_CREAR', 'REPORTE_CONSULTAR', 'VACUNA_CONSULTAR'] })
 
   expect(titulosDeAccesos()).toEqual(['Registro de producción', 'Mis reportes'])
 })

@@ -11,7 +11,7 @@ vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn(),
 
 const EMPLEADO = { nombres: 'Ana María', apellidos: 'López Fuentes', ddrissId: 1, establecimientoId: 4, municipioId: 1 }
 
-function crearSesion({ rol = 'ESTABLECIMIENTO', permisos = ['REPORTE_CONSULTAR'] } = {}) {
+function crearSesion({ rol = 'ESTABLECIMIENTO', permisos = ['REPORTE_CREAR', 'REPORTE_CONSULTAR'] } = {}) {
   const codificar = (objeto) => btoa(JSON.stringify(objeto)).replace(/=+$/, '')
   const exp = Math.floor(Date.now() / 1000) + 3600
   return {
@@ -26,7 +26,7 @@ function perfil({ empleado = {}, ...cambios } = {}) {
     nombreUsuario: 'alopez',
     rol: 'ESTABLECIMIENTO',
     rolNombre: 'Personal del establecimiento',
-    permisos: ['REPORTE_CONSULTAR'],
+    permisos: ['REPORTE_CREAR', 'REPORTE_CONSULTAR'],
     debeCambiarContrasena: false,
     ultimoAcceso: '2026-10-28T15:30:00.000Z',
     creadoEn: '2026-01-10T14:00:00.000Z',

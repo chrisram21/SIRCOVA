@@ -3491,15 +3491,48 @@ paths:
                   value:
                     error: { codigo: PERIODO_CERRADO, mensaje: El mes ya está cerrado. }
 
+  /reportes/{id}/validacion:
+    get:
+      tags: [Revisión]
+      summary: Resultados de validación guardados del reporte, sin volver a ejecutar las reglas
+      description: |
+        Lee los resultados actuales (`ABIERTO` y `JUSTIFICADO`) de `resultado_validacion`, en el mismo orden que
+        `POST /reportes/{id}/validar`, sin ejecutar el motor ni escribir nada, en cualquier estado del reporte.
+        Es lo que el revisor ve de lo que envió el establecimiento.
+
+        `celdas` y `campos` van vacíos porque no se guardan; `corregidos` es 0 y `validadoEn` es el `ejecutado_en`
+        más reciente de esos resultados, o `null` si no hay ninguno. Uno que no existe o está fuera del alcance del
+        usuario (para el Personal, de otro establecimiento; para el Revisor, de otra DDRISS) responde 404.
+      x-permiso: REPORTE_CONSULTAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Los resultados guardados
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Validacion" }
+        "400":
+          description: El id no es válido o hay un parámetro de consulta
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: vacunaId." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+
   /reportes/{id}/transiciones:
     post:
       tags: [Revisión]
       summary: Cambiar el estado del reporte (enviar, asignar, pedir corrección, aprobar, cerrar)
       description: |
         Única vía para cambiar el estado. El permiso depende del destino; por ahora están habilitados `ENVIADO`
-        (`REPORTE_ENVIAR`, solo el Personal del establecimiento) y `EN_REVISION` (`REPORTE_ASIGNAR`, solo el
-        Revisor), y cualquier otro destino responde 422 `TRANSICION_NO_DISPONIBLE`. Además del permiso, la
-        transición (estado actual → destino) debe existir en `transicion_estado` para el rol del usuario.
+        (`REPORTE_ENVIAR`, solo el Personal del establecimiento), `EN_REVISION` (`REPORTE_ASIGNAR`, solo el
+        Revisor) y `CORRECCION_SOLICITADA` (`REPORTE_SOLICITAR_CORRECCION`, solo el Revisor), y cualquier otro
+        destino responde 422 `TRANSICION_NO_DISPONIBLE`. Además del permiso, la transición (estado actual →
+        destino) debe existir en `transicion_estado` para el rol del usuario.
 
         Todo va en una transacción de MySQL con el reporte bloqueado. Cada transición sube `versionFila`, deja
         una fila en `historial_estado_reporte` (con el `comentario`, si viene) y una `CAMBIO_ESTADO` en la
@@ -3516,10 +3549,20 @@ paths:
         Llena `revisor_id` y `asignado_en`, y la `CAMBIO_ESTADO` lleva `revisorId`. Cambiar después el revisor
         es `PATCH /reportes/{id}/revisor`.
 
+        **CORRECCION_SOLICITADA (devolver):** solo el revisor asignado (`revisor_id` = el usuario); otro revisor
+        recibe 403 `NO_ES_REVISOR_ASIGNADO`, sin fila `ACCESO_DENEGADO`. Exige `observaciones`, con al menos una
+        (si no, 422 `OBSERVACION_REQUERIDA`): como máximo una general (`vacunaId: null`) y una por vacuna del
+        reporte (otra vacuna: 422 `VACUNA_NO_EN_REPORTE`). No acepta `comentario`: el del historial lo arma el
+        backend con el texto de la observación general o, sin ella, «N observaciones por vacuna: {nombres}»
+        (recortado a 1000 caracteres). Escribe una fila de `observacion_revision` por observación (`detalle_id`
+        vacío, `atendida` en `false`); `revisor_id` y `asignado_en` no cambian. La `CAMBIO_ESTADO` lleva las
+        `observaciones` (`vacunaId` y `texto`). Volver a `BORRADOR` es del establecimiento.
+
         Los errores se revisan en este orden: cuerpo, destino disponible, permiso, reporte, transición,
-        comentario, estado del mes (solo `ENVIADO`), `versionFila`, revisor (solo `EN_REVISION`) y validación
-        (solo `ENVIADO`).
-      x-permiso: "Según estadoDestino: ENVIADO → REPORTE_ENVIAR; EN_REVISION → REPORTE_ASIGNAR"
+        comentario (salvo `CORRECCION_SOLICITADA`), estado del mes (solo `ENVIADO`), `versionFila`, revisor (solo
+        `EN_REVISION`), revisor asignado y observaciones (solo `CORRECCION_SOLICITADA`) y validación (solo
+        `ENVIADO`).
+      x-permiso: "Según estadoDestino: ENVIADO → REPORTE_ENVIAR; EN_REVISION → REPORTE_ASIGNAR; CORRECCION_SOLICITADA → REPORTE_SOLICITAR_CORRECCION"
       parameters:
         - { $ref: "#/components/parameters/Id" }
       requestBody:
@@ -3536,15 +3579,46 @@ paths:
                 comentario:
                   type: string
                   maxLength: 1000
-                  description: Opcional; se guarda en el historial. Ninguna transición habilitada lo exige.
+                  description: |
+                    Opcional; se guarda en el historial. Con `CORRECCION_SOLICITADA` no se acepta (400): el
+                    comentario sale de las observaciones.
                 revisorId:
                   type: integer
                   minimum: 1
                   description: Obligatorio con `EN_REVISION` (el revisor que se asigna); con otro destino, 400
                   example: 2
+                observaciones:
+                  type: array
+                  description: |
+                    Obligatorio con `CORRECCION_SOLICITADA`; con otro destino, 400. Vacío: 422
+                    `OBSERVACION_REQUERIDA`. Una general y una por vacuna como máximo (repetida: 400).
+                  items:
+                    type: object
+                    required: [vacunaId, texto]
+                    additionalProperties: false
+                    properties:
+                      vacunaId:
+                        type: integer
+                        minimum: 1
+                        nullable: true
+                        description: Una vacuna del reporte, o `null` para la observación general
+                        example: 3
+                      texto:
+                        type: string
+                        minLength: 1
+                        maxLength: 1000
+                        description: Sin espacios a los lados
+                        example: Hexavalente D1 en menores de 1 año es muy alto frente a septiembre.
             examples:
               enviar: { value: { estadoDestino: ENVIADO, versionFila: 4 } }
               asignar: { value: { estadoDestino: EN_REVISION, versionFila: 5, revisorId: 2 } }
+              devolver:
+                value:
+                  estadoDestino: CORRECCION_SOLICITADA
+                  versionFila: 15
+                  observaciones:
+                    - { vacunaId: null, texto: Revise la procedencia de las dosis de octubre. }
+                    - { vacunaId: 3, texto: Hexavalente D1 en menores de 1 año es muy alto frente a septiembre. }
       responses:
         "200":
           description: Estado actualizado; el reporte como en `GET /reportes/{id}`
@@ -3569,8 +3643,25 @@ paths:
                 sinRevisor:
                   value:
                     error: { codigo: ENTRADA_INVALIDA, mensaje: "El campo revisorId es obligatorio para asignar el reporte." }
+                sinObservaciones:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "El campo observaciones es obligatorio para solicitar la corrección." }
+                observacionRepetida:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Solo puede haber una observación general." }
         "401": { $ref: "#/components/responses/NoAutenticado" }
-        "403": { $ref: "#/components/responses/SinPermiso" }
+        "403":
+          description: Sin el permiso del destino, o al devolver, el usuario no es el revisor asignado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                sinPermiso:
+                  value:
+                    error: { codigo: SIN_PERMISO, mensaje: No tiene permiso para realizar esta acción. }
+                noAsignado:
+                  value:
+                    error: { codigo: NO_ES_REVISOR_ASIGNADO, mensaje: Solo el revisor asignado puede devolver el reporte. }
         "404":
           description: El reporte no existe o no es del ámbito del usuario
           content:
@@ -3593,8 +3684,9 @@ paths:
         "422":
           description: |
             El destino no está habilitado, la transición no existe para el rol desde el estado actual, falta el
-            comentario que exige la transición, al asignar el revisor no es válido o, al enviar, quedan errores
-            de validación (con `validacion`)
+            comentario que exige la transición, al asignar el revisor no es válido, al devolver no hay
+            observaciones o una es de una vacuna que no está en el reporte o, al enviar, quedan errores de
+            validación (con `validacion`)
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorConValidacion" }
@@ -3611,6 +3703,12 @@ paths:
                 revisorInvalido:
                   value:
                     error: { codigo: REVISOR_INVALIDO, mensaje: El revisor elegido no es un revisor activo de la DDRISS del reporte. }
+                observacionRequerida:
+                  value:
+                    error: { codigo: OBSERVACION_REQUERIDA, mensaje: Escriba al menos una observación para devolver el reporte. }
+                vacunaNoEnReporte:
+                  value:
+                    error: { codigo: VACUNA_NO_EN_REPORTE, mensaje: Una observación es de una vacuna que no está en el reporte. }
                 conErrores:
                   value:
                     error:
@@ -3808,24 +3906,37 @@ paths:
         "200": { description: "Lista de cambios de estado con usuario, fecha y comentario" }
 
   /reportes/{id}/observaciones:
-    post:
+    get:
       tags: [Revisión]
-      summary: Registrar una observación de revisión (general, por vacuna o por celda)
+      summary: Observaciones del revisor en las devoluciones del reporte
+      description: |
+        Las observaciones de todas las devoluciones (`CORRECCION_SOLICITADA`) del reporte: de la más reciente a
+        la más antigua y, dentro de una misma devolución, la general primero y luego en el orden de las vacunas
+        del reporte. Se escriben solo con `POST /reportes/{id}/transiciones` al devolver.
+
+        Uno que no existe o está fuera del alcance del usuario (para el Personal, de otro establecimiento; para el
+        Revisor, de otra DDRISS) responde 404. Un reporte sin observaciones responde una lista vacía.
+      x-permiso: REPORTE_CONSULTAR
       parameters:
         - { $ref: "#/components/parameters/Id" }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [texto]
-              properties:
-                texto: { type: string }
-                reporteVacunaId: { type: integer }
-                detalleId: { type: integer }
       responses:
-        "201": { description: Observación registrada }
+        "200":
+          description: Las observaciones
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ObservacionRevision" }
+        "400":
+          description: El id no es válido o hay un parámetro de consulta
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: vacunaId." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
 
   /periodos/{id}/cerrar:
     post:
@@ -5771,6 +5882,26 @@ components:
         id: { type: integer, description: "`usuario.id`", example: 2 }
         nombre: { type: string, description: Nombres y apellidos del empleado, example: Ana Pérez }
 
+    ObservacionRevision:
+      type: object
+      required: [id, vacuna, texto, autor, creadoEn, atendida, atendidaEn]
+      properties:
+        id: { type: integer, description: "`observacion_revision.id`", example: 31 }
+        vacuna:
+          type: object
+          nullable: true
+          description: "`null` en una observación general, o si su vacuna ya no está en el reporte"
+          required: [id, codigo, nombre]
+          properties:
+            id: { type: integer, example: 3 }
+            codigo: { type: string, example: HEXA }
+            nombre: { type: string, example: Hexavalente }
+        texto: { type: string, maxLength: 1000, example: Hexavalente D1 en menores de 1 año es muy alto frente a septiembre. }
+        autor: { $ref: "#/components/schemas/RevisorResumen" }
+        creadoEn: { type: string, format: date-time, example: "2026-10-31T15:10:00.000Z" }
+        atendida: { type: boolean, description: La marca el establecimiento (HU-29), example: false }
+        atendidaEn: { type: string, format: date-time, nullable: true, example: null }
+
     ElementoBandeja:
       type: object
       required: [reporteId, versionFila, establecimiento, municipio, estado, enviadoEn, revisor, advertencias, dosisTotales]
@@ -5911,7 +6042,7 @@ components:
 
     Reporte:
       type: object
-      required: [id, establecimiento, periodo, estado, numeroRectificacion, versionFila, creadoEn, actualizadoEn, vacunas]
+      required: [id, establecimiento, periodo, estado, numeroRectificacion, versionFila, revisor, creadoEn, actualizadoEn, vacunas]
       properties:
         id: { type: integer, example: 412 }
         establecimiento: { $ref: "#/components/schemas/EstablecimientoDeReporte" }
@@ -5930,6 +6061,10 @@ components:
         estado: { $ref: "#/components/schemas/EstadoReporte" }
         numeroRectificacion: { type: integer, example: 0 }
         versionFila: { type: integer, example: 1 }
+        revisor:
+          allOf: [{ $ref: "#/components/schemas/RevisorResumen" }]
+          nullable: true
+          description: El revisor asignado (SPEC 35), o `null` si el reporte no se ha asignado
         creadoEn: { type: string, format: date-time, example: "2026-10-25T15:04:00.000Z" }
         actualizadoEn: { type: string, format: date-time, example: "2026-10-25T15:04:00.000Z" }
         vacunas:
@@ -6142,7 +6277,10 @@ components:
         validadoEn:
           type: string
           format: date-time
-          description: El instante de la corrida, aunque no se haya escrito nada
+          nullable: true
+          description: |
+            El instante de la corrida, aunque no se haya escrito nada. En `GET /reportes/{id}/validacion`, el
+            `ejecutado_en` más reciente de los resultados, o `null` si no hay ninguno.
           example: "2026-10-30T15:42:10.000Z"
         errores: { type: integer, description: Resultados actuales de severidad `ERROR`, example: 1 }
         advertencias: { type: integer, description: Resultados actuales de severidad `ADVERTENCIA`, example: 2 }

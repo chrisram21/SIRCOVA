@@ -138,6 +138,10 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('REPORTE_REVISAR',           'REVISION',                'Consultar la bandeja de revisión de su DDRISS y sus revisores'),
  ('REPORTE_ASIGNAR',           'REVISION',                'Asignar los reportes enviados de su DDRISS y reasignar los suyos');
 
+-- SPEC 36 (HU-28): revisar el reporte y devolverlo con observaciones
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('REPORTE_SOLICITAR_CORRECCION', 'REVISION',             'Devolver con observaciones los reportes en revisión que tiene asignados');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -254,6 +258,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'REVISOR'
    AND p.codigo IN ('REPORTE_REVISAR', 'REPORTE_ASIGNAR', 'MUNICIPIO_CONSULTAR');
+
+-- SPEC 36 (HU-28): el Revisor devuelve los reportes que tiene asignados y lee el detalle de los de su DDRISS
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'REVISOR'
+   AND p.codigo IN ('REPORTE_SOLICITAR_CORRECCION', 'REPORTE_CONSULTAR');
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

@@ -26,6 +26,7 @@ import PaginaInicio from '@/paginas/inicio/PaginaInicio.jsx'
 // Cada pantalla se descarga al entrar en ella (Layout la espera con Suspense); Inicio va incluida, porque es la primera.
 const PaginaTerritorio = lazy(() => import('@/paginas/configuracion/PaginaTerritorio.jsx'))
 const PaginaBandejaRevision = lazy(() => import('@/paginas/revision/PaginaBandejaRevision.jsx'))
+const PaginaRevisarReporte = lazy(() => import('@/paginas/revision/PaginaRevisarReporte.jsx'))
 const PaginaEstablecimientos = lazy(() => import('@/paginas/configuracion/PaginaEstablecimientos.jsx'))
 const PaginaVacunas = lazy(() => import('@/paginas/configuracion/PaginaVacunas.jsx'))
 const PaginaDimensiones = lazy(() => import('@/paginas/configuracion/PaginaDimensiones.jsx'))
@@ -62,7 +63,8 @@ const opcionesMenu = [
     titulo: 'Registro de producción',
     descripcion: 'Captura mensual de las dosis aplicadas, por vacuna.',
     ruta: '/registro',
-    permiso: 'REPORTE_CONSULTAR',
+    // REPORTE_CREAR y no REPORTE_CONSULTAR: el Revisor también consulta reportes (SPEC 36) y no captura.
+    permiso: 'REPORTE_CREAR',
     icono: ClipboardPen,
     pagina: PaginaRegistro,
   },
@@ -70,7 +72,7 @@ const opcionesMenu = [
     titulo: 'Mis reportes',
     descripcion: 'El estado de los reportes de cada mes.',
     ruta: '/reportes',
-    permiso: 'REPORTE_CONSULTAR',
+    permiso: 'REPORTE_CREAR',
     icono: FileText,
     pagina: PaginaMisReportes,
   },
@@ -81,6 +83,9 @@ const opcionesMenu = [
     permiso: 'REPORTE_REVISAR',
     icono: ClipboardCheck,
     pagina: PaginaBandejaRevision,
+    subrutas: [
+      { titulo: 'Revisar reporte', ruta: '/revision/reportes/:id', permiso: 'REPORTE_REVISAR', pagina: PaginaRevisarReporte },
+    ],
   },
   {
     titulo: 'Indicadores',
