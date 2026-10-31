@@ -12,7 +12,7 @@ import { tokenDePrueba } from './sesionDePrueba.js';
 // borra al inicio y al final; las filas de la bitácora quedan. Los esquemas de la semilla empiezan en 2026.
 const VACUNA = 'ZVT_HU26';
 const ANIO = 2017;
-const MESES = [1, 2, 3, 4, 5, 6];
+const MESES = [1, 2, 3, 4, 5, 6, 7, 8];
 const esquemaId = new ObjectId();
 const periodoIds = {};
 let vacunaId;
@@ -20,6 +20,7 @@ let municipioPropio;
 let personal;
 let otro;
 let revisor;
+let revisor2;
 
 const auditoria = () => ({
   creado_por: new Int32(1),
@@ -209,6 +210,7 @@ describe('POST /reportes/{id}/transiciones', () => {
     personal = await tokenDe('u.nombre_usuario', 'cs1201');
     otro = await tokenDe('u.nombre_usuario', 'cs1202');
     revisor = await tokenDe('r.codigo', 'REVISOR');
+    revisor2 = await tokenDe('u.nombre_usuario', 'revisor2');
     const [[municipio]] = await pool.query("SELECT municipio_id FROM establecimiento WHERE codigo = 'CS-1201'");
     municipioPropio = municipio.municipio_id;
   }, 120000);
@@ -372,4 +374,92 @@ describe('POST /reportes/{id}/transiciones', () => {
     expect(await historial(reporte.id)).toHaveLength(1);
     expect(await enBase(reporte.id)).toMatchObject({ estado: 'ENVIADO', version_fila: reporte.versionFila + 1 });
   }, 60000);
+
+  // SPEC 35: asignar un reporte enviado (ENVIADO → EN_REVISION) con revisorId.
+  describe('asignar un reporte enviado', () => {
+    let propio;
+    let deOtro;
+    const asignar = (reporte, revisorId, credencial = revisor.token) =>
+      transicion(reporte.id, { estadoDestino: 'EN_REVISION', versionFila: reporte.versionFila, revisorId }, credencial);
+    const asignacion = async (reporteId) => {
+      const [[fila]] = await pool.query(
+        'SELECT estado, version_fila, revisor_id, UNIX_TIMESTAMP(asignado_en) AS asignado FROM reporte_produccion WHERE id = ?',
+        [reporteId],
+      );
+      return fila;
+    };
+    const enviado = async (mes) => {
+      const reporte = await crearReporte(mes, 10);
+      const res = await enviar(reporte);
+      expect(res.status).toBe(200);
+      return { id: reporte.id, versionFila: res.body.versionFila };
+    };
+
+    beforeAll(async () => {
+      propio = await enviado(7);
+      deOtro = await enviado(8);
+    }, 60000);
+
+    it('sin revisorId, o con revisorId y otro destino, responde 400', async () => {
+      const sinRevisor = await transicion(propio.id, { estadoDestino: 'EN_REVISION', versionFila: propio.versionFila }, revisor.token);
+      expect(error(sinRevisor)).toEqual([400, 'ENTRADA_INVALIDA']);
+      const conOtroDestino = await transicion(propio.id, { estadoDestino: 'ENVIADO', versionFila: propio.versionFila, revisorId: revisor.usuarioId });
+      expect(error(conOtroDestino)).toEqual([400, 'ENTRADA_INVALIDA']);
+      expect(error(await asignar(propio, 'dos'))).toEqual([400, 'ENTRADA_INVALIDA']);
+    });
+
+    it('el Personal recibe 403 al pedir EN_REVISION', async () => {
+      expect(error(await asignar(propio, revisor.usuarioId, personal.token))).toEqual([403, 'SIN_PERMISO']);
+    });
+
+    it('un revisorId que no es revisor activo de la DDRISS responde 422 REVISOR_INVALIDO', async () => {
+      for (const revisorId of [personal.usuarioId, 999999999]) {
+        expect(error(await asignar(propio, revisorId))).toEqual([422, 'REVISOR_INVALIDO']);
+      }
+      expect(await asignacion(propio.id)).toMatchObject({ estado: 'ENVIADO', revisor_id: null });
+    });
+
+    it('una versionFila vieja responde 409 REPORTE_DESACTUALIZADO', async () => {
+      expect(error(await asignar({ ...propio, versionFila: propio.versionFila - 1 }, revisor.usuarioId))).toEqual([
+        409,
+        'REPORTE_DESACTUALIZADO',
+      ]);
+    });
+
+    it('asignárselo lo pasa a EN_REVISION con revisor_id, asignado_en, historial y CAMBIO_ESTADO', async () => {
+      const res = await asignar(propio, revisor.usuarioId);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ id: propio.id, estado: 'EN_REVISION', versionFila: propio.versionFila + 1 });
+      const fila = await asignacion(propio.id);
+      expect(fila).toMatchObject({ estado: 'EN_REVISION', revisor_id: revisor.usuarioId, version_fila: propio.versionFila + 1 });
+      expect(Math.abs(Number(fila.asignado) * 1000 - Date.now())).toBeLessThan(5 * 60 * 1000);
+      expect((await historial(propio.id)).at(-1)).toEqual({
+        estado_anterior: 'ENVIADO',
+        estado_nuevo: 'EN_REVISION',
+        usuario_id: revisor.usuarioId,
+        comentario: null,
+      });
+      const cambios = await bitacora('CAMBIO_ESTADO', propio.id);
+      expect(cambios.at(-1)).toMatchObject({
+        usuario_id: revisor.usuarioId,
+        modulo: 'REVISION',
+        valores_anteriores: { estado: 'ENVIADO' },
+        valores_nuevos: { estado: 'EN_REVISION', revisorId: revisor.usuarioId },
+      });
+      propio.versionFila = res.body.versionFila;
+    });
+
+    it('ya en revisión, asignarlo otra vez responde 422 TRANSICION_NO_PERMITIDA', async () => {
+      expect(error(await asignar(propio, revisor2.usuarioId))).toEqual([422, 'TRANSICION_NO_PERMITIDA']);
+    });
+
+    it('asignarlo a otro revisor de la DDRISS lo deja con ese revisor', async () => {
+      const res = await asignar(deOtro, revisor2.usuarioId);
+
+      expect(res.status).toBe(200);
+      expect(await asignacion(deOtro.id)).toMatchObject({ estado: 'EN_REVISION', revisor_id: revisor2.usuarioId });
+      expect((await historial(deOtro.id)).at(-1).usuario_id).toBe(revisor.usuarioId);
+    });
+  });
 });

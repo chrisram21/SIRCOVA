@@ -7,9 +7,10 @@ import { reglasQueAplican } from '../configuracion/reglas.service.js';
 import { MESES_EDITABLES } from '../produccion/captura.service.js';
 import { ESTADOS_REPORTE, obtenerReporte } from '../produccion/reportes.service.js';
 import { corridaEnTransaccion, leerReporte } from '../produccion/validacion.service.js';
+import { revisorDeLaDdriss } from './bandeja.service.js';
 
 // Cada spec de revisión agrega su destino; uno que no está aquí responde 422 TRANSICION_NO_DISPONIBLE.
-const PERMISO_POR_DESTINO = { ENVIADO: 'REPORTE_ENVIAR' };
+const PERMISO_POR_DESTINO = { ENVIADO: 'REPORTE_ENVIAR', EN_REVISION: 'REPORTE_ASIGNAR' };
 const LARGO_COMENTARIO = 1000;
 
 const errores = {
@@ -20,12 +21,14 @@ const errores = {
   periodoCerrado: () => new ErrorApi(409, 'PERIODO_CERRADO', 'El mes ya está cerrado.'),
   desactualizado: () =>
     new ErrorApi(409, 'REPORTE_DESACTUALIZADO', 'El reporte cambió desde que lo abrió; recárguelo.'),
+  revisorInvalido: () =>
+    new ErrorApi(422, 'REVISOR_INVALIDO', 'El revisor elegido no es un revisor activo de la DDRISS del reporte.'),
 };
 
 function leerPedido(id, cuerpo) {
-  revisarCampos(cuerpo, ['estadoDestino', 'versionFila', 'comentario']);
+  revisarCampos(cuerpo, ['estadoDestino', 'versionFila', 'comentario', 'revisorId']);
   if (!/^\d+$/.test(String(id)) || Number(id) <= 0) throw entradaInvalida('id debe ser un número entero positivo.');
-  const { estadoDestino, versionFila, comentario } = cuerpo;
+  const { estadoDestino, versionFila, comentario, revisorId } = cuerpo;
   if (estadoDestino === undefined) throw entradaInvalida('El campo estadoDestino es obligatorio.');
   if (!ESTADOS_REPORTE.includes(estadoDestino)) throw entradaInvalida('El estado destino no es válido.');
   if (versionFila === undefined) throw entradaInvalida('El campo versionFila es obligatorio.');
@@ -37,7 +40,13 @@ function leerPedido(id, cuerpo) {
   if (texto && texto.length > LARGO_COMENTARIO) {
     throw entradaInvalida(`comentario no puede tener más de ${LARGO_COMENTARIO} caracteres.`);
   }
-  return { id: Number(id), estadoDestino, versionFila, comentario: texto };
+  if (estadoDestino === 'EN_REVISION') {
+    if (revisorId === undefined) throw entradaInvalida('El campo revisorId es obligatorio para asignar el reporte.');
+    if (!Number.isInteger(revisorId) || revisorId <= 0) throw entradaInvalida('revisorId debe ser un número entero positivo.');
+  } else if (revisorId !== undefined) {
+    throw entradaInvalida('revisorId solo se usa al asignar el reporte (EN_REVISION).');
+  }
+  return { id: Number(id), estadoDestino, versionFila, comentario: texto, revisorId: revisorId ?? null };
 }
 
 async function nombresDeEstados(conexion, codigos) {
@@ -63,6 +72,7 @@ export async function cambiarEstado(id, cuerpo, req) {
   const contexto = contextoAuditoria(req);
   const reporte = await leerReporte(pedido.id, usuario);
   const enviar = pedido.estadoDestino === 'ENVIADO';
+  const asignar = pedido.estadoDestino === 'EN_REVISION';
   // Las versiones publicadas no cambian (regla 5): se pueden leer antes del bloqueo.
   const reglas = enviar ? await reglasQueAplican(reporte.ddriss_codigo) : null;
 
@@ -91,17 +101,25 @@ export async function cambiarEstado(id, cuerpo, req) {
     if (bloqueado.version_fila !== pedido.versionFila) throw errores.desactualizado();
 
     let resumen = {};
+    const cambios = [];
+    if (asignar) {
+      const revisor = await revisorDeLaDdriss(conexion, pedido.revisorId, reporte.ddriss_id);
+      if (!revisor) throw errores.revisorInvalido();
+      cambios.push(['revisor_id = ?', revisor.id], ['asignado_en = NOW()']);
+      resumen = { revisorId: revisor.id };
+    }
     if (enviar) {
       const validacion = await corridaEnTransaccion(conexion, reporte, reglas, contexto);
       if (validacion.errores > 0) return { mensaje: mensajeConErrores(validacion.errores), validacion };
       resumen = { errores: 0, advertencias: validacion.advertencias };
+      cambios.push(['enviado_en = NOW()']);
     }
 
     await conexion.query(
       `UPDATE reporte_produccion
-          SET estado = ?, version_fila = version_fila + 1${enviar ? ', enviado_en = NOW()' : ''}
+          SET ${['estado = ?', 'version_fila = version_fila + 1', ...cambios.map(([sql]) => sql)].join(', ')}
         WHERE id = ?`,
-      [pedido.estadoDestino, reporte.id],
+      [pedido.estadoDestino, ...cambios.flatMap(([, ...valores]) => valores), reporte.id],
     );
     await conexion.query(
       `INSERT INTO historial_estado_reporte (reporte_id, estado_anterior, estado_nuevo, usuario_id, comentario)

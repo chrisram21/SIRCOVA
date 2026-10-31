@@ -133,6 +133,11 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
 INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('REPORTE_ENVIAR',            'PRODUCCION',              'Enviar a revisión el reporte en borrador de su establecimiento');
 
+-- SPEC 35 (HU-27): bandeja de revisión y asignación de revisor
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('REPORTE_REVISAR',           'REVISION',                'Consultar la bandeja de revisión de su DDRISS y sus revisores'),
+ ('REPORTE_ASIGNAR',           'REVISION',                'Asignar los reportes enviados de su DDRISS y reasignar los suyos');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -243,6 +248,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'ESTABLECIMIENTO'
    AND p.codigo = 'REPORTE_ENVIAR';
+
+-- SPEC 35 (HU-27): solo el Revisor consulta la bandeja y asigna los reportes; MUNICIPIO_CONSULTAR, para su filtro
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'REVISOR'
+   AND p.codigo IN ('REPORTE_REVISAR', 'REPORTE_ASIGNAR', 'MUNICIPIO_CONSULTAR');
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

@@ -25,6 +25,7 @@ import PaginaInicio from '@/paginas/inicio/PaginaInicio.jsx'
 
 // Cada pantalla se descarga al entrar en ella (Layout la espera con Suspense); Inicio va incluida, porque es la primera.
 const PaginaTerritorio = lazy(() => import('@/paginas/configuracion/PaginaTerritorio.jsx'))
+const PaginaBandejaRevision = lazy(() => import('@/paginas/revision/PaginaBandejaRevision.jsx'))
 const PaginaEstablecimientos = lazy(() => import('@/paginas/configuracion/PaginaEstablecimientos.jsx'))
 const PaginaVacunas = lazy(() => import('@/paginas/configuracion/PaginaVacunas.jsx'))
 const PaginaDimensiones = lazy(() => import('@/paginas/configuracion/PaginaDimensiones.jsx'))
@@ -79,6 +80,7 @@ const opcionesMenu = [
     ruta: '/revision',
     permiso: 'REPORTE_REVISAR',
     icono: ClipboardCheck,
+    pagina: PaginaBandejaRevision,
   },
   {
     titulo: 'Indicadores',
