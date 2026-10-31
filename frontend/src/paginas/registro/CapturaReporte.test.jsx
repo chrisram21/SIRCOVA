@@ -9,9 +9,13 @@ import {
   obtenerFormulario,
   obtenerReporte,
   quitarVacuna,
+  validarReporte,
 } from '@/api/produccion.js'
+import { guardarSesion } from '@/api/sesion.js'
+import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 import CapturaReporte from './CapturaReporte.jsx'
 
+vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
 vi.mock('@/api/produccion.js', () => ({
   obtenerFormulario: vi.fn(),
   obtenerReporte: vi.fn(),
@@ -19,6 +23,7 @@ vi.mock('@/api/produccion.js', () => ({
   listarVacunasDisponibles: vi.fn(),
   agregarVacuna: vi.fn(),
   quitarVacuna: vi.fn(),
+  validarReporte: vi.fn(),
 }))
 
 // El aviso de guardado es un toast (sonner, simulado en preparar-pruebas.js).
@@ -697,5 +702,151 @@ describe('agregar y quitar vacunas (SPEC 31)', () => {
     dibujar({ reporte: { ...REPORTE, vacunas: [] } })
     expect(await screen.findByText('Este reporte no tiene vacunas.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Agregar vacuna' })).toBeNull()
+  })
+})
+
+describe('validación automática (SPEC 33)', () => {
+  const resultado = (id, severidad, vacuna, celdas, cambios = {}) => ({
+    id,
+    regla: { codigo: 'CAMPOS_COMPLETOS', version: 1, nombre: 'Campos completos', tipo: 'CAMPOS_COMPLETOS' },
+    severidad,
+    estado: 'ABIERTO',
+    mensaje: `Resultado ${id}`,
+    vacuna,
+    dosis: null,
+    celdas,
+    campos: [],
+    ...cambios,
+  })
+  const HEXA = { id: 3, codigo: 'HEXA', nombre: 'Hexavalente' }
+  const VPH_VACUNA = { id: 5, codigo: 'VPH', nombre: 'VPH' }
+  const enLaA = (dosis, claveCombinacion) => ({ municipioId: 1, dosis, claveCombinacion })
+  const validacion = (resultados) => ({
+    validadoEn: '2026-10-30T21:42:10.000Z',
+    errores: resultados.filter((r) => r.severidad === 'ERROR').length,
+    advertencias: resultados.filter((r) => r.severidad === 'ADVERTENCIA').length,
+    corregidos: 0,
+    resultados,
+  })
+  const RESULTADOS = [
+    resultado(1, 'ERROR', HEXA, [enLaA('D1', 'grupo_edad=1_A_5')]),
+    resultado(2, 'ADVERTENCIA', HEXA, [enLaA('D2', 'grupo_edad=1_A_5')]),
+    resultado(3, 'ERROR', VPH_VACUNA, [enLaA('D1', 'sexo=M')]),
+  ]
+
+  function crearSesion(permisos) {
+    const codificar = (objeto) => btoa(JSON.stringify(objeto)).replace(/=+$/, '')
+    const exp = Math.floor(Date.now() / 1000) + 3600
+    return {
+      token: `${codificar({ alg: 'HS256', typ: 'JWT' })}.${codificar({ sub: '9', exp })}.firma`,
+      usuario: {
+        id: 9,
+        nombreUsuario: 'cs1201',
+        rol: 'ESTABLECIMIENTO',
+        permisos,
+        empleado: { nombres: 'Ana', apellidos: 'Pérez', ddrissId: 1, establecimientoId: 4, municipioId: 1 },
+      },
+    }
+  }
+
+  // Con la sesión, para que la captura sepa si tiene REPORTE_VALIDAR.
+  async function montarConSesion(recibido = formulario(), permisos = ['REPORTE_EDITAR', 'REPORTE_VALIDAR']) {
+    guardarSesion(crearSesion(permisos))
+    obtenerFormulario.mockResolvedValue(recibido)
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/registro',
+          element: (
+            <ProveedorSesion>
+              <CapturaReporte reporte={REPORTE} />
+            </ProveedorSesion>
+          ),
+        },
+      ],
+      { initialEntries: ['/registro'] },
+    )
+    render(<RouterProvider router={router} />)
+    await waitFor(() => expect(screen.queryByLabelText('Cargando formulario')).toBeNull())
+  }
+
+  const panelResultados = () => within(screen.getByRole('list', { name: 'Resultados de la validación' }))
+
+  // Con llaves: si beforeEach devuelve una función (mockResolvedValue devuelve el mock), Vitest la llama al terminar.
+  beforeEach(() => {
+    validarReporte.mockResolvedValue(validacion(RESULTADOS))
+  })
+
+  test('al cargar un borrador valida una vez y muestra el panel con los resultados', async () => {
+    await montarConSesion()
+
+    await waitFor(() => expect(panelResultados().getAllByRole('listitem')).toHaveLength(3))
+    expect(validarReporte).toHaveBeenCalledOnce()
+    expect(validarReporte).toHaveBeenCalledWith(7)
+    expect(screen.getByText('Validación automática')).toBeTruthy()
+  })
+
+  test('un reporte de solo consulta no valida ni muestra el panel', async () => {
+    await montarConSesion(formulario({ editable: false }))
+    expect(validarReporte).not.toHaveBeenCalled()
+    expect(screen.queryByText('Validación automática')).toBeNull()
+  })
+
+  test('sin REPORTE_VALIDAR no valida ni muestra el panel', async () => {
+    await montarConSesion(formulario(), ['REPORTE_EDITAR'])
+    expect(validarReporte).not.toHaveBeenCalled()
+    expect(screen.queryByText('Validación automática')).toBeNull()
+  })
+
+  test('después de guardar vuelve a validar', async () => {
+    await montarConSesion()
+    await waitFor(() => expect(validarReporte).toHaveBeenCalledOnce())
+    guardarVacuna.mockResolvedValueOnce({ versionFila: 4, vacuna: capturaHexa({ celdas: [celda('D1', { grupo_edad: 'MENOR_1' }, 80)] }) })
+
+    escribir('1.ª dosis · < 1 año', '80')
+    fireEvent.click(botonGuardar())
+
+    await borradorGuardado()
+    await waitFor(() => expect(validarReporte).toHaveBeenCalledTimes(2))
+  })
+
+  test('la casilla de un error queda marcada como inválida, y la de una advertencia en ámbar', async () => {
+    await montarConSesion()
+    await waitFor(() => expect(campo('1.ª dosis · De 1 a < 6 años').getAttribute('aria-invalid')).toBe('true'))
+
+    const advertida = campo('2.ª dosis · De 1 a < 6 años')
+    expect(advertida.getAttribute('aria-invalid')).toBeNull()
+    expect(advertida.className).toContain('bg-advertencia')
+    expect(campo('1.ª dosis · < 1 año').getAttribute('aria-invalid')).toBeNull()
+  })
+
+  test('la pestaña de una vacuna con errores lo dice en su descripción', async () => {
+    validarReporte.mockResolvedValue(validacion([RESULTADOS[2]]))
+    await montarConSesion()
+
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'VPH' }).getAttribute('aria-describedby')).toContain('errores-52'),
+    )
+    expect(screen.getByRole('tab', { name: 'Hexavalente' }).getAttribute('aria-describedby')).toBeNull()
+  })
+
+  test('el clic en un resultado de otra vacuna abre su pestaña y enfoca la casilla', async () => {
+    await montarConSesion()
+    await waitFor(() => expect(panelResultados().getAllByRole('listitem')).toHaveLength(3))
+
+    // Los errores van primero: el de VPH es el segundo.
+    fireEvent.click(within(panelResultados().getAllByRole('listitem')[1]).getByRole('button'))
+
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'VPH' }).getAttribute('aria-selected')).toBe('true'))
+    await waitFor(() => expect(document.activeElement).toBe(campo('1.ª dosis · Masculino')))
+  })
+
+  test('un fallo de la validación se muestra en el panel sin impedir la captura', async () => {
+    validarReporte.mockRejectedValue(new ErrorApi(422, 'REGLA_INVALIDA', 'No se pudo validar.'))
+    await montarConSesion()
+
+    expect(await screen.findByText('No se pudo validar.')).toBeTruthy()
+    escribir('1.ª dosis · < 1 año', '80')
+    expect(botonGuardar().disabled).toBe(false)
   })
 })

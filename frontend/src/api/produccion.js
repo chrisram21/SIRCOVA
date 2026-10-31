@@ -40,6 +40,11 @@ export function agregarVacuna(reporteId, { vacunaId, versionFila }) {
   return solicitar(`/reportes/${reporteId}/vacunas`, { metodo: 'POST', cuerpo: { vacunaId, versionFila } })
 }
 
+// SPEC 33: ejecuta las reglas sobre lo guardado; responde { validadoEn, errores, advertencias, corregidos, resultados }.
+export function validarReporte(reporteId) {
+  return solicitar(`/reportes/${reporteId}/validar`, { metodo: 'POST' })
+}
+
 // Borra la vacuna y sus cantidades; responde { versionFila }.
 export function quitarVacuna(reporteId, vacunaId, versionFila) {
   return solicitar(`/reportes/${reporteId}/vacunas/${vacunaId}?versionFila=${versionFila}`, { metodo: 'DELETE' })

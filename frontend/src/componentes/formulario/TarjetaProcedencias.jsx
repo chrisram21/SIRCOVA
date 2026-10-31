@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import {
+  CLASES_MARCA,
   etiquetaDeColumna,
   leerCantidad,
   LetraTarjeta,
@@ -98,7 +99,17 @@ function encabezadosDeSeccion(tabla) {
 
 const mismaFila = (a, b) => a.municipioId === b.municipioId && a.dosis === b.dosis && a.seccion === b.seccion
 
-function TablaProcedencias({ tabla, filas, dondeEsta, nombreMunicipio, cantidades, alCambiar, alQuitar, soloLectura }) {
+function TablaProcedencias({
+  tabla,
+  filas,
+  dondeEsta,
+  nombreMunicipio,
+  cantidades,
+  alCambiar,
+  alQuitar,
+  soloLectura,
+  marcas,
+}) {
   const encabezados = encabezadosDeSeccion(tabla)
   const niveles = Math.max(encabezados.length, 1)
   const conGrupo = tabla.secciones.length > 1 || tabla.secciones[0]?.grupoEdad !== null
@@ -173,6 +184,8 @@ function TablaProcedencias({ tabla, filas, dondeEsta, nombreMunicipio, cantidade
                 {llaves.map((llave, k) => {
                   const columna = etiquetaDeColumna(encabezados, k)
                   const texto = cantidades[llave] ?? ''
+                  const valida = leerCantidad(texto).valida
+                  const marca = marcas[llave]
                   return (
                     <TableCell key={llave} className="px-1.5 text-center">
                       <Input
@@ -181,15 +194,17 @@ function TablaProcedencias({ tabla, filas, dondeEsta, nombreMunicipio, cantidade
                         autoComplete="off"
                         data-fila={i}
                         data-col={k}
+                        data-celda={llave}
                         value={texto}
                         disabled={soloLectura}
-                        aria-invalid={!leerCantidad(texto).valida || undefined}
+                        aria-invalid={!valida || marca === 'ERROR' || undefined}
                         onChange={(e) => alCambiar(llave, e.target.value)}
                         onFocus={seleccionarAlEntrar}
                         onKeyDown={moverEntreCasillas}
                         className={cn(
                           'mx-auto h-9 w-full max-w-24 min-w-14 bg-card text-center font-mono transition-colors',
-                          leerCantidad(texto).valida && texto.trim() !== '' && 'border-ring/50 bg-accent font-semibold text-accent-foreground',
+                          valida && texto.trim() !== '' && 'border-ring/50 bg-accent font-semibold text-accent-foreground',
+                          valida && CLASES_MARCA[marca],
                         )}
                       />
                     </TableCell>
@@ -355,7 +370,8 @@ function DialogoProcedencia({ dondeEsta, filas, opcionesMunicipio, alAgregar, al
 
 // La tarjeta B: dosis aplicadas a personas de otros municipios (HU-21). formulario: lo que devuelve armarFormulario;
 // filas: [{ municipioId, dosis, seccion }] (seccion es la posición en tabla.secciones); cantidades usan
-// llaveProcedencia. municipios y permitidas vienen de GET /reportes/{id}/formulario.
+// llaveProcedencia. municipios y permitidas vienen de GET /reportes/{id}/formulario. marcas: la severidad de la
+// validación por llaveProcedencia (SPEC 33).
 export default function TarjetaProcedencias({
   formulario,
   filas,
@@ -367,6 +383,7 @@ export default function TarjetaProcedencias({
   alQuitar,
   alCambiar,
   soloLectura = false,
+  marcas = {},
 }) {
   const [agregando, setAgregando] = useState(false)
   const dondeEsta = ubicaciones(formulario)
@@ -414,6 +431,7 @@ export default function TarjetaProcedencias({
                 alCambiar={alCambiar}
                 alQuitar={alQuitar}
                 soloLectura={soloLectura}
+                marcas={marcas}
               />
             ))}
           </div>
