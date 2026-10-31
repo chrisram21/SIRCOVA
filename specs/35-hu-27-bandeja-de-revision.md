@@ -181,18 +181,18 @@ Bitácora: `MODULOS.REVISION`, `ACCIONES.ACTUALIZAR`, `entidad: 'reporte_producc
 
 ## Criterios de aceptación
 
-- [ ] `backend/openapi.yaml` documenta `GET /revision/bandeja`, `GET /revision/revisores`, `PATCH /reportes/{id}/revisor` y el destino `EN_REVISION` de `/transiciones` con sus permisos y errores, y `/api/docs` carga sin errores.
-- [ ] `npm test` pasa en `backend/` y en `frontend/` sin desactivar ni quitar ninguna prueba, y las pruebas no dejan datos de los años 2015, 2016 ni 2017.
-- [ ] `frontend/package.json` y `backend/package.json` no cambian, y nada en `backend/db/` cambia salvo `05_permisos_mysql.sql`.
-- [ ] La bandeja solo muestra reportes y establecimientos de la DDRISS del usuario, de un mes, ordenados por fecha de envío, con los sin enviar al final.
-- [ ] Los chips filtran por su grupo y sus conteos coinciden con lo que muestran; «Sin enviar» incluye los establecimientos sin reporte del mes.
-- [ ] Se puede filtrar por mes (también uno cerrado) y por municipio, y los filtros quedan en la URL.
-- [ ] Al asignar un reporte `ENVIADO` a sí mismo o a otro revisor activo de la DDRISS, pasa a `EN_REVISION` con `revisor_id`, `asignado_en`, una fila de historial y una `CAMBIO_ESTADO`.
-- [ ] Solo el revisor asignado puede reasignar un reporte `EN_REVISION`; reasignar cambia `revisor_id` y `asignado_en`, deja una `ACTUALIZAR` y no cambia el estado ni escribe historial.
-- [ ] Un revisor inválido responde 422 `REVISOR_INVALIDO`, una `versionFila` vieja 409, y el Personal del establecimiento 403 en la bandeja y al pedir `EN_REVISION`.
-- [ ] «Revisión y cierre» abre la bandeja solo con `REPORTE_REVISAR`, y «Asignar» y «Reasignar» solo aparecen cuando el usuario puede usarlos.
-- [ ] Ningún componente propio tiene colores escritos a mano ni llama a `fetch` directamente.
-- [ ] HU-27 tiene su avance y sus criterios marcados, y `CONTEXTO BD.md` y `CLAUDE.md` están actualizados.
+- [x] `backend/openapi.yaml` documenta `GET /revision/bandeja`, `GET /revision/revisores`, `PATCH /reportes/{id}/revisor` y el destino `EN_REVISION` de `/transiciones` con sus permisos y errores, y `/api/docs` carga sin errores.
+- [x] `npm test` pasa en `backend/` y en `frontend/` sin desactivar ni quitar ninguna prueba, y las pruebas no dejan datos de los años 2015, 2016 ni 2017.
+- [x] `frontend/package.json` y `backend/package.json` no cambian, y nada en `backend/db/` cambia salvo `05_permisos_mysql.sql`.
+- [x] La bandeja solo muestra reportes y establecimientos de la DDRISS del usuario, de un mes, ordenados por fecha de envío, con los sin enviar al final.
+- [x] Los chips filtran por su grupo y sus conteos coinciden con lo que muestran; «Sin enviar» incluye los establecimientos sin reporte del mes.
+- [x] Se puede filtrar por mes (también uno cerrado) y por municipio, y los filtros quedan en la URL.
+- [x] Al asignar un reporte `ENVIADO` a sí mismo o a otro revisor activo de la DDRISS, pasa a `EN_REVISION` con `revisor_id`, `asignado_en`, una fila de historial y una `CAMBIO_ESTADO`.
+- [x] Solo el revisor asignado puede reasignar un reporte `EN_REVISION`; reasignar cambia `revisor_id` y `asignado_en`, deja una `ACTUALIZAR` y no cambia el estado ni escribe historial.
+- [x] Un revisor inválido responde 422 `REVISOR_INVALIDO`, una `versionFila` vieja 409, y el Personal del establecimiento 403 en la bandeja y al pedir `EN_REVISION`.
+- [x] «Revisión y cierre» abre la bandeja solo con `REPORTE_REVISAR`, y «Asignar» y «Reasignar» solo aparecen cuando el usuario puede usarlos.
+- [x] Ningún componente propio tiene colores escritos a mano ni llama a `fetch` directamente.
+- [x] HU-27 tiene su avance y sus criterios marcados, y `CONTEXTO BD.md` y `CLAUDE.md` están actualizados.
 
 ## Decisiones
 
