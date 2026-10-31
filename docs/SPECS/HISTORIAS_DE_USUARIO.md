@@ -754,6 +754,8 @@ Verificado contra la API real el 2026-10-30, como Administrador: se creó `RANGO
 
 Verificado contra la API real el 2026-10-30, como Personal del establecimiento (`cs1206`), en el reporte de octubre de 2026 del Centro de Salud Concepción Tutuapa: al abrirlo, el panel mostró 8 errores de `CAMPOS_COMPLETOS` y la advertencia de `VARIACION_HISTORICA` v2 de San Marcos; el clic en el error de Hexavalente abrió su pestaña y enfocó la primera casilla vacía. Se escribió un 0 en esa casilla (Segunda dosis, < 1 año), el panel avisó de los cambios sin guardar y, al guardar, el error pasó de 5 a 4 faltantes con «1 resultados corregidos». En la base quedaron 9 resultados `ABIERTO`, uno `CORREGIDO` y dos filas `VALIDAR`. El Revisor recibe 403.
 
+**Nota (2026-10-30, ajuste después del spec 34):** la captura ya no valida al abrir el borrador, porque mostrar todos los errores y advertencias solo por entrar resultaba agresivo. La primera validación la pide el Personal con «Validar reporte» en el panel; desde entonces, guardar, agregar o quitar una vacuna vuelve a validar, y «Recargar reporte» vuelve al panel sin resultados. El backend no cambia.
+
 **Nota (2026-10-25, spec 23):**
 - **Vacía ≠ 0.** Una celda vacía no tiene fila en `detalle_produccion`; una con 0 sí (SPEC 23). `CAMPOS_COMPLETOS` (`cero_explicito: true` en el 02) revisa todas las celdas de la tarjeta A y, en la B, solo las de las filas que agregó el Personal, nunca combinaciones de municipios sin fila.
 - **Total.** `reporte_vacuna.total_declarado` lo calcula el backend: es la suma del detalle, no un dato que escribe el Personal. El campo adicional `total_dosis_declarado` de Hexavalente v2 sigue en esa versión publicada, que no se edita: quitarlo pide publicar otra.
@@ -790,6 +792,8 @@ Verificado contra la API real el 2026-10-30, como Personal del establecimiento (
 - Se envía con el mes `ABIERTO` o `EN_CIERRE`, también después de la fecha límite. Con cambios sin guardar, el botón queda deshabilitado con una nota: el backend envía lo guardado.
 
 Verificado contra la API real el 2026-10-30, como Personal del establecimiento (`cs1209`), en el reporte de octubre de 2026 del Centro de Salud Tajumulco (id 524), creado para la prueba. Con los 9 errores de `CAMPOS_COMPLETOS`, el botón estaba deshabilitado con «Corrija los errores para poder enviar.»; con las casillas llenas sin guardar, con «Guarde los cambios antes de enviar.». Después de guardar, con una advertencia de `SECUENCIA_DOSIS` (Hexavalente), el diálogo dijo «Se enviará con 1 advertencia», el reporte pasó a «Enviado» en «Solo consulta» y en «Mis reportes». En la base quedaron `ENVIADO` con `enviado_en`, la fila `BORRADOR → ENVIADO` del historial, la advertencia `ABIERTO` y la `CAMBIO_ESTADO` con `{ errores: 0, advertencias: 1 }`. El Revisor (`revisor2`) recibe 403 y queda su `ACCESO_DENEGADO`.
+
+**Nota (2026-10-30, ajuste después del spec 34):** como la validación ya no corre al abrir el borrador (nota de HU-25), «Enviar a revisión» queda deshabilitado con «Valide el reporte antes de enviar.» hasta la primera validación; después siguen las notas de cambios sin guardar y de errores. El backend sigue validando lo guardado al enviar.
 
 **Nota (2026-10-26, spec 25):** «Enviar a revisión» no debe enviar con cambios sin guardar: la validación y el envío leen lo guardado, no lo que se ve. `CapturaReporte.jsx` ya los calcula (`conCambios`, la misma regla que habilita «Guardar borrador» y el aviso al salir). El botón puede deshabilitarse con ellos o guardar antes de enviar.
 

@@ -359,8 +359,9 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
   const primeraCarga = useRef(true)
   // El pedido que llegó como prop sirve solo para la primera carga; «Recargar» y «Reintentar» piden de nuevo.
   const pedidoPendiente = useRef(formularioPedido)
-  // SPEC 33: la última respuesta de POST /reportes/{id}/validar. Sin ProveedorSesion (las pruebas que montan la
-  // captura sola) no se valida.
+  // SPEC 33: la última respuesta de POST /reportes/{id}/validar. La primera la pide el Personal con el botón del panel;
+  // desde entonces, guardar, agregar o quitar una vacuna vuelve a validar. Sin ProveedorSesion (las pruebas que montan
+  // la captura sola) no se valida.
   const sesion = useSesion()
   const puedeValidar = sesion?.tienePermiso('REPORTE_VALIDAR') ?? false
   // SPEC 34: el estado que dice el detalle de la última carga; cambia al enviar y recargar.
@@ -491,7 +492,6 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
           tomarVacuna(captura, recibido.municipioPropio.id, recibido.municipios, recibidoDetalle.vacunas)
         }
         setFormulario(recibido)
-        if (recibido.editable && puedeValidar) validar()
       })
       .catch((err) => carga === cargaActual.current && setErrorCarga(mensajeDeError(err)))
   }
@@ -530,7 +530,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
       // Las pestañas usan el id de reporte_vacuna, como el resto de la pantalla.
       setPestana(String(respuesta.vacuna.id))
       toast.success(`${respuesta.vacuna.vacuna.nombre} agregada al reporte.`)
-      if (puedeValidar) validar()
+      if (puedeValidar && validacion) validar()
     } finally {
       setOcupado(false)
     }
@@ -558,7 +558,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
       setPestana(vecina ? String(vecina.vacuna.id) : null)
       setPorQuitar(null)
       toast.success(`${vacuna.vacuna.nombre} se quitó del reporte.`)
-      if (puedeValidar) validar()
+      if (puedeValidar && validacion) validar()
     } finally {
       setOcupado(false)
     }
@@ -659,16 +659,16 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
     }
     toast.success('Borrador guardado.')
     setGuardando(false)
-    if (puedeValidar) validar()
+    if (puedeValidar && validacion) validar()
   }
 
   const puedeGuardar = !soloLectura && !guardando && !ocupado && !invalidas && conCambios.length > 0
   const muestraEnviar = !soloLectura && (sesion?.tienePermiso('REPORTE_ENVIAR') ?? false)
   let motivoSinEnviar = null
   if (conCambios.length > 0) motivoSinEnviar = 'Guarde los cambios antes de enviar.'
-  else if (validacion?.errores > 0) motivoSinEnviar = 'Corrija los errores para poder enviar.'
-  const puedeEnviar =
-    muestraEnviar && !motivoSinEnviar && validacion !== null && !validando && !guardando && !ocupado && !dialogoEnvio
+  else if (!validacion) motivoSinEnviar = 'Valide el reporte antes de enviar.'
+  else if (validacion.errores > 0) motivoSinEnviar = 'Corrija los errores para poder enviar.'
+  const puedeEnviar = muestraEnviar && !motivoSinEnviar && !validando && !guardando && !ocupado && !dialogoEnvio
   atajoGuardar.current = puedeGuardar ? guardar : null
   const idsConCambios = new Set(conCambios.map(({ vacuna }) => vacuna.id))
   // Una vacuna está completa cuando todas las casillas de su tarjeta A tienen un dato.

@@ -751,8 +751,13 @@ describe('validación automática (SPEC 33)', () => {
     }
   }
 
-  // Con la sesión, para que la captura sepa si tiene REPORTE_VALIDAR.
-  async function montarConSesion(recibido = formulario(), permisos = ['REPORTE_EDITAR', 'REPORTE_VALIDAR']) {
+  // Con la sesión, para que la captura sepa si tiene REPORTE_VALIDAR. Al abrir no se valida: si el panel está, pulsa
+  // «Validar reporte» como haría el Personal, salvo con validar: false.
+  async function montarConSesion(
+    recibido = formulario(),
+    permisos = ['REPORTE_EDITAR', 'REPORTE_VALIDAR'],
+    { validar = true } = {},
+  ) {
     guardarSesion(crearSesion(permisos))
     obtenerFormulario.mockResolvedValue(recibido)
     const router = createMemoryRouter(
@@ -770,6 +775,11 @@ describe('validación automática (SPEC 33)', () => {
     )
     render(<RouterProvider router={router} />)
     await waitFor(() => expect(screen.queryByLabelText('Cargando formulario')).toBeNull())
+    const botonValidar = screen.queryByRole('button', { name: 'Validar reporte' })
+    if (validar && botonValidar) {
+      fireEvent.click(botonValidar)
+      await waitFor(() => expect(validarReporte).toHaveBeenCalledOnce())
+    }
   }
 
   const panelResultados = () => within(screen.getByRole('list', { name: 'Resultados de la validación' }))
@@ -779,13 +789,20 @@ describe('validación automática (SPEC 33)', () => {
     validarReporte.mockResolvedValue(validacion(RESULTADOS))
   })
 
-  test('al cargar un borrador valida una vez y muestra el panel con los resultados', async () => {
-    await montarConSesion()
+  test('al abrir un borrador no valida; «Validar reporte» valida una vez y muestra los resultados', async () => {
+    await montarConSesion(formulario(), undefined, { validar: false })
+
+    expect(screen.getByText('Validación automática')).toBeTruthy()
+    expect(validarReporte).not.toHaveBeenCalled()
+    expect(screen.queryByRole('list', { name: 'Resultados de la validación' })).toBeNull()
+    expect(campo('1.ª dosis · De 1 a < 6 años').getAttribute('aria-invalid')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Validar reporte' }))
 
     await waitFor(() => expect(panelResultados().getAllByRole('listitem')).toHaveLength(3))
     expect(validarReporte).toHaveBeenCalledOnce()
     expect(validarReporte).toHaveBeenCalledWith(7)
-    expect(screen.getByText('Validación automática')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Validar de nuevo' })).toBeTruthy()
   })
 
   test('un reporte de solo consulta no valida ni muestra el panel', async () => {
@@ -810,6 +827,17 @@ describe('validación automática (SPEC 33)', () => {
 
     await borradorGuardado()
     await waitFor(() => expect(validarReporte).toHaveBeenCalledTimes(2))
+  })
+
+  test('sin haber validado, guardar no valida', async () => {
+    await montarConSesion(formulario(), undefined, { validar: false })
+    guardarVacuna.mockResolvedValueOnce({ versionFila: 4, vacuna: capturaHexa({ celdas: [celda('D1', { grupo_edad: 'MENOR_1' }, 80)] }) })
+
+    escribir('1.ª dosis · < 1 año', '80')
+    fireEvent.click(botonGuardar())
+
+    await borradorGuardado()
+    expect(validarReporte).not.toHaveBeenCalled()
   })
 
   test('la casilla de un error queda marcada como inválida, y la de una advertencia en ámbar', async () => {
@@ -862,6 +890,13 @@ describe('validación automática (SPEC 33)', () => {
       await montarConSesion()
       await waitFor(() => expect(validarReporte).toHaveBeenCalledOnce())
       expect(screen.queryByRole('button', { name: 'Enviar a revisión' })).toBeNull()
+    })
+
+    test('sin validar queda deshabilitado y pide validar', async () => {
+      await montarConSesion(formulario(), PERMISOS_PERSONAL, { validar: false })
+
+      expect(botonEnviar().disabled).toBe(true)
+      expect(screen.getByText('Valide el reporte antes de enviar.', { selector: '#motivo-sin-enviar' })).toBeTruthy()
     })
 
     test('con errores queda deshabilitado con su nota', async () => {
