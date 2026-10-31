@@ -56,7 +56,8 @@ function Resultado({ resultado, alElegir }) {
   )
 }
 
-// validacion: la respuesta de POST /reportes/{id}/validar, o null antes de la primera.
+// validacion: la respuesta de POST /reportes/{id}/validar, o null mientras el Personal no ha validado: la primera
+// validación la pide él con el botón.
 export default function PanelValidacion({ validacion, validando, error, conCambios, alValidar, alElegir, className }) {
   const errores = validacion?.resultados.filter((r) => r.severidad === 'ERROR') ?? []
   const advertencias = validacion?.resultados.filter((r) => r.severidad === 'ADVERTENCIA') ?? []
@@ -74,11 +75,11 @@ export default function PanelValidacion({ validacion, validando, error, conCambi
         </div>
         <Button variant="outline" size="sm" onClick={alValidar} disabled={validando}>
           <RotateCw className={cn(validando && 'animate-spin motion-reduce:animate-none')} />
-          {validando ? 'Validando…' : 'Validar de nuevo'}
+          {validando ? 'Validando…' : validacion ? 'Validar de nuevo' : 'Validar reporte'}
         </Button>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        {conCambios && (
+        {conCambios && validacion && (
           <p className="rounded-md border border-advertencia-foreground/20 bg-advertencia px-3 py-2 text-sm text-advertencia-foreground">
             Los resultados son de lo guardado. Guarde el borrador para validar los cambios.
           </p>
@@ -86,11 +87,18 @@ export default function PanelValidacion({ validacion, validando, error, conCambi
 
         {error && <AvisoError onReintentar={alValidar}>{error}</AvisoError>}
 
-        {!validacion && !error && (
+        {!validacion && !error && validando && (
           <div className="flex flex-col gap-2" aria-label="Cargando la validación">
             <Skeleton className="h-16 w-full" />
             <Skeleton className="h-16 w-full" />
           </div>
+        )}
+
+        {!validacion && !error && !validando && (
+          <p className="text-sm text-muted-foreground">
+            Cuando termine de capturar, guarde el borrador y use «Validar reporte» para revisar lo guardado con las
+            reglas de la DDRISS.
+          </p>
         )}
 
         {validacion && (

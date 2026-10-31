@@ -105,9 +105,20 @@ test('con cambios sin guardar avisa que los resultados son de lo guardado', () =
   expect(screen.getByText('Los resultados son de lo guardado. Guarde el borrador para validar los cambios.')).toBeTruthy()
 })
 
-test('antes de la primera validación se ve la carga', () => {
+test('mientras corre la primera validación se ve la carga', () => {
   mostrar({ validando: true })
   expect(screen.getByLabelText('Cargando la validación')).toBeTruthy()
+})
+
+test('sin validar no muestra resultados ni la carga: invita a pulsar «Validar reporte»', () => {
+  mostrar({ conCambios: true })
+
+  expect(screen.queryByLabelText('Cargando la validación')).toBeNull()
+  expect(screen.queryByText('Sin errores')).toBeNull()
+  expect(screen.queryByText(/Los resultados son de lo guardado/)).toBeNull()
+  expect(screen.getByText(/use «Validar reporte» para revisar lo guardado/)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Validar reporte' }))
+  expect(props.alValidar).toHaveBeenCalledOnce()
 })
 
 test('un fallo muestra el error y «Reintentar» vuelve a validar', () => {
