@@ -810,9 +810,19 @@ Verificado contra la API real el 2026-10-30, como Personal del establecimiento (
 **Cómo se hará:** Pantalla de bandeja con filtros por periodo, municipio y estado; la asignación llena `revisor_id` y `asignado_en` y pasa el reporte a En revisión.
 
 **Criterios de aceptación:**
-- [ ] Veo los reportes enviados de mi DDRISS ordenados por fecha de envío.
-- [ ] Al asignar un revisor, el reporte pasa a En revisión.
-- [ ] Puedo filtrar por periodo, municipio y estado.
+- [x] Veo los reportes enviados de mi DDRISS ordenados por fecha de envío.
+- [x] Al asignar un revisor, el reporte pasa a En revisión.
+- [x] Puedo filtrar por periodo, municipio y estado.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 35 a `main`. Backend y frontend, en `specs/35-hu-27-bandeja-de-revision.md`: `GET /revision/bandeja` y `GET /revision/revisores` (permiso `REPORTE_REVISAR`), el destino `EN_REVISION` de `POST /reportes/{id}/transiciones` con `revisorId` y `PATCH /reportes/{id}/revisor` (permiso `REPORTE_ASIGNAR`), y la pantalla «Bandeja de revisión» en «Revisión y cierre». Diferencias con la historia y el mockup, decididas por el equipo:
+
+- De la pantalla 5 entran el encabezado, los chips, los filtros y la tabla; el panel de detalle con observaciones, «Solicitar corrección» y «Aprobar» es de HU-28, y «Cerrar periodo» del cierre del mes. La fila todavía no abre el reporte.
+- El periodo es un mes a la vez: por defecto el `ABIERTO` o `EN_CIERRE` más antiguo de la DDRISS, y en el selector todos sus meses, también los cerrados. El estado son los chips del mockup (Por atender = Enviado + En revisión, y Sin enviar incluye los establecimientos con `reporta_5c` sin reporte del mes) más «Asignados a mí»; Cerrado cuenta también Rectificación.
+- Se asigna a sí mismo o a otro revisor activo de la DDRISS. Además, el revisor asignado puede pasar un reporte en revisión a otro revisor (reasignar), sin cambiar el estado ni escribir historial, con una fila `ACTUALIZAR` en la bitácora.
+- La bandeja incluye también un establecimiento que ya no está activo o dejó de reportar el 5C si tiene reporte del mes, para que su reporte enviado no desaparezca.
+- El Revisor recibió `MUNICIPIO_CONSULTAR` (solo lectura) para el filtro de municipio.
+
+Verificado contra la API real el 2026-10-30: como la estadígrafa (`estadigrafa`), la bandeja abrió septiembre de 2026 con 11 por atender; en octubre de 2026 el reporte 524 (Centro de Salud Tajumulco, enviado en la prueba de HU-26) apareció en «Por atender» con su advertencia y 130 dosis. El filtro de municipio, «Sin enviar» y agosto (cerrado) cambiaron la tabla y la URL. Se asignó el 524 a `revisor2`, que lo vio en «Asignados a mí» y lo reasignó a la estadígrafa. En la base quedaron `EN_REVISION` con `revisor_id` 2 y `asignado_en`, la fila `ENVIADO → EN_REVISION` del historial, la `CAMBIO_ESTADO` con `revisorId` 3 y la `ACTUALIZAR` de 3 a 2. El Personal del establecimiento (`cs1209`) recibe 403 en la bandeja y al pedir `EN_REVISION`, y no ve la opción en el menú.
 
 #### HU-28. Revisar y solicitar corrección
 

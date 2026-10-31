@@ -1,6 +1,6 @@
 # SPEC 35 — Bandeja de revisión y asignación de revisor
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-27
 > **Depende de:** SPEC 04, SPEC 05, SPEC 06, SPEC 12, SPEC 16, SPEC 22, SPEC 33 y SPEC 34
 > **Fecha:** 2026-10-30
