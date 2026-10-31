@@ -3496,10 +3496,10 @@ paths:
       tags: [Revisión]
       summary: Cambiar el estado del reporte (enviar, asignar, pedir corrección, aprobar, cerrar)
       description: |
-        Única vía para cambiar el estado. El permiso depende del destino; por ahora solo está habilitado
-        `ENVIADO` (`REPORTE_ENVIAR`, solo el Personal del establecimiento), y cualquier otro destino responde
-        422 `TRANSICION_NO_DISPONIBLE`. Además del permiso, la transición (estado actual → destino) debe existir
-        en `transicion_estado` para el rol del usuario.
+        Única vía para cambiar el estado. El permiso depende del destino; por ahora están habilitados `ENVIADO`
+        (`REPORTE_ENVIAR`, solo el Personal del establecimiento) y `EN_REVISION` (`REPORTE_ASIGNAR`, solo el
+        Revisor), y cualquier otro destino responde 422 `TRANSICION_NO_DISPONIBLE`. Además del permiso, la
+        transición (estado actual → destino) debe existir en `transicion_estado` para el rol del usuario.
 
         Todo va en una transacción de MySQL con el reporte bloqueado. Cada transición sube `versionFila`, deja
         una fila en `historial_estado_reporte` (con el `comentario`, si viene) y una `CAMBIO_ESTADO` en la
@@ -3511,9 +3511,15 @@ paths:
         escritos, el reporte sigue en `BORRADOR` y responde 422 `REPORTE_CON_ERRORES` con la validación. Sin
         errores, el reporte pasa a `ENVIADO` con `enviadoEn`; las advertencias se envían y siguen `ABIERTO`.
 
+        **EN_REVISION (asignar):** exige `revisorId`, que debe ser una cuenta activa, con empleado activo, del
+        rol `REVISOR` y de la DDRISS del reporte (puede ser el propio usuario); si no, 422 `REVISOR_INVALIDO`.
+        Llena `revisor_id` y `asignado_en`, y la `CAMBIO_ESTADO` lleva `revisorId`. Cambiar después el revisor
+        es `PATCH /reportes/{id}/revisor`.
+
         Los errores se revisan en este orden: cuerpo, destino disponible, permiso, reporte, transición,
-        comentario, estado del mes, `versionFila` y validación.
-      x-permiso: REPORTE_ENVIAR
+        comentario, estado del mes (solo `ENVIADO`), `versionFila`, revisor (solo `EN_REVISION`) y validación
+        (solo `ENVIADO`).
+      x-permiso: "Según estadoDestino: ENVIADO → REPORTE_ENVIAR; EN_REVISION → REPORTE_ASIGNAR"
       parameters:
         - { $ref: "#/components/parameters/Id" }
       requestBody:
@@ -3531,7 +3537,14 @@ paths:
                   type: string
                   maxLength: 1000
                   description: Opcional; se guarda en el historial. Ninguna transición habilitada lo exige.
-            example: { estadoDestino: ENVIADO, versionFila: 4 }
+                revisorId:
+                  type: integer
+                  minimum: 1
+                  description: Obligatorio con `EN_REVISION` (el revisor que se asigna); con otro destino, 400
+                  example: 2
+            examples:
+              enviar: { value: { estadoDestino: ENVIADO, versionFila: 4 } }
+              asignar: { value: { estadoDestino: EN_REVISION, versionFila: 5, revisorId: 2 } }
       responses:
         "200":
           description: Estado actualizado; el reporte como en `GET /reportes/{id}`
@@ -3553,6 +3566,9 @@ paths:
                 destino:
                   value:
                     error: { codigo: ENTRADA_INVALIDA, mensaje: "El estado destino no es válido." }
+                sinRevisor:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "El campo revisorId es obligatorio para asignar el reporte." }
         "401": { $ref: "#/components/responses/NoAutenticado" }
         "403": { $ref: "#/components/responses/SinPermiso" }
         "404":
@@ -3577,7 +3593,8 @@ paths:
         "422":
           description: |
             El destino no está habilitado, la transición no existe para el rol desde el estado actual, falta el
-            comentario que exige la transición o, al enviar, quedan errores de validación (con `validacion`)
+            comentario que exige la transición, al asignar el revisor no es válido o, al enviar, quedan errores
+            de validación (con `validacion`)
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorConValidacion" }
@@ -3591,6 +3608,9 @@ paths:
                 comentario:
                   value:
                     error: { codigo: COMENTARIO_REQUERIDO, mensaje: Esta transición requiere un comentario. }
+                revisorInvalido:
+                  value:
+                    error: { codigo: REVISOR_INVALIDO, mensaje: El revisor elegido no es un revisor activo de la DDRISS del reporte. }
                 conErrores:
                   value:
                     error:
@@ -3602,6 +3622,181 @@ paths:
                       advertencias: 1
                       corregidos: 0
                       resultados: []
+
+  /reportes/{id}/revisor:
+    patch:
+      tags: [Revisión]
+      summary: Pasar un reporte en revisión a otro revisor (solo el revisor asignado)
+      description: |
+        Cambia `revisor_id` y `asignado_en` de un reporte `EN_REVISION` sin cambiar su estado, así que no pasa por
+        `/transiciones` ni escribe en `historial_estado_reporte`. Solo lo puede hacer el revisor asignado. El nuevo
+        revisor debe ser una cuenta activa, con empleado activo, del rol `REVISOR` y de la DDRISS del reporte, y
+        distinto del actual. Sube `versionFila` y deja una fila `ACTUALIZAR` en la bitácora (módulo `REVISION`,
+        entidad `reporte_produccion`) con `{ revisorId }` antes y después.
+
+        Los errores se revisan en este orden: cuerpo, permiso, reporte, estado, revisor asignado, revisor nuevo
+        y `versionFila`.
+      x-permiso: REPORTE_ASIGNAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [revisorId, versionFila]
+              additionalProperties: false
+              properties:
+                revisorId: { type: integer, minimum: 1, description: El revisor nuevo, example: 3 }
+                versionFila: { type: integer, description: La del reporte que se ve, example: 6 }
+      responses:
+        "200":
+          description: El revisor nuevo y la versionFila nueva del reporte
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [versionFila, revisor]
+                properties:
+                  versionFila: { type: integer, example: 7 }
+                  revisor: { $ref: "#/components/schemas/RevisorResumen" }
+        "400":
+          description: El id o el cuerpo no son válidos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                sinVersion:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "El campo versionFila es obligatorio." }
+                campoDeMas:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: motivo." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403":
+          description: Sin `REPORTE_ASIGNAR`, o el usuario no es el revisor asignado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                sinPermiso:
+                  value:
+                    error: { codigo: SIN_PERMISO, mensaje: No tiene permiso para realizar esta acción. }
+                noAsignado:
+                  value:
+                    error: { codigo: NO_ES_REVISOR_ASIGNADO, mensaje: Solo el revisor asignado puede pasar el reporte a otro revisor. }
+        "404":
+          description: El reporte no existe o no es de la DDRISS del usuario
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: NO_ENCONTRADO, mensaje: El recurso solicitado no existe. }
+        "409":
+          description: El reporte no está en revisión, o cambió desde que se abrió
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                noEnRevision:
+                  value:
+                    error: { codigo: REPORTE_NO_EN_REVISION, mensaje: El reporte no está en revisión. }
+                desactualizado:
+                  value:
+                    error: { codigo: REPORTE_DESACTUALIZADO, mensaje: El reporte cambió desde que lo abrió; recárguelo. }
+        "422":
+          description: El revisor nuevo no es un revisor activo de la DDRISS, o es el mismo asignado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                invalido:
+                  value:
+                    error: { codigo: REVISOR_INVALIDO, mensaje: El revisor elegido no es un revisor activo de la DDRISS del reporte. }
+                mismo:
+                  value:
+                    error: { codigo: REVISOR_INVALIDO, mensaje: El reporte ya está asignado a ese revisor. }
+
+  /revision/bandeja:
+    get:
+      tags: [Revisión]
+      summary: Bandeja de revisión de un mes de la DDRISS del usuario
+      description: |
+        Los establecimientos activos con `reporta_5c` de la DDRISS del usuario, cada uno con su reporte del mes si
+        lo tiene, filtrados por `grupo` (los chips de la pantalla) y por municipio, con la forma paginada común
+        y los `conteos` de cada grupo con el mes y el municipio elegidos (sin el filtro de `grupo`). Un mismo
+        `WHERE` da el `total`, la página y los conteos.
+
+        Orden: `enviadoEn` ascendente (los más antiguos primero), los que no tienen fecha de envío al final, y
+        después por municipio y establecimiento.
+
+        Grupos: `POR_ATENDER` (por defecto) = `ENVIADO` + `EN_REVISION`; `ASIGNADOS_A_MI` = `EN_REVISION` con el
+        usuario como revisor; `EN_REVISION`, `ENVIADO`, `CORRECCION_SOLICITADA` y `APROBADO`, su estado;
+        `SIN_ENVIAR` = sin reporte del mes o en `BORRADOR`; `CERRADO` = `CERRADO` + `RECTIFICACION`; `TODOS`.
+
+        Un parámetro inválido, desconocido o repetido responde 400 `ENTRADA_INVALIDA`; un `periodoId` sin
+        `cierre_periodo` de la DDRISS del usuario, 404; una página fuera de rango, 200 con `elementos` vacío.
+      x-permiso: REPORTE_REVISAR
+      parameters:
+        - { name: periodoId, in: query, required: true, schema: { type: integer, minimum: 1, example: 10 } }
+        - { name: municipioId, in: query, schema: { type: integer, minimum: 1, example: 9 } }
+        - { name: grupo, in: query, schema: { $ref: "#/components/schemas/GrupoBandeja" } }
+        - { $ref: "#/components/parameters/Pagina" }
+        - { $ref: "#/components/parameters/PorPagina" }
+      responses:
+        "200":
+          description: Página de la bandeja con los conteos de cada grupo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BandejaRevision" }
+        "400":
+          description: Un parámetro inválido, desconocido o repetido, o falta `periodoId`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                sinPeriodo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "periodoId es obligatorio." }
+                grupo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "grupo no es válido." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404":
+          description: El mes no tiene `cierre_periodo` de la DDRISS del usuario
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: NO_ENCONTRADO, mensaje: El recurso solicitado no existe. }
+
+  /revision/revisores:
+    get:
+      tags: [Revisión]
+      summary: Revisores activos de la DDRISS del usuario
+      description: |
+        Las cuentas activas, con empleado activo, del rol `REVISOR` de la DDRISS del usuario, ordenadas por nombre,
+        para elegir a quién asignar un reporte. Sin parámetros: uno de consulta responde 400.
+      x-permiso: REPORTE_REVISAR
+      responses:
+        "200":
+          description: Los revisores
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RevisorResumen" }
+        "400":
+          description: Hay un parámetro de consulta
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: ddrissId." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
 
   /reportes/{id}/historial:
     get:
@@ -5562,6 +5757,83 @@ components:
           properties:
             comentario: { type: string, nullable: true, example: Revisar Hexavalente D1 en menores de 1 año. }
             fecha: { type: string, format: date-time, example: "2026-10-12T20:00:00.000Z" }
+
+    GrupoBandeja:
+      type: string
+      description: Los chips de la bandeja de revisión
+      enum: [POR_ATENDER, ASIGNADOS_A_MI, EN_REVISION, ENVIADO, CORRECCION_SOLICITADA, SIN_ENVIAR, APROBADO, CERRADO, TODOS]
+      default: POR_ATENDER
+
+    RevisorResumen:
+      type: object
+      required: [id, nombre]
+      properties:
+        id: { type: integer, description: "`usuario.id`", example: 2 }
+        nombre: { type: string, description: Nombres y apellidos del empleado, example: Ana Pérez }
+
+    ElementoBandeja:
+      type: object
+      required: [reporteId, versionFila, establecimiento, municipio, estado, enviadoEn, revisor, advertencias, dosisTotales]
+      properties:
+        reporteId: { type: integer, nullable: true, description: "`null` si el establecimiento no tiene reporte del mes", example: 524 }
+        versionFila: { type: integer, nullable: true, example: 13 }
+        establecimiento:
+          type: object
+          required: [id, codigo, nombre]
+          properties:
+            id: { type: integer, example: 9 }
+            codigo: { type: string, example: CS-1209 }
+            nombre: { type: string, example: Centro de Salud Tajumulco }
+        municipio:
+          type: object
+          required: [id, nombre]
+          properties:
+            id: { type: integer, example: 9 }
+            nombre: { type: string, example: Tajumulco }
+        estado:
+          allOf: [{ $ref: "#/components/schemas/EstadoReporte" }]
+          nullable: true
+          description: "`null` si no hay reporte del mes"
+        enviadoEn: { type: string, format: date-time, nullable: true, example: "2026-10-31T02:58:01.000Z" }
+        revisor:
+          allOf: [{ $ref: "#/components/schemas/RevisorResumen" }]
+          nullable: true
+        advertencias:
+          type: integer
+          description: Resultados `ADVERTENCIA` en `ABIERTO` o `JUSTIFICADO`
+          example: 1
+        dosisTotales:
+          type: integer
+          nullable: true
+          description: Suma de `reporte_vacuna.total_declarado`; `null` si ninguna vacuna tiene total
+          example: 85
+
+    BandejaRevision:
+      description: Página de la bandeja, con la forma paginada común (ver `PaginaUsuarios`) y los conteos de los grupos
+      type: object
+      required: [elementos, total, pagina, porPagina, conteos]
+      properties:
+        elementos:
+          type: array
+          items: { $ref: "#/components/schemas/ElementoBandeja" }
+        total: { type: integer, minimum: 0, example: 6 }
+        pagina: { type: integer, minimum: 1, example: 1 }
+        porPagina: { type: integer, minimum: 1, maximum: 100, example: 20 }
+        conteos:
+          type: object
+          description: Cuántos hay en cada grupo con el mes y el municipio elegidos
+          required: [POR_ATENDER, ASIGNADOS_A_MI, EN_REVISION, ENVIADO, CORRECCION_SOLICITADA, SIN_ENVIAR, APROBADO, CERRADO, TODOS]
+          additionalProperties: false
+          properties:
+            POR_ATENDER: { type: integer, example: 6 }
+            ASIGNADOS_A_MI: { type: integer, example: 2 }
+            EN_REVISION: { type: integer, example: 4 }
+            ENVIADO: { type: integer, example: 2 }
+            CORRECCION_SOLICITADA: { type: integer, example: 3 }
+            SIN_ENVIAR: { type: integer, example: 2 }
+            APROBADO: { type: integer, example: 5 }
+            CERRADO: { type: integer, example: 14 }
+            TODOS: { type: integer, example: 30 }
 
     PaginaReportes:
       description: Página de reportes, con la forma paginada común (ver `PaginaUsuarios`)

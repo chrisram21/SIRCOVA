@@ -174,20 +174,20 @@ const PERMISO_POR_DESTINO = { ENVIADO: 'REPORTE_ENVIAR' };
 
 ## Criterios de aceptación
 
-- [ ] `backend/openapi.yaml` documenta `POST /reportes/{id}/transiciones` con `x-permiso: REPORTE_ENVIAR`, `versionFila` y sus errores, y `/api/docs` carga sin errores.
-- [ ] `npm test` pasa en `backend/` y en `frontend/` sin desactivar ni quitar ninguna prueba, y las pruebas no dejan datos del año 2017 ni `ZVT_HU26…`.
-- [ ] `frontend/package.json` y `backend/package.json` no cambian, y nada en `backend/db/` cambia salvo `05_permisos_mysql.sql`.
-- [ ] Un reporte en `BORRADOR` sin errores `ABIERTO` pasa a `ENVIADO`, con `enviado_en`, una fila en `historial_estado_reporte` y una `CAMBIO_ESTADO` en la bitácora.
-- [ ] Un reporte con errores `ABIERTO` después de validar lo guardado responde 422 `REPORTE_CON_ERRORES` con la validación y sigue en `BORRADOR`.
-- [ ] Un reporte con advertencias se envía, y sus advertencias siguen `ABIERTO` en `resultado_validacion`.
-- [ ] Después de enviarlo, guardar, agregar o quitar una vacuna y validar responden 409 `REPORTE_NO_EDITABLE`, y la captura lo abre en «Solo consulta».
-- [ ] La transición se revisa contra `transicion_estado` por el rol del usuario: enviar un reporte que no está en `BORRADOR` responde 422 `TRANSICION_NO_PERMITIDA`.
-- [ ] Un destino distinto de `ENVIADO` responde 422 `TRANSICION_NO_DISPONIBLE`.
-- [ ] Sin `REPORTE_ENVIAR` responde 403; de otro establecimiento, 404; con `versionFila` vieja, 409; con el mes `CERRADO`, 409.
-- [ ] «Enviar a revisión» solo se ve con `REPORTE_ENVIAR`, y está deshabilitado con cambios sin guardar o con errores, con su nota.
-- [ ] El envío pide confirmación en un diálogo que cuenta las advertencias.
-- [ ] Ningún componente propio tiene colores escritos a mano ni llama a `fetch` directamente.
-- [ ] HU-26 tiene su avance y sus criterios marcados, y `CONTEXTO BD.md` y `CLAUDE.md` están actualizados.
+- [x] `backend/openapi.yaml` documenta `POST /reportes/{id}/transiciones` con `x-permiso: REPORTE_ENVIAR`, `versionFila` y sus errores, y `/api/docs` carga sin errores.
+- [x] `npm test` pasa en `backend/` y en `frontend/` sin desactivar ni quitar ninguna prueba, y las pruebas no dejan datos del año 2017 ni `ZVT_HU26…`.
+- [x] `frontend/package.json` y `backend/package.json` no cambian, y nada en `backend/db/` cambia salvo `05_permisos_mysql.sql`.
+- [x] Un reporte en `BORRADOR` sin errores `ABIERTO` pasa a `ENVIADO`, con `enviado_en`, una fila en `historial_estado_reporte` y una `CAMBIO_ESTADO` en la bitácora.
+- [x] Un reporte con errores `ABIERTO` después de validar lo guardado responde 422 `REPORTE_CON_ERRORES` con la validación y sigue en `BORRADOR`.
+- [x] Un reporte con advertencias se envía, y sus advertencias siguen `ABIERTO` en `resultado_validacion`.
+- [x] Después de enviarlo, guardar, agregar o quitar una vacuna y validar responden 409 `REPORTE_NO_EDITABLE`, y la captura lo abre en «Solo consulta».
+- [x] La transición se revisa contra `transicion_estado` por el rol del usuario: enviar un reporte que no está en `BORRADOR` responde 422 `TRANSICION_NO_PERMITIDA`.
+- [x] Un destino distinto de `ENVIADO` responde 422 `TRANSICION_NO_DISPONIBLE`.
+- [x] Sin `REPORTE_ENVIAR` responde 403; de otro establecimiento, 404; con `versionFila` vieja, 409; con el mes `CERRADO`, 409.
+- [x] «Enviar a revisión» solo se ve con `REPORTE_ENVIAR`, y está deshabilitado con cambios sin guardar o con errores, con su nota.
+- [x] El envío pide confirmación en un diálogo que cuenta las advertencias.
+- [x] Ningún componente propio tiene colores escritos a mano ni llama a `fetch` directamente.
+- [x] HU-26 tiene su avance y sus criterios marcados, y `CONTEXTO BD.md` y `CLAUDE.md` están actualizados.
 
 ## Decisiones
 

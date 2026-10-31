@@ -1,3 +1,5 @@
+import * as bandejaService from './bandeja.service.js';
+import * as reasignacionService from './reasignacion.service.js';
 import * as transicionesService from './transiciones.service.js';
 
 export async function cambiarEstado(req, res) {
@@ -9,4 +11,16 @@ export async function cambiarEstado(req, res) {
     });
   }
   res.json(reporte);
+}
+
+export async function obtenerBandeja(req, res) {
+  res.json(await bandejaService.obtenerBandeja(req.usuario, req.query));
+}
+
+export async function listarRevisores(req, res) {
+  res.json(await bandejaService.listarRevisores(req.usuario, req.query));
+}
+
+export async function reasignarRevisor(req, res) {
+  res.json(await reasignacionService.reasignarRevisor(req.params.id, req.body, req));
 }

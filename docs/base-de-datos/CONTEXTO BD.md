@@ -188,6 +188,7 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 - Llaves: `id`, `establecimiento_id` → establecimiento, `periodo_id` → periodo. Único (`establecimiento_id`, `periodo_id`), lo que evita reportes duplicados.
 - Estado: `estado` → estado_reporte, `numero_rectificacion`, `observaciones`.
 - Responsables y fechas: `creado_por` → usuario, `revisor_id` → usuario, `asignado_en`, `aprobado_por` → usuario, `enviado_en`, `aprobado_en`, `cerrado_en`, `creado_en`, `actualizado_en`.
+- `revisor_id` y `asignado_en` los escribe la asignación (la transición `ENVIADO → EN_REVISION` con `revisorId`, SPEC 35), y los cambia `PATCH /reportes/{id}/revisor` cuando el revisor asignado pasa el reporte a otro revisor activo de la DDRISS: reasignar no cambia el estado ni escribe `historial_estado_reporte`, solo sube `version_fila` y deja una fila `ACTUALIZAR` en la bitácora.
 - `version_fila`: control de concurrencia optimista.
 
 **`reporte_vacuna`**: la sección de un reporte que corresponde a **una vacuna**, capturada con **una versión** de su esquema. Es el vínculo principal con MongoDB.
