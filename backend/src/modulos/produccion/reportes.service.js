@@ -33,11 +33,14 @@ const SELECT_REPORTE = `
          UNIX_TIMESTAMP(r.creado_en) AS creado_en, UNIX_TIMESTAMP(r.actualizado_en) AS actualizado_en,
          e.id AS establecimiento_id, e.codigo AS establecimiento_codigo, e.nombre AS establecimiento_nombre,
          e.ddriss_id, p.id AS periodo_id, p.anio, p.mes, cp.estado AS periodo_estado,
-         DATE_FORMAT(cp.fecha_limite_envio, '%Y-%m-%d') AS fecha_limite_envio
+         DATE_FORMAT(cp.fecha_limite_envio, '%Y-%m-%d') AS fecha_limite_envio,
+         r.revisor_id, CONCAT(em.nombres, ' ', em.apellidos) AS revisor_nombre
     FROM reporte_produccion r
     JOIN establecimiento e ON e.id = r.establecimiento_id
     JOIN periodo p ON p.id = r.periodo_id
-    LEFT JOIN cierre_periodo cp ON cp.periodo_id = p.id AND cp.ddriss_id = e.ddriss_id`;
+    LEFT JOIN cierre_periodo cp ON cp.periodo_id = p.id AND cp.ddriss_id = e.ddriss_id
+    LEFT JOIN usuario ur ON ur.id = r.revisor_id
+    LEFT JOIN empleado em ON em.id = ur.empleado_id`;
 
 async function vacunasDelReporte(ejecutor, reporteId) {
   const [filas] = await ejecutor.query(
@@ -144,6 +147,7 @@ async function buscarReporte(ejecutor, id, usuario, { etiquetas = true } = {}) {
     estado: fila.estado,
     numeroRectificacion: fila.numero_rectificacion,
     versionFila: fila.version_fila,
+    revisor: fila.revisor_id === null ? null : { id: fila.revisor_id, nombre: fila.revisor_nombre },
     creadoEn: aFechaIso(fila.creado_en),
     actualizadoEn: aFechaIso(fila.actualizado_en),
   };

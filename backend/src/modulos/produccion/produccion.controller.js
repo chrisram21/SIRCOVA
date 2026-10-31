@@ -2,6 +2,7 @@ import * as reportesService from './reportes.service.js';
 import * as capturaService from './captura.service.js';
 import * as vacunasDelReporteService from './vacunasDelReporte.service.js';
 import * as validacionService from './validacion.service.js';
+import * as observacionesService from './observaciones.service.js';
 import { contextoAuditoria } from '../auditoria/auditoria.service.js';
 
 export async function listarReportes(req, res) {
@@ -44,6 +45,14 @@ export async function quitarVacuna(req, res) {
       contextoAuditoria(req),
     ),
   );
+}
+
+export async function obtenerValidacionGuardada(req, res) {
+  res.json(await validacionService.validacionGuardada(req.params.id, req.query, req.usuario));
+}
+
+export async function listarObservaciones(req, res) {
+  res.json(await observacionesService.listarObservaciones(req.params.id, req.query, req.usuario));
 }
 
 export async function validarReporte(req, res) {

@@ -32,3 +32,12 @@ export function asignarRevisor(reporteId, { versionFila, revisorId }) {
 export function reasignarRevisor(reporteId, { versionFila, revisorId }) {
   return solicitar(`/reportes/${reporteId}/revisor`, { metodo: 'PATCH', cuerpo: { versionFila, revisorId } })
 }
+
+// SPEC 36: devolver es la transición EN_REVISION → CORRECCION_SOLICITADA, solo del revisor asignado;
+// observaciones: [{ vacunaId (null = general), texto }]. Responde el reporte.
+export function solicitarCorreccion(reporteId, { versionFila, observaciones }) {
+  return solicitar(`/reportes/${reporteId}/transiciones`, {
+    metodo: 'POST',
+    cuerpo: { estadoDestino: 'CORRECCION_SOLICITADA', versionFila, observaciones },
+  })
+}

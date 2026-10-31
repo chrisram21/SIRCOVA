@@ -200,6 +200,22 @@ test('asignar avisa con un toast y vuelve a cargar la bandeja', async () => {
   await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
 })
 
+test('los reportes enviados enlazan a su revisión con la búsqueda de la bandeja; un borrador y una fila sin reporte no', async () => {
+  obtenerBandeja.mockResolvedValue(bandeja([...FILAS, fila(5, 'BORRADOR')]))
+  const router = await montar({ url: '/revision?periodo=9&grupo=TODOS' })
+  await waitFor(() => expect(screen.getByRole('table')).toBeTruthy())
+
+  const enlace = within(filaDe('Centro de Salud 1')).getByRole('link', { name: 'Centro de Salud 1' })
+  expect(enlace.getAttribute('href')).toBe('/revision/reportes/501')
+  expect(within(filaDe('Centro de Salud 3')).getByRole('link', { name: 'Centro de Salud 3' })).toBeTruthy()
+  expect(within(filaDe('Centro de Salud 4')).queryByRole('link')).toBeNull()
+  expect(within(filaDe('Centro de Salud 5')).queryByRole('link')).toBeNull()
+
+  fireEvent.click(enlace)
+  await waitFor(() => expect(router.state.location.pathname).toBe('/revision/reportes/501'))
+  expect(router.state.location.state).toEqual({ volverA: '?periodo=9&grupo=TODOS' })
+})
+
 test('un grupo vacío lo dice', async () => {
   obtenerBandeja.mockResolvedValue(bandeja([]))
   await montar()

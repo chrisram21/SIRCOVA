@@ -49,3 +49,14 @@ export function validarReporte(reporteId) {
 export function quitarVacuna(reporteId, vacunaId, versionFila) {
   return solicitar(`/reportes/${reporteId}/vacunas/${vacunaId}?versionFila=${versionFila}`, { metodo: 'DELETE' })
 }
+
+// SPEC 36: los resultados guardados, sin volver a correr las reglas; la misma forma que validarReporte, con
+// `celdas` y `campos` vacíos y `validadoEn` null si no hay ninguno.
+export function obtenerValidacionGuardada(reporteId) {
+  return solicitar(`/reportes/${reporteId}/validacion`)
+}
+
+// Las observaciones de todas las devoluciones del reporte, de la más reciente a la más antigua.
+export function listarObservaciones(reporteId) {
+  return solicitar(`/reportes/${reporteId}/observaciones`)
+}

@@ -54,7 +54,7 @@ const aFechaHora = (fecha) =>
 const dimensionesDeClave = (clave) => (clave === '' ? {} : Object.fromEntries(clave.split('|').map((par) => par.split('='))))
 
 // Las celdas del municipio propio con la llave de FormularioCaptura ({dosis}|{clave}); un 0 se ve como «0».
-const cantidadesDe = (vacuna, municipioId) =>
+export const cantidadesDe = (vacuna, municipioId) =>
   Object.fromEntries(
     vacuna.celdas
       .filter((c) => c.municipioProcedenciaId === municipioId)
@@ -110,7 +110,7 @@ function celdasParaGuardar(cantidades, otras, municipioId) {
 }
 
 // Una dosis inactiva se oculta, salvo que el reporte ya tenga filas de ella (de cualquier procedencia).
-function formularioDe(vacuna, captura) {
+export function formularioDe(vacuna, captura) {
   if (!captura.esquema) return null
   const conFilas = new Set(captura.celdas.map((c) => c.dosisCodigo))
   return armarFormulario({

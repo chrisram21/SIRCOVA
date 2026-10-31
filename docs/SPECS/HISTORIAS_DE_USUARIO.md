@@ -835,9 +835,19 @@ Verificado contra la API real el 2026-10-30: como la estadígrafa (`estadigrafa`
 **Cómo se hará:** Vista de detalle con resultados de validación; endpoint `POST /reportes/{id}/observaciones`; transición a Corrección solicitada, que regresa el reporte a Borrador.
 
 **Criterios de aceptación:**
-- [ ] Puedo escribir observaciones generales o por vacuna.
-- [ ] Al devolverlo, el reporte vuelve a Borrador y el establecimiento ve las observaciones.
-- [ ] No puedo devolver un reporte sin escribir al menos una observación.
+- [x] Puedo escribir observaciones generales o por vacuna.
+- [x] Al devolverlo, el reporte vuelve a Borrador y el establecimiento ve las observaciones.
+- [x] No puedo devolver un reporte sin escribir al menos una observación.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 36 a `main`. Backend y frontend, en `specs/36-hu-28-revisar-y-solicitar-correccion.md`: el destino `CORRECCION_SOLICITADA` de `POST /reportes/{id}/transiciones` con `observaciones` (permiso nuevo `REPORTE_SOLICITAR_CORRECCION`), `GET /reportes/{id}/observaciones`, `GET /reportes/{id}/validacion` y `revisor` en `GET /reportes/{id}`, y la pantalla «Revisar reporte» (`/revision/reportes/{id}`), que se abre desde la bandeja. Diferencias con la historia, decididas por el equipo:
+
+- «El reporte vuelve a Borrador»: el revisor lo pasa a `CORRECCION_SOLICITADA`, como dice `transicion_estado`. Volver a `BORRADOR` es la transición del establecimiento (`CORRECCION_SOLICITADA → BORRADOR`), de HU-29.
+- No hay `POST /reportes/{id}/observaciones`: las observaciones van en el cuerpo de la transición y se guardan en la misma transacción, para que no queden observaciones sueltas. El contrato tiene en su lugar un `GET` de lectura.
+- Una observación general y una por vacuna como máximo en cada devolución; las de celda (`detalle_id`) quedan fuera. Solo el revisor asignado devuelve (otro revisor recibe 403 `NO_ES_REVISOR_ASIGNADO`). El comentario del historial es la observación general o «N observaciones por vacuna: …», y es lo que muestra «Mis reportes».
+- La revisión es una pantalla propia, no el panel lateral del mockup: las vacunas en solo consulta, la validación guardada (sin volver a correr las reglas) y las observaciones anteriores. Las cifras de atribución y la mini gráfica del panel quedan fuera; «Aprobar» es de HU-30.
+- El Revisor recibió `REPORTE_CONSULTAR` para leer el detalle y el formulario de su DDRISS; por eso «Registro de producción» y «Mis reportes» pasaron a pedir `REPORTE_CREAR` en el menú.
+
+Verificado contra la API real el 2026-10-31. Como la estadígrafa (`estadigrafa`), revisora asignada del reporte 524 (octubre de 2026, Centro de Salud Tajumulco), la fila de la bandeja abrió la revisión con sus vacunas en solo consulta y la advertencia de `SECUENCIA_DOSIS`. «Solicitar corrección» sin texto avisó y llevó el foco a la observación general; con una general y una de Hexavalente, el diálogo las resumió y el reporte pasó a «Corrección solicitada» en la bandeja. En la base quedaron `CORRECCION_SOLICITADA` (versión 16, el mismo revisor), las dos filas de `observacion_revision` con el mismo `creado_en`, el historial `EN_REVISION → CORRECCION_SOLICITADA` con la observación general y la `CAMBIO_ESTADO` con las dos observaciones. Como `cs1209`, «Mis reportes» destacó octubre con el comentario y `GET /reportes/524/observaciones` trajo las dos. Como `revisor2`, el 524 abrió en solo consulta, sin el formulario, y su menú no tiene «Registro de producción» ni «Mis reportes».
 
 #### HU-29. Corregir y reenviar un reporte devuelto
 
@@ -853,6 +863,8 @@ Verificado contra la API real el 2026-10-30: como la estadígrafa (`estadigrafa`
 - [ ] Veo cada observación junto a la vacuna a la que se refiere.
 - [ ] Al reenviar, el sistema vuelve a validar el reporte.
 - [ ] El historial guarda cada envío y cada devolución.
+
+**Nota (2026-10-31, spec 36):** el revisor deja el reporte en `CORRECCION_SOLICITADA`; volver a `BORRADOR` es la transición del establecimiento (`CORRECCION_SOLICITADA → BORRADOR`, rol Establecimiento), que esta historia agrega a `PERMISO_POR_DESTINO`. Las observaciones se leen con `GET /reportes/{id}/observaciones` (de la devolución más reciente a la más antigua; las de una devolución comparten `creadoEn`), y `atendida`/`atendida_en` siguen sin usarse. «Mis reportes» ya muestra el comentario de la devolución. El reporte 524 (octubre de 2026, `cs1209`) quedó en `CORRECCION_SOLICITADA` con una observación general y una de Hexavalente para probar esta historia.
 
 **Nota (2026-10-29, spec 31):** agregar y quitar vacunas del reporte solo se permite en Borrador. Esta historia debe decidir si también se permite cuando el reporte vuelve por Corrección solicitada, y qué pasa al quitar una vacuna con observaciones del revisor: hoy responde 409 `VACUNA_CON_OBSERVACIONES`, porque la llave de `observacion_revision` la dejaría en `NULL`. Detalle en `specs/31-vacunas-base-y-agregadas-al-reporte.md`.
 

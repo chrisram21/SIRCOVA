@@ -247,6 +247,9 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 
 **`observacion_revision`**: observaciones de la estadígrafa al solicitar correcciones. Pueden ser generales, de una vacuna o de una celda.
 - Columnas: `id`, `reporte_id` → reporte_produccion, `reporte_vacuna_id` → reporte_vacuna (opcional), `detalle_id` → detalle_produccion (opcional), `usuario_id` → usuario, `texto`, `atendida`, `atendida_en`, `creado_en`.
+- La escribe solo la transición `EN_REVISION → CORRECCION_SOLICITADA` de `POST /reportes/{id}/transiciones` (SPEC 36), del revisor asignado y en la misma transacción que el cambio de estado: una fila por observación, como máximo una general (`reporte_vacuna_id` NULL) y una por vacuna, con `detalle_id` NULL (las de celda todavía no se usan). Todas las de una devolución se insertan en un solo `INSERT`, así que comparten `creado_en`, que es lo que agrupa cada devolución al leerlas.
+- El comentario de esa fila de `historial_estado_reporte` lo arma el backend: el texto de la observación general o, sin ella, «N observaciones por vacuna: {nombres}». Las observaciones no dejan filas propias en la bitácora: van en los `valores_nuevos` de la `CAMBIO_ESTADO`.
+- `atendida` y `atendida_en` quedan en su valor por defecto hasta HU-29. `fk_obs_reporte` no borra en cascada: antes de borrar un reporte hay que borrar sus observaciones.
 
 **`resultado_validacion`**: errores y advertencias que produjo la ejecución de las reglas de MongoDB sobre un reporte.
 - Llaves: `id`, `reporte_id` → reporte_produccion, `reporte_vacuna_id`, `detalle_id`.

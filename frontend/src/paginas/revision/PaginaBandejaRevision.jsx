@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useLocation, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -90,7 +90,7 @@ function textoValidacion(fila) {
 }
 
 export default function PaginaBandejaRevision() {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const [parametros, setParametros] = useSearchParams()
   const sesion = useSesion()
   const usuarioId = sesion?.sesion?.usuario?.id ?? null
@@ -306,7 +306,18 @@ export default function PaginaBandejaRevision() {
                         <TableRow key={fila.establecimiento.id}>
                           <TableCell>
                             <div className="font-medium">{fila.municipio.nombre}</div>
-                            <div className="text-sm text-muted-foreground">{fila.establecimiento.nombre}</div>
+                            {/* Solo lo enviado se revisa: un borrador o un establecimiento sin reporte no abren nada. */}
+                            {fila.reporteId && fila.estado !== 'BORRADOR' ? (
+                              <Link
+                                to={`/revision/reportes/${fila.reporteId}`}
+                                state={{ volverA: search }}
+                                className="text-sm text-enlace underline-offset-4 hover:underline"
+                              >
+                                {fila.establecimiento.nombre}
+                              </Link>
+                            ) : (
+                              <div className="text-sm text-muted-foreground">{fila.establecimiento.nombre}</div>
+                            )}
                           </TableCell>
                           <TableCell>{fila.enviadoEn ? aFecha(fila.enviadoEn) : '—'}</TableCell>
                           <TableCell>

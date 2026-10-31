@@ -57,8 +57,17 @@ function Resultado({ resultado, alElegir }) {
 }
 
 // validacion: la respuesta de POST /reportes/{id}/validar, o null mientras el Personal no ha validado: la primera
-// validación la pide él con el botón.
-export default function PanelValidacion({ validacion, validando, error, conCambios, alValidar, alElegir, className }) {
+// validación la pide él con el botón. soloLectura (SPEC 36): lo guardado que ve el revisor, sin botón ni notas de envío.
+export default function PanelValidacion({
+  validacion,
+  validando,
+  error,
+  conCambios,
+  alValidar,
+  alElegir,
+  className,
+  soloLectura = false,
+}) {
   const errores = validacion?.resultados.filter((r) => r.severidad === 'ERROR') ?? []
   const advertencias = validacion?.resultados.filter((r) => r.severidad === 'ADVERTENCIA') ?? []
 
@@ -67,16 +76,22 @@ export default function PanelValidacion({ validacion, validando, error, conCambi
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
         <div>
           <CardTitle id="titulo-validacion">Validación automática</CardTitle>
-          {validacion && (
-            <p className="text-xs text-muted-foreground">
-              Validada a las {formatoHora.format(new Date(validacion.validadoEn))}
-            </p>
+          {soloLectura ? (
+            <p className="text-xs text-muted-foreground">Los resultados con que el establecimiento envió el reporte.</p>
+          ) : (
+            validacion && (
+              <p className="text-xs text-muted-foreground">
+                Validada a las {formatoHora.format(new Date(validacion.validadoEn))}
+              </p>
+            )
           )}
         </div>
-        <Button variant="outline" size="sm" onClick={alValidar} disabled={validando}>
-          <RotateCw className={cn(validando && 'animate-spin motion-reduce:animate-none')} />
-          {validando ? 'Validando…' : validacion ? 'Validar de nuevo' : 'Validar reporte'}
-        </Button>
+        {!soloLectura && (
+          <Button variant="outline" size="sm" onClick={alValidar} disabled={validando}>
+            <RotateCw className={cn(validando && 'animate-spin motion-reduce:animate-none')} />
+            {validando ? 'Validando…' : validacion ? 'Validar de nuevo' : 'Validar reporte'}
+          </Button>
+        )}
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {conCambios && validacion && (
@@ -119,9 +134,11 @@ export default function PanelValidacion({ validacion, validando, error, conCambi
           </>
         )}
 
-        <p className="text-xs text-muted-foreground">
-          Corrija los errores para poder enviar. Las advertencias no bloquean el envío.
-        </p>
+        {!soloLectura && (
+          <p className="text-xs text-muted-foreground">
+            Corrija los errores para poder enviar. Las advertencias no bloquean el envío.
+          </p>
+        )}
       </CardContent>
     </Card>
   )

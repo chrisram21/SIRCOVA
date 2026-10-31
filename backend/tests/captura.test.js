@@ -169,6 +169,7 @@ async function tokenDe(condicion, valor) {
 
 let personal;
 let revisor;
+let administrador;
 let municipioPropio;
 
 const consultar = (ruta, credencial = personal.token) =>
@@ -223,6 +224,7 @@ beforeAll(async () => {
   await preparar();
   personal = await tokenDe('u.nombre_usuario', 'cs1201');
   revisor = await tokenDe('r.codigo', 'REVISOR');
+  administrador = await tokenDe('r.codigo', 'ADMINISTRADOR');
   const [[municipio]] = await pool.query(
     "SELECT m.id, m.nombre FROM establecimiento e JOIN municipio m ON m.id = e.municipio_id WHERE e.codigo = 'CS-1201'",
   );
@@ -334,7 +336,8 @@ describe('GET /reportes/{id}/formulario', () => {
   it('otro establecimiento recibe 404, un rol sin REPORTE_CONSULTAR 403 y un reporte inexistente 404', async () => {
     const otro = await tokenDe('u.nombre_usuario', 'cs1202');
     expect((await consultar(`/reportes/${reporteId}/formulario`, otro.token)).status).toBe(404);
-    expect((await consultar(`/reportes/${reporteId}/formulario`, revisor.token)).status).toBe(403);
+    // El Revisor tiene REPORTE_CONSULTAR desde el SPEC 36: el rol sin el permiso es el Administrador.
+    expect((await consultar(`/reportes/${reporteId}/formulario`, administrador.token)).status).toBe(403);
     expect((await consultar('/reportes/999999999/formulario')).status).toBe(404);
     expect((await consultar('/reportes/abc/formulario')).status).toBe(404);
   });

@@ -279,6 +279,94 @@ export async function corridaEnTransaccion(conexion, reporte, reglas, contexto) 
   };
 }
 
+// El nombre y el tipo de cada versión de regla de los resultados; la de la DDRISS antes que la nacional del mismo
+// código y versión.
+async function reglasDeResultados(filas, ddrissCodigo) {
+  const pares = [...new Map(filas.map((f) => [`${f.regla_codigo}|${f.regla_version}`, f])).values()];
+  if (pares.length === 0) return new Map();
+  const documentos = await (await obtenerDb())
+    .collection('reglas_validacion')
+    .find({
+      $or: pares.map((f) => ({ codigo: f.regla_codigo, version: f.regla_version })),
+      $and: [{ $or: [{ 'territorio.nivel': 'NACIONAL' }, { 'territorio.ddriss_codigo': ddrissCodigo }] }],
+    })
+    .project({ codigo: 1, version: 1, nombre: 1, tipo: 1, territorio: 1 })
+    .toArray();
+  const porPar = new Map();
+  for (const d of documentos.sort((a, b) => (a.territorio.nivel === 'NACIONAL') - (b.territorio.nivel === 'NACIONAL'))) {
+    const k = `${d.codigo}|${d.version}`;
+    if (!porPar.has(k)) porPar.set(k, d);
+  }
+  return porPar;
+}
+
+// Lo guardado en resultado_validacion, sin correr el motor: lo que el establecimiento envió (SPEC 36).
+export async function validacionGuardada(id, query, usuario) {
+  const reporte = await leerReporte(leerPedido(id, query), usuario);
+  const [filas] = await pool.query(
+    `SELECT rv.id, rv.regla_codigo, rv.regla_version, rv.severidad, rv.estado, rv.mensaje, rv.detalle_id,
+            UNIX_TIMESTAMP(rv.ejecutado_en) AS ejecutado_en,
+            v.id AS vacuna_id, v.codigo AS vacuna_codigo, v.nombre AS vacuna_nombre, v.orden_informe,
+            rva.esquema_mongo_id, ds.codigo AS dosis_codigo, ds.nombre AS dosis_nombre
+       FROM resultado_validacion rv
+       LEFT JOIN reporte_vacuna rva ON rva.id = rv.reporte_vacuna_id
+       LEFT JOIN vacuna v ON v.id = rva.vacuna_id
+       LEFT JOIN detalle_produccion dp ON dp.id = rv.detalle_id
+       LEFT JOIN dosis ds ON ds.id = dp.dosis_id
+      WHERE rv.reporte_id = ? AND rv.estado IN (?)`,
+    [reporte.id, ACTUALES],
+  );
+  const conDetalle = filas.filter((f) => f.dosis_codigo !== null);
+  const [reglas, esquemas] = await Promise.all([
+    reglasDeResultados(filas, reporte.ddriss_codigo),
+    esquemasDe([...new Set(conDetalle.map((f) => f.esquema_mongo_id))]),
+  ]);
+
+  // El orden de ejecutarReglas: errores primero; dentro, por vacuna del reporte (las de ámbito REPORTE al final) y
+  // por código de regla.
+  const peso = { ERROR: 0, ADVERTENCIA: 1 };
+  const posicion = (f) => (f.vacuna_id === null ? [1, 0, ''] : [0, f.orden_informe ?? 0, f.vacuna_nombre]);
+  filas.sort((a, b) => {
+    const [ra, oa, na] = posicion(a);
+    const [rb, ob, nb] = posicion(b);
+    return (
+      peso[a.severidad] - peso[b.severidad] || ra - rb || oa - ob || na.localeCompare(nb) ||
+      a.regla_codigo.localeCompare(b.regla_codigo) || a.id - b.id
+    );
+  });
+
+  const resultados = filas.map((f) => {
+    const regla = reglas.get(`${f.regla_codigo}|${f.regla_version}`);
+    const etiquetaDosis = esquemas.get(f.esquema_mongo_id)?.dosis.find((d) => d.codigo === f.dosis_codigo)?.etiqueta;
+    return {
+      id: f.id,
+      regla: {
+        codigo: f.regla_codigo,
+        version: f.regla_version,
+        nombre: regla?.nombre ?? f.regla_codigo,
+        tipo: regla?.tipo ?? f.regla_codigo,
+      },
+      severidad: f.severidad,
+      estado: f.estado,
+      mensaje: f.mensaje,
+      vacuna: f.vacuna_id === null ? null : { id: f.vacuna_id, codigo: f.vacuna_codigo, nombre: f.vacuna_nombre },
+      dosis: f.dosis_codigo === null ? null : { codigo: f.dosis_codigo, etiqueta: etiquetaDosis ?? f.dosis_nombre },
+      celdas: [],
+      campos: [],
+    };
+  });
+  const cuantosErrores = resultados.filter((r) => r.severidad === 'ERROR').length;
+  const ultima = Math.max(...filas.map((f) => Number(f.ejecutado_en)));
+
+  return {
+    validadoEn: filas.length === 0 ? null : new Date(ultima * 1000).toISOString(),
+    errores: cuantosErrores,
+    advertencias: resultados.length - cuantosErrores,
+    corregidos: 0,
+    resultados,
+  };
+}
+
 export async function validarReporte(id, query, cuerpo, usuario, contexto) {
   const reporte = await leerReporte(leerPedido(id, query, cuerpo), usuario);
   // Las versiones publicadas no cambian (regla 5): se pueden leer antes del bloqueo.
