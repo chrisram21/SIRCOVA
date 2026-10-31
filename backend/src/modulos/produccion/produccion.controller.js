@@ -1,6 +1,7 @@
 import * as reportesService from './reportes.service.js';
 import * as capturaService from './captura.service.js';
 import * as vacunasDelReporteService from './vacunasDelReporte.service.js';
+import * as validacionService from './validacion.service.js';
 import { contextoAuditoria } from '../auditoria/auditoria.service.js';
 
 export async function listarReportes(req, res) {
@@ -42,5 +43,11 @@ export async function quitarVacuna(req, res) {
       req.usuario,
       contextoAuditoria(req),
     ),
+  );
+}
+
+export async function validarReporte(req, res) {
+  res.json(
+    await validacionService.validarReporte(req.params.id, req.query, req.body, req.usuario, contextoAuditoria(req)),
   );
 }

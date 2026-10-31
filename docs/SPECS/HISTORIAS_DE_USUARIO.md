@@ -739,9 +739,20 @@ Verificado contra la API real el 2026-10-30, como Administrador: se creó `RANGO
 **Cómo se hará:** Endpoint `POST /reportes/{id}/validar`; motor de reglas en el backend que lee las reglas vigentes y guarda los resultados en `resultado_validacion`.
 
 **Criterios de aceptación:**
-- [ ] Se detectan campos obligatorios vacíos, cantidades negativas, totales que no cuadran y duplicados.
-- [ ] Cada resultado indica la vacuna, dosis y regla que lo generó.
-- [ ] Los errores y las advertencias se muestran con colores distintos.
+- [x] Se detectan campos obligatorios vacíos, cantidades negativas, totales que no cuadran y duplicados.
+- [x] Cada resultado indica la vacuna, dosis y regla que lo generó.
+- [x] Los errores y las advertencias se muestran con colores distintos.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 33 a `main`. Backend y frontend, en `specs/33-hu-25-validar-reporte.md`: `POST /reportes/{id}/validar` (permiso `REPORTE_VALIDAR`, solo del Personal del establecimiento), un motor con un validador por cada tipo de `tiposRegla.js` y el panel «Validación automática» en la captura. Diferencias con la historia, decididas por el equipo:
+
+- Solo se valida un reporte en `BORRADOR` con el mes `ABIERTO` o `EN_CIERRE`, como el guardado, y siempre sobre lo guardado. La captura valida al abrir el borrador, después de guardar, agregar o quitar una vacuna, y con «Validar de nuevo».
+- Cada validación se compara con la anterior por su llave (regla, vacuna, celda y mensaje): lo que se repite se conserva, lo nuevo entra `ABIERTO` y lo que ya no aparece pasa a `CORREGIDO`. Solo una validación que cambia algo deja una fila `VALIDAR` en la bitácora.
+- «Campos obligatorios vacíos» los marca `CAMPOS_COMPLETOS`: las casillas vacías de la tarjeta A, las de las filas guardadas de la B y los campos adicionales `requerido` sin valor. «Totales que no cuadran» compara el campo `total_dosis_declarado` con la suma del detalle (`TOTAL_CUADRA`).
+- «Cantidades negativas» y «duplicados» ya los impide el guardado (SPEC 23) y el índice único del reporte: `NO_NEGATIVO` y `SIN_DUPLICADOS` tienen su validador, pero en la práctica no dan resultados. La semilla no tiene reglas `SIN_DUPLICADOS`.
+- La vacuna, la dosis (si el resultado es de una sola celda) y la regla van en la respuesta; las casillas de cada resultado solo en la respuesta, para marcarlas en la captura. Un clic en un resultado lleva a su casilla.
+- Colores: los errores en rojo, las advertencias en ámbar y «Sin errores» en verde, con el tono nuevo `--exito` (`AvisoExito tono="verde"`).
+
+Verificado contra la API real el 2026-10-30, como Personal del establecimiento (`cs1206`), en el reporte de octubre de 2026 del Centro de Salud Concepción Tutuapa: al abrirlo, el panel mostró 8 errores de `CAMPOS_COMPLETOS` y la advertencia de `VARIACION_HISTORICA` v2 de San Marcos; el clic en el error de Hexavalente abrió su pestaña y enfocó la primera casilla vacía. Se escribió un 0 en esa casilla (Segunda dosis, < 1 año), el panel avisó de los cambios sin guardar y, al guardar, el error pasó de 5 a 4 faltantes con «1 resultados corregidos». En la base quedaron 9 resultados `ABIERTO`, uno `CORREGIDO` y dos filas `VALIDAR`. El Revisor recibe 403.
 
 **Nota (2026-10-25, spec 23):**
 - **Vacía ≠ 0.** Una celda vacía no tiene fila en `detalle_produccion`; una con 0 sí (SPEC 23). `CAMPOS_COMPLETOS` (`cero_explicito: true` en el 02) revisa todas las celdas de la tarjeta A y, en la B, solo las de las filas que agregó el Personal, nunca combinaciones de municipios sin fila.
@@ -771,6 +782,8 @@ Verificado contra la API real el 2026-10-30, como Administrador: se creó `RANGO
 - [ ] Al enviar, el reporte pasa a Enviado y ya no puedo editarlo.
 
 **Nota (2026-10-26, spec 25):** «Enviar a revisión» no debe enviar con cambios sin guardar: la validación y el envío leen lo guardado, no lo que se ve. `CapturaReporte.jsx` ya los calcula (`conCambios`, la misma regla que habilita «Guardar borrador» y el aviso al salir). El botón puede deshabilitarse con ellos o guardar antes de enviar.
+
+**Nota (2026-10-30, spec 33):** el envío llama al motor del SPEC 33 (`validarReporte` de `modulos/produccion/validacion.service.js`) con lo guardado y se rechaza si quedan resultados `ERROR` en `ABIERTO`. Las advertencias se envían; justificarlas (`JUSTIFICADO`, `justificacion`) queda por decidir. La captura ya muestra el panel «Validación automática» y su nota "Corrija los errores para poder enviar. Las advertencias no bloquean el envío."
 
 #### HU-27. Bandeja de revisión y asignación de revisor
 

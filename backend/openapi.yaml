@@ -3432,17 +3432,64 @@ paths:
   /reportes/{id}/validar:
     post:
       tags: [Revisión]
-      summary: Ejecutar las reglas de validación sin cambiar el estado
+      summary: Ejecutar las reglas de validación sobre lo guardado del reporte en borrador, sin cambiar el estado
+      description: |
+        Ejecuta las reglas que aplican a la DDRISS del establecimiento del reporte en este momento (por código,
+        la `VIGENTE` de la DDRISS antes que la nacional; sin borradores), cuyo `vacunas` contiene la vacuna o
+        `*`, sobre lo **guardado**: cada vacuna con la versión del esquema fijada en el reporte. Las reglas de
+        ámbito `REPORTE` se ejecutan una vez. Una regla de un tipo que el backend no conoce se salta.
+
+        Los resultados se comparan con los actuales del reporte (`ABIERTO` o `JUSTIFICADO`) por su llave: la
+        regla, la vacuna, la celda y el mensaje. Uno que se repite se conserva (si cambió la versión o la
+        severidad de la regla, se actualizan); uno nuevo se inserta `ABIERTO`; uno que ya no aparece pasa a
+        `CORREGIDO`. Todo va en una transacción de MySQL con una fila `VALIDAR` en la bitácora (módulo
+        `PRODUCCION`, entidad `reporte_produccion`, con `{ errores, advertencias, nuevos, actualizados,
+        corregidos }`). Si nada cambió, no se escribe nada. No sube `versionFila`.
+
+        Solo con el reporte en `BORRADOR` y el mes de la DDRISS `ABIERTO` o `EN_CIERRE`, como el guardado. Los
+        errores se revisan en este orden: parámetros y cuerpo, reporte, estado del reporte y estado del mes.
+      x-permiso: REPORTE_VALIDAR
       parameters:
         - { $ref: "#/components/parameters/Id" }
       responses:
         "200":
-          description: Resultados de validación
+          description: Los resultados actuales del reporte
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/ResultadoValidacion" }
+              schema: { $ref: "#/components/schemas/Validacion" }
+        "400":
+          description: El id no es válido, hay un parámetro de consulta o el cuerpo no está vacío
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                parametro:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: vacunaId." }
+                cuerpo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: versionFila." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404":
+          description: El reporte no existe o es de otro establecimiento
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: NO_ENCONTRADO, mensaje: El recurso solicitado no existe. }
+        "409":
+          description: El reporte no está en borrador o el mes no está abierto ni en cierre
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                noEditable:
+                  value:
+                    error: { codigo: REPORTE_NO_EDITABLE, mensaje: El reporte ya no está en borrador y no se puede editar. }
+                periodoCerrado:
+                  value:
+                    error: { codigo: PERIODO_CERRADO, mensaje: El mes ya está cerrado. }
 
   /reportes/{id}/transiciones:
     post:
@@ -5723,14 +5770,81 @@ components:
           additionalProperties: true
           example: { frascos_abiertos: 12 }
 
+    Validacion:
+      type: object
+      required: [validadoEn, errores, advertencias, corregidos, resultados]
+      properties:
+        validadoEn:
+          type: string
+          format: date-time
+          description: El instante de la corrida, aunque no se haya escrito nada
+          example: "2026-10-30T15:42:10.000Z"
+        errores: { type: integer, description: Resultados actuales de severidad `ERROR`, example: 1 }
+        advertencias: { type: integer, description: Resultados actuales de severidad `ADVERTENCIA`, example: 2 }
+        corregidos: { type: integer, description: Cuántos pasaron a `CORREGIDO` en esta corrida, example: 1 }
+        resultados:
+          type: array
+          description: |
+            Los resultados actuales (`ABIERTO` o `JUSTIFICADO`): primero los errores y después las advertencias;
+            dentro, en el orden de las vacunas del reporte y luego por código de regla. Los de ámbito `REPORTE`
+            van al final de su severidad.
+          items: { $ref: "#/components/schemas/ResultadoValidacion" }
+
     ResultadoValidacion:
       type: object
+      required: [id, regla, severidad, estado, mensaje, vacuna, dosis, celdas, campos]
       properties:
-        reglaCodigo: { type: string, example: TOTAL_CUADRA }
-        reglaVersion: { type: integer }
-        severidad: { type: string, enum: [ERROR, ADVERTENCIA] }
-        mensaje: { type: string }
-        estado: { type: string, enum: [ABIERTO, CORREGIDO, JUSTIFICADO] }
+        id: { type: integer, description: "`resultado_validacion.id`", example: 412 }
+        regla:
+          type: object
+          required: [codigo, version, nombre, tipo]
+          description: La versión de la regla que produjo el resultado
+          properties:
+            codigo: { type: string, example: CAMPOS_COMPLETOS }
+            version: { type: integer, example: 1 }
+            nombre: { type: string, example: Campos completos }
+            tipo: { type: string, example: CAMPOS_COMPLETOS }
+        severidad: { type: string, enum: [ERROR, ADVERTENCIA], description: "`ERROR` impide enviar el reporte" }
+        estado: { type: string, enum: [ABIERTO, JUSTIFICADO] }
+        mensaje:
+          type: string
+          maxLength: 500
+          description: El de la regla, con sus marcadores reemplazados
+          example: "Faltan valores en Hexavalente: 1 combinaciones sin registrar."
+        vacuna:
+          type: object
+          nullable: true
+          description: "`null` en las reglas de ámbito `REPORTE`"
+          required: [id, codigo, nombre]
+          properties:
+            id: { type: integer, example: 2 }
+            codigo: { type: string, example: HEXA }
+            nombre: { type: string, example: Hexavalente }
+        dosis:
+          type: object
+          nullable: true
+          description: Solo en los resultados de una sola celda (ámbito `DETALLE`)
+          required: [codigo, etiqueta]
+          properties:
+            codigo: { type: string, example: D3 }
+            etiqueta: { type: string, example: 3.ª dosis }
+        celdas:
+          type: array
+          description: |
+            Las casillas que causan el resultado. Solo van en la respuesta: no se guardan. En `SECUENCIA_DOSIS`,
+            las de la dosis posterior en esa sección.
+          items:
+            type: object
+            required: [municipioId, dosis, claveCombinacion]
+            properties:
+              municipioId: { type: integer, description: La procedencia (`9999` incluido), example: 1201 }
+              dosis: { type: string, example: D3 }
+              claveCombinacion: { type: string, example: grupo_edad=MENOR_1 }
+        campos:
+          type: array
+          description: Las claves de los campos adicionales que faltan o no cuadran; solo en la respuesta
+          items: { type: string }
+          example: [total_dosis_declarado]
 
     ResultadoIndicador:
       type: object

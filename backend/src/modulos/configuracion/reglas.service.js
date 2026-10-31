@@ -156,6 +156,18 @@ export async function listarReglas(query, usuario) {
     .map(({ nombre, ...fila }) => fila);
 }
 
+// Las versiones que ejecuta el motor de validación (SPEC 33) para esa DDRISS, en orden de código; null = solo las
+// nacionales.
+export async function reglasQueAplican(ddrissCodigo) {
+  const vigentes = await (await coleccion())
+    .find({ estado: 'VIGENTE', $or: territoriosVisibles(ddrissCodigo) })
+    .toArray();
+  return [...Map.groupBy(vigentes, (d) => d.codigo)]
+    .map(([, versiones]) => versiones.find((d) => !esNacional(d)) ?? versiones[0])
+    .map((doc) => aRegla(doc))
+    .sort((a, b) => a.codigo.localeCompare(b.codigo));
+}
+
 // Cuándo, quién y por qué se desactivó cada versión: está solo en la bitácora, porque una versión HISTORICO no
 // cambia más que su estado y vigencia.hasta.
 async function desactivaciones(documentos) {

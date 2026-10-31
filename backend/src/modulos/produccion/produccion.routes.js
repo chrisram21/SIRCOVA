@@ -33,5 +33,11 @@ router.put(
   requierePermiso('REPORTE_EDITAR'),
   produccionController.guardarVacuna,
 );
+router.post(
+  '/reportes/:id/validar',
+  autenticar,
+  requierePermiso('REPORTE_VALIDAR'),
+  produccionController.validarReporte,
+);
 
 export default router;

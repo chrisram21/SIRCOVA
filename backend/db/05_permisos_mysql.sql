@@ -125,6 +125,10 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('REGLA_CREAR',               'CONFIGURACION_CATALOGOS', 'Crear reglas de validación para su DDRISS'),
  ('REGLA_EDITAR',              'CONFIGURACION_CATALOGOS', 'Publicar versiones de las reglas de validación para su DDRISS, y activar y desactivar las suyas');
 
+-- SPEC 33 (HU-25): validación automática del reporte en borrador
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('REPORTE_VALIDAR',           'PRODUCCION',              'Ejecutar las reglas de validación sobre el reporte en borrador de su establecimiento');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -223,6 +227,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'ADMINISTRADOR'
    AND p.codigo IN ('REGLA_CONSULTAR', 'REGLA_CREAR', 'REGLA_EDITAR');
+
+-- SPEC 33 (HU-25): el Personal de establecimiento valida sus reportes en borrador
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'ESTABLECIMIENTO'
+   AND p.codigo = 'REPORTE_VALIDAR';
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

@@ -23,12 +23,19 @@ export function AvisoError({ children, onReintentar, textoReintentar = 'Reintent
   )
 }
 
-// Un resultado que debe quedar a la vista; los avisos de guardado van con toast (sonner).
-export function AvisoExito({ children, className }) {
+const TONOS_EXITO = {
+  marca: { alerta: 'border-ring/40 bg-accent text-accent-foreground', texto: 'text-accent-foreground' },
+  verde: { alerta: 'border-exito-foreground/20 bg-exito text-exito-foreground', texto: 'text-exito-foreground' },
+}
+
+// Un resultado que debe quedar a la vista; los avisos de guardado van con toast (sonner). tono="verde" para uno que
+// debe resaltar más que el celeste común.
+export function AvisoExito({ children, className, tono = 'marca' }) {
+  const { alerta, texto } = TONOS_EXITO[tono]
   return (
-    <Alert role="status" className={cn('border-ring/40 bg-accent text-accent-foreground', className)}>
+    <Alert role="status" className={cn(alerta, className)}>
       <CircleCheck />
-      <AlertDescription className="text-accent-foreground">{children}</AlertDescription>
+      <AlertDescription className={texto}>{children}</AlertDescription>
     </Alert>
   )
 }

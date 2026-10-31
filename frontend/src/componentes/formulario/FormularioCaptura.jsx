@@ -102,7 +102,13 @@ const conInicio = (nivel) => {
   })
 }
 
-function TablaCaptura({ tabla, cantidades, alCambiar, soloLectura }) {
+// El borde de una casilla señalada por la validación (SPEC 33); la tarjeta B usa las mismas.
+export const CLASES_MARCA = {
+  ERROR: 'border-destructive ring-1 ring-destructive/40',
+  ADVERTENCIA: 'border-advertencia-foreground/60 bg-advertencia text-advertencia-foreground',
+}
+
+function TablaCaptura({ tabla, cantidades, alCambiar, soloLectura, marcas }) {
   const { encabezados, columnas, filas } = tabla
   const niveles = Math.max(encabezados.length, 1)
   // La casilla con el foco: su fila y su columna se resaltan para saber qué se está llenando.
@@ -192,6 +198,7 @@ function TablaCaptura({ tabla, cantidades, alCambiar, soloLectura }) {
                   const clave = `${fila.dosis}|${celda.claveCombinacion}`
                   const texto = cantidades[clave] ?? ''
                   const valida = leerCantidad(texto).valida
+                  const marca = marcas[clave]
                   return (
                     <TableCell
                       key={j}
@@ -203,9 +210,10 @@ function TablaCaptura({ tabla, cantidades, alCambiar, soloLectura }) {
                         autoComplete="off"
                         data-fila={i}
                         data-col={j}
+                        data-celda={clave}
                         value={texto}
                         disabled={soloLectura}
-                        aria-invalid={!valida || undefined}
+                        aria-invalid={!valida || marca === 'ERROR' || undefined}
                         title={valida ? undefined : 'Escriba un número entero, de 0 en adelante.'}
                         onChange={(e) => alCambiar(clave, e.target.value)}
                         onFocus={(e) => {
@@ -217,6 +225,7 @@ function TablaCaptura({ tabla, cantidades, alCambiar, soloLectura }) {
                         className={cn(
                           'mx-auto h-9 w-full max-w-24 min-w-14 bg-card text-center font-mono transition-colors',
                           valida && texto.trim() !== '' && 'border-ring/50 bg-accent font-semibold text-accent-foreground',
+                          valida && CLASES_MARCA[marca],
                         )}
                       />
                     </TableCell>
@@ -259,7 +268,8 @@ function TablaCaptura({ tabla, cantidades, alCambiar, soloLectura }) {
 
 // formulario: lo que devuelve armarFormulario. Sin cantidades ni alCambiar (la vista previa), las cantidades viven
 // aquí y nunca salen del componente; con ellas (la captura), las guarda el padre con la llave {dosis}|{clave}.
-export default function FormularioCaptura({ formulario, cantidades, alCambiar, soloLectura = false }) {
+// marcas: la severidad de la validación por llave (ERROR o ADVERTENCIA); la vista previa no la pasa.
+export default function FormularioCaptura({ formulario, cantidades, alCambiar, soloLectura = false, marcas = {} }) {
   const [propias, setPropias] = useState({})
   const controlado = cantidades !== undefined
   const cambiar = controlado ? alCambiar : (clave, texto) => setPropias((previas) => ({ ...previas, [clave]: texto }))
@@ -276,6 +286,7 @@ export default function FormularioCaptura({ formulario, cantidades, alCambiar, s
           cantidades={controlado ? cantidades : propias}
           alCambiar={cambiar}
           soloLectura={soloLectura}
+          marcas={marcas}
         />
       ))}
     </div>

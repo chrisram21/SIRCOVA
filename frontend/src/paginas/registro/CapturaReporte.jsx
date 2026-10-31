@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import { ESTADOS_REPORTE } from '@/componentes/InsigniaEstadoReporte.jsx'
+import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import { armarFormulario } from '@/componentes/formulario/armarFormulario.js'
 import FormularioCaptura, {
   CamposAdicionales,
@@ -21,11 +22,20 @@ import TarjetaProcedencias, {
   cantidadesDeOtras,
   filasDeCeldas,
   llavesDeFila,
+  llaveProcedencia,
 } from '@/componentes/formulario/TarjetaProcedencias.jsx'
 import { contenidoDe } from '@/paginas/configuracion/EditorEsquema.jsx'
 import { cn } from '@/lib/utils'
 import { mensajeDeError } from '@/api/cliente.js'
-import { agregarVacuna, guardarVacuna, obtenerFormulario, obtenerReporte, quitarVacuna } from '@/api/produccion.js'
+import {
+  agregarVacuna,
+  guardarVacuna,
+  obtenerFormulario,
+  obtenerReporte,
+  quitarVacuna,
+  validarReporte,
+} from '@/api/produccion.js'
+import PanelValidacion from './PanelValidacion.jsx'
 import { AgregarVacuna, DialogoQuitarVacuna } from './VacunasDelReporte.jsx'
 
 // Con estos dos errores lo guardado ya no coincide con lo que se ve: solo queda volver a cargar.
@@ -49,6 +59,32 @@ const cantidadesDe = (vacuna, municipioId) =>
       .filter((c) => c.municipioProcedenciaId === municipioId)
       .map((c) => [`${c.dosisCodigo}|${c.claveCombinacion}`, String(c.cantidad)]),
   )
+
+// Las casillas que señala la validación de una vacuna, por la llave de cada tarjeta; si una tiene un error y una
+// advertencia, gana el error.
+function marcasDe(resultados, vacunaId, municipioId) {
+  const marcas = { propias: {}, otras: {} }
+  for (const { severidad, vacuna, celdas } of resultados) {
+    if (vacuna?.id !== vacunaId) continue
+    for (const c of celdas) {
+      const [porLlave, llave] =
+        c.municipioId === municipioId
+          ? [marcas.propias, `${c.dosis}|${c.claveCombinacion}`]
+          : [marcas.otras, llaveProcedencia(c.dosis, c.municipioId, c.claveCombinacion)]
+      if (porLlave[llave] !== 'ERROR') porLlave[llave] = severidad
+    }
+  }
+  return marcas
+}
+
+// La casilla o el campo adicional al que lleva un resultado del panel.
+function selectorDe(resultado, municipioId) {
+  const [c] = resultado.celdas
+  if (!c) return `#campo-${resultado.campos[0]}`
+  const llave =
+    c.municipioId === municipioId ? `${c.dosis}|${c.claveCombinacion}` : llaveProcedencia(c.dosis, c.municipioId, c.claveCombinacion)
+  return `[data-celda="${llave}"]`
+}
 
 // Una celda vacía no se manda: no tiene fila (vacía ≠ 0). Las de la tarjeta A llevan el municipio propio y su llave
 // es {dosis}|{clave}; las de la B, {dosis}|{municipio}|{clave} (llaveProcedencia).
@@ -169,6 +205,7 @@ function PestanaVacuna({
   otras,
   datos,
   invalidas,
+  marcas,
   soloLectura,
   alCambiarCantidad,
   alCambiarOtra,
@@ -255,6 +292,7 @@ function PestanaVacuna({
             cantidades={cantidades}
             alCambiar={alCambiarCantidad}
             soloLectura={soloLectura}
+            marcas={marcas.propias}
           />
         </CardContent>
       </Card>
@@ -269,6 +307,7 @@ function PestanaVacuna({
         alQuitar={(fila) => alQuitarFila(fila, llavesDeFila(formulario, fila))}
         alCambiar={alCambiarOtra}
         soloLectura={soloLectura}
+        marcas={marcas.otras}
       />
       {esquema.camposAdicionales.length > 0 && (
         <Card>
@@ -318,6 +357,51 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
   const primeraCarga = useRef(true)
   // El pedido que llegó como prop sirve solo para la primera carga; «Recargar» y «Reintentar» piden de nuevo.
   const pedidoPendiente = useRef(formularioPedido)
+  // SPEC 33: la última respuesta de POST /reportes/{id}/validar. Sin ProveedorSesion (las pruebas que montan la
+  // captura sola) no se valida.
+  const puedeValidar = useSesion()?.tienePermiso('REPORTE_VALIDAR') ?? false
+  const [validacion, setValidacion] = useState(null)
+  const [validando, setValidando] = useState(false)
+  const [errorValidacion, setErrorValidacion] = useState(null)
+  const validacionActual = useRef(0)
+  // { selector } de la casilla que hay que enfocar cuando su pestaña ya está dibujada.
+  const [enfoque, setEnfoque] = useState(null)
+
+  // Radix dibuja el contenido de la pestaña nueva después de este render: se reintenta unas veces hasta que aparece.
+  useEffect(() => {
+    if (!enfoque) return
+    let intentos = 0
+    let temporizador
+    const buscar = () => {
+      const destino = document.querySelector(enfoque.selector)
+      if (destino) {
+        destino.focus()
+        setEnfoque(null)
+      } else if (++intentos < 10) {
+        temporizador = setTimeout(buscar, 30)
+      } else {
+        setEnfoque(null)
+      }
+    }
+    buscar()
+    return () => clearTimeout(temporizador)
+  }, [enfoque])
+
+  // Siempre sobre lo guardado; si llegan dos respuestas, gana la del último pedido.
+  async function validar() {
+    const pedido = ++validacionActual.current
+    setValidando(true)
+    try {
+      const recibida = await validarReporte(reporte.id)
+      if (pedido !== validacionActual.current) return
+      setValidacion(recibida)
+      setErrorValidacion(null)
+    } catch (err) {
+      if (pedido === validacionActual.current) setErrorValidacion(mensajeDeError(err))
+    } finally {
+      if (pedido === validacionActual.current) setValidando(false)
+    }
+  }
 
   // Las vacunas en el orden del reporte, cada una con lo que trae el formulario.
   const vacunas = formulario
@@ -382,6 +466,8 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
     setFormulario(null)
     setErrorCarga(null)
     setAviso(null)
+    setValidacion(null)
+    setErrorValidacion(null)
     const pedido = pedidoPendiente.current ?? obtenerFormulario(reporte.id)
     pedidoPendiente.current = null
     const detalle = primeraCarga.current ? Promise.resolve(reporte) : obtenerReporte(reporte.id)
@@ -398,6 +484,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
           tomarVacuna(captura, recibido.municipioPropio.id, recibido.municipios, recibidoDetalle.vacunas)
         }
         setFormulario(recibido)
+        if (recibido.editable && puedeValidar) validar()
       })
       .catch((err) => carga === cargaActual.current && setErrorCarga(mensajeDeError(err)))
   }
@@ -406,6 +493,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
     cargar()
     return () => {
       cargaActual.current += 1
+      validacionActual.current += 1
     }
   }, [reporte.id])
 
@@ -435,6 +523,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
       // Las pestañas usan el id de reporte_vacuna, como el resto de la pantalla.
       setPestana(String(respuesta.vacuna.id))
       toast.success(`${respuesta.vacuna.vacuna.nombre} agregada al reporte.`)
+      if (puedeValidar) validar()
     } finally {
       setOcupado(false)
     }
@@ -462,6 +551,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
       setPestana(vecina ? String(vecina.vacuna.id) : null)
       setPorQuitar(null)
       toast.success(`${vacuna.vacuna.nombre} se quitó del reporte.`)
+      if (puedeValidar) validar()
     } finally {
       setOcupado(false)
     }
@@ -541,6 +631,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
     }
     toast.success('Borrador guardado.')
     setGuardando(false)
+    if (puedeValidar) validar()
   }
 
   const puedeGuardar = !soloLectura && !guardando && !ocupado && !invalidas && conCambios.length > 0
@@ -561,9 +652,28 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
   if (conCambios.length > 0) insignia = 'Cambios sin guardar'
   else if (guardadoEn) insignia = `Guardado a las ${aHoraMinuto(guardadoEn)}`
   else if (reporte.actualizadoEn) insignia = `Último cambio: ${aFechaHora(new Date(reporte.actualizadoEn))}`
+  const resultados = validacion?.resultados ?? []
+  const conErrores = new Set(
+    vacunas
+      .filter(({ captura }) => resultados.some((r) => r.severidad === 'ERROR' && r.vacuna?.id === captura.vacunaId))
+      .map(({ vacuna }) => vacuna.id),
+  )
   const describirPestana = (id) =>
-    [conInvalidas.has(id) && `invalidas-${id}`, idsConCambios.has(id) && `cambios-${id}`].filter(Boolean).join(' ') ||
-    undefined
+    [
+      conInvalidas.has(id) && `invalidas-${id}`,
+      conErrores.has(id) && `errores-${id}`,
+      idsConCambios.has(id) && `cambios-${id}`,
+    ]
+      .filter(Boolean)
+      .join(' ') || undefined
+  const mostrarPanel = puedeValidar && !soloLectura
+  // Las pestañas usan el id de reporte_vacuna; el resultado trae el de la vacuna.
+  function elegirResultado(resultado) {
+    const destino = vacunas.find(({ captura }) => captura.vacunaId === resultado.vacuna.id)
+    if (!destino) return
+    setPestana(String(destino.vacuna.id))
+    setEnfoque({ selector: selectorDe(resultado, municipioId) })
+  }
   return (
     <div className="flex flex-col gap-4">
       {soloLectura && (
@@ -574,90 +684,114 @@ export default function CapturaReporte({ reporte, formularioPedido = null }) {
         </Alert>
       )}
 
-      <Tabs
-        value={vacunas.some(({ vacuna }) => String(vacuna.id) === pestana) ? pestana : String(vacunas[0].vacuna.id)}
-        onValueChange={setPestana}
-      >
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Como en Registro.html: una píldora por vacuna. */}
-          <TabsList aria-label="Vacunas" className="h-auto flex-wrap justify-start gap-2 bg-transparent p-0 group-data-horizontal/tabs:h-auto">
-            {vacunas.map(({ vacuna }) => (
-              <TabsTrigger
-                key={vacuna.id}
-                value={String(vacuna.id)}
-                aria-describedby={describirPestana(vacuna.id)}
-                className="h-auto flex-none rounded-full border-border bg-card px-3.5 py-1.5 shadow-tarjeta transition-colors duration-200 hover:not-aria-selected:border-ring/50 hover:not-aria-selected:bg-accent/40 aria-selected:border-primary aria-selected:bg-primary aria-selected:text-primary-foreground aria-selected:shadow-elevada"
-              >
-                {completas.has(vacuna.id) && <CircleCheck aria-hidden="true" className="text-ring" />}
-                {vacuna.vacuna.nombre}
-                {/* Las marcas van en la descripción, no en el nombre: la pestaña se sigue llamando como la vacuna. */}
-                {conInvalidas.has(vacuna.id) && (
-                  <>
-                    <CircleAlert aria-hidden="true" className="rounded-full bg-card text-destructive" />
-                    <span id={`invalidas-${vacuna.id}`} hidden>
-                      (cantidades no válidas)
-                    </span>
-                  </>
-                )}
-                {idsConCambios.has(vacuna.id) && (
-                  <>
-                    <span aria-hidden="true" className="size-2 rounded-full bg-advertencia-foreground ring-2 ring-advertencia" />
-                    <span id={`cambios-${vacuna.id}`} hidden>
-                      (cambios sin guardar)
-                    </span>
-                  </>
-                )}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-          {botonAgregar}
-        </div>
-        {vacunas.map(({ vacuna, captura }) => (
-          <TabsContent key={vacuna.id} value={String(vacuna.id)} className="pt-4">
-            <PestanaVacuna
-              vacuna={vacuna}
-              captura={captura}
-              formulario={armados.get(vacuna.id)}
-              municipio={formulario.municipioPropio.nombre}
-              municipios={formulario.municipios}
-              cantidades={cantidades[captura.vacunaId] ?? {}}
-              otras={otrasDe(captura.vacunaId)}
-              datos={datos[captura.vacunaId] ?? {}}
-              invalidas={conInvalidas.has(vacuna.id)}
-              // Mientras se guarda no se escribe: lo guardado reemplaza las cantidades de cada vacuna.
-              soloLectura={soloLectura || guardando}
-              alCambiarCantidad={(llave, texto) =>
-                setCantidades((previas) => ({ ...previas, [captura.vacunaId]: { ...previas[captura.vacunaId], [llave]: texto } }))
-              }
-              alCambiarOtra={(llave, texto) =>
-                cambiarOtras(captura.vacunaId, (actual) => ({
-                  ...actual,
-                  cantidades: { ...actual.cantidades, [llave]: texto },
-                }))
-              }
-              alAgregarFila={(fila) =>
-                cambiarOtras(captura.vacunaId, (actual) => ({ ...actual, filas: [...actual.filas, fila] }))
-              }
-              // Las cantidades de una fila quitada se borran: no se mandan, así que al guardar se borran sus celdas.
-              alQuitarFila={(fila, llaves) =>
-                cambiarOtras(captura.vacunaId, (actual) => ({
-                  filas: actual.filas.filter(
-                    (f) => !(f.municipioId === fila.municipioId && f.dosis === fila.dosis && f.seccion === fila.seccion),
-                  ),
-                  cantidades: Object.fromEntries(
-                    Object.entries(actual.cantidades).filter(([llave]) => !llaves.includes(llave)),
-                  ),
-                }))
-              }
-              alCambiarDato={(clave, valor) =>
-                setDatos((previos) => ({ ...previos, [captura.vacunaId]: { ...previos[captura.vacunaId], [clave]: valor } }))
-              }
-              alQuitar={soloLectura || captura.base !== false ? null : () => setPorQuitar({ vacuna, captura })}
-              quitarDeshabilitado={guardando || ocupado}
-            />
-          </TabsContent>
-        ))}
-      </Tabs>
+      {/* Con el panel de validación: a la derecha en pantallas anchas, debajo en las angostas. */}
+      <div className={cn('flex flex-col gap-4', mostrarPanel && 'xl:grid xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start')}>
+        <Tabs
+          className="min-w-0"
+          value={vacunas.some(({ vacuna }) => String(vacuna.id) === pestana) ? pestana : String(vacunas[0].vacuna.id)}
+          onValueChange={setPestana}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Como en Registro.html: una píldora por vacuna. */}
+            <TabsList aria-label="Vacunas" className="h-auto flex-wrap justify-start gap-2 bg-transparent p-0 group-data-horizontal/tabs:h-auto">
+              {vacunas.map(({ vacuna }) => (
+                <TabsTrigger
+                  key={vacuna.id}
+                  value={String(vacuna.id)}
+                  aria-describedby={describirPestana(vacuna.id)}
+                  className="h-auto flex-none rounded-full border-border bg-card px-3.5 py-1.5 shadow-tarjeta transition-colors duration-200 hover:not-aria-selected:border-ring/50 hover:not-aria-selected:bg-accent/40 aria-selected:border-primary aria-selected:bg-primary aria-selected:text-primary-foreground aria-selected:shadow-elevada"
+                >
+                  {completas.has(vacuna.id) && <CircleCheck aria-hidden="true" className="text-ring" />}
+                  {vacuna.vacuna.nombre}
+                  {/* Las marcas van en la descripción, no en el nombre: la pestaña se sigue llamando como la vacuna. */}
+                  {conInvalidas.has(vacuna.id) && (
+                    <>
+                      <CircleAlert aria-hidden="true" className="rounded-full bg-card text-destructive" />
+                      <span id={`invalidas-${vacuna.id}`} hidden>
+                        (cantidades no válidas)
+                      </span>
+                    </>
+                  )}
+                  {conErrores.has(vacuna.id) && (
+                    <>
+                      <span aria-hidden="true" className="size-2 rounded-full bg-destructive ring-2 ring-card" />
+                      <span id={`errores-${vacuna.id}`} hidden>
+                        (con errores de validación)
+                      </span>
+                    </>
+                  )}
+                  {idsConCambios.has(vacuna.id) && (
+                    <>
+                      <span aria-hidden="true" className="size-2 rounded-full bg-advertencia-foreground ring-2 ring-advertencia" />
+                      <span id={`cambios-${vacuna.id}`} hidden>
+                        (cambios sin guardar)
+                      </span>
+                    </>
+                  )}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            {botonAgregar}
+          </div>
+          {vacunas.map(({ vacuna, captura }) => (
+            <TabsContent key={vacuna.id} value={String(vacuna.id)} className="pt-4">
+              <PestanaVacuna
+                vacuna={vacuna}
+                captura={captura}
+                formulario={armados.get(vacuna.id)}
+                municipio={formulario.municipioPropio.nombre}
+                municipios={formulario.municipios}
+                cantidades={cantidades[captura.vacunaId] ?? {}}
+                otras={otrasDe(captura.vacunaId)}
+                datos={datos[captura.vacunaId] ?? {}}
+                invalidas={conInvalidas.has(vacuna.id)}
+                marcas={marcasDe(resultados, captura.vacunaId, municipioId)}
+                // Mientras se guarda no se escribe: lo guardado reemplaza las cantidades de cada vacuna.
+                soloLectura={soloLectura || guardando}
+                alCambiarCantidad={(llave, texto) =>
+                  setCantidades((previas) => ({ ...previas, [captura.vacunaId]: { ...previas[captura.vacunaId], [llave]: texto } }))
+                }
+                alCambiarOtra={(llave, texto) =>
+                  cambiarOtras(captura.vacunaId, (actual) => ({
+                    ...actual,
+                    cantidades: { ...actual.cantidades, [llave]: texto },
+                  }))
+                }
+                alAgregarFila={(fila) =>
+                  cambiarOtras(captura.vacunaId, (actual) => ({ ...actual, filas: [...actual.filas, fila] }))
+                }
+                // Las cantidades de una fila quitada se borran: no se mandan, así que al guardar se borran sus celdas.
+                alQuitarFila={(fila, llaves) =>
+                  cambiarOtras(captura.vacunaId, (actual) => ({
+                    filas: actual.filas.filter(
+                      (f) => !(f.municipioId === fila.municipioId && f.dosis === fila.dosis && f.seccion === fila.seccion),
+                    ),
+                    cantidades: Object.fromEntries(
+                      Object.entries(actual.cantidades).filter(([llave]) => !llaves.includes(llave)),
+                    ),
+                  }))
+                }
+                alCambiarDato={(clave, valor) =>
+                  setDatos((previos) => ({ ...previos, [captura.vacunaId]: { ...previos[captura.vacunaId], [clave]: valor } }))
+                }
+                alQuitar={soloLectura || captura.base !== false ? null : () => setPorQuitar({ vacuna, captura })}
+                quitarDeshabilitado={guardando || ocupado}
+              />
+            </TabsContent>
+          ))}
+        </Tabs>
+        {mostrarPanel && (
+          <PanelValidacion
+            className="xl:sticky xl:top-4"
+            validacion={validacion}
+            validando={validando}
+            error={errorValidacion}
+            conCambios={conCambios.length > 0}
+            alValidar={validar}
+            alElegir={elegirResultado}
+          />
+        )}
+      </div>
 
       {aviso && (
         <AvisoError onReintentar={aviso.recargar ? cargar : undefined} textoReintentar="Recargar reporte">
