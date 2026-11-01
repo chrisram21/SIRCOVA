@@ -95,7 +95,7 @@ async function preparar() {
     periodoIds[mes] = periodo.insertId;
     await pool.query(
       'INSERT INTO cierre_periodo (periodo_id, ddriss_id, fecha_limite_envio, estado) VALUES (?, 1, ?, ?)',
-      [periodo.insertId, `${ANIO}-${dosDigitos(mes + 1)}-10`, estado],
+      [periodo.insertId, '2099-12-31', estado],
     );
   }
 

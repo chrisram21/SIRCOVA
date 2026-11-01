@@ -98,7 +98,7 @@ describe('PATCH /reportes/{id}/revisor', () => {
     );
     periodoId = periodo.insertId;
     await pool.query(
-      "INSERT INTO cierre_periodo (periodo_id, ddriss_id, fecha_limite_envio, estado) VALUES (?, 1, '2015-02-10', 'ABIERTO')",
+      "INSERT INTO cierre_periodo (periodo_id, ddriss_id, fecha_limite_envio, estado) VALUES (?, 1, '2099-12-31', 'ABIERTO')",
       [periodoId],
     );
     suyo = await crearReporte('CS-1201', 'EN_REVISION', estadigrafa.id);

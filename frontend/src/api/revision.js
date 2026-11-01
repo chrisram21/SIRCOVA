@@ -1,3 +1,4 @@
+import { invalidarCache } from './cache.js'
 import { solicitar } from './cliente.js'
 
 // SPEC 34: la única vía para cambiar el estado del reporte; responde el reporte como GET /reportes/{id}. Un 422
@@ -6,7 +7,8 @@ export function cambiarEstadoReporte(reporteId, { estadoDestino, versionFila }) 
   return solicitar(`/reportes/${reporteId}/transiciones`, { metodo: 'POST', cuerpo: { estadoDestino, versionFila } })
 }
 
-// SPEC 35: la bandeja de un mes de la DDRISS; responde { elementos, total, pagina, porPagina, conteos }.
+// SPEC 35: la bandeja de un mes de la DDRISS; responde { elementos, total, pagina, porPagina, conteos, cierre }
+// (cierre, SPEC 39: { estado, fechaLimiteEnvio, establecimientos, aprobados, cerrados, faltanPorAprobar }).
 export function obtenerBandeja({ periodoId, municipioId, grupo, pagina, porPagina }) {
   const consulta = new URLSearchParams()
   for (const [nombre, valor] of Object.entries({ periodoId, municipioId, grupo, pagina, porPagina })) {
@@ -58,4 +60,10 @@ export function aprobarReporte(reporteId, { versionFila, comentario }) {
     metodo: 'POST',
     cuerpo: { estadoDestino: 'APROBADO', versionFila, ...(comentario && { comentario }) },
   })
+}
+
+// SPEC 39: cierra un mes EN_CIERRE de la DDRISS y pasa sus reportes aprobados a CERRADO. Responde el periodo con
+// reportesCerrados; el estado del mes cambia, así que la lista de periodos guardada se borra.
+export function cerrarPeriodo(periodoId) {
+  return solicitar(`/periodos/${periodoId}/cerrar`, { metodo: 'POST' }).finally(() => invalidarCache('/periodos'))
 }

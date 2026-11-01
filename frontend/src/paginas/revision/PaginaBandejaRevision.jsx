@@ -13,10 +13,11 @@ import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import InsigniaEstadoReporte from '@/componentes/InsigniaEstadoReporte.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
-import { nombreDelMes, porFecha } from '@/lib/fechas.js'
+import { MESES, nombreDelMes, porFecha } from '@/lib/fechas.js'
 import { cn } from '@/lib/utils'
 import PaginacionUsuarios, { FILAS_POR_PAGINA } from '@/paginas/usuarios/PaginacionUsuarios.jsx'
 import DialogoAsignarRevisor from './DialogoAsignarRevisor.jsx'
+import DialogoCerrarPeriodo, { impedimentoDeCierre } from './DialogoCerrarPeriodo.jsx'
 
 const POR_PAGINA_INICIAL = 20
 const GRUPO_INICIAL = 'POR_ATENDER'
@@ -95,6 +96,7 @@ export default function PaginaBandejaRevision() {
   const sesion = useSesion()
   const usuarioId = sesion?.sesion?.usuario?.id ?? null
   const puedeAsignar = sesion?.tienePermiso('REPORTE_ASIGNAR') ?? false
+  const puedeCerrar = sesion?.tienePermiso('PERIODO_CERRAR') ?? false
 
   const [meses, setMeses] = useState(null)
   const [municipios, setMunicipios] = useState([])
@@ -106,6 +108,7 @@ export default function PaginaBandejaRevision() {
   const [intento, setIntento] = useState(0)
   // { modo: 'asignar' | 'reasignar', fila } mientras el diálogo está abierto.
   const [dialogo, setDialogo] = useState(null)
+  const [cerrandoPeriodo, setCerrandoPeriodo] = useState(false)
 
   const deUrl = filtrosDeUrl(parametros)
   const periodo = meses && (meses.find((p) => p.id === deUrl.periodo) ?? mesPorDefecto(meses))
@@ -182,12 +185,55 @@ export default function PaginaBandejaRevision() {
     recargar()
   }
 
+  // El mes queda fijo en la URL: sin él, el mes por defecto pasaría a otro abierto. La lista de meses se vuelve a pedir
+  // para que el elegido diga «cerrado».
+  function periodoCerrado() {
+    setCerrandoPeriodo(false)
+    setParametros(new URLSearchParams(consultaDe(filtros)), { replace: true })
+    setIntentoCatalogos((n) => n + 1)
+    setIntento((n) => n + 1)
+  }
+
   const antetitulo = periodo ? `Revisión y cierre · Periodo ${nombreDelMes(periodo)}` : 'Revisión y cierre'
   const conteos = resultado?.conteos
+  const cierre = resultado?.cierre
+  const notaCierre = cierre && impedimentoDeCierre(cierre)
 
   return (
     <section className="flex flex-col gap-6 p-6">
-      <EncabezadoPagina antetitulo={antetitulo} titulo="Bandeja de revisión" />
+      <EncabezadoPagina
+        antetitulo={antetitulo}
+        titulo="Bandeja de revisión"
+        acciones={
+          cierre && (
+            <div className="flex flex-col items-end gap-1">
+              <div className="flex flex-wrap items-center justify-end gap-3">
+                <span className="text-sm text-muted-foreground">
+                  {cierre.aprobados + cierre.cerrados} de {cierre.establecimientos} aprobados o cerrados
+                </span>
+                {cierre.estado === 'CERRADO' ? (
+                  <Badge variant="outline">Cerrado</Badge>
+                ) : (
+                  puedeCerrar && (
+                    <Button
+                      disabled={Boolean(notaCierre)}
+                      aria-describedby={notaCierre ? 'nota-cierre' : undefined}
+                      onClick={() => setCerrandoPeriodo(true)}
+                    >
+                      Cerrar periodo de {MESES[periodo.mes - 1]}
+                    </Button>
+                  )
+                )}
+              </div>
+              {puedeCerrar && cierre.estado !== 'CERRADO' && notaCierre && (
+                <p id="nota-cierre" className="text-xs text-muted-foreground">
+                  {notaCierre}
+                </p>
+              )}
+            </div>
+          )
+        }
+      />
 
       {errorCatalogos && (
         <AvisoError onReintentar={() => setIntentoCatalogos((n) => n + 1)}>
@@ -382,6 +428,14 @@ export default function PaginaBandejaRevision() {
           alHecho={hecho}
           alRecargar={recargar}
           alCerrar={() => setDialogo(null)}
+        />
+      )}
+      {cerrandoPeriodo && periodo && (
+        <DialogoCerrarPeriodo
+          periodo={periodo}
+          alHecho={periodoCerrado}
+          alRecargar={() => setIntento((n) => n + 1)}
+          alCerrar={() => setCerrandoPeriodo(false)}
         />
       )}
     </section>

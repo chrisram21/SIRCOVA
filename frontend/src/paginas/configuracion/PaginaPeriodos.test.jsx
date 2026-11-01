@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { toast } from 'sonner'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { abrirPeriodo, cambiarFechaLimite, crearAnioPeriodos, listarPeriodos } from '@/api/catalogos.js'
+import { cerrarPeriodo, obtenerBandeja } from '@/api/revision.js'
 import { ErrorApi } from '@/api/cliente.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
@@ -19,6 +20,7 @@ vi.mock('@/api/catalogos.js', () => ({
   abrirPeriodo: vi.fn(),
   cambiarFechaLimite: vi.fn(),
 }))
+vi.mock('@/api/revision.js', () => ({ obtenerBandeja: vi.fn(), cerrarPeriodo: vi.fn() }))
 
 const dosDigitos = (n) => String(n).padStart(2, '0')
 const finDeMes = (anio, mes) => `${anio}-${dosDigitos(mes)}-${dosDigitos(new Date(Date.UTC(anio, mes, 0)).getUTCDate())}`
@@ -410,5 +412,58 @@ describe('Abrir y cambiar la fecha límite', () => {
 
     expect(within(tabla()).queryByRole('columnheader', { name: 'Acciones' })).toBeNull()
     expect(within(tabla()).queryAllByRole('button')).toHaveLength(0)
+  })
+})
+
+describe('Cerrar periodo (SPEC 39)', () => {
+  const PERMISOS_CERRAR = [...PERMISOS_REVISOR, 'PERIODO_CERRAR']
+  const septiembre = () => PERIODOS.find((p) => p.anio === 2026 && p.mes === 9)
+  const botonCerrar = (mes) => within(filaDe(mes)).queryByRole('button', { name: 'Cerrar periodo' })
+
+  test('sin PERIODO_CERRAR no aparece «Cerrar periodo»', async () => {
+    await abrir(undefined, PERMISOS_REVISOR)
+
+    expect(within(tabla()).queryAllByRole('button', { name: 'Cerrar periodo' })).toHaveLength(0)
+  })
+
+  test('con PERIODO_CERRAR aparece solo en el mes en cierre, aunque no pueda editar', async () => {
+    await abrir(undefined, [...PERMISOS, 'PERIODO_CERRAR'])
+
+    expect(botonCerrar('Septiembre')).toBeTruthy()
+    expect(within(tabla()).getAllByRole('button')).toHaveLength(1)
+    expect(within(tabla()).getByRole('columnheader', { name: 'Acciones' })).toBeTruthy()
+  })
+
+  test('junto a «Cambiar fecha límite» si también puede editar', async () => {
+    await abrir(undefined, PERMISOS_CERRAR)
+
+    expect(within(filaDe('Septiembre')).getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'Cambiar fecha límite',
+      'Cerrar periodo',
+    ])
+    expect(botonCerrar('Octubre')).toBeNull()
+    expect(botonCerrar('Agosto')).toBeNull()
+  })
+
+  test('cerrar abre el diálogo con el resumen del mes y, al terminar, vuelve a pedir la lista', async () => {
+    obtenerBandeja.mockResolvedValue({
+      cierre: { estado: 'EN_CIERRE', fechaLimiteEnvio: '2026-10-10', establecimientos: 30, aprobados: 19, cerrados: 0, faltanPorAprobar: 0 },
+    })
+    cerrarPeriodo.mockResolvedValue({ ...septiembre(), estado: 'CERRADO', reportesCerrados: 19 })
+    await abrir(undefined, PERMISOS_CERRAR)
+
+    fireEvent.click(botonCerrar('Septiembre'))
+    const dialogo = within(screen.getByRole('alertdialog', { name: '¿Cerrar el periodo de septiembre de 2026?' }))
+    expect(obtenerBandeja).toHaveBeenCalledWith({ periodoId: septiembre().id, porPagina: 1 })
+    await waitFor(() => expect(dialogo.getByRole('button', { name: 'Cerrar periodo' }).hasAttribute('disabled')).toBe(false))
+    listarPeriodos.mockResolvedValue(PERIODOS.map((p) => (p.id === septiembre().id ? { ...p, estado: 'CERRADO' } : p)))
+    fireEvent.click(dialogo.getByRole('button', { name: 'Cerrar periodo' }))
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Periodo de septiembre de 2026 cerrado: 19 reportes cerrados.'))
+    expect(cerrarPeriodo).toHaveBeenCalledWith(septiembre().id)
+    await waitFor(() => expect(listarPeriodos).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(textoDe(filaDe('Septiembre'))[3]).toBe('Cerrado'))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(botonCerrar('Septiembre')).toBeNull()
   })
 })

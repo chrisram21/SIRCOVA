@@ -116,7 +116,7 @@ async function preparar() {
        VALUES (?, 1, ?, ?, ?, ?)`,
       [
         periodo.insertId,
-        `${ANIO}-${dosDigitos(mes + 1)}-10`,
+        '2099-12-31',
         estado,
         estado === 'CERRADO' ? 2 : null,
         estado === 'CERRADO' ? `${ANIO}-${dosDigitos(mes + 1)}-20 16:00:00` : null,
@@ -263,7 +263,7 @@ describe('POST /reportes', () => {
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({
       establecimiento: { codigo: ESTABLECIMIENTO },
-      periodo: { id: periodoIds[2], anio: ANIO, mes: 2, estado: 'ABIERTO', fechaLimiteEnvio: `${ANIO}-03-10` },
+      periodo: { id: periodoIds[2], anio: ANIO, mes: 2, estado: 'ABIERTO', fechaLimiteEnvio: '2099-12-31' },
       estado: 'BORRADOR',
       numeroRectificacion: 0,
       versionFila: 1,
@@ -468,7 +468,7 @@ describe('GET /reportes y GET /reportes/{id}', () => {
     expect(res.body).toMatchObject({
       id: reporteId,
       establecimiento: { codigo: ESTABLECIMIENTO },
-      periodo: { id: periodoIds[2], anio: ANIO, mes: 2, estado: 'ABIERTO', fechaLimiteEnvio: `${ANIO}-03-10` },
+      periodo: { id: periodoIds[2], anio: ANIO, mes: 2, estado: 'ABIERTO', fechaLimiteEnvio: '2099-12-31' },
       estado: 'BORRADOR',
       numeroRectificacion: 0,
       versionFila: 1,

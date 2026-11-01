@@ -180,6 +180,7 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 **`cierre_periodo`** (nueva en v0.5): estado del mes **para cada DDRISS**. Sirve para que cada DDRISS abra, cierre y fije su fecha límite por separado. Mientras está ABIERTO sus establecimientos envían y corrigen; CERRADO solo admite rectificación.
 - Columnas: `id`, `periodo_id` → periodo, `ddriss_id` → ddriss, `fecha_limite_envio` (base de las alertas de reportes pendientes de esa DDRISS), `estado` (ABIERTO, EN_CIERRE, CERRADO), `cerrado_por` → usuario, `cerrado_en`.
 - Único (`periodo_id`, `ddriss_id`). `CHECK`: si el estado es CERRADO, `cerrado_por` y `cerrado_en` son obligatorios.
+- Desde el SPEC 39: `EN_CIERRE` lo escribe una tarea del backend (al arrancar y cada hora) el día después de `fecha_limite_envio`, con bitácora sin usuario; ampliar la fecha límite a hoy o después lo devuelve a `ABIERTO` (SPEC 16). `CERRADO`, `cerrado_por` y `cerrado_en` los escribe `POST /periodos/{id}/cerrar`, solo desde `EN_CIERRE` y sin reportes en el ciclo, en la misma transacción que pasa los reportes aprobados del mes a `CERRADO`.
 - El backend crea la fila al abrir el mes, una por DDRISS activa (en el proyecto, solo San Marcos).
 
 ### 4.3 Operación de vacunación (7 tablas)
@@ -190,6 +191,7 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 - Responsables y fechas: `creado_por` → usuario, `revisor_id` → usuario, `asignado_en`, `aprobado_por` → usuario, `enviado_en`, `aprobado_en`, `cerrado_en`, `creado_en`, `actualizado_en`.
 - `revisor_id` y `asignado_en` los escribe la asignación (la transición `ENVIADO → EN_REVISION` con `revisorId`, SPEC 35), y los cambia `PATCH /reportes/{id}/revisor` cuando el revisor asignado pasa el reporte a otro revisor activo de la DDRISS: reasignar no cambia el estado ni escribe `historial_estado_reporte`, solo sube `version_fila` y deja una fila `ACTUALIZAR` en la bitácora.
 - `aprobado_por` y `aprobado_en` los escribe la transición `EN_REVISION → APROBADO` de `POST /reportes/{id}/transiciones` (SPEC 38), solo del revisor asignado: `aprobado_por` es él y `aprobado_en` la hora de la aprobación. `revisor_id` y `asignado_en` no cambian.
+- `cerrado_en` lo escribe el cierre del mes (`POST /periodos/{id}/cerrar`, SPEC 39), al pasar el reporte de `APROBADO` a `CERRADO`.
 - `version_fila`: control de concurrencia optimista.
 
 **`reporte_vacuna`**: la sección de un reporte que corresponde a **una vacuna**, capturada con **una versión** de su esquema. Es el vínculo principal con MongoDB.

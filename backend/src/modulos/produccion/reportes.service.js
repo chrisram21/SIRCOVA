@@ -5,6 +5,7 @@ import { ErrorApi } from '../../middlewares/errores.js';
 import { filtroAlcance, verificarAlcance } from '../auth/alcance.service.js';
 import { registrarBitacora, MODULOS, ACCIONES } from '../auditoria/auditoria.service.js';
 import { entradaInvalida, revisarCampos, revisarParametros } from '../catalogos/catalogos.service.js';
+import { hoyGuatemala } from '../catalogos/periodos.service.js';
 import { esquemasDelPeriodo } from '../configuracion/esquemas.service.js';
 
 export const ESTADOS_REPORTE = [
@@ -311,10 +312,12 @@ export async function crearReporte(cuerpo, usuario, contexto) {
     reporteId = await enTransaccion(async (conexion) => {
       // Primera consulta de la transacción: así un cambio de estado del mes espera a que esta termine.
       const [[cierre]] = await conexion.query(
-        'SELECT estado FROM cierre_periodo WHERE periodo_id = ? AND ddriss_id = ? FOR SHARE',
+        `SELECT estado, DATE_FORMAT(fecha_limite_envio, '%Y-%m-%d') AS fecha_limite_envio
+           FROM cierre_periodo WHERE periodo_id = ? AND ddriss_id = ? FOR SHARE`,
         [periodo.id, establecimiento.ddriss_id],
       );
-      if (cierre?.estado !== 'ABIERTO') throw errores.periodoNoAbierto();
+      // Una fecha límite vencida cierra la entrega aunque la tarea que pasa el mes a EN_CIERRE no haya corrido.
+      if (cierre?.estado !== 'ABIERTO' || cierre.fecha_limite_envio < hoyGuatemala()) throw errores.periodoNoAbierto();
       const [[existente]] = await conexion.query(
         'SELECT id FROM reporte_produccion WHERE establecimiento_id = ? AND periodo_id = ?',
         [establecimiento.id, periodo.id],

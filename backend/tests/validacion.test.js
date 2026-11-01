@@ -188,7 +188,7 @@ async function preparar() {
     periodoIds[mes] = periodo.insertId;
     await pool.query(
       "INSERT INTO cierre_periodo (periodo_id, ddriss_id, fecha_limite_envio, estado) VALUES (?, 1, ?, 'ABIERTO')",
-      [periodo.insertId, `${ANIO}-${dosDigitos(mes + 1)}-10`],
+      [periodo.insertId, '2099-12-31'],
     );
   }
   for (const [codigo, dosis] of [[VACUNA, ['D1', 'D2', 'D3']], [VACUNA_UNICA, ['UNICA']]]) {

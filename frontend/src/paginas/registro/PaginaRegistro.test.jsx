@@ -121,7 +121,7 @@ test('sin meses abiertos muestra el mensaje y nada más', async () => {
   prepararApi({ periodos: [] })
   await abrir()
 
-  expect(listarPeriodos).toHaveBeenCalledWith({ estado: 'ABIERTO' })
+  expect(listarPeriodos).toHaveBeenCalledWith()
   expect(screen.getByText('No hay meses abiertos para reportar. La DDRISS abre cada mes en Configuración.')).toBeTruthy()
   expect(screen.queryByRole('button', { name: /Crear reporte/ })).toBeNull()
   expect(document.querySelector('select[name="periodo"]')).toBeNull()
@@ -138,6 +138,29 @@ test('con septiembre enviado y octubre sin reporte, abre en octubre con el botó
   expect(screen.getByText('10/11/2026')).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Crear reporte de octubre de 2026' })).toBeTruthy()
   expect(obtenerReporte).not.toHaveBeenCalled()
+})
+
+test('ofrece un mes en cierre solo si tiene un reporte devuelto o en borrador, nunca para crear', async () => {
+  const mes = (numero, estado = 'EN_CIERRE') => ({ id: numero, anio: 2026, mes: numero, estado, fechaLimiteEnvio: '2026-08-10' })
+  const [MAYO, JUNIO, JULIO, AGOSTO, NOVIEMBRE] = [mes(5), mes(6), mes(7), mes(8), mes(11, 'CERRADO')]
+  prepararApi({
+    periodos: [MAYO, JUNIO, JULIO, AGOSTO, SEPTIEMBRE, NOVIEMBRE],
+    reportesPorMes: {
+      5: resumen(5, MAYO, 'CORRECCION_SOLICITADA'),
+      6: resumen(6, JUNIO, 'BORRADOR'),
+      7: resumen(7, JULIO, 'APROBADO'),
+      9: resumen(9, SEPTIEMBRE, 'ENVIADO'),
+    },
+  })
+  await abrir()
+
+  const opciones = [...document.querySelectorAll('select[name="periodo"] option')].map((o) => o.value)
+  expect(opciones).toEqual(['5', '6', '9'])
+  expect(listarReportes).not.toHaveBeenCalledWith({ periodoId: 11 })
+  // El borrador de junio es el pendiente más antiguo.
+  expect(titulo()).toBe('Reporte mensual de junio de 2026')
+  await waitFor(() => expect(obtenerReporte).toHaveBeenCalledWith(6))
+  expect(screen.queryByRole('button', { name: /Crear reporte/ })).toBeNull()
 })
 
 test('con los dos meses sin reporte abre en el más antiguo', async () => {

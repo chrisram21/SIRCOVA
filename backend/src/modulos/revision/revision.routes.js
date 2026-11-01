@@ -11,5 +11,6 @@ router.get('/revision/revisores', autenticar, requierePermiso('REPORTE_REVISAR')
 router.post('/reportes/:id/transiciones', autenticar, revisionController.cambiarEstado);
 // REPORTE_ASIGNAR lo revisa el servicio, después del cuerpo, como en las transiciones.
 router.patch('/reportes/:id/revisor', autenticar, revisionController.reasignarRevisor);
+router.post('/periodos/:id/cerrar', autenticar, requierePermiso('PERIODO_CERRAR'), revisionController.cerrarPeriodo);
 
 export default router;

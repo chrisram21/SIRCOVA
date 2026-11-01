@@ -95,13 +95,24 @@ test('un reporte devuelto para corrección se destaca con el comentario del revi
   expect(within(fila('Octubre de 2026')).queryByText(/Devuelto para corrección/)).toBeNull()
 })
 
-test('«Abrir» solo aparece en los reportes de meses abiertos y lleva a /registro con ese mes', async () => {
+test('«Abrir» aparece en los meses abiertos y en un devuelto de un mes en cierre, y lleva a /registro con ese mes', async () => {
   await abrir()
 
   const abrirOctubre = within(fila('Octubre de 2026')).getByRole('link', { name: 'Abrir' })
   expect(abrirOctubre.getAttribute('href')).toBe('/registro?periodo=30')
-  expect(within(fila('Septiembre de 2026')).queryByRole('link', { name: 'Abrir' })).toBeNull()
+  const abrirSeptiembre = within(fila('Septiembre de 2026')).getByRole('link', { name: 'Abrir' })
+  expect(abrirSeptiembre.getAttribute('href')).toBe('/registro?periodo=29')
   expect(within(fila('Agosto de 2026')).queryByRole('link', { name: 'Abrir' })).toBeNull()
+})
+
+test('en un mes en cierre, un reporte ya aprobado o enviado no tiene «Abrir»', async () => {
+  listarReportes.mockResolvedValue(
+    respuesta([reporte(255, 9, 'APROBADO', 'EN_CIERRE'), reporte(254, 7, 'ENVIADO', 'EN_CIERRE')]),
+  )
+  await abrir()
+
+  expect(within(fila('Septiembre de 2026')).queryByRole('link', { name: 'Abrir' })).toBeNull()
+  expect(within(fila('Julio de 2026')).queryByRole('link', { name: 'Abrir' })).toBeNull()
 })
 
 test('elegir un año y un estado pide la página 1 con esos filtros y los pone en la URL', async () => {
