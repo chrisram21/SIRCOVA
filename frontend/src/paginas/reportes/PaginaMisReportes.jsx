@@ -12,6 +12,7 @@ import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import InsigniaEstadoReporte, { ESTADOS_REPORTE } from '@/componentes/InsigniaEstadoReporte.jsx'
 import { cn } from '@/lib/utils'
+import { EDITABLES_EN_CIERRE } from '@/paginas/registro/mesesAbiertos.js'
 import PaginacionUsuarios, { FILAS_POR_PAGINA } from '@/paginas/usuarios/PaginacionUsuarios.jsx'
 
 const POR_PAGINA_INICIAL = 20
@@ -258,7 +259,9 @@ export default function PaginaMisReportes() {
                       </TableCell>
                       <TableCell>{aFechaHora(reporte.estadoDesde)}</TableCell>
                       <TableCell className="text-right">
-                        {reporte.periodo.estado === 'ABIERTO' && (
+                        {/* /registro solo carga estos meses (mesesAbiertos.js). */}
+                        {(reporte.periodo.estado === 'ABIERTO' ||
+                          (reporte.periodo.estado === 'EN_CIERRE' && EDITABLES_EN_CIERRE.includes(reporte.estado))) && (
                           <Button variant="outline" size="sm" asChild>
                             <Link to={`/registro?periodo=${reporte.periodo.id}`}>Abrir</Link>
                           </Button>

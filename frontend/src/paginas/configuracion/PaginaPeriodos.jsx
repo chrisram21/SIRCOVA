@@ -21,6 +21,7 @@ import { crearAnioPeriodos, listarPeriodos } from '@/api/catalogos.js'
 import { mensajeDeError } from '@/api/cliente.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
+import DialogoCerrarPeriodo from '@/paginas/revision/DialogoCerrarPeriodo.jsx'
 import DialogoFechaLimite from './DialogoFechaLimite.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 
@@ -136,12 +137,15 @@ function ContenidoPeriodos() {
   const { tienePermiso } = useSesion()
   const puedeCrear = tienePermiso('PERIODO_CREAR')
   const puedeEditar = tienePermiso('PERIODO_EDITAR')
+  const puedeCerrar = tienePermiso('PERIODO_CERRAR')
   const [parametros, setParametros] = useSearchParams()
   const [periodos, setPeriodos] = useState(null)
   const [errorCarga, setErrorCarga] = useState(null)
   const [creandoAnio, setCreandoAnio] = useState(false)
   // El mes cuyo Dialog de fecha límite está abierto, o null.
   const [porEditar, setPorEditar] = useState(null)
+  // El mes cuyo diálogo de cierre está abierto, o null.
+  const [porCerrar, setPorCerrar] = useState(null)
   // Cada carga tiene su número; una respuesta que llega después de otra carga se descarta.
   const cargaActual = useRef(0)
 
@@ -283,7 +287,7 @@ function ContenidoPeriodos() {
                       <TableHead>Del – al</TableHead>
                       <TableHead>Fecha límite de envío</TableHead>
                       <TableHead>Estado</TableHead>
-                      {puedeEditar && <TableHead className="text-right">Acciones</TableHead>}
+                      {(puedeEditar || puedeCerrar) && <TableHead className="text-right">Acciones</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -297,14 +301,21 @@ function ContenidoPeriodos() {
                         <TableCell>
                           <InsigniaEstado estado={p.estado} />
                         </TableCell>
-                        {puedeEditar && (
-                          <TableCell className="text-right">
+                        {(puedeEditar || puedeCerrar) && (
+                          <TableCell>
                             {/* Un mes cerrado no tiene acciones: solo admite rectificaciones. */}
-                            {p.estado !== 'CERRADO' && (
-                              <Button variant="outline" size="sm" onClick={() => setPorEditar(p)}>
-                                {p.estado === null ? 'Abrir' : 'Cambiar fecha límite'}
-                              </Button>
-                            )}
+                            <div className="flex flex-wrap justify-end gap-2">
+                              {puedeEditar && p.estado !== 'CERRADO' && (
+                                <Button variant="outline" size="sm" onClick={() => setPorEditar(p)}>
+                                  {p.estado === null ? 'Abrir' : 'Cambiar fecha límite'}
+                                </Button>
+                              )}
+                              {puedeCerrar && p.estado === 'EN_CIERRE' && (
+                                <Button size="sm" onClick={() => setPorCerrar(p)}>
+                                  Cerrar periodo
+                                </Button>
+                              )}
+                            </div>
                           </TableCell>
                         )}
                       </TableRow>
@@ -323,6 +334,16 @@ function ContenidoPeriodos() {
           nombreMes={MESES[porEditar.mes - 1]}
           alGuardar={alGuardarFecha}
           alCerrar={() => setPorEditar(null)}
+        />
+      )}
+      {porCerrar && (
+        <DialogoCerrarPeriodo
+          periodo={porCerrar}
+          alHecho={() => {
+            setPorCerrar(null)
+            cargar()
+          }}
+          alCerrar={() => setPorCerrar(null)}
         />
       )}
       {creandoAnio && (

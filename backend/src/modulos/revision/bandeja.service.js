@@ -1,6 +1,7 @@
 import pool from '../../config/mysql.js';
 import { ErrorApi } from '../../middlewares/errores.js';
 import { entradaInvalida, revisarParametros } from '../catalogos/catalogos.service.js';
+import { EN_CICLO } from './cierre.service.js';
 
 // SPEC 35: la bandeja de revisión de un mes de la DDRISS y los revisores para asignar.
 
@@ -84,12 +85,34 @@ const aElemento = (f) => ({
   dosisTotales: f.dosis_totales == null ? null : Number(f.dosis_totales),
 });
 
+// El mes visto para cerrarlo: no depende del municipio, del grupo ni de la página.
+async function resumenCierre(cierre, filtros, ddrissId) {
+  const base = consultaBase({ ...filtros, municipioId: null }, ddrissId);
+  const [[fila]] = await pool.query(
+    `SELECT COUNT(*) AS establecimientos,
+            COALESCE(SUM(r.estado = 'APROBADO'), 0) AS aprobados,
+            COALESCE(SUM(r.estado IN ('CERRADO', 'RECTIFICACION')), 0) AS cerrados,
+            COALESCE(SUM(${EN_CICLO}), 0) AS faltan
+       ${base.desde}`,
+    base.parametros,
+  );
+  return {
+    estado: cierre.estado,
+    fechaLimiteEnvio: cierre.fecha_limite_envio,
+    establecimientos: Number(fila.establecimientos),
+    aprobados: Number(fila.aprobados),
+    cerrados: Number(fila.cerrados),
+    faltanPorAprobar: Number(fila.faltan),
+  };
+}
+
 export async function obtenerBandeja(usuario, query = {}) {
   const filtros = leerFiltros(query);
-  const [[cierre]] = await pool.query('SELECT 1 AS hay FROM cierre_periodo WHERE periodo_id = ? AND ddriss_id = ?', [
-    filtros.periodoId,
-    usuario.ddrissId ?? 0,
-  ]);
+  const [[cierre]] = await pool.query(
+    `SELECT estado, DATE_FORMAT(fecha_limite_envio, '%Y-%m-%d') AS fecha_limite_envio
+       FROM cierre_periodo WHERE periodo_id = ? AND ddriss_id = ?`,
+    [filtros.periodoId, usuario.ddrissId ?? 0],
+  );
   if (!cierre) throw new ErrorApi(404, 'NO_ENCONTRADO', 'El recurso solicitado no existe.');
 
   const conteos = await contarGrupos(consultaBase(filtros, usuario.ddrissId), usuario.id);
@@ -114,7 +137,14 @@ export async function obtenerBandeja(usuario, query = {}) {
       LIMIT ? OFFSET ?`,
     [...base.parametros, ...grupo.parametros, filtros.porPagina, (filtros.pagina - 1) * filtros.porPagina],
   );
-  return { elementos: filas.map(aElemento), total, pagina: filtros.pagina, porPagina: filtros.porPagina, conteos };
+  return {
+    elementos: filas.map(aElemento),
+    total,
+    pagina: filtros.pagina,
+    porPagina: filtros.porPagina,
+    conteos,
+    cierre: await resumenCierre(cierre, filtros, usuario.ddrissId),
+  };
 }
 
 // Un revisor al que se puede asignar un reporte de la DDRISS: cuenta y empleado activos, rol REVISOR.

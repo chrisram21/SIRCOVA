@@ -51,7 +51,7 @@ const aPeriodo = (fila) => ({
   cerradoEn: aFechaIso(fila.cerrado_en),
 });
 
-async function buscarPeriodos(ejecutor, usuario, { id, anio, estado } = {}) {
+export async function buscarPeriodos(ejecutor, usuario, { id, anio, estado } = {}) {
   const condiciones = ['1 = 1'];
   const parametros = [usuario.ddrissId ?? null];
   if (id !== undefined) {

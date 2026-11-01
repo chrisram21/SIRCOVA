@@ -92,7 +92,7 @@ async function reporteEnRevision(estado = 'EN_REVISION') {
     `${ANIO}-${mes}-${fin}`,
   ]);
   await pool.query(
-    `INSERT INTO cierre_periodo (periodo_id, ddriss_id, fecha_limite_envio, estado) VALUES (?, 1, '${ANIO}-12-31', 'ABIERTO')`,
+    `INSERT INTO cierre_periodo (periodo_id, ddriss_id, fecha_limite_envio, estado) VALUES (?, 1, '2099-12-31', 'ABIERTO')`,
     [periodo.insertId],
   );
   const [creado] = await pool.query(
@@ -163,7 +163,7 @@ beforeAll(async () => {
     [ANIO],
   );
   await pool.query(
-    `INSERT INTO cierre_periodo (periodo_id, ddriss_id, fecha_limite_envio, estado) VALUES (?, 1, '${ANIO}-02-10', 'ABIERTO')`,
+    `INSERT INTO cierre_periodo (periodo_id, ddriss_id, fecha_limite_envio, estado) VALUES (?, 1, '2099-12-31', 'ABIERTO')`,
     [periodo.insertId],
   );
   const [[cs1201]] = await pool.query("SELECT id, municipio_id FROM establecimiento WHERE codigo = 'CS-1201'");

@@ -3034,7 +3034,8 @@ paths:
       summary: Crear el reporte mensual del establecimiento del usuario (nace en BORRADOR)
       description: |
         El establecimiento sale de la cuenta del usuario. El mes debe estar `ABIERTO` en `cierre_periodo` de la
-        DDRISS del establecimiento. Crea, en una transacción de MySQL, el reporte, una fila de `reporte_vacuna`
+        DDRISS del establecimiento y su fecha límite de envío no debe haber pasado (fecha de Guatemala), aunque la
+        tarea que pasa el mes a `EN_CIERRE` todavía no haya corrido; si no, 409 `PERIODO_NO_ABIERTO`. Crea, en una transacción de MySQL, el reporte, una fila de `reporte_vacuna`
         por cada vacuna activa con un esquema publicado que cubra el día 1 del mes (el de la DDRISS del
         establecimiento, `VIGENTE` o `HISTORICO`, o si no hay, el nacional) **marcado con `incluirPorDefecto`**
         (un esquema sin el campo cuenta como marcado), una fila en `historial_estado_reporte`
@@ -3091,7 +3092,9 @@ paths:
               example:
                 error: { codigo: NO_ENCONTRADO, mensaje: El periodo no existe. }
         "409":
-          description: El establecimiento está inactivo, el mes no está abierto o ya existe el reporte del mes
+          description: |
+            El establecimiento está inactivo, el mes no está abierto o su fecha límite ya pasó, o ya existe el
+            reporte del mes
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -3852,6 +3855,9 @@ paths:
 
         Un parámetro inválido, desconocido o repetido responde 400 `ENTRADA_INVALIDA`; un `periodoId` sin
         `cierre_periodo` de la DDRISS del usuario, 404; una página fuera de rango, 200 con `elementos` vacío.
+
+        `cierre` resume el mes para cerrarlo (`POST /periodos/{id}/cerrar`) y no depende de `municipioId`, `grupo`
+        ni la página.
       x-permiso: REPORTE_REVISAR
       parameters:
         - { name: periodoId, in: query, required: true, schema: { type: integer, minimum: 1, example: 10 } }
@@ -3960,12 +3966,81 @@ paths:
   /periodos/{id}/cerrar:
     post:
       tags: [Revisión]
-      summary: Cerrar el periodo (cierra los reportes aprobados y dispara el cálculo de indicadores)
+      summary: Cerrar un mes en cierre de la DDRISS del usuario y pasar sus reportes aprobados a Cerrado
+      description: |
+        Pasa el `cierre_periodo` de la DDRISS del usuario de `EN_CIERRE` a `CERRADO` (`cerrado_por`, `cerrado_en`)
+        y cada reporte `APROBADO` del mes, de los establecimientos de esa DDRISS, a `CERRADO` (`cerrado_en`, sube
+        `versionFila`), en una sola transacción. Es la única excepción a que el estado de un reporte solo cambie
+        con `POST /reportes/{id}/transiciones`: igual revisa `APROBADO → CERRADO` en `transicion_estado` para el
+        rol del usuario.
+
+        El mes pasa solo de `ABIERTO` a `EN_CIERRE` el día después de su fecha límite de envío (una tarea del
+        servidor, al arrancar y cada hora).
+
+        No se cierra mientras algún reporte del mes siga en el ciclo: `ENVIADO`, `EN_REVISION`,
+        `CORRECCION_SOLICITADA` o `BORRADOR` ya enviado alguna vez (devuelto). Un `BORRADOR` nunca enviado y un
+        establecimiento sin reporte no lo impiden; el borrador queda como está y ya no se edita. Un mes sin reportes
+        aprobados también se cierra (`reportesCerrados: 0`).
+
+        Cada reporte deja una fila `APROBADO → CERRADO` en el historial (comentario «Cierre del periodo.») y una
+        `CAMBIO_ESTADO` en la bitácora (módulo `REVISION`) con `{ estado: 'APROBADO' }` antes y
+        `{ estado: 'CERRADO', cierrePeriodoId }` después; el mes deja una `ACTUALIZAR` (entidad `cierre_periodo`)
+        con `{ estado: 'EN_CIERRE' }` antes y `{ estado: 'CERRADO', reportesCerrados }` después.
+
+        Sin cuerpo: un cuerpo con campos responde 400. No calcula indicadores todavía (HU-36).
+      x-permiso: PERIODO_CERRAR
       parameters:
         - { $ref: "#/components/parameters/Id" }
       responses:
-        "200": { description: Periodo cerrado }
-        "422": { $ref: "#/components/responses/ReglaNegocio" }
+        "200":
+          description: Mes cerrado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PeriodoCerrado" }
+        "400":
+          description: El id no es válido o el cuerpo trae campos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: comentario." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404":
+          description: El mes no existe o no tiene `cierre_periodo` de la DDRISS del usuario
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: NO_ENCONTRADO, mensaje: El periodo no existe. }
+        "409":
+          description: El mes sigue abierto, ya está cerrado o tiene reportes en el ciclo (con `faltanPorAprobar`)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/Error" }
+                  - type: object
+                    properties:
+                      faltanPorAprobar: { type: integer, minimum: 1, example: 3 }
+              examples:
+                abierto:
+                  value:
+                    error: { codigo: PERIODO_NO_EN_CIERRE, mensaje: "El mes sigue abierto: se cierra cuando vence su fecha límite." }
+                cerrado:
+                  value:
+                    error: { codigo: PERIODO_YA_CERRADO, mensaje: El mes ya está cerrado. }
+                pendientes:
+                  value:
+                    error: { codigo: PERIODO_CON_PENDIENTES, mensaje: Faltan 3 reportes por aprobar. }
+                    faltanPorAprobar: 3
+        "422":
+          description: El rol del usuario no tiene la transición `APROBADO → CERRADO`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: TRANSICION_NO_PERMITIDA, mensaje: El reporte no puede pasar de Aprobado a Cerrado. }
 
   /reportes/{id}/rectificaciones:
     post:
@@ -5959,9 +6034,11 @@ components:
           example: 85
 
     BandejaRevision:
-      description: Página de la bandeja, con la forma paginada común (ver `PaginaUsuarios`) y los conteos de los grupos
+      description: |
+        Página de la bandeja, con la forma paginada común (ver `PaginaUsuarios`), los conteos de los grupos y el
+        resumen del cierre del mes
       type: object
-      required: [elementos, total, pagina, porPagina, conteos]
+      required: [elementos, total, pagina, porPagina, conteos, cierre]
       properties:
         elementos:
           type: array
@@ -5984,6 +6061,32 @@ components:
             APROBADO: { type: integer, example: 5 }
             CERRADO: { type: integer, example: 14 }
             TODOS: { type: integer, example: 30 }
+        cierre: { $ref: "#/components/schemas/ResumenCierre" }
+
+    ResumenCierre:
+      type: object
+      description: |
+        El mes de la DDRISS del usuario visto para cerrarlo, sin los filtros de la bandeja. `establecimientos` es el
+        conteo de «Todos» sin municipio; `cerrados` cuenta `CERRADO` y `RECTIFICACION`; `faltanPorAprobar`, los
+        reportes en el ciclo (`ENVIADO`, `EN_REVISION`, `CORRECCION_SOLICITADA` o `BORRADOR` ya enviado), con la
+        misma regla que el cierre.
+      required: [estado, fechaLimiteEnvio, establecimientos, aprobados, cerrados, faltanPorAprobar]
+      properties:
+        estado: { $ref: "#/components/schemas/EstadoPeriodo" }
+        fechaLimiteEnvio: { type: string, format: date, example: "2026-11-10" }
+        establecimientos: { type: integer, minimum: 0, example: 30 }
+        aprobados: { type: integer, minimum: 0, example: 5 }
+        cerrados: { type: integer, minimum: 0, example: 14 }
+        faltanPorAprobar: { type: integer, minimum: 0, example: 9 }
+
+    PeriodoCerrado:
+      description: El mes ya cerrado (el mismo objeto de `GET /periodos`) y cuántos reportes pasaron a Cerrado
+      allOf:
+        - { $ref: "#/components/schemas/Periodo" }
+        - type: object
+          required: [reportesCerrados]
+          properties:
+            reportesCerrados: { type: integer, minimum: 0, example: 19 }
 
     PaginaReportes:
       description: Página de reportes, con la forma paginada común (ver `PaginaUsuarios`)

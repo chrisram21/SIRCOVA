@@ -3,7 +3,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { toast } from 'sonner'
 import { listarMunicipios, listarPeriodos } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
-import { asignarRevisor, listarRevisores, obtenerBandeja } from '@/api/revision.js'
+import { asignarRevisor, cerrarPeriodo, listarRevisores, obtenerBandeja } from '@/api/revision.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 import PaginaBandejaRevision, { mesesDeLaDdriss, mesPorDefecto } from './PaginaBandejaRevision.jsx'
@@ -15,6 +15,7 @@ vi.mock('@/api/revision.js', () => ({
   listarRevisores: vi.fn(),
   asignarRevisor: vi.fn(),
   reasignarRevisor: vi.fn(),
+  cerrarPeriodo: vi.fn(),
 }))
 
 const YO = 2
@@ -230,4 +231,81 @@ test('si falla la carga se muestra el error y «Reintentar» vuelve a pedir', as
   fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
   await waitFor(() => expect(screen.getByRole('table')).toBeTruthy())
   expect(obtenerBandeja).toHaveBeenCalledTimes(2)
+})
+
+describe('cierre del periodo (SPEC 39)', () => {
+  const PERMISOS_CIERRE = ['REPORTE_REVISAR', 'REPORTE_ASIGNAR', 'PERIODO_CERRAR']
+  const cierre = (cambios = {}) => ({
+    estado: 'EN_CIERRE',
+    fechaLimiteEnvio: '2026-10-10',
+    establecimientos: 30,
+    aprobados: 5,
+    cerrados: 14,
+    faltanPorAprobar: 0,
+    ...cambios,
+  })
+  const conCierre = (resumen) => ({ ...bandeja(), cierre: resumen })
+  const botonCerrar = () => screen.queryByRole('button', { name: 'Cerrar periodo de septiembre' })
+
+  test('el encabezado cuenta los aprobados o cerrados; sin PERIODO_CERRAR no hay botón', async () => {
+    obtenerBandeja.mockResolvedValue(conCierre(cierre()))
+    await montar()
+
+    expect(await screen.findByText('19 de 30 aprobados o cerrados')).toBeTruthy()
+    expect(botonCerrar()).toBeNull()
+  })
+
+  test('con PERIODO_CERRAR, en cierre y sin pendientes, el botón está habilitado', async () => {
+    obtenerBandeja.mockResolvedValue(conCierre(cierre()))
+    await montar({ permisos: PERMISOS_CIERRE })
+
+    await waitFor(() => expect(botonCerrar()).toBeTruthy())
+    expect(botonCerrar().hasAttribute('disabled')).toBe(false)
+    expect(document.getElementById('nota-cierre')).toBeNull()
+  })
+
+  test.each([
+    [cierre({ estado: 'ABIERTO', fechaLimiteEnvio: '2026-11-10' }), 'Se puede cerrar cuando venza la fecha límite (10/11/2026).'],
+    [cierre({ faltanPorAprobar: 2 }), 'Faltan 2 reportes por aprobar.'],
+  ])('deshabilitado con su nota mientras no se puede cerrar (%#)', async (resumen, nota) => {
+    obtenerBandeja.mockResolvedValue(conCierre(resumen))
+    await montar({ permisos: PERMISOS_CIERRE })
+
+    await waitFor(() => expect(botonCerrar()).toBeTruthy())
+    expect(botonCerrar().hasAttribute('disabled')).toBe(true)
+    expect(botonCerrar().getAttribute('aria-describedby')).toBe('nota-cierre')
+    expect(document.getElementById('nota-cierre').textContent).toBe(nota)
+  })
+
+  test('un mes cerrado muestra la insignia en lugar del botón', async () => {
+    obtenerBandeja.mockResolvedValue(conCierre(cierre({ estado: 'CERRADO', aprobados: 0, cerrados: 19 })))
+    await montar({ permisos: PERMISOS_CIERRE })
+
+    expect(await screen.findByText('19 de 30 aprobados o cerrados')).toBeTruthy()
+    expect(botonCerrar()).toBeNull()
+    expect(screen.getByText('Cerrado', { selector: '[data-slot="badge"]' })).toBeTruthy()
+  })
+
+  test('cerrar avisa, deja el mes en la URL y recarga la bandeja y los meses', async () => {
+    obtenerBandeja.mockResolvedValue(conCierre(cierre()))
+    cerrarPeriodo.mockResolvedValue({ ...PERIODOS[1], estado: 'CERRADO', reportesCerrados: 5 })
+    const router = await montar({ permisos: PERMISOS_CIERRE })
+    await waitFor(() => expect(botonCerrar()).toBeTruthy())
+
+    fireEvent.click(botonCerrar())
+    const dialogo = within(await screen.findByRole('alertdialog'))
+    await waitFor(() => expect(dialogo.getByRole('button', { name: 'Cerrar periodo' }).hasAttribute('disabled')).toBe(false))
+    const cerrado = cierre({ estado: 'CERRADO', aprobados: 0, cerrados: 19 })
+    obtenerBandeja.mockResolvedValue(conCierre(cerrado))
+    listarPeriodos.mockResolvedValue([PERIODOS[0], { ...PERIODOS[1], estado: 'CERRADO' }, ...PERIODOS.slice(2)])
+    fireEvent.click(dialogo.getByRole('button', { name: 'Cerrar periodo' }))
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Periodo de septiembre de 2026 cerrado: 5 reportes cerrados.'))
+    expect(cerrarPeriodo).toHaveBeenCalledWith(9)
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    await waitFor(() => expect(router.state.location.search).toBe('?periodo=9'))
+    await waitFor(() => expect(listarPeriodos).toHaveBeenCalledTimes(2))
+    expect(await screen.findByText('Cerrado', { selector: '[data-slot="badge"]' })).toBeTruthy()
+    expect(botonCerrar()).toBeNull()
+  })
 })

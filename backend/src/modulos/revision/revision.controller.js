@@ -1,4 +1,5 @@
 import * as bandejaService from './bandeja.service.js';
+import * as cierreService from './cierre.service.js';
 import * as reasignacionService from './reasignacion.service.js';
 import * as transicionesService from './transiciones.service.js';
 
@@ -19,6 +20,17 @@ export async function obtenerBandeja(req, res) {
 
 export async function listarRevisores(req, res) {
   res.json(await bandejaService.listarRevisores(req.usuario, req.query));
+}
+
+export async function cerrarPeriodo(req, res) {
+  const { periodo, pendientes } = await cierreService.cerrarPeriodo(req.params.id, req.body, req);
+  if (pendientes) {
+    return res.status(409).json({
+      error: { codigo: 'PERIODO_CON_PENDIENTES', mensaje: cierreService.mensajePendientes(pendientes) },
+      faltanPorAprobar: pendientes,
+    });
+  }
+  res.json(periodo);
 }
 
 export async function reasignarRevisor(req, res) {

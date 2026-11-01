@@ -42,7 +42,7 @@ async function crearPeriodo(mes, estado) {
        VALUES (?, 1, ?, ?, ?, ?)`,
       [
         periodo.insertId,
-        `${ANIO}-${dosDigitos(mes + 1)}-10`,
+        '2099-12-31',
         estado,
         estado === 'CERRADO' ? 2 : null,
         estado === 'CERRADO' ? `${ANIO}-12-20 16:00:00` : null,

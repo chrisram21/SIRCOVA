@@ -168,8 +168,8 @@ describe('tarjetas con datos', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date(2026, 9, 28, 10, 0, 0))
     listarPeriodos.mockResolvedValue([
-      { id: 10, anio: 2026, mes: 10, fechaLimiteEnvio: '2026-11-10' },
-      { id: 9, anio: 2026, mes: 9, fechaLimiteEnvio: '2026-10-10' },
+      { id: 10, anio: 2026, mes: 10, estado: 'ABIERTO', fechaLimiteEnvio: '2026-11-10' },
+      { id: 9, anio: 2026, mes: 9, estado: 'ABIERTO', fechaLimiteEnvio: '2026-10-10' },
     ])
     listarReportes.mockImplementation(async ({ periodoId }) => ({
       elementos: periodoId === 9 ? [{ id: 250, estado: 'EN_REVISION' }] : [],

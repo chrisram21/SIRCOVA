@@ -914,10 +914,20 @@ Verificado contra la API real el 2026-10-31 con el reporte 524 (octubre de 2026,
 **Cómo se hará:** Tarea programada (cron) que al vencer la fecha límite pasa `cierre_periodo` de ABIERTO a EN_CIERRE; endpoint `POST /periodos/{id}/cerrar` para el cierre final, que pasa los reportes aprobados a Cerrado y dispara el cálculo de indicadores.
 
 **Criterios de aceptación:**
-- [ ] Al vencer la fecha límite de envío, la entrega se cierra automáticamente: no se crean reportes nuevos, pero los que están en revisión o devueltos siguen su ciclo.
-- [ ] El cierre final lo hace la estadígrafa; el sistema muestra cuántos reportes faltan por aprobar antes de cerrar.
-- [ ] Al cerrar, todos los reportes aprobados del periodo pasan a Cerrado.
-- [ ] Un reporte cerrado no se edita por el procedimiento ordinario.
+- [x] Al vencer la fecha límite de envío, la entrega se cierra automáticamente: no se crean reportes nuevos, pero los que están en revisión o devueltos siguen su ciclo.
+- [x] El cierre final lo hace la estadígrafa; el sistema muestra cuántos reportes faltan por aprobar antes de cerrar.
+- [x] Al cerrar, todos los reportes aprobados del periodo pasan a Cerrado.
+- [x] Un reporte cerrado no se edita por el procedimiento ordinario.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 39 a `main`. Backend y frontend, en `specs/39-hu-31-cerrar-periodo.md`: una tarea del servidor (`server.js`, al arrancar y cada hora) pasa a `EN_CIERRE` los meses `ABIERTO` cuya fecha límite ya pasó, y `POST /periodos/{id}/cerrar`, con el permiso nuevo `PERIODO_CERRAR` (solo REVISOR), cierra el mes y pasa sus reportes aprobados a `CERRADO` en una transacción. Diferencias con la historia:
+
+- Es la única excepción a la regla 3 de `AGENTS.md`: el cierre cambia el estado de los reportes sin pasar por `/transiciones`, aunque revisa `APROBADO → CERRADO` en `transicion_estado` y deja historial y bitácora por reporte. Quedó escrita en la regla.
+- El cierre final lo hace el rol REVISOR (el modelo no distingue a la estadígrafa), solo con el mes `EN_CIERRE`. Lo impiden los reportes que siguen en el ciclo: `ENVIADO`, `EN_REVISION`, `CORRECCION_SOLICITADA` y `BORRADOR` ya enviado alguna vez. Un borrador nunca enviado no lo impide y queda `BORRADOR`, sin editarse.
+- «No se crean reportes nuevos»: además de la tarea, `POST /reportes` responde 409 `PERIODO_NO_ABIERTO` si la fecha límite pasó aunque la tarea no haya corrido. En `EN_CIERRE` el Personal sigue guardando y enviando cualquier borrador que ya exista, y Registro e Inicio le ofrecen esos meses si tiene un reporte en `BORRADOR` o `CORRECCION_SOLICITADA` (resuelve la nota del SPEC 37); «Mis reportes» muestra «Abrir» en ellos.
+- «Muestra cuántos faltan»: la bandeja muestra «N de M aprobados o cerrados» y el botón «Cerrar periodo de {mes}», deshabilitado con «Faltan N reportes por aprobar.» o con la fecha límite si el mes sigue abierto. El mismo diálogo de confirmación se abre desde Administración › Periodos. `GET /revision/bandeja` trae el resumen en `cierre`.
+- «Dispara el cálculo de indicadores»: el motor todavía no existe; queda una nota en HU-36.
+
+Verificado contra la API real el 2026-10-31. Al arrancar el backend, la tarea pasó septiembre de 2026 (fecha límite 10/10/2026) a `EN_CIERRE`, con su `ACTUALIZAR` sin usuario en la bitácora; septiembre queda así. Como `estadigrafa`, la bandeja de septiembre mostró «10 de 31 aprobados o cerrados» y el botón deshabilitado con «Faltan 12 reportes por aprobar.». Junio de 2010 se preparó por SQL (la API no crea años antes de 2020) con un reporte aprobado de CS-1206 y se cerró desde «Periodos»: el mes quedó `CERRADO` con `cerrado_por` = la estadígrafa, el reporte 897 `CERRADO` con su historial y su `CAMBIO_ESTADO`, y apareció el aviso «Periodo de junio de 2010 cerrado: 1 reporte cerrado.». Como `cs1208`, Registro ofreció septiembre (reporte devuelto) con «Corregir reporte» y «Mis reportes» mostró «Abrir» en él; como `cs1206`, junio de 2010 y su septiembre enviado no tienen «Abrir».
 
 **Nota (2026-10-23, spec 16):** Ampliar la fecha límite de un mes `EN_CIERRE` a hoy o después lo devuelve a `ABIERTO` (`PATCH /periodos/{id}`, SPEC 16); la tarea programada debe volver a revisarlo con la fecha nueva.
 
@@ -934,6 +944,8 @@ Verificado contra la API real el 2026-10-31 con el reporte 524 (octubre de 2026,
 **Cómo se hará:** Endpoint `POST /reportes/{id}/rectificaciones`; tablas `solicitud_rectificacion` y `rectificacion_detalle` con valores anteriores y nuevos.
 
 **Nota (2026-10-31, spec 38):** corregir las cantidades de un reporte de un mes `CERRADO` (por ejemplo, un error que la DDRISS notifica meses después) es la rectificación de esta historia y de HU-33, no una devolución: aprobar y devolver solo existen antes del cierre, y aprobar no revisa el estado del mes. Al definirla, decidir quién la pide (la historia dice el Personal; el equipo comentó que también podría pedirla el administrador) y cómo se editan las cantidades.
+
+**Nota (2026-10-31, spec 39):** para probarla, junio de 2010 está `CERRADO` en la base de prueba con el reporte 897 de CS-1206 (`cs1206`) en `CERRADO`; no tiene vacunas ni cantidades, porque se preparó por SQL. Los meses de 2026 hasta agosto también están cerrados en la semilla.
 
 **Criterios de aceptación:**
 - [ ] Solo puedo solicitar rectificación de reportes Cerrados.
@@ -1005,6 +1017,8 @@ Verificado contra la API real el 2026-10-31 con el reporte 524 (octubre de 2026,
 - [ ] Las dosis se asignan al municipio de residencia (procedencia); las de Migrantes no cuentan para la cobertura y las del Hospital de San Marcos sí.
 - [ ] Un caso de prueba con datos conocidos (por ejemplo, 541 de población a junio ≈ 270 dosis) da el resultado esperado.
 - [ ] Cada resultado guarda la versión de configuración usada.
+
+**Nota (2026-10-31, spec 39):** el cálculo debe dispararse al cerrar el mes. `POST /periodos/{id}/cerrar` (`modulos/revision/cierre.service.js`) todavía no crea `corrida_calculo`; esta historia la agrega con el motivo `CIERRE_PERIODO`.
 
 #### HU-37. Calcular la brecha de dosis
 

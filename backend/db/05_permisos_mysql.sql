@@ -146,6 +146,10 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
 INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('REPORTE_APROBAR',           'REVISION',                'Aprobar los reportes en revisión que tiene asignados');
 
+-- SPEC 39 (HU-31): cerrar el periodo
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('PERIODO_CERRAR',            'REVISION',                'Cerrar un mes en cierre de su DDRISS y pasar sus reportes aprobados a Cerrado');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -274,6 +278,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'REVISOR'
    AND p.codigo = 'REPORTE_APROBAR';
+
+-- SPEC 39 (HU-31): el Revisor cierra los meses en cierre de su DDRISS
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'REVISOR'
+   AND p.codigo = 'PERIODO_CERRAR';
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas
