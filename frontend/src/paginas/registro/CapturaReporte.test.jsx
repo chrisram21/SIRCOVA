@@ -5,13 +5,14 @@ import { ErrorApi } from '@/api/cliente.js'
 import {
   agregarVacuna,
   guardarVacuna,
+  listarObservaciones,
   listarVacunasDisponibles,
   obtenerFormulario,
   obtenerReporte,
   quitarVacuna,
   validarReporte,
 } from '@/api/produccion.js'
-import { cambiarEstadoReporte } from '@/api/revision.js'
+import { cambiarEstadoReporte, corregirReporte } from '@/api/revision.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 import CapturaReporte from './CapturaReporte.jsx'
@@ -25,8 +26,9 @@ vi.mock('@/api/produccion.js', () => ({
   agregarVacuna: vi.fn(),
   quitarVacuna: vi.fn(),
   validarReporte: vi.fn(),
+  listarObservaciones: vi.fn(),
 }))
-vi.mock('@/api/revision.js', () => ({ cambiarEstadoReporte: vi.fn() }))
+vi.mock('@/api/revision.js', () => ({ cambiarEstadoReporte: vi.fn(), corregirReporte: vi.fn() }))
 
 // El aviso de guardado es un toast (sonner, simulado en preparar-pruebas.js).
 const borradorGuardado = () => waitFor(() => expect(toast.success).toHaveBeenCalledWith('Borrador guardado.'))
@@ -756,7 +758,7 @@ describe('validación automática (SPEC 33)', () => {
   async function montarConSesion(
     recibido = formulario(),
     permisos = ['REPORTE_EDITAR', 'REPORTE_VALIDAR'],
-    { validar = true } = {},
+    { validar = true, reporte = REPORTE } = {},
   ) {
     guardarSesion(crearSesion(permisos))
     obtenerFormulario.mockResolvedValue(recibido)
@@ -766,7 +768,7 @@ describe('validación automática (SPEC 33)', () => {
           path: '/registro',
           element: (
             <ProveedorSesion>
-              <CapturaReporte reporte={REPORTE} />
+              <CapturaReporte reporte={reporte} />
             </ProveedorSesion>
           ),
         },
@@ -974,6 +976,133 @@ describe('validación automática (SPEC 33)', () => {
 
       expect(await screen.findByText('El reporte cambió desde que lo abrió; recárguelo.')).toBeTruthy()
       expect(screen.getByRole('button', { name: 'Recargar reporte' })).toBeTruthy()
+    })
+  })
+
+  describe('corregir un reporte devuelto (SPEC 37)', () => {
+    const DEVUELTO = { ...REPORTE, estado: 'CORRECCION_SOLICITADA' }
+    const BORRADOR = { ...REPORTE, estado: 'BORRADOR' }
+    const AUTOR = { id: 2, nombre: 'Ana Pérez' }
+    const observacion = (id, vacuna, texto, cambios = {}) => ({
+      id,
+      vacuna,
+      texto,
+      autor: AUTOR,
+      creadoEn: '2026-10-31T15:10:00.000Z',
+      atendida: false,
+      atendidaEn: null,
+      ...cambios,
+    })
+    const VIEJA = observacion(20, VPH_VACUNA, 'Observación vieja de VPH.', {
+      creadoEn: '2026-10-20T15:00:00.000Z',
+      atendida: true,
+      atendidaEn: '2026-10-21T10:00:00.000Z',
+    })
+    const OBSERVACIONES = [
+      observacion(31, null, 'Revise la procedencia de octubre.'),
+      observacion(32, HEXA, 'Hexavalente D1 es muy alto.'),
+      VIEJA,
+    ]
+    const AVISO = 'Ana Pérez devolvió el reporte el 31/10/2026. Revise las observaciones y corríjalo.'
+    const nota = (nombre) => screen.queryByRole('note', { name: nombre })
+    const montarDevuelto = (permisos = ['REPORTE_EDITAR', 'REPORTE_VALIDAR', 'REPORTE_ENVIAR']) =>
+      montarConSesion(formulario({ editable: false }), permisos, { reporte: DEVUELTO })
+
+    beforeEach(() => {
+      listarObservaciones.mockResolvedValue(OBSERVACIONES)
+      obtenerReporte.mockResolvedValue(DEVUELTO)
+    })
+
+    test('muestra el aviso, la observación general arriba y la de la vacuna en su pestaña, con su marca', async () => {
+      await montarDevuelto()
+
+      expect(await screen.findByText(AVISO)).toBeTruthy()
+      expect(listarObservaciones).toHaveBeenCalledWith(7)
+      expect(screen.queryByText('Solo consulta')).toBeNull()
+      expect(screen.getByText('Devuelto para corrección')).toBeTruthy()
+      expect(nota('Observación del revisor').textContent).toContain('Revise la procedencia de octubre.')
+      expect(nota('Observación del revisor').textContent).toContain('Ana Pérez')
+      expect(nota('Observación del revisor sobre Hexavalente').textContent).toContain('Hexavalente D1 es muy alto.')
+      const pestanaHexa = screen.getByRole('tab', { name: 'Hexavalente' })
+      expect(pestanaHexa.getAttribute('aria-describedby')).toContain('observaciones-51')
+      expect(document.getElementById('observaciones-51').textContent).toBe('(tiene observaciones)')
+      // La de VPH ya estaba atendida: no es de la última devolución.
+      expect(screen.getByRole('tab', { name: 'VPH' }).getAttribute('aria-describedby')).toBeNull()
+      await abrirPestana('VPH')
+      expect(nota('Observación del revisor sobre VPH')).toBeNull()
+      expect(screen.queryByText('Observación vieja de VPH.')).toBeNull()
+      expect(screen.getByRole('button', { name: 'Corregir reporte' })).toBeTruthy()
+    })
+
+    test('sin REPORTE_EDITAR se ven el aviso y las observaciones, sin el botón', async () => {
+      await montarDevuelto(['REPORTE_VALIDAR'])
+
+      expect(await screen.findByText(AVISO)).toBeTruthy()
+      expect(nota('Observación del revisor')).toBeTruthy()
+      expect(screen.queryByRole('button', { name: 'Corregir reporte' })).toBeNull()
+    })
+
+    test('«Corregir reporte» vuelve a Borrador, recarga editable y las observaciones siguen a la vista', async () => {
+      await montarDevuelto()
+      await screen.findByText(AVISO)
+      corregirReporte.mockResolvedValue({ ...BORRADOR, versionFila: 4 })
+      obtenerReporte.mockResolvedValue(BORRADOR)
+      obtenerFormulario.mockResolvedValue(formulario({ versionFila: 4 }))
+
+      fireEvent.click(screen.getByRole('button', { name: 'Corregir reporte' }))
+
+      await waitFor(() =>
+        expect(toast.success).toHaveBeenCalledWith('El reporte volvió a Borrador. Ya puede corregirlo.'),
+      )
+      expect(corregirReporte).toHaveBeenCalledOnce()
+      expect(corregirReporte).toHaveBeenCalledWith(7, { versionFila: 3 })
+      expect(await screen.findByRole('button', { name: 'Guardar borrador' })).toBeTruthy()
+      expect(obtenerReporte).toHaveBeenCalledWith(7)
+      expect(screen.queryByText('Devuelto para corrección')).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Corregir reporte' })).toBeNull()
+      expect(campo('1.ª dosis · < 1 año').readOnly).toBe(false)
+      await waitFor(() => expect(nota('Observación del revisor')).toBeTruthy())
+      expect(nota('Observación del revisor sobre Hexavalente')).toBeTruthy()
+    })
+
+    test('un 409 al corregir muestra el mensaje con «Recargar reporte»', async () => {
+      await montarDevuelto()
+      await screen.findByText(AVISO)
+      corregirReporte.mockRejectedValue(
+        new ErrorApi(409, 'REPORTE_DESACTUALIZADO', 'El reporte cambió desde que lo abrió; recárguelo.'),
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'Corregir reporte' }))
+
+      expect(await screen.findByText('El reporte cambió desde que lo abrió; recárguelo.')).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Recargar reporte' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Corregir reporte' }).disabled).toBe(false)
+    })
+
+    test('un borrador sin observaciones pendientes no muestra nada nuevo', async () => {
+      listarObservaciones.mockResolvedValue([VIEJA])
+      obtenerReporte.mockResolvedValue(BORRADOR)
+      await montarConSesion(formulario(), undefined, { reporte: BORRADOR })
+
+      await waitFor(() => expect(listarObservaciones).toHaveBeenCalledWith(7))
+      expect(screen.queryByText('Devuelto para corrección')).toBeNull()
+      expect(nota('Observación del revisor')).toBeNull()
+      expect(screen.queryByText('Observación vieja de VPH.')).toBeNull()
+    })
+
+    test('si fallan las observaciones, el formulario se ve y «Reintentar» las vuelve a pedir', async () => {
+      listarObservaciones.mockRejectedValueOnce(new ErrorApi(500, 'ERROR_INTERNO', 'Falló el servidor.'))
+      obtenerReporte.mockResolvedValue(BORRADOR)
+      await montarConSesion(formulario(), undefined, { reporte: BORRADOR, validar: false })
+
+      expect(await screen.findByText(/No se pudieron cargar las observaciones del revisor/)).toBeTruthy()
+      expect(botonGuardar()).toBeTruthy()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+      await waitFor(() => expect(nota('Observación del revisor')).toBeTruthy())
+      expect(listarObservaciones).toHaveBeenCalledTimes(2)
+      expect(screen.queryByText(/No se pudieron cargar las observaciones del revisor/)).toBeNull()
     })
   })
 })

@@ -205,6 +205,19 @@ test('carga el detalle, las vacunas en solo consulta, la validación guardada y 
   expect(anteriores.getAllByRole('listitem')).toHaveLength(2)
 })
 
+test('una observación atendida dice cuándo se atendió; una pendiente no (SPEC 37)', async () => {
+  const [pendiente, atendida] = OBSERVACIONES
+  listarObservaciones.mockResolvedValue([pendiente, { ...atendida, atendida: true, atendidaEn: '2026-10-22T15:30:00.000Z' }])
+  await montar()
+
+  const anteriores = within(screen.getByText('Observaciones anteriores').closest('[data-slot="card"]'))
+  const [deLaGeneral, deHexa] = anteriores.getAllByRole('listitem')
+  const hora = new Date('2026-10-22T15:30:00.000Z')
+  const dos = (n) => String(n).padStart(2, '0')
+  expect(deHexa.textContent).toContain(`Atendida el 22/10/2026 ${dos(hora.getHours())}:${dos(hora.getMinutes())}`)
+  expect(deLaGeneral.textContent).not.toContain('Atendida')
+})
+
 test('el formulario de observaciones solo aparece al revisor asignado de un reporte en revisión', async () => {
   await montar()
   expect(general()).toBeTruthy()

@@ -3530,8 +3530,9 @@ paths:
       description: |
         Única vía para cambiar el estado. El permiso depende del destino; por ahora están habilitados `ENVIADO`
         (`REPORTE_ENVIAR`, solo el Personal del establecimiento), `EN_REVISION` (`REPORTE_ASIGNAR`, solo el
-        Revisor) y `CORRECCION_SOLICITADA` (`REPORTE_SOLICITAR_CORRECCION`, solo el Revisor), y cualquier otro
-        destino responde 422 `TRANSICION_NO_DISPONIBLE`. Además del permiso, la transición (estado actual →
+        Revisor), `CORRECCION_SOLICITADA` (`REPORTE_SOLICITAR_CORRECCION`, solo el Revisor) y `BORRADOR`
+        (`REPORTE_EDITAR`, solo el Personal del establecimiento), y cualquier otro destino responde 422
+        `TRANSICION_NO_DISPONIBLE`. Además del permiso, la transición (estado actual →
         destino) debe existir en `transicion_estado` para el rol del usuario.
 
         Todo va en una transacción de MySQL con el reporte bloqueado. Cada transición sube `versionFila`, deja
@@ -3543,6 +3544,10 @@ paths:
         (con su fila `VALIDAR` si cambió algún resultado). Si quedan errores `ABIERTO`, los resultados quedan
         escritos, el reporte sigue en `BORRADOR` y responde 422 `REPORTE_CON_ERRORES` con la validación. Sin
         errores, el reporte pasa a `ENVIADO` con `enviadoEn`; las advertencias se envían y siguen `ABIERTO`.
+        En un reenvío (después de una devolución), las observaciones pendientes del reporte (`atendida` en
+        `false`) quedan atendidas (`atendida` en `true`, `atendidaEn` = ahora) en la misma transacción, y la
+        `CAMBIO_ESTADO` lleva `observacionesAtendidas` con cuántas fueron. Con errores siguen pendientes.
+        `revisor_id` y `asignado_en` no cambian: el reporte vuelve a la bandeja como `ENVIADO` con su revisor.
 
         **EN_REVISION (asignar):** exige `revisorId`, que debe ser una cuenta activa, con empleado activo, del
         rol `REVISOR` y de la DDRISS del reporte (puede ser el propio usuario); si no, 422 `REVISOR_INVALIDO`.
@@ -3558,11 +3563,15 @@ paths:
         vacío, `atendida` en `false`); `revisor_id` y `asignado_en` no cambian. La `CAMBIO_ESTADO` lleva las
         `observaciones` (`vacunaId` y `texto`). Volver a `BORRADOR` es del establecimiento.
 
+        **BORRADOR (corregir):** solo desde `CORRECCION_SOLICITADA` y con el mes de la DDRISS `ABIERTO` o
+        `EN_CIERRE` (si no, 409 `PERIODO_CERRADO`). El reporte vuelve a ser editable; `revisor_id`,
+        `asignado_en` y las observaciones no cambian. `comentario` es opcional.
+
         Los errores se revisan en este orden: cuerpo, destino disponible, permiso, reporte, transición,
-        comentario (salvo `CORRECCION_SOLICITADA`), estado del mes (solo `ENVIADO`), `versionFila`, revisor (solo
+        comentario (salvo `CORRECCION_SOLICITADA`), estado del mes (solo `ENVIADO` y `BORRADOR`), `versionFila`, revisor (solo
         `EN_REVISION`), revisor asignado y observaciones (solo `CORRECCION_SOLICITADA`) y validación (solo
         `ENVIADO`).
-      x-permiso: "Según estadoDestino: ENVIADO → REPORTE_ENVIAR; EN_REVISION → REPORTE_ASIGNAR; CORRECCION_SOLICITADA → REPORTE_SOLICITAR_CORRECCION"
+      x-permiso: "Según estadoDestino: ENVIADO → REPORTE_ENVIAR; EN_REVISION → REPORTE_ASIGNAR; CORRECCION_SOLICITADA → REPORTE_SOLICITAR_CORRECCION; BORRADOR → REPORTE_EDITAR"
       parameters:
         - { $ref: "#/components/parameters/Id" }
       requestBody:
@@ -3619,6 +3628,7 @@ paths:
                   observaciones:
                     - { vacunaId: null, texto: Revise la procedencia de las dosis de octubre. }
                     - { vacunaId: 3, texto: Hexavalente D1 en menores de 1 año es muy alto frente a septiembre. }
+              corregir: { value: { estadoDestino: BORRADOR, versionFila: 16 } }
       responses:
         "200":
           description: Estado actualizado; el reporte como en `GET /reportes/{id}`
@@ -3912,7 +3922,9 @@ paths:
       description: |
         Las observaciones de todas las devoluciones (`CORRECCION_SOLICITADA`) del reporte: de la más reciente a
         la más antigua y, dentro de una misma devolución, la general primero y luego en el orden de las vacunas
-        del reporte. Se escriben solo con `POST /reportes/{id}/transiciones` al devolver.
+        del reporte. Se escriben solo con `POST /reportes/{id}/transiciones` al devolver, y `atendida` y
+        `atendidaEn` cambian solo al reenviar el reporte (`ENVIADO`), que marca todas las pendientes. Por eso las
+        pendientes (`atendida: false`) son siempre las de la última devolución.
 
         Uno que no existe o está fuera del alcance del usuario (para el Personal, de otro establecimiento; para el
         Revisor, de otra DDRISS) responde 404. Un reporte sin observaciones responde una lista vacía.
@@ -5899,8 +5911,8 @@ components:
         texto: { type: string, maxLength: 1000, example: Hexavalente D1 en menores de 1 año es muy alto frente a septiembre. }
         autor: { $ref: "#/components/schemas/RevisorResumen" }
         creadoEn: { type: string, format: date-time, example: "2026-10-31T15:10:00.000Z" }
-        atendida: { type: boolean, description: La marca el establecimiento (HU-29), example: false }
-        atendidaEn: { type: string, format: date-time, nullable: true, example: null }
+        atendida: { type: boolean, description: "Pasa a `true` al reenviar el reporte después de la devolución", example: false }
+        atendidaEn: { type: string, format: date-time, nullable: true, description: "Cuándo se reenvió; `null` si está pendiente", example: null }
 
     ElementoBandeja:
       type: object

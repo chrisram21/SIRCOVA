@@ -28,12 +28,18 @@ export default function DialogoAsignarRevisor({ modo, fila, usuarioId, alHecho, 
   // { mensaje, desactualizado }: un 409 ofrece «Recargar», porque la fila ya no es la que se ve.
   const [errorApi, setErrorApi] = useState(null)
   const selector = useRef(null)
+  // SPEC 37: un reporte reenviado conserva su revisor; al asignarlo de nuevo se ofrece el mismo.
+  const anterior = reasignar ? null : fila.revisor
+  const esMiAnterior = anterior?.id === usuarioId
 
   function cargar() {
     setErrorCarga(null)
     setRevisores(null)
     listarRevisores()
-      .then(setRevisores)
+      .then((recibidos) => {
+        setRevisores(recibidos)
+        if (anterior && !esMiAnterior && recibidos.some((r) => r.id === anterior.id)) setElegido(String(anterior.id))
+      })
       .catch((err) => setErrorCarga(mensajeDeError(err)))
   }
 
@@ -85,6 +91,11 @@ export default function DialogoAsignarRevisor({ modo, fila, usuarioId, alHecho, 
               ? `El reporte de ${establecimiento} sigue en revisión, a cargo del revisor que elija.`
               : `El reporte de ${establecimiento} pasa a «En revisión» a cargo del revisor que elija.`}
           </AlertDialogDescription>
+          {anterior && (
+            <p className="text-sm text-muted-foreground">
+              Lo revisó antes: {anterior.nombre}.{esMiAnterior && ' Usted revisó este reporte antes.'}
+            </p>
+          )}
         </AlertDialogHeader>
 
         {errorCarga ? (

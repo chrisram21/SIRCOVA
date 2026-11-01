@@ -12,6 +12,7 @@ vi.mock('@/api/produccion.js', () => ({
   crearReporte: vi.fn(),
   obtenerFormulario: vi.fn(),
   guardarVacuna: vi.fn(),
+  listarObservaciones: vi.fn(() => Promise.resolve([])),
 }))
 vi.mock('@/api/revision.js', () => ({ cambiarEstadoReporte: vi.fn() }))
 

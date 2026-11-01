@@ -148,6 +148,9 @@ function ObservacionesAnteriores({ observaciones }) {
                 <li key={o.id} className="rounded-md border bg-muted/40 px-3 py-2">
                   <p className="font-medium">{o.vacuna?.nombre ?? 'General'}</p>
                   <p className="whitespace-pre-line text-muted-foreground">{o.texto}</p>
+                  {o.atendida && o.atendidaEn && (
+                    <p className="mt-1 text-xs text-muted-foreground">Atendida el {aFechaHora(o.atendidaEn)}</p>
+                  )}
                 </li>
               ))}
             </ul>
