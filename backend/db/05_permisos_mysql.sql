@@ -142,6 +142,10 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
 INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('REPORTE_SOLICITAR_CORRECCION', 'REVISION',             'Devolver con observaciones los reportes en revisión que tiene asignados');
 
+-- SPEC 38 (HU-30): aprobar el reporte
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('REPORTE_APROBAR',           'REVISION',                'Aprobar los reportes en revisión que tiene asignados');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -264,6 +268,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'REVISOR'
    AND p.codigo IN ('REPORTE_SOLICITAR_CORRECCION', 'REPORTE_CONSULTAR');
+
+-- SPEC 38 (HU-30): el Revisor aprueba los reportes que tiene asignados
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'REVISOR'
+   AND p.codigo = 'REPORTE_APROBAR';
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

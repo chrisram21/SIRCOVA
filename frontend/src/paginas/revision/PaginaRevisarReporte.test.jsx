@@ -3,7 +3,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { toast } from 'sonner'
 import { ErrorApi } from '@/api/cliente.js'
 import { listarObservaciones, obtenerFormulario, obtenerReporte, obtenerValidacionGuardada } from '@/api/produccion.js'
-import { solicitarCorreccion } from '@/api/revision.js'
+import { aprobarReporte, solicitarCorreccion } from '@/api/revision.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 import PaginaRevisarReporte from './PaginaRevisarReporte.jsx'
@@ -15,7 +15,7 @@ vi.mock('@/api/produccion.js', () => ({
   obtenerValidacionGuardada: vi.fn(),
   listarObservaciones: vi.fn(),
 }))
-vi.mock('@/api/revision.js', () => ({ solicitarCorreccion: vi.fn() }))
+vi.mock('@/api/revision.js', () => ({ aprobarReporte: vi.fn(), solicitarCorreccion: vi.fn() }))
 
 const YO = 2
 const OTRO = 3
@@ -226,9 +226,9 @@ test('el formulario de observaciones solo aparece al revisor asignado de un repo
 })
 
 test.each([
-  ['asignado a otro revisor', { revisor: { id: OTRO, nombre: 'Luis Gómez' } }, PERMISOS, 'Solo el revisor asignado puede devolver este reporte.'],
+  ['asignado a otro revisor', { revisor: { id: OTRO, nombre: 'Luis Gómez' } }, PERMISOS, 'Solo el revisor asignado puede devolver o aprobar este reporte.'],
   ['en otro estado', { estado: 'CORRECCION_SOLICITADA' }, PERMISOS, 'El reporte está en «Corrección solicitada».'],
-  ['sin el permiso', {}, ['REPORTE_REVISAR', 'REPORTE_CONSULTAR'], 'Solo el revisor asignado puede devolver este reporte.'],
+  ['sin el permiso', {}, ['REPORTE_REVISAR', 'REPORTE_CONSULTAR'], 'Solo el revisor asignado puede devolver o aprobar este reporte.'],
 ])('un reporte %s queda en solo consulta', async (_, cambios, permisos, motivo) => {
   obtenerReporte.mockResolvedValue(reporte(cambios))
   await montar({ permisos })
@@ -327,4 +327,64 @@ test('si falla la carga se muestra el error y «Reintentar» vuelve a pedir', as
   fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
   expect(await screen.findByRole('heading', { name: 'Reporte de octubre de 2026' })).toBeTruthy()
   expect(obtenerReporte).toHaveBeenCalledTimes(2)
+})
+
+describe('aprobar (SPEC 38)', () => {
+  const CON_APROBAR = [...PERMISOS, 'REPORTE_APROBAR']
+  const botonAprobar = () => screen.queryByRole('button', { name: 'Aprobar' })
+  const NOTA = 'Con observaciones, el reporte va a corrección: use «Solicitar corrección».'
+
+  test.each([
+    ['con REPORTE_APROBAR, al revisor asignado de un reporte en revisión', {}, CON_APROBAR, true],
+    ['sin REPORTE_APROBAR', {}, PERMISOS, false],
+    ['a otro revisor', { revisor: { id: OTRO, nombre: 'Luis Gómez' } }, CON_APROBAR, false],
+  ])('«Aprobar» %s: %s', async (_, cambios, permisos, aparece) => {
+    obtenerReporte.mockResolvedValue(reporte(cambios))
+    await montar({ permisos })
+
+    expect(botonAprobar() !== null).toBe(aparece)
+  })
+
+  test('con una observación escrita queda deshabilitado con su nota, y al borrarla se habilita', async () => {
+    await montar({ permisos: CON_APROBAR })
+    expect(botonAprobar().disabled).toBe(false)
+
+    escribir(general(), 'Revise la procedencia.')
+
+    expect(botonAprobar().disabled).toBe(true)
+    expect(botonAprobar().getAttribute('aria-describedby')).toBe('motivo-sin-aprobar')
+    expect(screen.getByText(NOTA).id).toBe('motivo-sin-aprobar')
+
+    escribir(general(), '   ')
+
+    expect(botonAprobar().disabled).toBe(false)
+    expect(screen.queryByText(NOTA)).toBeNull()
+  })
+
+  test('aprobar cuenta las advertencias, avisa con un toast y vuelve a la bandeja con sus filtros', async () => {
+    aprobarReporte.mockResolvedValue(reporte({ estado: 'APROBADO', versionFila: 15 }))
+    const router = await montar({ permisos: CON_APROBAR })
+
+    fireEvent.click(botonAprobar())
+    const dialogo = within(await screen.findByRole('alertdialog'))
+    expect(dialogo.getByText('Tiene 1 advertencia abierta; se aprueba igual.')).toBeTruthy()
+    fireEvent.click(dialogo.getByRole('button', { name: 'Aprobar' }))
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Reporte aprobado.'))
+    expect(aprobarReporte).toHaveBeenCalledTimes(1)
+    expect(aprobarReporte.mock.calls[0][0]).toBe(524)
+    expect(aprobarReporte.mock.calls[0][1].versionFila).toBe(14)
+    await waitFor(() => expect(router.state.location.pathname).toBe('/revision'))
+    expect(router.state.location.search).toBe('?periodo=10&grupo=EN_REVISION')
+  })
+
+  test('un reporte APROBADO queda en solo consulta, sin botones ni formulario', async () => {
+    obtenerReporte.mockResolvedValue(reporte({ estado: 'APROBADO' }))
+    await montar({ permisos: CON_APROBAR })
+
+    expect(screen.getByText('El reporte está en «Aprobado».')).toBeTruthy()
+    expect(botonAprobar()).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Solicitar corrección' })).toBeNull()
+    expect(screen.queryByLabelText('Observación general')).toBeNull()
+  })
 })

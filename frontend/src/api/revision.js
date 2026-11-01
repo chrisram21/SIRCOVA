@@ -50,3 +50,12 @@ export function corregirReporte(reporteId, { versionFila }) {
     cuerpo: { estadoDestino: 'BORRADOR', versionFila },
   })
 }
+
+// SPEC 38: el revisor asignado aprueba un reporte EN_REVISION; el comentario (opcional) va al historial. Responde el
+// reporte.
+export function aprobarReporte(reporteId, { versionFila, comentario }) {
+  return solicitar(`/reportes/${reporteId}/transiciones`, {
+    metodo: 'POST',
+    cuerpo: { estadoDestino: 'APROBADO', versionFila, ...(comentario && { comentario }) },
+  })
+}
