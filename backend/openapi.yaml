@@ -2991,9 +2991,11 @@ paths:
       tags: [Producción]
       summary: Listar los reportes mensuales del alcance del usuario
       description: |
-        El Personal de establecimiento solo ve los de su establecimiento. Ordenados por año y mes descendentes,
-        con la forma paginada común. No lee MongoDB. Un parámetro inválido, desconocido o repetido responde
-        400 `ENTRADA_INVALIDA`; una página fuera de rango responde 200 con `elementos` vacío y el `total` real.
+        El Personal de establecimiento solo ve los de su establecimiento; el Revisor y el administrador (que lo
+        usa para elegir el reporte cerrado de una rectificación, SPEC 40), los de su DDRISS. Ordenados por año y
+        mes descendentes, con la forma paginada común. No lee MongoDB. Un parámetro inválido, desconocido o
+        repetido responde 400 `ENTRADA_INVALIDA`; una página fuera de rango responde 200 con `elementos` vacío y
+        el `total` real.
 
         Cada elemento trae `periodo.estado` (el estado del mes en `cierre_periodo` de la DDRISS del
         establecimiento), `estadoDesde` (la fecha de la fila más reciente de `historial_estado_reporte`) y, si
@@ -3157,6 +3159,9 @@ paths:
 
         Cada vacuna trae sus `procedenciasPermitidas`, según el modo de procedencia de su esquema, y
         `municipios` trae el nombre de cada una y de las procedencias de las celdas guardadas.
+
+        La pantalla de rectificación (SPEC 40) lo usa con un reporte `CERRADO` para mostrar sus cantidades
+        actuales; también lo usa el administrador, para los reportes de su DDRISS.
       x-permiso: REPORTE_CONSULTAR
       parameters:
         - { $ref: "#/components/parameters/Id" }
@@ -4045,20 +4050,163 @@ paths:
   /reportes/{id}/rectificaciones:
     post:
       tags: [Revisión]
-      summary: Solicitar la rectificación de un reporte CERRADO
+      summary: Solicitar la rectificación de un reporte CERRADO con la justificación y las cantidades nuevas
+      description: |
+        Crea una `solicitud_rectificacion` `PENDIENTE` y una fila de `rectificacion_detalle` por celda que cambia,
+        en una transacción de MySQL, con una `CREAR` (módulo `RECTIFICACION`, entidad `solicitud_rectificacion`)
+        que lleva el objeto completo: `reporteId`, `motivo`, `estado` y `cambios` con cada celda, su cantidad
+        anterior y la nueva. El reporte **no cambia**: sigue `CERRADO` y su `versionFila` no sube. Autorizar,
+        rechazar y aplicar la solicitud es de HU-33.
+
+        La piden el Personal (reportes de su establecimiento) y el administrador (de los establecimientos de su
+        DDRISS). Uno que no existe o está fuera del alcance responde 404.
+
+        La cantidad anterior la lee el backend: la de `detalle_produccion` o 0 si la celda no existe (entonces
+        `detalle_id` queda `NULL`). Cada celda debe ser válida para la versión del esquema fijada en
+        `reporte_vacuna` y su procedencia debe estar permitida o tener filas en la vacuna, como al guardar
+        (`PUT /reportes/{id}/vacunas/{vacunaId}`). Una celda con cantidad no se vacía: se escribe 0.
+
+        Un reporte con una solicitud `PENDIENTE` no admite otra. Los campos adicionales no se rectifican, no se
+        corren las reglas de validación y no se sube documento de respaldo (`evidencia_ruta` queda `NULL`).
+
+        Los errores se revisan en este orden: cuerpo, reporte, estado del reporte, solicitud pendiente,
+        `versionFila` y celdas.
+      x-permiso: RECTIFICACION_SOLICITAR
       parameters:
         - { $ref: "#/components/parameters/Id" }
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [motivo]
-              properties:
-                motivo: { type: string }
+            schema: { $ref: "#/components/schemas/SolicitudRectificacionNueva" }
+            example:
+              motivo: Faltó sumar la jornada de vacunación del 28 de agosto.
+              versionFila: 14
+              cambios:
+                - { vacunaId: 3, dosisCodigo: D3, municipioProcedenciaId: 7, dimensiones: { grupo_edad: MENOR_1 }, cantidadNueva: 93 }
       responses:
-        "201": { description: Solicitud creada en estado PENDIENTE }
+        "201":
+          description: Solicitud creada en estado `PENDIENTE`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SolicitudRectificacion" }
+        "400":
+          description: El id o el cuerpo no son válidos (motivo vacío o largo, `cambios` vacío, una celda repetida o un campo desconocido)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                motivo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: La justificación es obligatoria. }
+                cambios:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: cambios debe tener entre 1 y 500 celdas. }
+                repetida:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: Una celda está repetida en los cambios. }
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: evidencia." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: El reporte no está cerrado, ya tiene una solicitud pendiente (con `solicitudId`) o cambió desde que se abrió
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/Error" }
+                  - type: object
+                    properties:
+                      solicitudId: { type: integer, description: Solo con `RECTIFICACION_PENDIENTE`, example: 4 }
+              examples:
+                noCerrado:
+                  value:
+                    error: { codigo: REPORTE_NO_CERRADO, mensaje: Solo se rectifican reportes cerrados. }
+                pendiente:
+                  value:
+                    error: { codigo: RECTIFICACION_PENDIENTE, mensaje: El reporte ya tiene una solicitud de rectificación pendiente. }
+                    solicitudId: 4
+                desactualizado:
+                  value:
+                    error: { codigo: REPORTE_DESACTUALIZADO, mensaje: El reporte cambió desde que lo abrió; recárguelo. }
+        "422":
+          description: Una celda no es parte del formulario, usa una procedencia no permitida o no cambia la cantidad
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                vacuna:
+                  value:
+                    error: { codigo: CELDA_INVALIDA, mensaje: Una celda es de una vacuna que no está en el reporte. }
+                celda:
+                  value:
+                    error: { codigo: CELDA_INVALIDA, mensaje: "La celda 3.ª dosis · < 1 año no es parte del formulario." }
+                procedencia:
+                  value:
+                    error: { codigo: CELDA_INVALIDA, mensaje: "La celda 1.ª dosis · < 1 año tiene una procedencia que no se puede usar en esta vacuna." }
+                sinDiferencia:
+                  value:
+                    error: { codigo: CAMBIO_SIN_DIFERENCIA, mensaje: "La celda 3.ª dosis · < 1 año ya tiene esa cantidad." }
+
+  /rectificaciones:
+    get:
+      tags: [Revisión]
+      summary: Listar las solicitudes de rectificación del alcance del usuario
+      description: |
+        El Personal ve las de los reportes de su establecimiento y el administrador las de su DDRISS. Ordenadas
+        por fecha de solicitud, de la más reciente a la más antigua, con la forma paginada común. Un parámetro
+        inválido, desconocido o repetido responde 400 `ENTRADA_INVALIDA`; una página fuera de rango responde 200
+        con `elementos` vacío y el `total` real.
+      x-permiso: RECTIFICACION_CONSULTAR
+      parameters:
+        - { name: estado, in: query, schema: { $ref: "#/components/schemas/EstadoRectificacion" } }
+        - { $ref: "#/components/parameters/Pagina" }
+        - { $ref: "#/components/parameters/PorPagina" }
+      responses:
+        "200":
+          description: Página de solicitudes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaginaRectificaciones" }
+        "400":
+          description: Un parámetro inválido, desconocido o repetido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                estado:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "estado debe ser PENDIENTE, AUTORIZADA, RECHAZADA o APLICADA." }
+                desconocido:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: reporteId." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+
+  /rectificaciones/{id}:
+    get:
+      tags: [Revisión]
+      summary: Detalle de una solicitud de rectificación con el valor anterior y el nuevo de cada celda
+      description: |
+        Las etiquetas de la dosis y de las dimensiones salen de la versión del esquema fijada en `reporte_vacuna`,
+        incluidas las inactivas. Los cambios van en el orden de las vacunas del reporte, la dosis, la procedencia
+        y la combinación. Una que no existe o está fuera del alcance del usuario responde 404.
+      x-permiso: RECTIFICACION_CONSULTAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: La solicitud
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SolicitudRectificacion" }
+        "400": { $ref: "#/components/responses/EntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
 
   # ---------------------------------------------------------------- Indicadores
   /indicadores/corridas:
@@ -6470,6 +6618,139 @@ components:
           description: Las claves de los campos adicionales que faltan o no cuadran; solo en la respuesta
           items: { type: string }
           example: [total_dosis_declarado]
+
+    EstadoRectificacion:
+      type: string
+      enum: [PENDIENTE, AUTORIZADA, RECHAZADA, APLICADA]
+
+    CambioRectificacionEntrada:
+      type: object
+      additionalProperties: false
+      description: Una celda que cambia, con el formato de `Celda` y `cantidadNueva` en lugar de `cantidad`
+      required: [vacunaId, dosisCodigo, municipioProcedenciaId, dimensiones, cantidadNueva]
+      properties:
+        vacunaId: { type: integer, description: "`vacuna.id`", example: 3 }
+        dosisCodigo: { type: string, example: D3 }
+        municipioProcedenciaId: { type: integer, example: 7 }
+        dimensiones:
+          type: object
+          additionalProperties: { type: string }
+          example: { grupo_edad: MENOR_1 }
+        cantidadNueva: { type: integer, minimum: 0, maximum: 4294967295, example: 93 }
+
+    SolicitudRectificacionNueva:
+      type: object
+      additionalProperties: false
+      required: [motivo, versionFila, cambios]
+      properties:
+        motivo: { type: string, minLength: 1, maxLength: 1000, description: La justificación; se recorta, example: Faltó sumar la jornada de vacunación del 28 de agosto. }
+        versionFila: { type: integer, minimum: 1, description: La del reporte que vio el usuario, example: 14 }
+        cambios:
+          type: array
+          minItems: 1
+          maxItems: 500
+          description: Solo las celdas que cambian, sin repetir una celda
+          items: { $ref: "#/components/schemas/CambioRectificacionEntrada" }
+
+    CambioRectificacion:
+      type: object
+      required: [vacuna, dosis, municipioProcedencia, dimensiones, claveCombinacion, celdaNueva, cantidadAnterior, cantidadNueva]
+      properties:
+        vacuna:
+          type: object
+          required: [id, codigo, nombre]
+          properties:
+            id: { type: integer, example: 3 }
+            codigo: { type: string, example: HEXA }
+            nombre: { type: string, example: Hexavalente }
+        dosis:
+          type: object
+          required: [codigo, nombre]
+          properties:
+            codigo: { type: string, example: D3 }
+            nombre: { type: string, example: 3.ª dosis }
+        municipioProcedencia:
+          type: object
+          required: [id, nombre]
+          properties:
+            id: { type: integer, example: 7 }
+            nombre: { type: string, example: San Marcos }
+        dimensiones:
+          type: array
+          description: El grupo de edad primero y las demás por código; vacía si la vacuna no desagrega
+          items:
+            type: object
+            required: [codigo, nombre, valor, etiqueta]
+            properties:
+              codigo: { type: string, example: grupo_edad }
+              nombre: { type: string, example: Grupo de edad }
+              valor: { type: string, example: MENOR_1 }
+              etiqueta: { type: string, example: "< 1 año" }
+        claveCombinacion: { type: string, example: grupo_edad=MENOR_1 }
+        celdaNueva: { type: boolean, description: "`true` si la celda no existía (`detalle_id` `NULL`)", example: false }
+        cantidadAnterior: { type: integer, minimum: 0, example: 87 }
+        cantidadNueva: { type: integer, minimum: 0, example: 93 }
+
+    ReporteDeRectificacion:
+      type: object
+      required: [id, establecimiento, periodo, estado]
+      properties:
+        id: { type: integer, example: 228 }
+        establecimiento: { $ref: "#/components/schemas/EstablecimientoDeReporte" }
+        periodo:
+          type: object
+          required: [id, anio, mes]
+          properties:
+            id: { type: integer, example: 8 }
+            anio: { type: integer, example: 2026 }
+            mes: { type: integer, minimum: 1, maximum: 12, example: 8 }
+        estado: { $ref: "#/components/schemas/EstadoReporte" }
+
+    SolicitudRectificacionResumen:
+      type: object
+      required: [id, reporte, estado, motivo, solicitadoPor, solicitadoEn, cambios]
+      properties:
+        id: { type: integer, example: 4 }
+        reporte: { $ref: "#/components/schemas/ReporteDeRectificacion" }
+        estado: { $ref: "#/components/schemas/EstadoRectificacion" }
+        motivo: { type: string, example: Faltó sumar la jornada de vacunación del 28 de agosto. }
+        solicitadoPor: { $ref: "#/components/schemas/RevisorResumen" }
+        solicitadoEn: { type: string, format: date-time, example: "2026-10-31T16:00:00.000Z" }
+        cambios: { type: integer, minimum: 1, description: Número de celdas que cambia, example: 2 }
+
+    SolicitudRectificacion:
+      type: object
+      required: [id, reporte, estado, motivo, solicitadoPor, solicitadoEn, resueltoPor, comentarioResolucion, resueltoEn, aplicadoEn, cambios]
+      properties:
+        id: { type: integer, example: 4 }
+        reporte: { $ref: "#/components/schemas/ReporteDeRectificacion" }
+        estado: { $ref: "#/components/schemas/EstadoRectificacion" }
+        motivo: { type: string, example: Faltó sumar la jornada de vacunación del 28 de agosto. }
+        solicitadoPor: { $ref: "#/components/schemas/RevisorResumen" }
+        solicitadoEn: { type: string, format: date-time, example: "2026-10-31T16:00:00.000Z" }
+        resueltoPor:
+          allOf: [{ $ref: "#/components/schemas/RevisorResumen" }]
+          nullable: true
+          description: "`null` mientras está `PENDIENTE` (lo escribe HU-33)"
+        comentarioResolucion: { type: string, nullable: true, example: null }
+        resueltoEn: { type: string, format: date-time, nullable: true, example: null }
+        aplicadoEn: { type: string, format: date-time, nullable: true, example: null }
+        cambios:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/CambioRectificacion" }
+
+    PaginaRectificaciones:
+      description: Página de solicitudes de rectificación, con la forma paginada común (ver `PaginaUsuarios`)
+      type: object
+      required: [elementos, total, pagina, porPagina]
+      properties:
+        elementos:
+          type: array
+          items: { $ref: "#/components/schemas/SolicitudRectificacionResumen" }
+        total: { type: integer, minimum: 0, example: 1 }
+        pagina: { type: integer, minimum: 1, example: 1 }
+        porPagina: { type: integer, minimum: 1, maximum: 100, example: 20 }
 
     ResultadoIndicador:
       type: object

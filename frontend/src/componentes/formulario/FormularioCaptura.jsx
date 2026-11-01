@@ -102,10 +102,12 @@ const conInicio = (nivel) => {
   })
 }
 
-// El borde de una casilla señalada por la validación (SPEC 33); la tarjeta B usa las mismas.
+// El borde de una casilla señalada por la validación (SPEC 33); la tarjeta B usa las mismas. CAMBIADA es la casilla
+// que la rectificación (SPEC 40) cambia respecto del reporte cerrado.
 export const CLASES_MARCA = {
   ERROR: 'border-destructive ring-1 ring-destructive/40',
   ADVERTENCIA: 'border-advertencia-foreground/60 bg-advertencia text-advertencia-foreground',
+  CAMBIADA: 'border-advertencia-foreground/60 bg-advertencia font-semibold text-advertencia-foreground ring-2 ring-ring/40',
 }
 
 function TablaCaptura({ tabla, cantidades, alCambiar, soloLectura, marcas }) {
@@ -211,6 +213,7 @@ function TablaCaptura({ tabla, cantidades, alCambiar, soloLectura, marcas }) {
                         data-fila={i}
                         data-col={j}
                         data-celda={clave}
+                        data-cambiada={marca === 'CAMBIADA' || undefined}
                         value={texto}
                         disabled={soloLectura}
                         aria-invalid={!valida || marca === 'ERROR' || undefined}

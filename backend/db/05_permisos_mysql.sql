@@ -26,6 +26,7 @@
 --        CONFIGURACION_CATALOGOS  (POBLACION_REGISTRAR, modelo v0.6)
 --        USUARIOS                 (SPEC 07, HU-04)
 --        PRODUCCION               (SPEC 22, HU-19)
+--        RECTIFICACION            (SPEC 40, HU-32)
 --    - Un código no se borra ni se renombra (regla 6 de AGENTS.md).
 --    - Asignaciones y retiros siempre por códigos, nunca por ids.
 --
@@ -149,6 +150,11 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
 -- SPEC 39 (HU-31): cerrar el periodo
 INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('PERIODO_CERRAR',            'REVISION',                'Cerrar un mes en cierre de su DDRISS y pasar sus reportes aprobados a Cerrado');
+
+-- SPEC 40 (HU-32): solicitar la rectificación de un reporte cerrado
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('RECTIFICACION_SOLICITAR',   'RECTIFICACION',           'Solicitar la rectificación de un reporte cerrado de su ámbito'),
+ ('RECTIFICACION_CONSULTAR',   'RECTIFICACION',           'Consultar las solicitudes de rectificación de su ámbito');
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
@@ -284,6 +290,18 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'REVISOR'
    AND p.codigo = 'PERIODO_CERRAR';
+
+-- SPEC 40 (HU-32): el Personal y el Administrador piden y consultan rectificaciones de su ámbito
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo IN ('ESTABLECIMIENTO', 'ADMINISTRADOR')
+   AND p.codigo IN ('RECTIFICACION_SOLICITAR', 'RECTIFICACION_CONSULTAR');
+
+-- SPEC 40 (HU-32): el Administrador lee los reportes de su DDRISS para elegir el que rectifica
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'ADMINISTRADOR'
+   AND p.codigo = 'REPORTE_CONSULTAR';
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

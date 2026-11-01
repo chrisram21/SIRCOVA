@@ -195,6 +195,7 @@ function TablaProcedencias({
                         data-fila={i}
                         data-col={k}
                         data-celda={llave}
+                        data-cambiada={marca === 'CAMBIADA' || undefined}
                         value={texto}
                         disabled={soloLectura}
                         aria-invalid={!valida || marca === 'ERROR' || undefined}

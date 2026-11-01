@@ -3,10 +3,15 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import { listarPeriodos } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
 import { listarReportes } from '@/api/produccion.js'
+import { listarRectificaciones } from '@/api/rectificaciones.js'
+import { guardarSesion } from '@/api/sesion.js'
+import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 import PaginaMisReportes from './PaginaMisReportes.jsx'
 
+vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
 vi.mock('@/api/produccion.js', () => ({ listarReportes: vi.fn() }))
 vi.mock('@/api/catalogos.js', () => ({ listarPeriodos: vi.fn() }))
+vi.mock('@/api/rectificaciones.js', () => ({ listarRectificaciones: vi.fn() }))
 
 const ESTABLECIMIENTO = { id: 1, codigo: 'CS-1201', nombre: 'Centro de Salud San Marcos' }
 const PERIODOS = [
@@ -53,6 +58,34 @@ async function abrir(ruta = '/reportes') {
   await waitFor(() => expect(screen.queryByLabelText('Cargando reportes')).toBeNull())
 }
 
+// SPEC 40: con la sesión del Personal, para los permisos de la rectificación.
+function crearSesion(permisos) {
+  const codificar = (objeto) => btoa(JSON.stringify(objeto)).replace(/=+$/, '')
+  const exp = Math.floor(Date.now() / 1000) + 3600
+  return {
+    token: `${codificar({ alg: 'HS256', typ: 'JWT' })}.${codificar({ sub: '13', exp })}.firma`,
+    usuario: {
+      id: 13,
+      nombreUsuario: 'cs1201',
+      rol: 'ESTABLECIMIENTO',
+      permisos,
+      empleado: { nombres: 'Marta', apellidos: 'López', ddrissId: 1, establecimientoId: 1, municipioId: 1 },
+    },
+  }
+}
+
+async function abrirConSesion(permisos) {
+  guardarSesion(crearSesion(permisos))
+  render(
+    <MemoryRouter initialEntries={['/reportes']}>
+      <ProveedorSesion>
+        <PaginaMisReportes />
+      </ProveedorSesion>
+    </MemoryRouter>,
+  )
+  await waitFor(() => expect(screen.queryByLabelText('Cargando reportes')).toBeNull())
+}
+
 const fila = (mes) => screen.getByText(mes).closest('tr')
 const nativo = (nombre) => document.querySelector(`select[name="${nombre}"]`)
 const elegirFiltro = (nombre, valor) => fireEvent.change(nativo(nombre), { target: { value: String(valor) } })
@@ -61,6 +94,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   listarReportes.mockResolvedValue(respuesta(REPORTES))
   listarPeriodos.mockResolvedValue(PERIODOS)
+  listarRectificaciones.mockResolvedValue({ elementos: [], total: 0, pagina: 1, porPagina: 100 })
 })
 
 test('muestra cada reporte con su mes, su estado y la fecha de su último cambio de estado', async () => {
@@ -200,4 +234,35 @@ test('si fallan los años, el filtro de año queda deshabilitado y «Reintentar�
   fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
   await waitFor(() => expect(screen.queryByText(/No se pudieron cargar los años/)).toBeNull())
   expect(listarPeriodos).toHaveBeenCalledTimes(2)
+})
+
+describe('rectificación (SPEC 40)', () => {
+  const CERRADOS = [reporte(240, 8, 'CERRADO', 'CERRADO'), reporte(230, 7, 'CERRADO', 'CERRADO'), ...REPORTES.slice(0, 1)]
+  const CON_PERMISO = ['REPORTE_CREAR', 'REPORTE_CONSULTAR', 'RECTIFICACION_SOLICITAR']
+
+  test('un reporte cerrado ofrece «Solicitar rectificación», o «Ver solicitud» si ya tiene una pendiente', async () => {
+    listarReportes.mockResolvedValue(respuesta(CERRADOS))
+    listarRectificaciones.mockResolvedValue({ elementos: [{ id: 9, reporte: { id: 230 } }], total: 1, pagina: 1, porPagina: 100 })
+    await abrirConSesion(CON_PERMISO)
+
+    expect(listarRectificaciones).toHaveBeenCalledWith({ estado: 'PENDIENTE', porPagina: 100 })
+    const ver = await within(fila('Julio de 2026')).findByRole('link', { name: 'Ver solicitud' })
+    expect(ver.getAttribute('href')).toBe('/rectificaciones/9')
+    const solicitar = within(fila('Agosto de 2026')).getByRole('link', { name: 'Solicitar rectificación' })
+    expect(solicitar.getAttribute('href')).toBe('/rectificaciones/nueva?reporte=240')
+    expect(within(fila('Octubre de 2026')).queryByRole('link', { name: 'Solicitar rectificación' })).toBeNull()
+  })
+
+  test('sin RECTIFICACION_SOLICITAR no ofrece la rectificación ni pide las solicitudes', async () => {
+    listarReportes.mockResolvedValue(respuesta(CERRADOS))
+    await abrirConSesion(['REPORTE_CREAR', 'REPORTE_CONSULTAR'])
+
+    expect(within(fila('Agosto de 2026')).queryByRole('link', { name: 'Solicitar rectificación' })).toBeNull()
+    expect(listarRectificaciones).not.toHaveBeenCalled()
+  })
+
+  test('un reporte aprobado, que todavía no está cerrado, no ofrece la rectificación', async () => {
+    await abrirConSesion(CON_PERMISO)
+    expect(within(fila('Agosto de 2026')).queryByRole('link', { name: 'Solicitar rectificación' })).toBeNull()
+  })
 })

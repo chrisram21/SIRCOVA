@@ -11,7 +11,7 @@ import { leerProcedencias, procedenciasPermitidas } from './procedencias.service
 
 export const MESES_EDITABLES = ['ABIERTO', 'EN_CIERRE'];
 const GRUPO_EDAD = 'grupo_edad';
-const CANTIDAD_MAXIMA = 4294967295; // INT UNSIGNED de detalle_produccion.cantidad
+export const CANTIDAD_MAXIMA = 4294967295; // INT UNSIGNED de detalle_produccion.cantidad
 const LARGO_TEXTO = 200;
 
 const errores = {
@@ -31,7 +31,7 @@ const aId = (valor) => (/^\d+$/.test(String(valor)) ? Number(valor) : 0);
 const esEditable = (reporte) => reporte.estado === 'BORRADOR' && MESES_EDITABLES.includes(reporte.estadoMes);
 
 // El estado del mes es el de la DDRISS del establecimiento (regla 10).
-async function leerReporte(ejecutor, id, usuario) {
+export async function leerReporte(ejecutor, id, usuario) {
   const [[fila]] = await ejecutor.query(
     `SELECT r.id, r.estado, r.version_fila, e.id AS establecimiento_id, e.ddriss_id,
             m.id AS municipio_id, m.nombre AS municipio_nombre, cp.estado AS estado_mes
@@ -54,7 +54,7 @@ async function leerReporte(ejecutor, id, usuario) {
   };
 }
 
-const delReporte = (reporte) => ({ ddrissId: reporte.ddrissId, municipioPropioId: reporte.municipioPropio.id });
+export const delReporte = (reporte) => ({ ddrissId: reporte.ddrissId, municipioPropioId: reporte.municipioPropio.id });
 
 // En el orden de GET /reportes/{id} (orden_informe, nombre).
 async function vacunasDelReporte(ejecutor, reporteId) {
@@ -213,7 +213,7 @@ const conClavesOrdenadas = (objeto) =>
   objeto === null ? null : Object.fromEntries(Object.keys(objeto).sort().map((clave) => [clave, objeto[clave]]));
 
 // "3.ª dosis · < 1 año · Femenino": la dosis y las etiquetas del catálogo, con el grupo de edad primero.
-function nombreDeCelda(celda, dosis, catalogo) {
+export function nombreDeCelda(celda, dosis, catalogo) {
   const dimensiones = Object.keys(celda.dimensiones).sort(
     (a, b) => (b === GRUPO_EDAD) - (a === GRUPO_EDAD) || a.localeCompare(b),
   );
@@ -232,7 +232,7 @@ async function catalogoDe(esquema) {
 }
 
 // La llave de uq_detalle dentro de una vacuna.
-const llaveDeCelda = (c) => `${c.dosisCodigo}|${c.municipioProcedenciaId}|${c.claveCombinacion}`;
+export const llaveDeCelda = (c) => `${c.dosisCodigo}|${c.municipioProcedenciaId}|${c.claveCombinacion}`;
 
 const procedenciaInvalida = (celda, dosis, catalogo) =>
   errores.celdaInvalida(
@@ -241,7 +241,7 @@ const procedenciaInvalida = (celda, dosis, catalogo) =>
 
 // Las reglas de las dosis inactivas y de las procedencias heredadas necesitan las filas actuales: se revisan dentro
 // de la transacción. Aquí se devuelven las celdas cuya procedencia no es la propia ni una permitida.
-function revisarCeldas(celdas, { validas, dosis, catalogo, municipioPropio, permitidas }) {
+export function revisarCeldas(celdas, { validas, dosis, catalogo, municipioPropio, permitidas }) {
   const conClave = celdas.map((celda) => ({ ...celda, claveCombinacion: claveCombinacion(celda.dimensiones) }));
   for (const celda of conClave) {
     if (!validas.has(`${celda.dosisCodigo}|${celda.claveCombinacion}`)) {
@@ -310,6 +310,41 @@ async function escribirCeldas(conexion, { repVacId, actuales, pedidas, dosis, us
   }
 }
 
+// Lo que hace falta para revisar las celdas de una vacuna del reporte contra la versión fijada de su esquema.
+// Esa versión no cambia (regla 5), así que se puede leer fuera de la transacción.
+export async function formularioDeVacuna(reporte, repVac) {
+  const esquema = (await esquemasDe([repVac.esquema_mongo_id])).get(repVac.esquema_mongo_id);
+  if (!esquema) throw errores.celdaInvalida('No se encontró el formulario de esta vacuna.');
+  const [filasDosis] = await pool.query('SELECT id, codigo, nombre, activa FROM dosis WHERE vacuna_id = ?', [
+    repVac.vacuna_id,
+  ]);
+  const dosis = new Map(filasDosis.map((d) => [d.codigo, d]));
+  const dimensiones = await catalogoDe(esquema);
+  const catalogo = new Map(dimensiones.map((d) => [d.codigo, d]));
+  const validas = celdasDelEsquema({ contenido: esquema, codigosDosis: [...dosis.keys()], dimensiones, deducirSecciones: true });
+  const procedencias = await leerProcedencias(pool, delReporte(reporte));
+  return {
+    esquema,
+    dosis,
+    catalogo,
+    validas,
+    procedencias,
+    municipioPropio: reporte.municipioPropio.id,
+    permitidas: procedenciasPermitidas(esquema, procedencias),
+  };
+}
+
+// Una dosis inactiva o una procedencia que ya no se ofrece (o un id que no existe) solo se aceptan si la vacuna ya
+// tenía filas de ellas.
+export function revisarContraActuales({ pedidas, heredadas, actuales, dosis, catalogo }) {
+  const conFilas = new Set(actuales.map((c) => c.dosisCodigo));
+  const inactiva = pedidas.find((c) => !dosis.get(c.dosisCodigo).activa && !conFilas.has(c.dosisCodigo));
+  if (inactiva) throw errores.celdaInvalida(`La dosis ${dosis.get(inactiva.dosisCodigo).nombre} está desactivada.`);
+  const conProcedencia = new Set(actuales.map((c) => c.municipioProcedenciaId));
+  const sinFilas = heredadas.find((c) => !conProcedencia.has(c.municipioProcedenciaId));
+  if (sinFilas) throw procedenciaInvalida(sinFilas, dosis, catalogo);
+}
+
 // Reemplaza todas las celdas de la vacuna, de cualquier procedencia (las tarjetas A y B).
 export async function guardarVacuna(id, vacunaId, cuerpo, usuario, contexto) {
   const pedido = leerGuardado(cuerpo);
@@ -320,25 +355,9 @@ export async function guardarVacuna(id, vacunaId, cuerpo, usuario, contexto) {
   );
   if (!repVac) throw errores.noEncontrado();
 
-  // La versión fijada en el reporte no cambia (regla 5), así que se puede leer fuera de la transacción.
-  const esquema = (await esquemasDe([repVac.esquema_mongo_id])).get(repVac.esquema_mongo_id);
-  if (!esquema) throw errores.celdaInvalida('No se encontró el formulario de esta vacuna.');
-  const [filasDosis] = await pool.query('SELECT id, codigo, nombre, activa FROM dosis WHERE vacuna_id = ?', [
-    repVac.vacuna_id,
-  ]);
-  const dosis = new Map(filasDosis.map((d) => [d.codigo, d]));
-  const dimensiones = await catalogoDe(esquema);
-  const catalogo = new Map(dimensiones.map((d) => [d.codigo, d]));
-  const validas = celdasDelEsquema({ contenido: esquema, codigosDosis: [...dosis.keys()], dimensiones, deducirSecciones: true });
-  const municipioPropio = reporte.municipioPropio.id;
-  const procedencias = await leerProcedencias(pool, delReporte(reporte));
-  const { pedidas, heredadas } = revisarCeldas(pedido.celdas, {
-    validas,
-    dosis,
-    catalogo,
-    municipioPropio,
-    permitidas: procedenciasPermitidas(esquema, procedencias),
-  });
+  const formulario = await formularioDeVacuna(reporte, repVac);
+  const { esquema, dosis, catalogo, procedencias } = formulario;
+  const { pedidas, heredadas } = revisarCeldas(pedido.celdas, formulario);
   const datosAdicionales = leerDatosAdicionales(pedido.datosAdicionales, esquema.camposAdicionales);
 
   return enTransaccion(async (conexion) => {
@@ -358,13 +377,7 @@ export async function guardarVacuna(id, vacunaId, cuerpo, usuario, contexto) {
     if (bloqueado.version_fila !== pedido.versionFila) throw errores.desactualizado();
 
     const actuales = await celdasGuardadas(conexion, [repVac.id]);
-    const conFilas = new Set(actuales.map((c) => c.dosisCodigo));
-    const inactiva = pedidas.find((c) => !dosis.get(c.dosisCodigo).activa && !conFilas.has(c.dosisCodigo));
-    if (inactiva) throw errores.celdaInvalida(`La dosis ${dosis.get(inactiva.dosisCodigo).nombre} está desactivada.`);
-    // Una procedencia que ya no se ofrece (o un id que no existe) solo se acepta si la vacuna ya tenía filas de ella.
-    const conProcedencia = new Set(actuales.map((c) => c.municipioProcedenciaId));
-    const sinFilas = heredadas.find((c) => !conProcedencia.has(c.municipioProcedenciaId));
-    if (sinFilas) throw procedenciaInvalida(sinFilas, dosis, catalogo);
+    revisarContraActuales({ pedidas, heredadas, actuales, dosis, catalogo });
 
     const totalDeclarado = pedidas.length === 0 ? null : pedidas.reduce((suma, c) => suma + c.cantidad, 0);
     const [[antes]] = await conexion.query('SELECT datos_adicionales, total_declarado FROM reporte_vacuna WHERE id = ?', [

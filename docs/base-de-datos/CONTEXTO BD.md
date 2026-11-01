@@ -264,8 +264,11 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 **`solicitud_rectificacion`**: pedido justificado de cambiar un reporte **ya cerrado**.
 - Columnas: `id`, `reporte_id` → reporte_produccion, `solicitado_por` → usuario, `motivo`, `evidencia_ruta` (documento de respaldo, nunca datos de pacientes), `estado` (PENDIENTE, AUTORIZADA, RECHAZADA, APLICADA), `resuelto_por` → usuario, `comentario_resolucion`, `solicitado_en`, `resuelto_en`, `aplicado_en`.
 
+- La escribe `POST /reportes/{id}/rectificaciones` (SPEC 40): solo para un reporte `CERRADO` y sin otra solicitud `PENDIENTE` del mismo reporte, con `estado = 'PENDIENTE'` y `evidencia_ruta` en `NULL`. Crearla no cambia el reporte (sigue `CERRADO`, sin subir `version_fila`). `resuelto_por`, `comentario_resolucion`, `resuelto_en` y `aplicado_en` son de HU-33. `fk_rect_reporte` no borra en cascada: antes de borrar un reporte hay que borrar sus solicitudes y su detalle.
+
 **`rectificacion_detalle`**: evidencia, celda por celda, del dato anterior y el nuevo en una rectificación.
 - Columnas: `id`, `solicitud_id` → solicitud_rectificacion, `detalle_id` → detalle_produccion (NULL si la celda es nueva), `reporte_vacuna_id`, `dosis_id`, `municipio_procedencia_id`, `clave_combinacion`, `cantidad_anterior`, `cantidad_nueva`.
+- Desde el SPEC 40 se escribe junto con la solicitud, una fila por celda que cambia. `cantidad_anterior` la lee el backend de `detalle_produccion` (0 si la celda no existe, con `detalle_id` en `NULL`) y nunca es igual a `cantidad_nueva`; una celda con cantidad no se vacía (se pide 0). Solo cubre celdas: los `datos_adicionales` no se rectifican.
 
 **`bitacora`**: auditoría general de solo inserción. Cubre las bitácoras de usuarios, producción, revisión, rectificaciones y configuración, incluidos los cambios en MongoDB.
 - Quién y cuándo: `id`, `fecha` (con milisegundos), `usuario_id` → usuario (NULL en accesos fallidos o procesos automáticos), `nombre_usuario_intento`.
