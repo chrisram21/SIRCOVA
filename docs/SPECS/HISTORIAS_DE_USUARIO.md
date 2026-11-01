@@ -890,9 +890,18 @@ Verificado contra la API real el 2026-10-31 con el reporte 524 (octubre de 2026,
 **Cómo se hará:** Transición APROBAR desde En revisión mediante `POST /reportes/{id}/transiciones`.
 
 **Criterios de aceptación:**
-- [ ] Solo puedo aprobar reportes En revisión asignados a mí o a mi DDRISS.
-- [ ] El reporte aprobado ya no se puede editar.
-- [ ] La aprobación queda con fecha y usuario en el historial.
+- [x] Solo puedo aprobar reportes En revisión asignados a mí o a mi DDRISS.
+- [x] El reporte aprobado ya no se puede editar.
+- [x] La aprobación queda con fecha y usuario en el historial.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 38 a `main`. Backend y frontend, en `specs/38-hu-30-aprobar-reporte.md`: el destino `APROBADO` de `POST /reportes/{id}/transiciones` con el permiso nuevo `REPORTE_APROBAR` (solo REVISOR), que llena `aprobado_por` y `aprobado_en` y acepta un `comentario` opcional para el historial. Diferencias con la historia:
+
+- «Asignados a mí o a mi DDRISS»: solo aprueba el revisor asignado, como al devolver (HU-28). Otro revisor de la DDRISS recibe 403 `NO_ES_REVISOR_ASIGNADO`; si hace falta, primero se reasigna (HU-27). El mensaje de ese error pasó a «Solo el revisor asignado puede hacer esto con el reporte.».
+- La «transición APROBAR» es el destino `APROBADO`. No revisa el estado del mes, y las advertencias abiertas no impiden aprobar: el diálogo las cuenta y la `CAMBIO_ESTADO` lleva `advertencias`.
+- «Aprobar» va solo en «Revisar reporte», junto a «Solicitar corrección», con un `AlertDialog` que pide el comentario opcional. Si el revisor escribió observaciones, queda deshabilitado con la nota «Con observaciones, el reporte va a corrección: use «Solicitar corrección».».
+- «Ya no se puede editar» ya lo cumplía el modelo: guardar, agregar o quitar vacunas y validar exigen `BORRADOR` (409 `REPORTE_NO_EDITABLE`), y la captura abre en «Solo consulta». Lo comprueba `aprobarReporte.test.js`.
+
+Verificado contra la API real el 2026-10-31 con el reporte 524 (octubre de 2026, Centro de Salud Tajumulco), después de correr el 05. Como `revisor2`, la revisión mostró «Solo consulta» con «Solo el revisor asignado puede devolver o aprobar este reporte.». Como `estadigrafa`, escribir una observación general deshabilitó «Aprobar» con su nota y borrarla lo habilitó; el diálogo pidió el comentario (el 524 no tenía advertencias abiertas, así que no las contó) y se aprobó. En la base quedaron `APROBADO` con `aprobado_por` = la estadígrafa y `aprobado_en`, la fila `EN_REVISION → APROBADO` con el comentario y la `CAMBIO_ESTADO` con `advertencias: 0`; la bandeja lo mostró en «Aprobado». Como `cs1209`, «Mis reportes» dijo «Aprobado» y la captura abrió en «Solo consulta». El 524 quedó `APROBADO`, para probar HU-31.
 
 #### HU-31. Cerrar el periodo
 
@@ -923,6 +932,8 @@ Verificado contra la API real el 2026-10-31 con el reporte 524 (octubre de 2026,
 | Personal de establecimiento | 5 | S3 | Andrea López |
 
 **Cómo se hará:** Endpoint `POST /reportes/{id}/rectificaciones`; tablas `solicitud_rectificacion` y `rectificacion_detalle` con valores anteriores y nuevos.
+
+**Nota (2026-10-31, spec 38):** corregir las cantidades de un reporte de un mes `CERRADO` (por ejemplo, un error que la DDRISS notifica meses después) es la rectificación de esta historia y de HU-33, no una devolución: aprobar y devolver solo existen antes del cierre, y aprobar no revisa el estado del mes. Al definirla, decidir quién la pide (la historia dice el Personal; el equipo comentó que también podría pedirla el administrador) y cómo se editan las cantidades.
 
 **Criterios de aceptación:**
 - [ ] Solo puedo solicitar rectificación de reportes Cerrados.

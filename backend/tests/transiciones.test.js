@@ -303,8 +303,8 @@ describe('POST /reportes/{id}/transiciones', () => {
       expect(await historial(reporte.id)).toHaveLength(0);
     });
 
-    it('un destino distinto de ENVIADO responde 422 TRANSICION_NO_DISPONIBLE', async () => {
-      const res = await transicion(reporte.id, { estadoDestino: 'APROBADO', versionFila: reporte.versionFila });
+    it('un destino todavía no habilitado responde 422 TRANSICION_NO_DISPONIBLE', async () => {
+      const res = await transicion(reporte.id, { estadoDestino: 'RECTIFICACION', versionFila: reporte.versionFila });
       expect(error(res)).toEqual([422, 'TRANSICION_NO_DISPONIBLE']);
     });
 

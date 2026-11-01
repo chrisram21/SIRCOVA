@@ -15,6 +15,7 @@ const PERMISO_POR_DESTINO = {
   EN_REVISION: 'REPORTE_ASIGNAR',
   CORRECCION_SOLICITADA: 'REPORTE_SOLICITAR_CORRECCION',
   BORRADOR: 'REPORTE_EDITAR',
+  APROBADO: 'REPORTE_APROBAR',
 };
 const LARGO_COMENTARIO = 1000;
 const LARGO_OBSERVACION = 1000; // observacion_revision.texto
@@ -30,7 +31,7 @@ const errores = {
   revisorInvalido: () =>
     new ErrorApi(422, 'REVISOR_INVALIDO', 'El revisor elegido no es un revisor activo de la DDRISS del reporte.'),
   noAsignado: () =>
-    new ErrorApi(403, 'NO_ES_REVISOR_ASIGNADO', 'Solo el revisor asignado puede devolver el reporte.'),
+    new ErrorApi(403, 'NO_ES_REVISOR_ASIGNADO', 'Solo el revisor asignado puede hacer esto con el reporte.'),
   observacionRequerida: () =>
     new ErrorApi(422, 'OBSERVACION_REQUERIDA', 'Escriba al menos una observación para devolver el reporte.'),
   vacunaNoEnReporte: () =>
@@ -165,6 +166,7 @@ export async function cambiarEstado(id, cuerpo, req) {
   const enviar = pedido.estadoDestino === 'ENVIADO';
   const asignar = pedido.estadoDestino === 'EN_REVISION';
   const devolver = pedido.estadoDestino === 'CORRECCION_SOLICITADA';
+  const aprobar = pedido.estadoDestino === 'APROBADO';
   // Enviar y corregir dejan o vuelven a dejar el reporte para editar: solo con el mes abierto o en cierre.
   const exigeMesEditable = enviar || pedido.estadoDestino === 'BORRADOR';
   // Las versiones publicadas no cambian (regla 5): se pueden leer antes del bloqueo.
@@ -198,11 +200,20 @@ export async function cambiarEstado(id, cuerpo, req) {
     let resumen = {};
     let comentario = pedido.comentario;
     const cambios = [];
+    // Las dos salidas de la revisión son solo del revisor asignado.
+    if ((devolver || aprobar) && bloqueado.revisor_id !== usuario.id) throw errores.noAsignado();
     if (devolver) {
-      if (bloqueado.revisor_id !== usuario.id) throw errores.noAsignado();
       const guardadas = await guardarObservaciones(conexion, reporte.id, usuario.id, pedido.observaciones);
       comentario = guardadas.comentario;
       resumen = { observaciones: guardadas.ordenadas };
+    }
+    if (aprobar) {
+      const [[{ advertencias }]] = await conexion.query(
+        "SELECT COUNT(*) AS advertencias FROM resultado_validacion WHERE reporte_id = ? AND severidad = 'ADVERTENCIA' AND estado = 'ABIERTO'",
+        [reporte.id],
+      );
+      cambios.push(['aprobado_por = ?', usuario.id], ['aprobado_en = NOW()']);
+      resumen = { advertencias: Number(advertencias) };
     }
     if (asignar) {
       const revisor = await revisorDeLaDdriss(conexion, pedido.revisorId, reporte.ddriss_id);

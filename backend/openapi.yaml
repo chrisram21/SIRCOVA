@@ -3530,9 +3530,9 @@ paths:
       description: |
         Única vía para cambiar el estado. El permiso depende del destino; por ahora están habilitados `ENVIADO`
         (`REPORTE_ENVIAR`, solo el Personal del establecimiento), `EN_REVISION` (`REPORTE_ASIGNAR`, solo el
-        Revisor), `CORRECCION_SOLICITADA` (`REPORTE_SOLICITAR_CORRECCION`, solo el Revisor) y `BORRADOR`
-        (`REPORTE_EDITAR`, solo el Personal del establecimiento), y cualquier otro destino responde 422
-        `TRANSICION_NO_DISPONIBLE`. Además del permiso, la transición (estado actual →
+        Revisor), `CORRECCION_SOLICITADA` (`REPORTE_SOLICITAR_CORRECCION`, solo el Revisor), `BORRADOR`
+        (`REPORTE_EDITAR`, solo el Personal del establecimiento) y `APROBADO` (`REPORTE_APROBAR`, solo el
+        Revisor), y cualquier otro destino responde 422 `TRANSICION_NO_DISPONIBLE`. Además del permiso, la transición (estado actual →
         destino) debe existir en `transicion_estado` para el rol del usuario.
 
         Todo va en una transacción de MySQL con el reporte bloqueado. Cada transición sube `versionFila`, deja
@@ -3567,11 +3567,17 @@ paths:
         `EN_CIERRE` (si no, 409 `PERIODO_CERRADO`). El reporte vuelve a ser editable; `revisor_id`,
         `asignado_en` y las observaciones no cambian. `comentario` es opcional.
 
+        **APROBADO (aprobar):** solo desde `EN_REVISION` y solo el revisor asignado (`revisor_id` = el usuario);
+        otro revisor recibe 403 `NO_ES_REVISOR_ASIGNADO`, sin fila `ACCESO_DENEGADO`. No revisa el estado del mes.
+        Llena `aprobadoPor` (el usuario) y `aprobadoEn`; `revisor_id` y `asignado_en` no cambian. `comentario` es
+        opcional y va al historial. Las advertencias `ABIERTO` no impiden aprobar, y la `CAMBIO_ESTADO` lleva
+        `advertencias` con cuántas había. Un reporte aprobado ya no se edita (409 `REPORTE_NO_EDITABLE`).
+
         Los errores se revisan en este orden: cuerpo, destino disponible, permiso, reporte, transición,
         comentario (salvo `CORRECCION_SOLICITADA`), estado del mes (solo `ENVIADO` y `BORRADOR`), `versionFila`, revisor (solo
-        `EN_REVISION`), revisor asignado y observaciones (solo `CORRECCION_SOLICITADA`) y validación (solo
-        `ENVIADO`).
-      x-permiso: "Según estadoDestino: ENVIADO → REPORTE_ENVIAR; EN_REVISION → REPORTE_ASIGNAR; CORRECCION_SOLICITADA → REPORTE_SOLICITAR_CORRECCION; BORRADOR → REPORTE_EDITAR"
+        `EN_REVISION`), revisor asignado (`CORRECCION_SOLICITADA` y `APROBADO`), observaciones (solo
+        `CORRECCION_SOLICITADA`) y validación (solo `ENVIADO`).
+      x-permiso: "Según estadoDestino: ENVIADO → REPORTE_ENVIAR; EN_REVISION → REPORTE_ASIGNAR; CORRECCION_SOLICITADA → REPORTE_SOLICITAR_CORRECCION; BORRADOR → REPORTE_EDITAR; APROBADO → REPORTE_APROBAR"
       parameters:
         - { $ref: "#/components/parameters/Id" }
       requestBody:
@@ -3629,6 +3635,7 @@ paths:
                     - { vacunaId: null, texto: Revise la procedencia de las dosis de octubre. }
                     - { vacunaId: 3, texto: Hexavalente D1 en menores de 1 año es muy alto frente a septiembre. }
               corregir: { value: { estadoDestino: BORRADOR, versionFila: 16 } }
+              aprobar: { value: { estadoDestino: APROBADO, versionFila: 21, comentario: Cifras coherentes con septiembre. } }
       responses:
         "200":
           description: Estado actualizado; el reporte como en `GET /reportes/{id}`
@@ -3661,7 +3668,7 @@ paths:
                     error: { codigo: ENTRADA_INVALIDA, mensaje: "Solo puede haber una observación general." }
         "401": { $ref: "#/components/responses/NoAutenticado" }
         "403":
-          description: Sin el permiso del destino, o al devolver, el usuario no es el revisor asignado
+          description: Sin el permiso del destino, o al devolver o aprobar, el usuario no es el revisor asignado
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -3671,7 +3678,7 @@ paths:
                     error: { codigo: SIN_PERMISO, mensaje: No tiene permiso para realizar esta acción. }
                 noAsignado:
                   value:
-                    error: { codigo: NO_ES_REVISOR_ASIGNADO, mensaje: Solo el revisor asignado puede devolver el reporte. }
+                    error: { codigo: NO_ES_REVISOR_ASIGNADO, mensaje: Solo el revisor asignado puede hacer esto con el reporte. }
         "404":
           description: El reporte no existe o no es del ámbito del usuario
           content:

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Lock, MessageSquareWarning, Undo2 } from 'lucide-react'
+import { CircleCheck, Lock, MessageSquareWarning, Undo2 } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -21,6 +21,7 @@ import TarjetaProcedencias, { cantidadesDeOtras, filasDeCeldas } from '@/compone
 import { nombreDelMes } from '@/lib/fechas.js'
 import { cantidadesDe, formularioDe } from '@/paginas/registro/CapturaReporte.jsx'
 import PanelValidacion from '@/paginas/registro/PanelValidacion.jsx'
+import DialogoAprobarReporte from './DialogoAprobarReporte.jsx'
 import DialogoSolicitarCorreccion from './DialogoSolicitarCorreccion.jsx'
 
 const LARGO_OBSERVACION = 1000 // observacion_revision.texto
@@ -28,6 +29,8 @@ const GENERAL = 'general'
 // Con estos errores lo que se ve ya no es el reporte actual: se ofrece recargarlo sin perder lo escrito.
 const ERRORES_DE_RECARGA = ['REPORTE_DESACTUALIZADO', 'TRANSICION_NO_PERMITIDA']
 const SIN_OBSERVACIONES = 'Escriba al menos una observación para devolver el reporte.'
+// SPEC 38: si el revisor escribió observaciones, algo está mal y el reporte va a corrección, no se aprueba.
+const CON_OBSERVACIONES = 'Con observaciones, el reporte va a corrección: use «Solicitar corrección».'
 const nada = () => {}
 
 const dosCifras = (numero) => String(numero).padStart(2, '0')
@@ -168,6 +171,7 @@ export default function PaginaRevisarReporte() {
   const sesion = useSesion()
   const usuarioId = sesion?.sesion?.usuario?.id ?? null
   const puedeSolicitar = sesion?.tienePermiso('REPORTE_SOLICITAR_CORRECCION') ?? false
+  const tienePermisoAprobar = sesion?.tienePermiso('REPORTE_APROBAR') ?? false
   const volverA = `/revision${typeof state?.volverA === 'string' ? state.volverA : ''}`
 
   // { reporte, formulario, validacion, observaciones } de la última carga.
@@ -180,6 +184,7 @@ export default function PaginaRevisarReporte() {
   const [aviso, setAviso] = useState(null)
   const [dialogo, setDialogo] = useState(null)
   const [devuelto, setDevuelto] = useState(false)
+  const [aprobando, setAprobando] = useState(false)
   const campoGeneral = useRef(null)
 
   useEffect(() => {
@@ -246,7 +251,10 @@ export default function PaginaRevisarReporte() {
   }
 
   const { reporte, formulario, validacion, observaciones } = datos
-  const puedeDevolver = puedeSolicitar && reporte.estado === 'EN_REVISION' && reporte.revisor?.id === usuarioId
+  // Devolver y aprobar son solo del revisor asignado de un reporte en revisión, cada uno con su permiso.
+  const asignadoEnRevision = reporte.estado === 'EN_REVISION' && reporte.revisor?.id === usuarioId
+  const puedeDevolver = puedeSolicitar && asignadoEnRevision
+  const puedeAprobar = tienePermisoAprobar && asignadoEnRevision
   const vacunas = reporte.vacunas.map((vacuna) => ({
     vacuna,
     captura: formulario.vacunas.find((c) => c.vacunaId === vacuna.vacuna.id),
@@ -289,6 +297,17 @@ export default function PaginaRevisarReporte() {
     setDevuelto(true)
   }
 
+  function aprobado() {
+    setAprobando(false)
+    toast.success('Reporte aprobado.')
+    navegar(volverA)
+  }
+
+  function recargarDesdeAprobar() {
+    setAprobando(false)
+    recargar()
+  }
+
   function fallo(err) {
     setDialogo(null)
     setAviso({ mensaje: mensajeDeError(err), recargar: ERRORES_DE_RECARGA.includes(err.codigo) })
@@ -298,14 +317,14 @@ export default function PaginaRevisarReporte() {
     <section className="flex flex-col gap-6 p-6">
       {encabezado}
 
-      {!puedeDevolver && (
+      {!puedeDevolver && !puedeAprobar && (
         <Alert className="border-border bg-muted">
           <Lock />
           <AlertTitle>Solo consulta</AlertTitle>
           <AlertDescription>
             {reporte.estado !== 'EN_REVISION'
               ? `El reporte está en «${ESTADOS_REPORTE[reporte.estado]?.titulo ?? reporte.estado}».`
-              : 'Solo el revisor asignado puede devolver este reporte.'}
+              : 'Solo el revisor asignado puede devolver o aprobar este reporte.'}
           </AlertDescription>
         </Alert>
       )}
@@ -370,19 +389,51 @@ export default function PaginaRevisarReporte() {
         </AvisoError>
       )}
 
-      {puedeDevolver && (
+      {(puedeDevolver || puedeAprobar) && (
         <div className="sticky bottom-0 z-10 -mx-6 flex flex-wrap items-center justify-end gap-3 border-t bg-background/90 px-6 py-3 backdrop-blur-md">
           <p className="mr-auto text-sm text-muted-foreground">Cada acción queda en la bitácora de revisión.</p>
-          <Button
-            variant="outline"
-            className="border-estado-correccion-foreground/40 text-estado-correccion-foreground hover:bg-estado-correccion hover:text-estado-correccion-foreground"
-            onClick={solicitar}
-            disabled={dialogo !== null}
-          >
-            <Undo2 />
-            Solicitar corrección
-          </Button>
+          {puedeAprobar && escritas && (
+            <p id="motivo-sin-aprobar" className="text-sm text-muted-foreground">
+              {CON_OBSERVACIONES}
+            </p>
+          )}
+          {puedeDevolver && (
+            <Button
+              variant="outline"
+              className="border-estado-correccion-foreground/40 text-estado-correccion-foreground hover:bg-estado-correccion hover:text-estado-correccion-foreground"
+              onClick={solicitar}
+              disabled={dialogo !== null || aprobando}
+            >
+              <Undo2 />
+              Solicitar corrección
+            </Button>
+          )}
+          {puedeAprobar && (
+            <Button
+              onClick={() => {
+                setAviso(null)
+                setAprobando(true)
+              }}
+              disabled={escritas || dialogo !== null || aprobando}
+              aria-describedby={escritas ? 'motivo-sin-aprobar' : undefined}
+            >
+              <CircleCheck />
+              Aprobar
+            </Button>
+          )}
         </div>
+      )}
+
+      {aprobando && (
+        <DialogoAprobarReporte
+          reporteId={reporte.id}
+          establecimiento={reporte.establecimiento.nombre}
+          versionFila={reporte.versionFila}
+          advertencias={validacion.advertencias}
+          alHecho={aprobado}
+          alRecargar={recargarDesdeAprobar}
+          alCerrar={() => setAprobando(false)}
+        />
       )}
 
       {dialogo && (
