@@ -948,9 +948,18 @@ Verificado contra la API real el 2026-10-31. Al arrancar el backend, la tarea pa
 **Nota (2026-10-31, spec 39):** para probarla, junio de 2010 está `CERRADO` en la base de prueba con el reporte 897 de CS-1206 (`cs1206`) en `CERRADO`; no tiene vacunas ni cantidades, porque se preparó por SQL. Los meses de 2026 hasta agosto también están cerrados en la semilla.
 
 **Criterios de aceptación:**
-- [ ] Solo puedo solicitar rectificación de reportes Cerrados.
-- [ ] La justificación es obligatoria.
-- [ ] La solicitud muestra el valor anterior y el nuevo de cada dato.
+- [x] Solo puedo solicitar rectificación de reportes Cerrados.
+- [x] La justificación es obligatoria.
+- [x] La solicitud muestra el valor anterior y el nuevo de cada dato.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 40 a `main`. Backend y frontend, en `specs/40-hu-32-solicitar-rectificacion.md`: `POST /reportes/{id}/rectificaciones` (permiso nuevo `RECTIFICACION_SOLICITAR`) crea la `solicitud_rectificacion` `PENDIENTE` con una fila de `rectificacion_detalle` por celda que cambia, y `GET /rectificaciones` y `GET /rectificaciones/{id}` (`RECTIFICACION_CONSULTAR`) las consultan por ámbito. Diferencias con la historia:
+
+- También la pide el administrador, para los establecimientos de su DDRISS; para leer los reportes cerrados recibe `REPORTE_CONSULTAR`.
+- La solicitud trae los cambios desde el principio: la justificación y las cantidades nuevas, escritas en el formulario de captura con los valores del reporte cerrado. El reporte sigue `CERRADO` (no pasa por `RECTIFICACION` ni sube `versionFila`) y la cantidad anterior la lee el backend. Autorizar y aplicar es de HU-33.
+- Una sola solicitud `PENDIENTE` por reporte (409 `RECTIFICACION_PENDIENTE`). Solo se rectifican cantidades de celdas: ni campos adicionales, ni vacunas, ni documento de respaldo (`evidencia_ruta` queda `NULL`), y no se corre el motor de validación. Una celda con cantidad no se vacía: se escribe 0.
+- Pantallas: la opción de menú «Rectificaciones» (lista, nueva solicitud y detalle) y, en «Mis reportes», «Solicitar rectificación» o «Ver solicitud» en los reportes cerrados.
+
+Verificado contra la API real el 2026-11-01, después de correr el 05. Como `cs1206`, «Mis reportes» ofreció «Solicitar rectificación» en sus meses cerrados; en agosto de 2026 (reporte 223), cambiar la 3.ª dosis propia (91 → 97) y la 1.ª dosis de migrantes (4 → 5) las resaltó y las listó; enviar sin justificación mostró el error con el foco en ella, y con justificación se creó la solicitud 12 y «Mis reportes» pasó a «Ver solicitud». Como `admin.prueba`, el menú mostró solo Inicio, Rectificaciones y Administración; la lista trajo las solicitudes de toda la DDRISS; vaciar una casilla pidió escribir 0, y se creó la solicitud 13 para agosto de Centro de Salud Catarina (reporte 233, 2.ª dosis 17 → 15). En la base, las dos quedaron `PENDIENTE` con su detalle (anterior y nuevo), su `CREAR` del módulo `RECTIFICACION`, y los reportes siguen `CERRADO` con la misma `version_fila` y las mismas cantidades. Las solicitudes 12 y 13 quedan para probar HU-33.
 
 #### HU-33. Resolver una rectificación
 
@@ -961,6 +970,8 @@ Verificado contra la API real el 2026-10-31. Al arrancar el backend, la tarea pa
 | Estadígrafa / revisor | 3 | S3 | Kenneth García |
 
 **Cómo se hará:** Bandeja de rectificaciones; al aprobar, se aplican los cambios, el reporte regresa a Cerrado y se recalculan los indicadores afectados.
+
+**Nota (2026-11-01, spec 40):** la solicitud ya trae los cambios en `rectificacion_detalle` (celda, cantidad anterior y nueva) y el reporte sigue `CERRADO` mientras está `PENDIENTE`, así que autorizar debe aplicar esos cambios y dejar el reporte `CERRADO` en una transacción; falta decidir si pasa por `RECTIFICACION` (la transición existe para REVISOR, con comentario) y cómo se sube `numero_rectificacion`. Al aplicar, la cantidad actual de la celda puede ya no ser la anterior guardada. Los cambios no tocan `datos_adicionales` (por ejemplo, `total_dosis_declarado`), que puede dejar de cuadrar con la suma. La semilla (03) sigue el flujo anterior en el reporte 228: la solicitud 2 está `AUTORIZADA` sin detalle y el reporte en `RECTIFICACION`. El revisor necesita `RECTIFICACION_CONSULTAR` (hoy solo lo tienen el Personal y el administrador) y la pantalla «Rectificaciones» es donde va su bandeja. Para probar, las solicitudes 12 (reporte 223, CS-1206) y 13 (reporte 233, CS-1216) quedaron `PENDIENTE` en la base de prueba.
 
 **Criterios de aceptación:**
 - [ ] Al aprobar, los datos cambian y el reporte vuelve a Cerrado.

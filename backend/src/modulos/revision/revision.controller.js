@@ -1,6 +1,7 @@
 import * as bandejaService from './bandeja.service.js';
 import * as cierreService from './cierre.service.js';
 import * as reasignacionService from './reasignacion.service.js';
+import * as rectificacionesService from './rectificaciones.service.js';
 import * as transicionesService from './transiciones.service.js';
 
 export async function cambiarEstado(req, res) {
@@ -35,4 +36,23 @@ export async function cerrarPeriodo(req, res) {
 
 export async function reasignarRevisor(req, res) {
   res.json(await reasignacionService.reasignarRevisor(req.params.id, req.body, req));
+}
+
+export async function solicitarRectificacion(req, res) {
+  const { solicitud, pendiente } = await rectificacionesService.solicitarRectificacion(req.params.id, req.body, req);
+  if (pendiente) {
+    return res.status(409).json({
+      error: { codigo: 'RECTIFICACION_PENDIENTE', mensaje: rectificacionesService.mensajePendiente },
+      solicitudId: pendiente,
+    });
+  }
+  res.status(201).json(solicitud);
+}
+
+export async function listarRectificaciones(req, res) {
+  res.json(await rectificacionesService.listarRectificaciones(req.usuario, req.query));
+}
+
+export async function obtenerRectificacion(req, res) {
+  res.json(await rectificacionesService.obtenerRectificacion(req.params.id, req.usuario));
 }

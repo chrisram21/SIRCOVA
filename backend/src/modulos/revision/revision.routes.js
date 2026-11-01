@@ -12,5 +12,23 @@ router.post('/reportes/:id/transiciones', autenticar, revisionController.cambiar
 // REPORTE_ASIGNAR lo revisa el servicio, después del cuerpo, como en las transiciones.
 router.patch('/reportes/:id/revisor', autenticar, revisionController.reasignarRevisor);
 router.post('/periodos/:id/cerrar', autenticar, requierePermiso('PERIODO_CERRAR'), revisionController.cerrarPeriodo);
+router.post(
+  '/reportes/:id/rectificaciones',
+  autenticar,
+  requierePermiso('RECTIFICACION_SOLICITAR'),
+  revisionController.solicitarRectificacion,
+);
+router.get(
+  '/rectificaciones',
+  autenticar,
+  requierePermiso('RECTIFICACION_CONSULTAR'),
+  revisionController.listarRectificaciones,
+);
+router.get(
+  '/rectificaciones/:id',
+  autenticar,
+  requierePermiso('RECTIFICACION_CONSULTAR'),
+  revisionController.obtenerRectificacion,
+);
 
 export default router;

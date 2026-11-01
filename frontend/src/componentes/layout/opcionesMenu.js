@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   ClipboardPen,
   FileCog,
+  FilePenLine,
   FileSpreadsheet,
   FileText,
   House,
@@ -49,6 +50,9 @@ const PaginaRegistrarPersonal = lazy(() => import('@/paginas/usuarios/PaginaRegi
 const PaginaUsuarios = lazy(() => import('@/paginas/usuarios/PaginaUsuarios.jsx'))
 const PaginaRegistro = lazy(() => import('@/paginas/registro/PaginaRegistro.jsx'))
 const PaginaMisReportes = lazy(() => import('@/paginas/reportes/PaginaMisReportes.jsx'))
+const PaginaRectificaciones = lazy(() => import('@/paginas/rectificaciones/PaginaRectificaciones.jsx'))
+const PaginaDetalleRectificacion = lazy(() => import('@/paginas/rectificaciones/PaginaDetalleRectificacion.jsx'))
+const PaginaNuevaRectificacion = lazy(() => import('@/paginas/rectificaciones/PaginaNuevaRectificacion.jsx'))
 
 export const RUTA_ADMINISTRACION = '/administracion'
 
@@ -85,6 +89,28 @@ const opcionesMenu = [
     pagina: PaginaBandejaRevision,
     subrutas: [
       { titulo: 'Revisar reporte', ruta: '/revision/reportes/:id', permiso: 'REPORTE_REVISAR', pagina: PaginaRevisarReporte },
+    ],
+  },
+  {
+    titulo: 'Rectificaciones',
+    descripcion: 'Correcciones pedidas a reportes ya cerrados.',
+    ruta: '/rectificaciones',
+    permiso: 'RECTIFICACION_CONSULTAR',
+    icono: FilePenLine,
+    pagina: PaginaRectificaciones,
+    subrutas: [
+      {
+        titulo: 'Nueva solicitud',
+        ruta: '/rectificaciones/nueva',
+        permiso: 'RECTIFICACION_SOLICITAR',
+        pagina: PaginaNuevaRectificacion,
+      },
+      {
+        titulo: 'Solicitud de rectificación',
+        ruta: '/rectificaciones/:id',
+        permiso: 'RECTIFICACION_CONSULTAR',
+        pagina: PaginaDetalleRectificacion,
+      },
     ],
   },
   {

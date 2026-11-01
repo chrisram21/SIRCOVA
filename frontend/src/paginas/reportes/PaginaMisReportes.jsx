@@ -8,9 +8,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { listarPeriodos } from '@/api/catalogos.js'
 import { mensajeDeError } from '@/api/cliente.js'
 import { listarReportes } from '@/api/produccion.js'
+import { listarRectificaciones } from '@/api/rectificaciones.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import InsigniaEstadoReporte, { ESTADOS_REPORTE } from '@/componentes/InsigniaEstadoReporte.jsx'
+import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import { cn } from '@/lib/utils'
 import { EDITABLES_EN_CIERRE } from '@/paginas/registro/mesesAbiertos.js'
 import PaginacionUsuarios, { FILAS_POR_PAGINA } from '@/paginas/usuarios/PaginacionUsuarios.jsx'
@@ -94,6 +96,9 @@ export default function PaginaMisReportes() {
   const [anios, setAnios] = useState([])
   const [errorAnios, setErrorAnios] = useState(null)
   const [intentoAnios, setIntentoAnios] = useState(0)
+  const puedeRectificar = useSesion()?.tienePermiso('RECTIFICACION_SOLICITAR') ?? false
+  // reporteId → id de su solicitud de rectificación PENDIENTE (SPEC 40).
+  const [pendientes, setPendientes] = useState(new Map())
 
   // Cualquier cambio que no sea de página vuelve a la página 1.
   function irA(cambios) {
@@ -115,6 +120,18 @@ export default function PaginaMisReportes() {
       vigente = false
     }
   }, [intentoAnios])
+
+  useEffect(() => {
+    if (!puedeRectificar) return undefined
+    let vigente = true
+    // Si falla, cada reporte cerrado ofrece «Solicitar rectificación» y la API avisa si ya hay una pendiente.
+    listarRectificaciones({ estado: 'PENDIENTE', porPagina: 100 })
+      .then((respuesta) => vigente && setPendientes(new Map(respuesta.elementos.map((s) => [s.reporte.id, s.id]))))
+      .catch(() => {})
+    return () => {
+      vigente = false
+    }
+  }, [puedeRectificar, intento])
 
   useEffect(() => {
     // Al cambiar la URL antes de que llegue la respuesta, la respuesta vieja se descarta.
@@ -264,6 +281,15 @@ export default function PaginaMisReportes() {
                           (reporte.periodo.estado === 'EN_CIERRE' && EDITABLES_EN_CIERRE.includes(reporte.estado))) && (
                           <Button variant="outline" size="sm" asChild>
                             <Link to={`/registro?periodo=${reporte.periodo.id}`}>Abrir</Link>
+                          </Button>
+                        )}
+                        {puedeRectificar && reporte.estado === 'CERRADO' && (
+                          <Button variant="outline" size="sm" asChild>
+                            {pendientes.has(reporte.id) ? (
+                              <Link to={`/rectificaciones/${pendientes.get(reporte.id)}`}>Ver solicitud</Link>
+                            ) : (
+                              <Link to={`/rectificaciones/nueva?reporte=${reporte.id}`}>Solicitar rectificación</Link>
+                            )}
                           </Button>
                         )}
                       </TableCell>

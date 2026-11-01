@@ -102,7 +102,7 @@ test('con INDICADOR_CONSULTAR y BITACORA_CONSULTAR ve Inicio, Indicadores y Audi
   expect(menu().queryByRole('link', { name: 'Registro de producción' })).toBeNull()
 })
 
-test('con todos los permisos ve las 10 opciones en el orden de la tabla; «Administración» empieza plegada', () => {
+test('con todos los permisos ve las 11 opciones en el orden de la tabla; «Administración» empieza plegada', () => {
   abrir('/inicio', { permisos: TODOS_LOS_PERMISOS })
 
   expect(opcionesVisibles()).toEqual([
@@ -110,6 +110,7 @@ test('con todos los permisos ve las 10 opciones en el orden de la tabla; «Admin
     'Registro de producción',
     'Mis reportes',
     'Revisión y cierre',
+    'Rectificaciones',
     'Indicadores',
     'Mapa territorial',
     'Informes',
@@ -159,6 +160,17 @@ test('sin ningún hijo visible, «Administración» no aparece', () => {
 
   expect(opcionesVisibles()).toEqual(['Inicio', 'Registro de producción', 'Mis reportes'])
   expect(menu().queryByRole('button', { name: 'Administración' })).toBeNull()
+})
+
+test('«Rectificaciones» aparece solo con RECTIFICACION_CONSULTAR', () => {
+  abrir('/inicio', { permisos: ['REPORTE_CREAR', 'REPORTE_CONSULTAR', 'RECTIFICACION_CONSULTAR', 'RECTIFICACION_SOLICITAR'] })
+  expect(opcionesVisibles()).toEqual(['Inicio', 'Registro de producción', 'Mis reportes', 'Rectificaciones'])
+  expect(menu().getByRole('link', { name: 'Rectificaciones' }).getAttribute('href')).toBe('/rectificaciones')
+})
+
+test('sin RECTIFICACION_CONSULTAR no aparece «Rectificaciones», aunque tenga RECTIFICACION_SOLICITAR', () => {
+  abrir('/inicio', { permisos: ['REPORTE_CREAR', 'RECTIFICACION_SOLICITAR'] })
+  expect(menu().queryByRole('link', { name: 'Rectificaciones' })).toBeNull()
 })
 
 test('el Revisor, con REPORTE_CONSULTAR, no ve «Registro de producción» ni «Mis reportes»', () => {
