@@ -14,6 +14,7 @@ const PERMISO_POR_DESTINO = {
   ENVIADO: 'REPORTE_ENVIAR',
   EN_REVISION: 'REPORTE_ASIGNAR',
   CORRECCION_SOLICITADA: 'REPORTE_SOLICITAR_CORRECCION',
+  BORRADOR: 'REPORTE_EDITAR',
 };
 const LARGO_COMENTARIO = 1000;
 const LARGO_OBSERVACION = 1000; // observacion_revision.texto
@@ -164,6 +165,8 @@ export async function cambiarEstado(id, cuerpo, req) {
   const enviar = pedido.estadoDestino === 'ENVIADO';
   const asignar = pedido.estadoDestino === 'EN_REVISION';
   const devolver = pedido.estadoDestino === 'CORRECCION_SOLICITADA';
+  // Enviar y corregir dejan o vuelven a dejar el reporte para editar: solo con el mes abierto o en cierre.
+  const exigeMesEditable = enviar || pedido.estadoDestino === 'BORRADOR';
   // Las versiones publicadas no cambian (regla 5): se pueden leer antes del bloqueo.
   const reglas = enviar ? await reglasQueAplican(reporte.ddriss_codigo) : null;
 
@@ -183,7 +186,7 @@ export async function cambiarEstado(id, cuerpo, req) {
     }
     // Al devolver, el comentario lo arman las observaciones.
     if (transicion.requiere_comentario && !devolver && !pedido.comentario) throw errores.comentarioRequerido();
-    if (enviar) {
+    if (exigeMesEditable) {
       const [[cierre]] = await conexion.query(
         'SELECT estado FROM cierre_periodo WHERE periodo_id = ? AND ddriss_id = ?',
         [reporte.periodo_id, reporte.ddriss_id],
@@ -212,6 +215,12 @@ export async function cambiarEstado(id, cuerpo, req) {
       if (validacion.errores > 0) return { mensaje: mensajeConErrores(validacion.errores), validacion };
       resumen = { errores: 0, advertencias: validacion.advertencias };
       cambios.push(['enviado_en = NOW()']);
+      // Un reenvío atiende las observaciones de la devolución: las pendientes son siempre las de la última.
+      const [atendidas] = await conexion.query(
+        'UPDATE observacion_revision SET atendida = TRUE, atendida_en = NOW() WHERE reporte_id = ? AND atendida = FALSE',
+        [reporte.id],
+      );
+      if (atendidas.affectedRows > 0) resumen.observacionesAtendidas = atendidas.affectedRows;
     }
 
     await conexion.query(
