@@ -41,3 +41,12 @@ export function solicitarCorreccion(reporteId, { versionFila, observaciones }) {
     cuerpo: { estadoDestino: 'CORRECCION_SOLICITADA', versionFila, observaciones },
   })
 }
+
+// SPEC 37: el Personal vuelve a BORRADOR un reporte devuelto (CORRECCION_SOLICITADA) para corregirlo. Responde el
+// reporte.
+export function corregirReporte(reporteId, { versionFila }) {
+  return solicitar(`/reportes/${reporteId}/transiciones`, {
+    metodo: 'POST',
+    cuerpo: { estadoDestino: 'BORRADOR', versionFila },
+  })
+}

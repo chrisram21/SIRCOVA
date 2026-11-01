@@ -18,8 +18,8 @@ const FILA = {
 }
 const props = { fila: FILA, usuarioId: YO, alHecho: vi.fn(), alRecargar: vi.fn(), alCerrar: vi.fn() }
 
-async function abrir(modo = 'asignar') {
-  render(<DialogoAsignarRevisor modo={modo} {...props} />)
+async function abrir(modo = 'asignar', fila = FILA) {
+  render(<DialogoAsignarRevisor modo={modo} {...props} fila={fila} />)
   const dialogo = within(screen.getByRole('alertdialog'))
   await waitFor(() => expect(document.querySelector('select[name="revisor"]').disabled).toBe(false))
   return dialogo
@@ -130,4 +130,39 @@ test('«Cancelar» cierra sin llamar a la API', async () => {
   await waitFor(() => expect(props.alCerrar).toHaveBeenCalled())
   expect(asignarRevisor).not.toHaveBeenCalled()
   expect(reasignarRevisor).not.toHaveBeenCalled()
+})
+
+describe('un reporte reenviado que ya tenía revisor (SPEC 37)', () => {
+  const seleccionado = () => document.querySelector('select[name="revisor"]').value
+
+  test('si lo revisó otro, queda elegido y se indica', async () => {
+    asignarRevisor.mockResolvedValue({ id: 524, estado: 'EN_REVISION' })
+    const dialogo = await abrir('asignar', { ...FILA, revisor: { id: 3, nombre: 'Luis Gómez' } })
+
+    expect(dialogo.getByText('Lo revisó antes: Luis Gómez.')).toBeTruthy()
+    await waitFor(() => expect(seleccionado()).toBe('3'))
+    fireEvent.click(dialogo.getByRole('button', { name: 'Asignar' }))
+    await waitFor(() => expect(asignarRevisor).toHaveBeenCalledWith(524, { versionFila: 13, revisorId: 3 }))
+  })
+
+  test('si lo revisó el propio usuario, nada queda elegido y se le recuerda', async () => {
+    const dialogo = await abrir('asignar', { ...FILA, revisor: { id: YO, nombre: 'Ana Pérez' } })
+
+    expect(dialogo.getByText('Lo revisó antes: Ana Pérez. Usted revisó este reporte antes.')).toBeTruthy()
+    expect(seleccionado()).toBe('')
+    expect(dialogo.getByRole('button', { name: 'Asignármelo' })).toBeTruthy()
+  })
+
+  test('sin revisor anterior no se indica nada', async () => {
+    const dialogo = await abrir()
+
+    expect(dialogo.queryByText(/Lo revisó antes/)).toBeNull()
+    expect(seleccionado()).toBe('')
+  })
+
+  test('al reasignar no se indica el revisor actual como anterior', async () => {
+    const dialogo = await abrir('reasignar', { ...FILA, revisor: { id: YO, nombre: 'Ana Pérez' } })
+
+    expect(dialogo.queryByText(/Lo revisó antes/)).toBeNull()
+  })
 })

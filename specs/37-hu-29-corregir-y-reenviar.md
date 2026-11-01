@@ -1,6 +1,6 @@
 # SPEC 37 — Corregir y reenviar un reporte devuelto
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-29
 > **Depende de:** SPEC 23, SPEC 25, SPEC 26, SPEC 31, SPEC 33, SPEC 34, SPEC 35 y SPEC 36
 > **Fecha:** 2026-10-31
@@ -157,19 +157,19 @@ Es el mismo `ENVIADO` del SPEC 34. Si el envío pasa, marca las observaciones pe
 
 ## Criterios de aceptación
 
-- [ ] `backend/openapi.yaml` documenta el destino `BORRADOR` y que el reenvío marca atendidas las observaciones, y `/api/docs` carga sin errores.
-- [ ] En `backend/` pasan `corregirReporte.test.js`, `transiciones.test.js` y `revisarReporte.test.js`, y `npm test` pasa completo en `frontend/`, sin desactivar ni quitar ninguna prueba; las pruebas no dejan datos del año 2013.
-- [ ] `frontend/package.json`, `backend/package.json` y `backend/db/` no cambian.
-- [ ] El Personal pasa un reporte de `CORRECCION_SOLICITADA` a `BORRADOR` con «Corregir reporte», con su fila de historial y su `CAMBIO_ESTADO`, y `revisor_id` no cambia.
-- [ ] El Revisor recibe 403 al corregir, un reporte que no está en `CORRECCION_SOLICITADA` 422 y un mes `CERRADO` 409.
-- [ ] En la captura, la observación general se ve arriba de las pestañas y cada observación de vacuna dentro de su pestaña, en `CORRECCION_SOLICITADA` y en el Borrador corregido.
-- [ ] En el Borrador corregido se editan cantidades, se agregan vacunas y se quitan las que no tienen observaciones.
-- [ ] Al reenviar se vuelve a validar: con errores responde 422 `REPORTE_CON_ERRORES` y las observaciones siguen pendientes; sin errores queda `ENVIADO` y las observaciones quedan atendidas con fecha.
-- [ ] El historial de un reporte devuelto y reenviado tiene, en orden, cada envío, la devolución y la corrección.
-- [ ] Al asignar un reporte reenviado, el diálogo indica quién lo revisó antes y lo preselecciona si es otro revisor.
-- [ ] «Revisar reporte» muestra cuándo se atendió cada observación anterior.
-- [ ] Ningún componente propio tiene colores escritos a mano ni llama a `fetch` directamente.
-- [ ] HU-29 tiene su avance y sus criterios marcados, HU-31 y HU-34 sus notas, y `CONTEXTO BD.md` y `CLAUDE.md` están actualizados.
+- [x] `backend/openapi.yaml` documenta el destino `BORRADOR` y que el reenvío marca atendidas las observaciones, y `/api/docs` carga sin errores.
+- [x] En `backend/` pasan `corregirReporte.test.js`, `transiciones.test.js` y `revisarReporte.test.js`, y `npm test` pasa completo en `frontend/`, sin desactivar ni quitar ninguna prueba; las pruebas no dejan datos del año 2013.
+- [x] `frontend/package.json`, `backend/package.json` y `backend/db/` no cambian.
+- [x] El Personal pasa un reporte de `CORRECCION_SOLICITADA` a `BORRADOR` con «Corregir reporte», con su fila de historial y su `CAMBIO_ESTADO`, y `revisor_id` no cambia.
+- [x] El Revisor recibe 403 al corregir, un reporte que no está en `CORRECCION_SOLICITADA` 422 y un mes `CERRADO` 409.
+- [x] En la captura, la observación general se ve arriba de las pestañas y cada observación de vacuna dentro de su pestaña, en `CORRECCION_SOLICITADA` y en el Borrador corregido.
+- [x] En el Borrador corregido se editan cantidades, se agregan vacunas y se quitan las que no tienen observaciones.
+- [x] Al reenviar se vuelve a validar: con errores responde 422 `REPORTE_CON_ERRORES` y las observaciones siguen pendientes; sin errores queda `ENVIADO` y las observaciones quedan atendidas con fecha.
+- [x] El historial de un reporte devuelto y reenviado tiene, en orden, cada envío, la devolución y la corrección.
+- [x] Al asignar un reporte reenviado, el diálogo indica quién lo revisó antes y lo preselecciona si es otro revisor.
+- [x] «Revisar reporte» muestra cuándo se atendió cada observación anterior.
+- [x] Ningún componente propio tiene colores escritos a mano ni llama a `fetch` directamente.
+- [x] HU-29 tiene su avance y sus criterios marcados, HU-31 y HU-34 sus notas, y `CONTEXTO BD.md` y `CLAUDE.md` están actualizados.
 
 ## Decisiones
 

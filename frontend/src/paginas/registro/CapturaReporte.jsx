@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CircleAlert, CircleCheck, Info, Layers, Lock, Save, Send, Trash2 } from 'lucide-react'
+import { CircleAlert, CircleCheck, Info, Layers, Lock, MessageSquareWarning, Save, Send, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -30,17 +30,22 @@ import { mensajeDeError } from '@/api/cliente.js'
 import {
   agregarVacuna,
   guardarVacuna,
+  listarObservaciones,
   obtenerFormulario,
   obtenerReporte,
   quitarVacuna,
   validarReporte,
 } from '@/api/produccion.js'
+import { corregirReporte } from '@/api/revision.js'
 import DialogoEnviarReporte from './DialogoEnviarReporte.jsx'
+import { AvisoDevolucion, ObservacionRevisor } from './ObservacionesRevisor.jsx'
 import PanelValidacion from './PanelValidacion.jsx'
 import { AgregarVacuna, DialogoQuitarVacuna } from './VacunasDelReporte.jsx'
 
 // Con estos dos errores lo guardado ya no coincide con lo que se ve: solo queda volver a cargar.
 const ERRORES_DE_RECARGA = ['REPORTE_DESACTUALIZADO', 'REPORTE_NO_EDITABLE']
+// SPEC 37: las observaciones pendientes se ven desde la devolución hasta el reenvío, que las marca atendidas.
+const ESTADOS_CON_OBSERVACIONES = ['CORRECCION_SOLICITADA', 'BORRADOR']
 
 const aDiaMesAnio = (fecha) => (fecha ? fecha.split('-').reverse().join('/') : null)
 
@@ -207,6 +212,7 @@ function PestanaVacuna({
   datos,
   invalidas,
   marcas,
+  observacion,
   soloLectura,
   alCambiarCantidad,
   alCambiarOtra,
@@ -224,6 +230,9 @@ function PestanaVacuna({
   const vigencia = aDiaMesAnio(esquema.vigencia?.desde)
   return (
     <div className="flex flex-col gap-4">
+      {observacion && (
+        <ObservacionRevisor observacion={observacion} titulo={`Observación del revisor sobre ${vacuna.vacuna.nombre}`} />
+      )}
       {invalidas && (
         <AvisoError>
           Hay cantidades de {vacuna.vacuna.nombre} que no son números enteros (0 en adelante); están marcadas en rojo.
@@ -334,7 +343,7 @@ function PestanaVacuna({
 
 // reporte: GET /reportes/{id}, con las etiquetas de las dosis y de las dimensiones de cada vacuna. formularioPedido:
 // la promesa de GET /reportes/{id}/formulario si ya se pidió (PaginaRegistro la pide junto con el detalle).
-// alEnviar: avisa a la página el reporte ya enviado, para que muestre su estado nuevo.
+// alEnviar: avisa a la página el reporte ya enviado o corregido, para que muestre su estado nuevo.
 export default function CapturaReporte({ reporte, formularioPedido = null, alEnviar }) {
   // formulario: GET /reportes/{id}/formulario; cantidades, otras, datos y firmas van por vacunaId. otras es la
   // tarjeta B: { filas, cantidades }.
@@ -371,6 +380,13 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
   const [validando, setValidando] = useState(false)
   const [errorValidacion, setErrorValidacion] = useState(null)
   const validacionActual = useRef(0)
+  // SPEC 37: las observaciones pendientes (atendida: false), que son las de la última devolución; null mientras llegan.
+  const [observaciones, setObservaciones] = useState(null)
+  const [errorObservaciones, setErrorObservaciones] = useState(null)
+  const observacionesActual = useRef(0)
+  const [corrigiendo, setCorrigiendo] = useState(false)
+  const [errorCorregir, setErrorCorregir] = useState(null)
+  const puedeCorregir = sesion?.tienePermiso('REPORTE_EDITAR') ?? false
   // { selector } de la casilla que hay que enfocar cuando su pestaña ya está dibujada.
   const [enfoque, setEnfoque] = useState(null)
 
@@ -408,6 +424,21 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
     } finally {
       if (pedido === validacionActual.current) setValidando(false)
     }
+  }
+
+  // Un fallo aquí no impide ver el formulario: se muestra aparte, con «Reintentar».
+  function cargarObservaciones(estadoActual) {
+    const pedido = ++observacionesActual.current
+    setErrorObservaciones(null)
+    if (!ESTADOS_CON_OBSERVACIONES.includes(estadoActual)) {
+      setObservaciones([])
+      return
+    }
+    setObservaciones(null)
+    Promise.resolve()
+      .then(() => listarObservaciones(reporte.id))
+      .then((recibidas) => pedido === observacionesActual.current && setObservaciones(recibidas.filter((o) => !o.atendida)))
+      .catch((err) => pedido === observacionesActual.current && setErrorObservaciones(mensajeDeError(err)))
   }
 
   // Las vacunas en el orden del reporte, cada una con lo que trae el formulario.
@@ -475,6 +506,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
     setAviso(null)
     setValidacion(null)
     setErrorValidacion(null)
+    setErrorCorregir(null)
     const pedido = pedidoPendiente.current ?? obtenerFormulario(reporte.id)
     pedidoPendiente.current = null
     const detalle = primeraCarga.current ? Promise.resolve(reporte) : obtenerReporte(reporte.id)
@@ -488,6 +520,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
         setFirmas({})
         setVacunasReporte(recibidoDetalle.vacunas)
         setEstado(recibidoDetalle.estado)
+        cargarObservaciones(recibidoDetalle.estado)
         for (const captura of recibido.vacunas) {
           tomarVacuna(captura, recibido.municipioPropio.id, recibido.municipios, recibidoDetalle.vacunas)
         }
@@ -501,6 +534,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
     return () => {
       cargaActual.current += 1
       validacionActual.current += 1
+      observacionesActual.current += 1
     }
   }, [reporte.id])
 
@@ -561,6 +595,22 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
       if (puedeValidar && validacion) validar()
     } finally {
       setOcupado(false)
+    }
+  }
+
+  // SPEC 37: CORRECCION_SOLICITADA → BORRADOR. Se recargan el detalle y el formulario, que llega editable.
+  async function corregir() {
+    setCorrigiendo(true)
+    setErrorCorregir(null)
+    try {
+      const recibido = await corregirReporte(reporte.id, { versionFila: formulario.versionFila })
+      toast.success('El reporte volvió a Borrador. Ya puede corregirlo.')
+      alEnviar?.(recibido)
+      cargar()
+    } catch (err) {
+      setErrorCorregir(mensajeDeError(err))
+    } finally {
+      setCorrigiendo(false)
     }
   }
 
@@ -692,8 +742,13 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
       .filter(({ captura }) => resultados.some((r) => r.severidad === 'ERROR' && r.vacuna?.id === captura.vacunaId))
       .map(({ vacuna }) => vacuna.id),
   )
+  const pendientes = observaciones ?? []
+  const general = pendientes.find((o) => o.vacuna === null)
+  const observacionDe = (vacunaId) => pendientes.find((o) => o.vacuna?.id === vacunaId)
+  const conObservaciones = new Set(vacunas.filter(({ captura }) => observacionDe(captura.vacunaId)).map(({ vacuna }) => vacuna.id))
   const describirPestana = (id) =>
     [
+      conObservaciones.has(id) && `observaciones-${id}`,
       conInvalidas.has(id) && `invalidas-${id}`,
       conErrores.has(id) && `errores-${id}`,
       idsConCambios.has(id) && `cambios-${id}`,
@@ -710,13 +765,33 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
   }
   return (
     <div className="flex flex-col gap-4">
-      {soloLectura && (
-        <Alert className="border-border bg-muted">
-          <Lock />
-          <AlertTitle>Solo consulta</AlertTitle>
-          <AlertDescription>{motivoSoloLectura(estado)}</AlertDescription>
-        </Alert>
+      {estado === 'CORRECCION_SOLICITADA' ? (
+        <AvisoDevolucion
+          observaciones={pendientes}
+          puedeCorregir={puedeCorregir}
+          corrigiendo={corrigiendo}
+          alCorregir={corregir}
+        />
+      ) : (
+        soloLectura && (
+          <Alert className="border-border bg-muted">
+            <Lock />
+            <AlertTitle>Solo consulta</AlertTitle>
+            <AlertDescription>{motivoSoloLectura(estado)}</AlertDescription>
+          </Alert>
+        )
       )}
+      {errorCorregir && (
+        <AvisoError onReintentar={cargar} textoReintentar="Recargar reporte">
+          {errorCorregir}
+        </AvisoError>
+      )}
+      {errorObservaciones && (
+        <AvisoError onReintentar={() => cargarObservaciones(estado)}>
+          No se pudieron cargar las observaciones del revisor: {errorObservaciones}
+        </AvisoError>
+      )}
+      {general && <ObservacionRevisor observacion={general} titulo="Observación del revisor" />}
 
       {/* Con el panel de validación: a la derecha en pantallas anchas, debajo en las angostas. */}
       <div className={cn('flex flex-col gap-4', mostrarPanel && 'xl:grid xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start')}>
@@ -737,6 +812,14 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
                 >
                   {completas.has(vacuna.id) && <CircleCheck aria-hidden="true" className="text-ring" />}
                   {vacuna.vacuna.nombre}
+                  {conObservaciones.has(vacuna.id) && (
+                    <>
+                      <MessageSquareWarning aria-hidden="true" className="text-advertencia-foreground" />
+                      <span id={`observaciones-${vacuna.id}`} hidden>
+                        (tiene observaciones)
+                      </span>
+                    </>
+                  )}
                   {/* Las marcas van en la descripción, no en el nombre: la pestaña se sigue llamando como la vacuna. */}
                   {conInvalidas.has(vacuna.id) && (
                     <>
@@ -780,6 +863,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
                 datos={datos[captura.vacunaId] ?? {}}
                 invalidas={conInvalidas.has(vacuna.id)}
                 marcas={marcasDe(resultados, captura.vacunaId, municipioId)}
+                observacion={observacionDe(captura.vacunaId)}
                 // Mientras se guarda no se escribe: lo guardado reemplaza las cantidades de cada vacuna.
                 soloLectura={soloLectura || guardando}
                 alCambiarCantidad={(llave, texto) =>

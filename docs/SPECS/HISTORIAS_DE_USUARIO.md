@@ -860,9 +860,20 @@ Verificado contra la API real el 2026-10-31. Como la estadígrafa (`estadigrafa`
 **Cómo se hará:** Las observaciones se muestran junto al formulario; al reenviar se repiten las validaciones.
 
 **Criterios de aceptación:**
-- [ ] Veo cada observación junto a la vacuna a la que se refiere.
-- [ ] Al reenviar, el sistema vuelve a validar el reporte.
-- [ ] El historial guarda cada envío y cada devolución.
+- [x] Veo cada observación junto a la vacuna a la que se refiere.
+- [x] Al reenviar, el sistema vuelve a validar el reporte.
+- [x] El historial guarda cada envío y cada devolución.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 37 a `main`. Backend y frontend, en `specs/37-hu-29-corregir-y-reenviar.md`: el destino `BORRADOR` de `POST /reportes/{id}/transiciones` (permiso `REPORTE_EDITAR`, solo desde `CORRECCION_SOLICITADA` y con el mes `ABIERTO` o `EN_CIERRE`), y el reenvío marca atendidas las observaciones. Diferencias con la historia:
+
+- El reporte devuelto se abre en la captura con el aviso «Devuelto para corrección» y el botón «Corregir reporte», que lo pasa a `BORRADOR`; desde ahí se corrige y se envía como siempre. `revisor_id` y `asignado_en` no cambian.
+- La captura muestra solo las observaciones de la última devolución: la general arriba de las pestañas y la de cada vacuna dentro de su pestaña, con una marca. Se ven en `CORRECCION_SOLICITADA` y en el Borrador que sigue, hasta reenviar.
+- «Al reenviar se repiten las validaciones» ya lo hacía el envío (SPEC 34): con errores responde 422 `REPORTE_CON_ERRORES`. Si el envío pasa, las observaciones pendientes quedan `atendida` con `atendida_en`, en la misma transacción, y la `CAMBIO_ESTADO` lleva `observacionesAtendidas`. No se marcan a mano.
+- «El historial guarda cada envío y cada devolución» ya lo hacía `historial_estado_reporte`; lo comprueba `corregirReporte.test.js` con el ciclo completo. La línea de tiempo es de HU-34.
+- En la bandeja, al asignar un reporte reenviado, el diálogo dice quién lo revisó antes y lo preselecciona si es otro revisor. «Revisar reporte» dice cuándo se atendió cada observación.
+- La nota del spec 31 queda resuelta: el Borrador corregido es un Borrador más, así que se editan cantidades y se agregan y quitan vacunas; quitar una con observaciones sigue respondiendo 409 `VACUNA_CON_OBSERVACIONES`.
+
+Verificado contra la API real el 2026-10-31 con el reporte 524 (octubre de 2026, Centro de Salud Tajumulco). Como `cs1209`, la captura mostró el aviso, la observación general y la de Hexavalente en su pestaña con la marca; «Corregir reporte» lo pasó a Borrador con las observaciones a la vista. Se corrigió la 2.ª dosis en menores de 1 año (y el total declarado, que `TOTAL_CUADRA` marcó), se validó sin errores y se reenvió. En la base quedaron `ENVIADO` con el mismo `revisor_id`, las dos observaciones atendidas, las filas `CORRECCION_SOLICITADA → BORRADOR` y `BORRADOR → ENVIADO` del historial y las dos `CAMBIO_ESTADO` (la del reenvío con `observacionesAtendidas: 2`). Como `estadigrafa`, la bandeja mostró el 524 «Enviado» con su revisora; el diálogo dijo «Lo revisó antes: María José Ramírez Orozco. Usted revisó este reporte antes.», se usó «Asignármelo» y «Revisar reporte» mostró «Atendida el …» en las dos. El 524 quedó `EN_REVISION` con la estadígrafa, para probar HU-30.
 
 **Nota (2026-10-31, spec 36):** el revisor deja el reporte en `CORRECCION_SOLICITADA`; volver a `BORRADOR` es la transición del establecimiento (`CORRECCION_SOLICITADA → BORRADOR`, rol Establecimiento), que esta historia agrega a `PERMISO_POR_DESTINO`. Las observaciones se leen con `GET /reportes/{id}/observaciones` (de la devolución más reciente a la más antigua; las de una devolución comparten `creadoEn`), y `atendida`/`atendida_en` siguen sin usarse. «Mis reportes» ya muestra el comentario de la devolución. El reporte 524 (octubre de 2026, `cs1209`) quedó en `CORRECCION_SOLICITADA` con una observación general y una de Hexavalente para probar esta historia.
 
@@ -900,6 +911,8 @@ Verificado contra la API real el 2026-10-31. Como la estadígrafa (`estadigrafa`
 - [ ] Un reporte cerrado no se edita por el procedimiento ordinario.
 
 **Nota (2026-10-23, spec 16):** Ampliar la fecha límite de un mes `EN_CIERRE` a hoy o después lo devuelve a `ABIERTO` (`PATCH /periodos/{id}`, SPEC 16); la tarea programada debe volver a revisarlo con la fecha nueva.
+
+**Nota (2026-10-31, spec 37):** «Los devueltos siguen su ciclo» todavía no se cumple en la pantalla: Registro (`cargarMesesAbiertos`) y «Mis reportes» («Abrir») solo abren meses `ABIERTO`, así que un reporte devuelto en un mes `EN_CIERRE` no se puede corregir ni reenviar desde la pantalla. El backend sí lo permite: corregir (`BORRADOR`), guardar, validar y enviar aceptan el mes en `MESES_EDITABLES`. Esta historia debe resolverlo al pasar los meses a `EN_CIERRE`, por ejemplo ofreciendo en Registro los meses `EN_CIERRE` que tengan un reporte del establecimiento en `CORRECCION_SOLICITADA` o `BORRADOR`.
 
 #### HU-32. Solicitar una rectificación
 
@@ -940,6 +953,8 @@ Verificado contra la API real el 2026-10-31. Como la estadígrafa (`estadigrafa`
 | Estadígrafa / revisor | 3 | S3 | Andrea López |
 
 **Cómo se hará:** Endpoint `GET /reportes/{id}/historial`; tabla `historial_estado_reporte` que se llena automáticamente en cada transición.
+
+**Nota (2026-10-31, spec 37):** el historial ya guarda cada creación, envío, asignación, devolución y corrección (`CORRECCION_SOLICITADA → BORRADOR`), cada una con su usuario, en `historial_estado_reporte`; lo comprueba `backend/tests/corregirReporte.test.js` con el ciclo completo. `GET /reportes/{id}/historial` sigue provisional en el contrato (sin implementar).
 
 **Criterios de aceptación:**
 - [ ] Cada cambio de estado muestra estado anterior, nuevo, usuario, fecha y comentario.
