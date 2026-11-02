@@ -264,7 +264,8 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 **`solicitud_rectificacion`**: pedido justificado de cambiar un reporte **ya cerrado**.
 - Columnas: `id`, `reporte_id` → reporte_produccion, `solicitado_por` → usuario, `motivo`, `evidencia_ruta` (documento de respaldo, nunca datos de pacientes), `estado` (PENDIENTE, AUTORIZADA, RECHAZADA, APLICADA), `resuelto_por` → usuario, `comentario_resolucion`, `solicitado_en`, `resuelto_en`, `aplicado_en`.
 
-- La escribe `POST /reportes/{id}/rectificaciones` (SPEC 40): solo para un reporte `CERRADO` y sin otra solicitud `PENDIENTE` del mismo reporte, con `estado = 'PENDIENTE'` y `evidencia_ruta` en `NULL`. Crearla no cambia el reporte (sigue `CERRADO`, sin subir `version_fila`). `resuelto_por`, `comentario_resolucion`, `resuelto_en` y `aplicado_en` son de HU-33. `fk_rect_reporte` no borra en cascada: antes de borrar un reporte hay que borrar sus solicitudes y su detalle.
+- La escribe `POST /reportes/{id}/rectificaciones` (SPEC 40): solo para un reporte `CERRADO` y sin otra solicitud `PENDIENTE` del mismo reporte, con `estado = 'PENDIENTE'` y `evidencia_ruta` en `NULL`. Crearla no cambia el reporte (sigue `CERRADO`, sin subir `version_fila`). `fk_rect_reporte` no borra en cascada: antes de borrar un reporte hay que borrar sus solicitudes y su detalle.
+- La resuelve un revisor de la DDRISS del reporte (SPEC 41). `POST /rectificaciones/{id}/aprobar` la pasa de `PENDIENTE` directo a `APLICADA` (`resuelto_por`, `comentario_resolucion` opcional, `resuelto_en` = `aplicado_en`) en la misma transacción en que aplica sus celdas; el reporte pasa por `RECTIFICACION` y vuelve a `CERRADO` (dos filas de historial), con `numero_rectificacion` y `version_fila` + 1 y el `total_declarado` de cada vacuna que cambia recalculado como la suma. `POST /rectificaciones/{id}/rechazar` la deja `RECHAZADA` con el motivo en `comentario_resolucion`, sin tocar el reporte. `AUTORIZADA` no se usa en este flujo: la solicitud 2 de la semilla (reporte 228 en `RECTIFICACION`, sin detalle) es del flujo anterior, igual que la 3 (`PENDIENTE` sin detalle, que solo se puede rechazar).
 
 **`rectificacion_detalle`**: evidencia, celda por celda, del dato anterior y el nuevo en una rectificación.
 - Columnas: `id`, `solicitud_id` → solicitud_rectificacion, `detalle_id` → detalle_produccion (NULL si la celda es nueva), `reporte_vacuna_id`, `dosis_id`, `municipio_procedencia_id`, `clave_combinacion`, `cantidad_anterior`, `cantidad_nueva`.
@@ -427,7 +428,7 @@ Preguntas abiertas para la DDRISS (detalle en la sección 7 de `03_documento_dis
 - ¿Quién reporta: cada establecimiento o el consolidado municipal?
 - ¿Cómo reporta la institución de Coatepeque?
 - ¿Cuál es la fuente oficial de la población objetivo?
-- ¿Quién autoriza las rectificaciones?
+- ¿Quién autoriza las rectificaciones? (en el sistema, desde el SPEC 41: un revisor de la DDRISS; falta confirmarlo con la DDRISS)
 - ¿Cuál es la fecha límite de envío de cada mes?
 
 ---

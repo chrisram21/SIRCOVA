@@ -151,11 +151,12 @@ function crearSesion(permisos) {
 const PERMISOS = ['REPORTE_REVISAR', 'REPORTE_CONSULTAR', 'REPORTE_SOLICITAR_CORRECCION']
 
 // useBlocker necesita un data router.
-async function montar({ permisos = PERMISOS } = {}) {
+async function montar({ permisos = PERMISOS, state = { volverA: '?periodo=10&grupo=EN_REVISION' } } = {}) {
   guardarSesion(crearSesion(permisos))
   const router = createMemoryRouter(
     [
       { path: '/revision', element: <h1>Bandeja</h1> },
+      { path: '/rectificaciones/:id', element: <h1>Solicitud</h1> },
       {
         path: '/revision/reportes/:id',
         element: (
@@ -165,7 +166,7 @@ async function montar({ permisos = PERMISOS } = {}) {
         ),
       },
     ],
-    { initialEntries: [{ pathname: '/revision/reportes/524', state: { volverA: '?periodo=10&grupo=EN_REVISION' } }] },
+    { initialEntries: [{ pathname: '/revision/reportes/524', state }] },
   )
   render(<RouterProvider router={router} />)
   await screen.findByRole('heading', { name: 'Reporte de octubre de 2026' })
@@ -303,6 +304,28 @@ test('con observaciones escritas, salir pide confirmación', async () => {
   fireEvent.click(screen.getByRole('link', { name: 'Volver a la bandeja' }))
   expect(await screen.findByText('Hay cambios sin guardar')).toBeTruthy()
   expect(router.state.location.pathname).toBe('/revision/reportes/524')
+})
+
+test('«Volver a la bandeja» conserva los filtros de la bandeja', async () => {
+  await montar()
+  const volver = screen.getByRole('link', { name: 'Volver a la bandeja' })
+  expect(volver.getAttribute('href')).toBe('/revision?periodo=10&grupo=EN_REVISION')
+})
+
+test('abierta desde una solicitud de rectificación, «Volver» regresa a ella con su state', async () => {
+  const router = await montar({
+    state: { regresarA: { ruta: '/rectificaciones/12', texto: 'Volver a la solicitud', estado: { volverA: '?estado=todos' } } },
+  })
+  expect(screen.queryByRole('link', { name: 'Volver a la bandeja' })).toBeNull()
+
+  fireEvent.click(screen.getByRole('link', { name: 'Volver a la solicitud' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/rectificaciones/12'))
+  expect(router.state.location.state).toEqual({ volverA: '?estado=todos' })
+})
+
+test('un regresarA con una ruta que no empieza con «/» se ignora', async () => {
+  await montar({ state: { regresarA: { ruta: 'https://otro.sitio', texto: 'Volver a otro sitio' } } })
+  expect(screen.getByRole('link', { name: 'Volver a la bandeja' }).getAttribute('href')).toBe('/revision')
 })
 
 test('si falla la carga se muestra el error y «Reintentar» vuelve a pedir', async () => {

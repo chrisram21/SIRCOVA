@@ -7,6 +7,7 @@ import { entradaInvalida, revisarCampos, revisarParametros } from '../catalogos/
 import {
   CANTIDAD_MAXIMA,
   celdasGuardadas,
+  escribirCeldas,
   formularioDeVacuna,
   leerReporte,
   llaveDeCelda,
@@ -17,8 +18,10 @@ import {
 import { claveCombinacion } from '../produccion/celdas.service.js';
 
 const LARGO_MOTIVO = 1000; // solicitud_rectificacion.motivo
+const LARGO_COMENTARIO = 500; // solicitud_rectificacion.comentario_resolucion
 const MAXIMO_CAMBIOS = 500;
 const GRUPO_EDAD = 'grupo_edad';
+const CAMPO_TOTAL = 'total_dosis_declarado'; // el que compara la regla TOTAL_CUADRA
 const ESTADOS = ['PENDIENTE', 'AUTORIZADA', 'RECHAZADA', 'APLICADA'];
 
 const errores = {
@@ -28,6 +31,16 @@ const errores = {
     new ErrorApi(409, 'REPORTE_DESACTUALIZADO', 'El reporte cambió desde que lo abrió; recárguelo.'),
   vacunaNoEnReporte: () => new ErrorApi(422, 'CELDA_INVALIDA', 'Una celda es de una vacuna que no está en el reporte.'),
   sinDiferencia: (nombre) => new ErrorApi(422, 'CAMBIO_SIN_DIFERENCIA', `La celda ${nombre} ya tiene esa cantidad.`),
+  resuelta: () => new ErrorApi(409, 'RECTIFICACION_RESUELTA', 'La solicitud ya fue resuelta.'),
+  desactualizada: () =>
+    new ErrorApi(
+      409,
+      'RECTIFICACION_DESACTUALIZADA',
+      'Los datos del reporte cambiaron desde la solicitud; rechácela y pida otra.',
+    ),
+  sinCambios: () => new ErrorApi(422, 'RECTIFICACION_SIN_CAMBIOS', 'La solicitud no tiene cambios que aplicar.'),
+  noPermitida: (origen, destino) =>
+    new ErrorApi(422, 'TRANSICION_NO_PERMITIDA', `El reporte no puede pasar de ${origen} a ${destino}.`),
 };
 
 export const mensajePendiente = 'El reporte ya tiene una solicitud de rectificación pendiente.';
@@ -231,6 +244,38 @@ const aReporte = (f) => ({
   estado: f.reporte_estado,
 });
 
+// Las vacunas cuyo total declarado por el establecimiento (campo adicional) ya no cuadraría con la suma de sus celdas
+// después de aplicar. reporte_vacuna.total_declarado no sirve: la captura lo guarda como esa misma suma.
+async function totalesQueNoCuadran(ejecutor, cambios) {
+  if (cambios.length === 0) return [];
+  const diferencias = new Map();
+  for (const c of cambios) {
+    const previa = diferencias.get(c.reporte_vacuna_id) ?? 0;
+    diferencias.set(c.reporte_vacuna_id, previa + c.cantidad_nueva - c.cantidad_anterior);
+  }
+  const [filas] = await ejecutor.query(
+    `SELECT rv.id, v.id AS vacuna_id, v.nombre AS vacuna_nombre, rv.datos_adicionales,
+            (SELECT COALESCE(SUM(dp.cantidad), 0) FROM detalle_produccion dp WHERE dp.reporte_vacuna_id = rv.id) AS suma
+       FROM reporte_vacuna rv
+       JOIN vacuna v ON v.id = rv.vacuna_id
+      WHERE rv.id IN (?)
+      ORDER BY v.orden_informe, v.nombre`,
+    [[...diferencias.keys()]],
+  );
+  return filas
+    .map((f) => {
+      const sumaActual = Number(f.suma);
+      return {
+        vacunaId: f.vacuna_id,
+        vacuna: f.vacuna_nombre,
+        totalDeclarado: f.datos_adicionales?.[CAMPO_TOTAL],
+        sumaActual,
+        sumaConCambios: sumaActual + diferencias.get(f.id),
+      };
+    })
+    .filter((t) => typeof t.totalDeclarado === 'number' && t.totalDeclarado !== t.sumaConCambios);
+}
+
 // La solicitud completa y, aparte, su ámbito: el ámbito lo revisa quien la pide.
 async function leerSolicitud(ejecutor, id) {
   const [[fila]] = await ejecutor.query(
@@ -247,7 +292,7 @@ async function leerSolicitud(ejecutor, id) {
   );
   if (!fila) return null;
   const [cambios] = await ejecutor.query(
-    `SELECT rd.detalle_id, rd.municipio_procedencia_id, m.nombre AS municipio_nombre, rd.clave_combinacion,
+    `SELECT rd.detalle_id, rd.reporte_vacuna_id, rd.municipio_procedencia_id, m.nombre AS municipio_nombre, rd.clave_combinacion,
             rd.cantidad_anterior, rd.cantidad_nueva, v.id AS vacuna_id, v.codigo AS vacuna_codigo,
             v.nombre AS vacuna_nombre, d.codigo AS dosis_codigo, d.nombre AS dosis_nombre
        FROM rectificacion_detalle rd
@@ -282,6 +327,7 @@ async function leerSolicitud(ejecutor, id) {
       cantidadNueva: c.cantidad_nueva,
     })),
   };
+  if (fila.estado === 'PENDIENTE') solicitud.totales = await totalesQueNoCuadran(ejecutor, cambios);
   return { ambito: { establecimientoId: fila.establecimiento_id, ddrissId: fila.ddriss_id }, solicitud };
 }
 
@@ -358,4 +404,224 @@ export async function obtenerRectificacion(id, usuario) {
   if (!leida) throw errores.noEncontrado();
   verificarAlcance(usuario, leida.ambito);
   return leida.solicitud;
+}
+
+function leerResolucion(id, cuerpo, obligatorio) {
+  revisarCampos(cuerpo ?? {}, ['comentario']);
+  if (!/^\d+$/.test(String(id)) || Number(id) <= 0) throw entradaInvalida('id debe ser un número entero positivo.');
+  const comentario = cuerpo?.comentario;
+  if (comentario !== undefined && comentario !== null && typeof comentario !== 'string') {
+    throw entradaInvalida('comentario debe ser un texto.');
+  }
+  const texto = comentario?.trim() || null;
+  if (obligatorio && !texto) throw entradaInvalida('El motivo del rechazo es obligatorio.');
+  if (texto?.length > LARGO_COMENTARIO) {
+    const nombre = obligatorio ? 'El motivo del rechazo' : 'El comentario';
+    throw entradaInvalida(`${nombre} no puede tener más de ${LARGO_COMENTARIO} caracteres.`);
+  }
+  return { id: Number(id), comentario: texto };
+}
+
+// Fuera de la transacción, para bloquear después el reporte antes que la solicitud.
+async function reporteDeSolicitud(id, usuario) {
+  const [[fila]] = await pool.query(
+    `SELECT s.reporte_id, r.establecimiento_id, e.ddriss_id
+       FROM solicitud_rectificacion s
+       JOIN reporte_produccion r ON r.id = s.reporte_id
+       JOIN establecimiento e ON e.id = r.establecimiento_id
+      WHERE s.id = ?`,
+    [id],
+  );
+  if (!fila) throw errores.noEncontrado();
+  verificarAlcance(usuario, { establecimientoId: fila.establecimiento_id, ddrissId: fila.ddriss_id });
+  return fila.reporte_id;
+}
+
+// Primera consulta de la transacción, en el mismo orden que solicitarRectificacion: el reporte y luego la solicitud.
+async function bloquear(conexion, reporteId, solicitudId) {
+  const [[reporte]] = await conexion.query(
+    'SELECT estado, numero_rectificacion FROM reporte_produccion WHERE id = ? FOR UPDATE',
+    [reporteId],
+  );
+  const [[solicitud]] = await conexion.query('SELECT estado FROM solicitud_rectificacion WHERE id = ? FOR UPDATE', [
+    solicitudId,
+  ]);
+  if (solicitud.estado !== 'PENDIENTE') throw errores.resuelta();
+  return reporte;
+}
+
+const TRANSICIONES = [
+  ['CERRADO', 'RECTIFICACION', 'Cerrado', 'Rectificación'],
+  ['RECTIFICACION', 'CERRADO', 'Rectificación', 'Cerrado'],
+];
+
+async function revisarTransiciones(conexion, rol) {
+  for (const [origen, destino, nombreOrigen, nombreDestino] of TRANSICIONES) {
+    const [[transicion]] = await conexion.query(
+      `SELECT 1 AS hay FROM transicion_estado t JOIN rol r ON r.id = t.rol_id
+        WHERE t.estado_origen = ? AND t.estado_destino = ? AND r.codigo = ?`,
+      [origen, destino, rol],
+    );
+    if (!transicion) throw errores.noPermitida(nombreOrigen, nombreDestino);
+  }
+}
+
+// Las celdas de una vacuna con sus cantidades nuevas, escritas como en la captura. Cada una debe seguir con la
+// cantidad anterior que vio el solicitante (0 si no existía); si no, no se aplica nada.
+async function aplicarCambiosDeVacuna(conexion, repVacId, cambios, usuarioId) {
+  const actuales = await celdasGuardadas(conexion, [repVacId]);
+  const porLlave = new Map(actuales.map((a) => [llaveDeCelda(a), a]));
+  const nuevas = new Map();
+  const dosis = new Map();
+  for (const c of cambios) {
+    const celda = {
+      dosisCodigo: c.dosis_codigo,
+      municipioProcedenciaId: c.municipio_procedencia_id,
+      claveCombinacion: c.clave_combinacion,
+      dimensiones: Object.fromEntries(paresDeClave(c.clave_combinacion)),
+      cantidad: c.cantidad_nueva,
+    };
+    if ((porLlave.get(llaveDeCelda(celda))?.cantidad ?? 0) !== c.cantidad_anterior) throw errores.desactualizada();
+    nuevas.set(llaveDeCelda(celda), celda);
+    dosis.set(c.dosis_codigo, { id: c.dosis_id });
+  }
+  // escribirCeldas borra lo que no viene: van todas las actuales, con las cantidades nuevas donde cambian.
+  const pedidas = [
+    ...actuales.map((a) => nuevas.get(llaveDeCelda(a)) ?? a),
+    ...[...nuevas.values()].filter((n) => !porLlave.has(llaveDeCelda(n))),
+  ];
+  await escribirCeldas(conexion, { repVacId, actuales, pedidas, dosis, usuarioId });
+
+  const [[antes]] = await conexion.query('SELECT total_declarado FROM reporte_vacuna WHERE id = ?', [repVacId]);
+  const totalDeclarado = pedidas.reduce((suma, c) => suma + c.cantidad, 0);
+  await conexion.query('UPDATE reporte_vacuna SET total_declarado = ? WHERE id = ?', [totalDeclarado, repVacId]);
+  return { anterior: antes.total_declarado ?? null, nuevo: totalDeclarado };
+}
+
+// Autoriza y aplica de una vez: el reporte pasa por RECTIFICACION dentro de la transacción y la solicitud queda
+// APLICADA sin pasar por AUTORIZADA.
+export async function aprobarRectificacion(id, cuerpo, req) {
+  const pedido = leerResolucion(id, cuerpo, false);
+  const reporteId = await reporteDeSolicitud(pedido.id, req.usuario);
+  const contexto = contextoAuditoria(req);
+
+  await enTransaccion(async (conexion) => {
+    const reporte = await bloquear(conexion, reporteId, pedido.id);
+    if (reporte.estado !== 'CERRADO') throw errores.noCerrado();
+    const [cambios] = await conexion.query(
+      `SELECT rd.reporte_vacuna_id, rv.vacuna_id, rd.dosis_id, d.codigo AS dosis_codigo, rd.municipio_procedencia_id,
+              rd.clave_combinacion, rd.cantidad_anterior, rd.cantidad_nueva
+         FROM rectificacion_detalle rd
+         JOIN reporte_vacuna rv ON rv.id = rd.reporte_vacuna_id
+         JOIN dosis d ON d.id = rd.dosis_id
+        WHERE rd.solicitud_id = ?
+        ORDER BY rd.id`,
+      [pedido.id],
+    );
+    if (cambios.length === 0) throw errores.sinCambios();
+    await revisarTransiciones(conexion, req.usuario.rol);
+
+    const numero = reporte.numero_rectificacion + 1;
+    await conexion.query("UPDATE reporte_produccion SET estado = 'RECTIFICACION' WHERE id = ?", [reporteId]);
+    const totales = [];
+    for (const repVacId of new Set(cambios.map((c) => c.reporte_vacuna_id))) {
+      const deLaVacuna = cambios.filter((c) => c.reporte_vacuna_id === repVacId);
+      const total = await aplicarCambiosDeVacuna(conexion, repVacId, deLaVacuna, contexto.usuarioId);
+      totales.push({
+        vacunaId: deLaVacuna[0].vacuna_id,
+        totalDeclaradoAnterior: total.anterior,
+        totalDeclarado: total.nuevo,
+      });
+    }
+    await conexion.query(
+      `UPDATE reporte_produccion SET estado = 'CERRADO', numero_rectificacion = ?, version_fila = version_fila + 1
+        WHERE id = ?`,
+      [numero, reporteId],
+    );
+
+    const autorizada = [`Rectificación ${numero} autorizada (solicitud ${pedido.id}).`, pedido.comentario]
+      .filter(Boolean)
+      .join(' ');
+    const aplicada = `Rectificación ${numero} aplicada: ${cambios.length} celdas.`;
+    await conexion.query(
+      'INSERT INTO historial_estado_reporte (reporte_id, estado_anterior, estado_nuevo, usuario_id, comentario) VALUES ?',
+      [
+        [
+          [reporteId, 'CERRADO', 'RECTIFICACION', contexto.usuarioId, autorizada],
+          [reporteId, 'RECTIFICACION', 'CERRADO', contexto.usuarioId, aplicada],
+        ],
+      ],
+    );
+    await conexion.query(
+      `UPDATE solicitud_rectificacion
+          SET estado = 'APLICADA', resuelto_por = ?, comentario_resolucion = ?, resuelto_en = NOW(), aplicado_en = NOW()
+        WHERE id = ?`,
+      [contexto.usuarioId, pedido.comentario, pedido.id],
+    );
+
+    for (const [origen, destino] of TRANSICIONES) {
+      await registrarBitacora(conexion, {
+        ...contexto,
+        modulo: MODULOS.RECTIFICACION,
+        accion: ACCIONES.CAMBIO_ESTADO,
+        entidad: 'reporte_produccion',
+        entidadId: reporteId,
+        valoresAnteriores: { estado: origen },
+        valoresNuevos: { estado: destino, solicitudId: pedido.id },
+      });
+    }
+    await registrarBitacora(conexion, {
+      ...contexto,
+      modulo: MODULOS.RECTIFICACION,
+      accion: ACCIONES.APLICAR_RECTIFICACION,
+      entidad: 'solicitud_rectificacion',
+      entidadId: pedido.id,
+      valoresAnteriores: { estado: 'PENDIENTE' },
+      valoresNuevos: {
+        estado: 'APLICADA',
+        comentario: pedido.comentario,
+        reporteId,
+        numeroRectificacion: numero,
+        cambios: cambios.map((c) => ({
+          vacunaId: c.vacuna_id,
+          dosisCodigo: c.dosis_codigo,
+          municipioProcedenciaId: c.municipio_procedencia_id,
+          claveCombinacion: c.clave_combinacion,
+          cantidadAnterior: c.cantidad_anterior,
+          cantidadNueva: c.cantidad_nueva,
+        })),
+        totales,
+      },
+    });
+  });
+
+  return (await leerSolicitud(pool, pedido.id)).solicitud;
+}
+
+// El estado del reporte no se revisa: también se rechaza una solicitud sin detalle (de la semilla).
+export async function rechazarRectificacion(id, cuerpo, req) {
+  const pedido = leerResolucion(id, cuerpo, true);
+  const reporteId = await reporteDeSolicitud(pedido.id, req.usuario);
+  const contexto = contextoAuditoria(req);
+
+  await enTransaccion(async (conexion) => {
+    await bloquear(conexion, reporteId, pedido.id);
+    await conexion.query(
+      `UPDATE solicitud_rectificacion
+          SET estado = 'RECHAZADA', resuelto_por = ?, comentario_resolucion = ?, resuelto_en = NOW()
+        WHERE id = ?`,
+      [contexto.usuarioId, pedido.comentario, pedido.id],
+    );
+    await registrarBitacora(conexion, {
+      ...contexto,
+      modulo: MODULOS.RECTIFICACION,
+      accion: ACCIONES.RECHAZAR_RECTIFICACION,
+      entidad: 'solicitud_rectificacion',
+      entidadId: pedido.id,
+      valoresAnteriores: { estado: 'PENDIENTE' },
+      valoresNuevos: { estado: 'RECHAZADA', comentario: pedido.comentario },
+    });
+  });
+
+  return (await leerSolicitud(pool, pedido.id)).solicitud;
 }

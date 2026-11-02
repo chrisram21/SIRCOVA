@@ -2,6 +2,19 @@ import { ArrowLeft } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 
+// Una pantalla que abre otra fuera de su flujo puede pedir que «Volver» regrese a ella: manda en el state del Link
+// `regresarA: { ruta, texto, estado }` (estado es el state que recupera al regresar). Sin regresarA, o con una ruta
+// que no empieza con "/", vale el destino de siempre de la pantalla.
+export function destinoDeVolver(state, ruta, texto) {
+  const regresarA = state?.regresarA
+  if (typeof regresarA?.ruta !== 'string' || !regresarA.ruta.startsWith('/')) return { ruta, texto, estado: undefined }
+  return {
+    ruta: regresarA.ruta,
+    texto: typeof regresarA.texto === 'string' && regresarA.texto ? regresarA.texto : texto,
+    estado: regresarA.estado ?? undefined,
+  }
+}
+
 // El encabezado común de las pantallas: «Volver» (opcional), antetítulo, título, descripción y acciones a la derecha.
 // volverA es el `to` de Link (texto o { pathname, search }); estadoVolver, su `state`.
 export default function EncabezadoPagina({

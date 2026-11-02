@@ -13,7 +13,7 @@ import { mensajeDeError } from '@/api/cliente.js'
 import { listarObservaciones, obtenerFormulario, obtenerReporte, obtenerValidacionGuardada } from '@/api/produccion.js'
 import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
 import { AvisoError } from '@/componentes/Avisos.jsx'
-import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
+import EncabezadoPagina, { destinoDeVolver } from '@/componentes/EncabezadoPagina.jsx'
 import InsigniaEstadoReporte, { ESTADOS_REPORTE } from '@/componentes/InsigniaEstadoReporte.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import FormularioCaptura, { CamposAdicionales, LetraTarjeta } from '@/componentes/formulario/FormularioCaptura.jsx'
@@ -172,7 +172,13 @@ export default function PaginaRevisarReporte() {
   const usuarioId = sesion?.sesion?.usuario?.id ?? null
   const puedeSolicitar = sesion?.tienePermiso('REPORTE_SOLICITAR_CORRECCION') ?? false
   const tienePermisoAprobar = sesion?.tienePermiso('REPORTE_APROBAR') ?? false
-  const volverA = `/revision${typeof state?.volverA === 'string' ? state.volverA : ''}`
+  // Desde la bandeja, sus filtros (state.volverA); desde otra pantalla, la que pide regresarA (SPEC 41).
+  const volver = destinoDeVolver(
+    state,
+    `/revision${typeof state?.volverA === 'string' ? state.volverA : ''}`,
+    'Volver a la bandeja',
+  )
+  const volverA = volver.ruta
 
   // { reporte, formulario, validacion, observaciones } de la última carga.
   const [datos, setDatos] = useState(null)
@@ -205,7 +211,7 @@ export default function PaginaRevisarReporte() {
 
   // Después de vaciar lo escrito, para que el aviso de cambios sin guardar no bloquee la vuelta a la bandeja.
   useEffect(() => {
-    if (devuelto) navegar(volverA)
+    if (devuelto) navegar(volverA, { state: volver.estado })
   }, [devuelto])
 
   function recargar() {
@@ -218,7 +224,8 @@ export default function PaginaRevisarReporte() {
       antetitulo={datos ? `Revisión y cierre · ${datos.reporte.establecimiento.nombre}` : 'Revisión y cierre'}
       titulo={datos ? `Reporte de ${nombreDelMes(datos.reporte.periodo)}` : 'Revisar reporte'}
       volverA={volverA}
-      textoVolver="Volver a la bandeja"
+      textoVolver={volver.texto}
+      estadoVolver={volver.estado}
       acciones={
         datos && (
           <>
@@ -300,7 +307,7 @@ export default function PaginaRevisarReporte() {
   function aprobado() {
     setAprobando(false)
     toast.success('Reporte aprobado.')
-    navegar(volverA)
+    navegar(volverA, { state: volver.estado })
   }
 
   function recargarDesdeAprobar() {

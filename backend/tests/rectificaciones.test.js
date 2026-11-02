@@ -19,6 +19,7 @@ let personal;
 let otroPersonal;
 let administrador;
 let estadigrafa;
+let epidemiologia;
 let ultimoMes = 0;
 // Las que crean las pruebas del POST; las de GET las consultan.
 let solicitudPersonal;
@@ -207,6 +208,7 @@ beforeAll(async () => {
   personal = await deUsuario('cs1201');
   otroPersonal = await deUsuario('cs1202');
   estadigrafa = await deUsuario('estadigrafa');
+  epidemiologia = await tokenDe("r.codigo = 'EPIDEMIOLOGIA' AND e.ddriss_id = ?", [1]);
   administrador = await tokenDe("r.codigo = 'ADMINISTRADOR' AND e.ddriss_id = ?", [1]);
   const [[establecimiento]] = await pool.query("SELECT municipio_id FROM establecimiento WHERE codigo = 'CS-1201'");
   municipioPropio = establecimiento.municipio_id;
@@ -406,7 +408,8 @@ describe('GET /rectificaciones y GET /rectificaciones/{id}', () => {
     for (const consulta of ['estado=ABIERTA', 'reporteId=1', 'porPagina=101', 'pagina=0', 'estado=PENDIENTE&estado=APLICADA']) {
       expect(error(await consultar(`/rectificaciones?${consulta}`)), consulta).toEqual([400, 'ENTRADA_INVALIDA']);
     }
-    expect(error(await consultar('/rectificaciones', estadigrafa))).toEqual([403, 'SIN_PERMISO']);
+    // Desde el SPEC 41 el Revisor también consulta (RECTIFICACION_CONSULTAR); Epidemiología no.
+    expect(error(await consultar('/rectificaciones', epidemiologia))).toEqual([403, 'SIN_PERMISO']);
   }, 60000);
 
   it('el detalle trae los cambios del ámbito del usuario', async () => {
@@ -416,7 +419,8 @@ describe('GET /rectificaciones y GET /rectificaciones/{id}', () => {
     expect((await consultar(`/rectificaciones/${solicitudPersonal.id}`, administrador)).body).toEqual(solicitudPersonal);
 
     expect(error(await consultar(`/rectificaciones/${solicitudPersonal.id}`, otroPersonal))).toEqual([404, 'NO_ENCONTRADO']);
-    expect(error(await consultar(`/rectificaciones/${solicitudPersonal.id}`, estadigrafa))).toEqual([403, 'SIN_PERMISO']);
+    expect((await consultar(`/rectificaciones/${solicitudPersonal.id}`, estadigrafa)).status).toBe(200);
+    expect(error(await consultar(`/rectificaciones/${solicitudPersonal.id}`, epidemiologia))).toEqual([403, 'SIN_PERMISO']);
     expect(error(await consultar('/rectificaciones/999999999'))).toEqual([404, 'NO_ENCONTRADO']);
     expect(error(await consultar('/rectificaciones/abc'))).toEqual([400, 'ENTRADA_INVALIDA']);
   }, 60000);
