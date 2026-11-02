@@ -5,6 +5,7 @@ import { ErrorApi } from '@/api/cliente.js'
 import {
   agregarVacuna,
   guardarVacuna,
+  listarHistorial,
   listarObservaciones,
   listarVacunasDisponibles,
   obtenerFormulario,
@@ -27,11 +28,23 @@ vi.mock('@/api/produccion.js', () => ({
   quitarVacuna: vi.fn(),
   validarReporte: vi.fn(),
   listarObservaciones: vi.fn(),
+  listarHistorial: vi.fn(),
 }))
 vi.mock('@/api/revision.js', () => ({ cambiarEstadoReporte: vi.fn(), corregirReporte: vi.fn() }))
 
 // El aviso de guardado es un toast (sonner, simulado en preparar-pruebas.js).
 const borradorGuardado = () => waitFor(() => expect(toast.success).toHaveBeenCalledWith('Borrador guardado.'))
+
+const HISTORIAL = [
+  {
+    id: 1,
+    estadoAnterior: null,
+    estadoNuevo: 'BORRADOR',
+    usuario: { id: 13, nombre: 'Marta López', rol: { codigo: 'ESTABLECIMIENTO', nombre: 'Personal del establecimiento' } },
+    fecha: '2026-10-02T15:10:00.000Z',
+    comentario: null,
+  },
+]
 
 const valor = (codigo, etiqueta, orden) => ({ codigo, etiqueta, orden, activo: true })
 const HEXAVALENTE = {
@@ -943,6 +956,26 @@ describe('validación automática (SPEC 33)', () => {
       expect(screen.queryByRole('alertdialog')).toBeNull()
     })
 
+    test('el historial ya desplegado se vuelve a pedir después de enviar (SPEC 42)', async () => {
+      validarReporte.mockResolvedValue(SIN_ERRORES())
+      listarHistorial.mockResolvedValue(HISTORIAL)
+      await montarConSesion(formulario(), PERMISOS_PERSONAL)
+      await waitFor(() => expect(botonEnviar().disabled).toBe(false))
+      fireEvent.click(screen.getByRole('button', { name: 'Historial de estados' }))
+      await screen.findByRole('list', { name: 'Historial de estados' })
+      expect(listarHistorial).toHaveBeenCalledTimes(1)
+      const enviado = { ...REPORTE, estado: 'ENVIADO' }
+      cambiarEstadoReporte.mockResolvedValue(enviado)
+      obtenerFormulario.mockResolvedValue(formulario({ editable: false, versionFila: 4 }))
+      obtenerReporte.mockResolvedValue(enviado)
+
+      fireEvent.click(botonEnviar())
+      fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Enviar' }))
+
+      await waitFor(() => expect(listarHistorial).toHaveBeenCalledTimes(2))
+      expect(listarHistorial).toHaveBeenLastCalledWith(7)
+    })
+
     test('un 422 con la validación actualiza el panel y muestra el mensaje', async () => {
       validarReporte.mockResolvedValue(SIN_ERRORES())
       await montarConSesion(formulario(), PERMISOS_PERSONAL)
@@ -1104,5 +1137,38 @@ describe('validación automática (SPEC 33)', () => {
       expect(listarObservaciones).toHaveBeenCalledTimes(2)
       expect(screen.queryByText(/No se pudieron cargar las observaciones del revisor/)).toBeNull()
     })
+  })
+})
+
+describe('historial de estados (SPEC 42)', () => {
+  test('empieza plegado y no pide nada; al desplegarlo pide el historial y lo muestra', async () => {
+    listarHistorial.mockResolvedValue(HISTORIAL)
+    await montar()
+
+    const disparador = screen.getByRole('button', { name: 'Historial de estados' })
+    expect(disparador.getAttribute('aria-expanded')).toBe('false')
+    expect(listarHistorial).not.toHaveBeenCalled()
+
+    fireEvent.click(disparador)
+    const filas = within(await screen.findByRole('list', { name: 'Historial de estados' })).getAllByRole('listitem')
+    expect(listarHistorial).toHaveBeenCalledWith(7)
+    expect(filas).toHaveLength(1)
+    expect(filas[0].textContent).toContain('Reporte creado')
+
+    // Plegarlo y desplegarlo sin cambios de estado no lo vuelve a pedir.
+    fireEvent.click(disparador)
+    fireEvent.click(disparador)
+    expect(listarHistorial).toHaveBeenCalledTimes(1)
+  })
+
+  test('si falla, muestra el error y «Reintentar» lo vuelve a pedir', async () => {
+    listarHistorial.mockRejectedValueOnce(new ErrorApi(500, 'ERROR_INTERNO', 'Falló el servidor.')).mockResolvedValue(HISTORIAL)
+    await montar()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Historial de estados' }))
+    expect(await screen.findByText('No se pudo cargar el historial: Falló el servidor.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(await screen.findByRole('list', { name: 'Historial de estados' })).toBeTruthy()
+    expect(listarHistorial).toHaveBeenCalledTimes(2)
   })
 })

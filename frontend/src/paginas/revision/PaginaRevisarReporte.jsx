@@ -10,10 +10,17 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { mensajeDeError } from '@/api/cliente.js'
-import { listarObservaciones, obtenerFormulario, obtenerReporte, obtenerValidacionGuardada } from '@/api/produccion.js'
+import {
+  listarHistorial,
+  listarObservaciones,
+  obtenerFormulario,
+  obtenerReporte,
+  obtenerValidacionGuardada,
+} from '@/api/produccion.js'
 import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina, { destinoDeVolver } from '@/componentes/EncabezadoPagina.jsx'
+import HistorialEstadosReporte from '@/componentes/HistorialEstadosReporte.jsx'
 import InsigniaEstadoReporte, { ESTADOS_REPORTE } from '@/componentes/InsigniaEstadoReporte.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import FormularioCaptura, { CamposAdicionales, LetraTarjeta } from '@/componentes/formulario/FormularioCaptura.jsx'
@@ -159,6 +166,43 @@ function ObservacionesAnteriores({ observaciones }) {
             </ul>
           </section>
         ))}
+      </CardContent>
+    </Card>
+  )
+}
+
+// Carga aparte del resto de la pantalla: si falla, solo esta tarjeta muestra el error.
+function TarjetaHistorial({ reporteId, recarga }) {
+  const [cambios, setCambios] = useState(null)
+  const [error, setError] = useState(null)
+  const [intento, setIntento] = useState(0)
+
+  useEffect(() => {
+    let vigente = true
+    setError(null)
+    setCambios(null)
+    listarHistorial(reporteId)
+      .then((lista) => vigente && setCambios(lista))
+      .catch((err) => vigente && setError(mensajeDeError(err)))
+    return () => {
+      vigente = false
+    }
+  }, [reporteId, recarga, intento])
+
+  return (
+    <Card aria-labelledby="titulo-historial">
+      <CardHeader>
+        <CardTitle id="titulo-historial">Historial de estados</CardTitle>
+        <CardDescription>Quién cambió el estado del reporte y cuándo.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {error ? (
+          <AvisoError onReintentar={() => setIntento((n) => n + 1)}>No se pudo cargar el historial: {error}</AvisoError>
+        ) : cambios ? (
+          <HistorialEstadosReporte cambios={cambios} />
+        ) : (
+          <Skeleton aria-label="Cargando historial" className="h-24 w-full" />
+        )}
       </CardContent>
     </Card>
   )
@@ -389,6 +433,8 @@ export default function PaginaRevisarReporte() {
           <ObservacionesAnteriores observaciones={observaciones} />
         </div>
       </div>
+
+      <TarjetaHistorial reporteId={id} recarga={intento} />
 
       {aviso && (
         <AvisoError onReintentar={aviso.recargar ? recargar : undefined} textoReintentar="Recargar">

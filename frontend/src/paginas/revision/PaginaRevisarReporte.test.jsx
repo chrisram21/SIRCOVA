@@ -2,7 +2,13 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { toast } from 'sonner'
 import { ErrorApi } from '@/api/cliente.js'
-import { listarObservaciones, obtenerFormulario, obtenerReporte, obtenerValidacionGuardada } from '@/api/produccion.js'
+import {
+  listarHistorial,
+  listarObservaciones,
+  obtenerFormulario,
+  obtenerReporte,
+  obtenerValidacionGuardada,
+} from '@/api/produccion.js'
 import { aprobarReporte, solicitarCorreccion } from '@/api/revision.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
@@ -14,6 +20,7 @@ vi.mock('@/api/produccion.js', () => ({
   obtenerFormulario: vi.fn(),
   obtenerValidacionGuardada: vi.fn(),
   listarObservaciones: vi.fn(),
+  listarHistorial: vi.fn(),
 }))
 vi.mock('@/api/revision.js', () => ({ aprobarReporte: vi.fn(), solicitarCorreccion: vi.fn() }))
 
@@ -133,6 +140,25 @@ const OBSERVACIONES = [
   },
 ]
 
+const HISTORIAL = [
+  {
+    id: 1,
+    estadoAnterior: null,
+    estadoNuevo: 'BORRADOR',
+    usuario: { id: 14, nombre: 'Rosa Díaz', rol: { codigo: 'ESTABLECIMIENTO', nombre: 'Personal del establecimiento' } },
+    fecha: '2026-10-02T15:10:00.000Z',
+    comentario: null,
+  },
+  {
+    id: 2,
+    estadoAnterior: 'ENVIADO',
+    estadoNuevo: 'EN_REVISION',
+    usuario: { id: YO, nombre: 'Ana Pérez', rol: { codigo: 'REVISOR', nombre: 'Estadígrafa / revisor DDRISS' } },
+    fecha: '2026-10-06T14:05:00.000Z',
+    comentario: 'Asignado a Ana Pérez.',
+  },
+]
+
 function crearSesion(permisos) {
   const codificar = (objeto) => btoa(JSON.stringify(objeto)).replace(/=+$/, '')
   const exp = Math.floor(Date.now() / 1000) + 3600
@@ -183,6 +209,7 @@ beforeEach(() => {
   obtenerFormulario.mockResolvedValue(FORMULARIO)
   obtenerValidacionGuardada.mockResolvedValue(VALIDACION)
   listarObservaciones.mockResolvedValue(OBSERVACIONES)
+  listarHistorial.mockResolvedValue(HISTORIAL)
 })
 
 test('carga el detalle, las vacunas en solo consulta, la validación guardada y las observaciones anteriores', async () => {
@@ -217,6 +244,52 @@ test('una observación atendida dice cuándo se atendió; una pendiente no (SPEC
   const dos = (n) => String(n).padStart(2, '0')
   expect(deHexa.textContent).toContain(`Atendida el 22/10/2026 ${dos(hora.getHours())}:${dos(hora.getMinutes())}`)
   expect(deLaGeneral.textContent).not.toContain('Atendida')
+})
+
+const tarjetaHistorial = () => within(screen.getByText('Historial de estados').closest('[data-slot="card"]'))
+
+test('muestra el historial de estados del reporte (SPEC 42)', async () => {
+  await montar()
+
+  expect(listarHistorial).toHaveBeenCalledWith('524')
+  const historial = tarjetaHistorial()
+  const filas = within(await historial.findByRole('list', { name: 'Historial de estados' })).getAllByRole('listitem')
+  expect(filas).toHaveLength(2)
+  expect(filas[0].textContent).toContain('Reporte creado')
+  expect(filas[1].textContent).toContain('Ana Pérez · Estadígrafa / revisor DDRISS')
+  expect(filas[1].textContent).toContain('Asignado a Ana Pérez.')
+})
+
+test('el historial también se ve en solo consulta, en cualquier estado (SPEC 42)', async () => {
+  obtenerReporte.mockResolvedValue(reporte({ estado: 'CERRADO' }))
+  await montar()
+  expect(await tarjetaHistorial().findByRole('list', { name: 'Historial de estados' })).toBeTruthy()
+})
+
+test('si el historial falla, solo su tarjeta muestra el error con «Reintentar» (SPEC 42)', async () => {
+  listarHistorial.mockRejectedValueOnce(new ErrorApi(500, 'ERROR_INTERNO', 'Falló el servidor.'))
+  await montar()
+
+  const historial = tarjetaHistorial()
+  expect(await historial.findByText('No se pudo cargar el historial: Falló el servidor.')).toBeTruthy()
+  expect(screen.getByRole('tab', { name: 'Hexavalente' })).toBeTruthy()
+  fireEvent.click(historial.getByRole('button', { name: 'Reintentar' }))
+  expect(await historial.findByRole('list', { name: 'Historial de estados' })).toBeTruthy()
+  expect(listarHistorial).toHaveBeenCalledTimes(2)
+})
+
+test('el historial se vuelve a pedir al recargar el reporte (SPEC 42)', async () => {
+  solicitarCorreccion.mockRejectedValue(
+    new ErrorApi(409, 'REPORTE_DESACTUALIZADO', 'El reporte cambió desde que lo abrió; recárguelo.'),
+  )
+  await montar()
+  await tarjetaHistorial().findByRole('list', { name: 'Historial de estados' })
+  escribir(general(), 'Revise la procedencia.')
+  fireEvent.click(botonSolicitar())
+  fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Devolver al establecimiento' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Recargar' }))
+
+  await waitFor(() => expect(listarHistorial).toHaveBeenCalledTimes(2))
 })
 
 test('el formulario de observaciones solo aparece al revisor asignado de un reporte en revisión', async () => {

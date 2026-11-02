@@ -60,3 +60,8 @@ export function obtenerValidacionGuardada(reporteId) {
 export function listarObservaciones(reporteId) {
   return solicitar(`/reportes/${reporteId}/observaciones`)
 }
+
+// Los cambios de estado del reporte, del más antiguo al más reciente. Sin caché: cambia con cada transición.
+export function listarHistorial(reporteId) {
+  return solicitar(`/reportes/${reporteId}/historial`)
+}

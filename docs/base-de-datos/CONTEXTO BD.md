@@ -247,6 +247,7 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 **`historial_estado_reporte`**: registro de cada transición de estado de un reporte.
 - Columnas: `id`, `reporte_id` → reporte_produccion, `estado_anterior` → estado_reporte, `estado_nuevo` → estado_reporte, `usuario_id` → usuario, `comentario`, `fecha`.
 - La primera fila de un reporte es su creación (`estado_anterior` NULL → `BORRADOR`). Las demás las escribe `POST /reportes/{id}/transiciones` (SPEC 34), en la misma transacción que cambia `reporte_produccion.estado`, sube `version_fila` y deja la `CAMBIO_ESTADO` en la bitácora; al pasar a `ENVIADO` también llena `enviado_en`. `historial_estado_reporte` tampoco cae en cascada con el reporte.
+- No admite `UPDATE`: lo impide el trigger `trg_historial_sin_update` de `09_historial_inmutable_mysql.sql` (SPEC 42), que hay que volver a correr cada vez que se recrea la base con el 01, como el 06 de la bitácora. El `DELETE` no se bloquea porque las pruebas borran el historial de sus reportes al limpiar; la API nunca borra filas. Se lee con `GET /reportes/{id}/historial`, del más antiguo al más reciente (a igual fecha, por `id`).
 
 **`observacion_revision`**: observaciones de la estadígrafa al solicitar correcciones. Pueden ser generales, de una vacuna o de una celda.
 - Columnas: `id`, `reporte_id` → reporte_produccion, `reporte_vacuna_id` → reporte_vacuna (opcional), `detalle_id` → detalle_produccion (opcional), `usuario_id` → usuario, `texto`, `atendida`, `atendida_en`, `creado_en`.

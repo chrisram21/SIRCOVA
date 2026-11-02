@@ -3,6 +3,7 @@ import * as capturaService from './captura.service.js';
 import * as vacunasDelReporteService from './vacunasDelReporte.service.js';
 import * as validacionService from './validacion.service.js';
 import * as observacionesService from './observaciones.service.js';
+import * as historialService from './historial.service.js';
 import { contextoAuditoria } from '../auditoria/auditoria.service.js';
 
 export async function listarReportes(req, res) {
@@ -53,6 +54,10 @@ export async function obtenerValidacionGuardada(req, res) {
 
 export async function listarObservaciones(req, res) {
   res.json(await observacionesService.listarObservaciones(req.params.id, req.query, req.usuario));
+}
+
+export async function listarHistorial(req, res) {
+  res.json(await historialService.listarHistorial(req.params.id, req.query, req.usuario));
 }
 
 export async function validarReporte(req, res) {
