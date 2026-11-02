@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useLocation, useParams } from 'react-router-dom'
+import { CircleCheck, TriangleAlert, X } from 'lucide-react'
+import { Link, useLocation, useParams } from 'react-router-dom'
+import { toast } from 'sonner'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { mensajeDeError } from '@/api/cliente.js'
@@ -7,7 +11,10 @@ import { obtenerRectificacion } from '@/api/rectificaciones.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import InsigniaEstadoRectificacion from '@/componentes/InsigniaEstadoRectificacion.jsx'
+import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import { nombreDelMes } from '@/lib/fechas.js'
+import DialogoAprobarRectificacion from './DialogoAprobarRectificacion.jsx'
+import DialogoRechazarRectificacion from './DialogoRechazarRectificacion.jsx'
 import { aFechaHora, combinacionDe, diferenciaDe, mesDe } from './formato.js'
 
 function Dato({ etiqueta, children }) {
@@ -65,6 +72,11 @@ export default function PaginaDetalleRectificacion() {
   const [solicitud, setSolicitud] = useState(null)
   const [errorCarga, setErrorCarga] = useState(null)
   const [intento, setIntento] = useState(0)
+  // 'aprobar' | 'rechazar' | null
+  const [dialogo, setDialogo] = useState(null)
+  const sesion = useSesion()
+  const puedeResolver = sesion?.tienePermiso('RECTIFICACION_RESOLVER') ?? false
+  const puedeVerReporte = sesion?.tienePermiso('REPORTE_REVISAR') ?? false
 
   useEffect(() => {
     let vigente = true
@@ -78,6 +90,20 @@ export default function PaginaDetalleRectificacion() {
   }, [id, intento])
 
   const titulo = solicitud ? `Rectificación de ${nombreDelMes(solicitud.reporte.periodo)}` : 'Solicitud de rectificación'
+  const resolver = puedeResolver && solicitud?.estado === 'PENDIENTE'
+
+  function resuelta(mensaje) {
+    return (respuesta) => {
+      setDialogo(null)
+      setSolicitud(respuesta)
+      toast.success(mensaje)
+    }
+  }
+
+  function recargar() {
+    setDialogo(null)
+    setIntento((n) => n + 1)
+  }
 
   return (
     <section className="flex flex-col gap-6 p-6">
@@ -87,7 +113,25 @@ export default function PaginaDetalleRectificacion() {
         descripcion={solicitud?.reporte.establecimiento.nombre}
         volverA={volverA}
         textoVolver="Volver a las solicitudes"
-        acciones={solicitud && <InsigniaEstadoRectificacion estado={solicitud.estado} />}
+        acciones={
+          solicitud && (
+            <>
+              <InsigniaEstadoRectificacion estado={solicitud.estado} />
+              {resolver && (
+                <>
+                  <Button variant="outline" onClick={() => setDialogo('rechazar')}>
+                    <X />
+                    Rechazar
+                  </Button>
+                  <Button onClick={() => setDialogo('aprobar')}>
+                    <CircleCheck />
+                    Aprobar
+                  </Button>
+                </>
+              )}
+            </>
+          )
+        }
       />
 
       {errorCarga ? (
@@ -108,6 +152,20 @@ export default function PaginaDetalleRectificacion() {
             </Dato>
             <Dato etiqueta="Reporte">
               {solicitud.reporte.establecimiento.codigo} · {mesDe(solicitud.reporte.periodo)}
+              {puedeVerReporte && (
+                <>
+                  {' · '}
+                  <Link
+                    to={`/revision/reportes/${solicitud.reporte.id}`}
+                    state={{
+                      regresarA: { ruta: `/rectificaciones/${solicitud.id}`, texto: 'Volver a la solicitud', estado: state },
+                    }}
+                    className="font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    Ver reporte
+                  </Link>
+                </>
+              )}
             </Dato>
             <div className="sm:col-span-2">
               <Dato etiqueta="Justificación">
@@ -126,11 +184,38 @@ export default function PaginaDetalleRectificacion() {
             )}
           </dl>
 
+          {solicitud.totales?.map((total) => (
+            <Alert key={total.vacunaId} className="border-advertencia-foreground/20 bg-advertencia text-advertencia-foreground">
+              <TriangleAlert />
+              <AlertDescription className="text-advertencia-foreground">
+                {total.vacuna}: el total declarado ({total.totalDeclarado}) ya no cuadrará con la suma ({total.sumaActual}{' '}
+                → {total.sumaConCambios}).
+              </AlertDescription>
+            </Alert>
+          ))}
+
           <div className="flex flex-col gap-3">
             <h2 className="text-lg font-semibold">Cambios ({solicitud.cambios.length})</h2>
             <TablaCambios cambios={solicitud.cambios} />
           </div>
         </>
+      )}
+
+      {dialogo === 'aprobar' && (
+        <DialogoAprobarRectificacion
+          solicitud={solicitud}
+          alHecho={resuelta('Rectificación aplicada.')}
+          alRecargar={recargar}
+          alCerrar={() => setDialogo(null)}
+        />
+      )}
+      {dialogo === 'rechazar' && (
+        <DialogoRechazarRectificacion
+          solicitud={solicitud}
+          alHecho={resuelta('Solicitud rechazada.')}
+          alRecargar={recargar}
+          alCerrar={() => setDialogo(null)}
+        />
       )}
     </section>
   )

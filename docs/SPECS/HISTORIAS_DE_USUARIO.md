@@ -974,9 +974,20 @@ Verificado contra la API real el 2026-11-01, después de correr el 05. Como `cs1
 **Nota (2026-11-01, spec 40):** la solicitud ya trae los cambios en `rectificacion_detalle` (celda, cantidad anterior y nueva) y el reporte sigue `CERRADO` mientras está `PENDIENTE`, así que autorizar debe aplicar esos cambios y dejar el reporte `CERRADO` en una transacción; falta decidir si pasa por `RECTIFICACION` (la transición existe para REVISOR, con comentario) y cómo se sube `numero_rectificacion`. Al aplicar, la cantidad actual de la celda puede ya no ser la anterior guardada. Los cambios no tocan `datos_adicionales` (por ejemplo, `total_dosis_declarado`), que puede dejar de cuadrar con la suma. La semilla (03) sigue el flujo anterior en el reporte 228: la solicitud 2 está `AUTORIZADA` sin detalle y el reporte en `RECTIFICACION`. El revisor necesita `RECTIFICACION_CONSULTAR` (hoy solo lo tienen el Personal y el administrador) y la pantalla «Rectificaciones» es donde va su bandeja. Para probar, las solicitudes 12 (reporte 223, CS-1206) y 13 (reporte 233, CS-1216) quedaron `PENDIENTE` en la base de prueba.
 
 **Criterios de aceptación:**
-- [ ] Al aprobar, los datos cambian y el reporte vuelve a Cerrado.
-- [ ] Al rechazar, debo indicar el motivo y los datos no cambian.
-- [ ] Toda rectificación queda en la bitácora con valores anteriores y nuevos.
+- [x] Al aprobar, los datos cambian y el reporte vuelve a Cerrado.
+- [x] Al rechazar, debo indicar el motivo y los datos no cambian.
+- [x] Toda rectificación queda en la bitácora con valores anteriores y nuevos.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 41 a `main`. Backend y frontend, en `specs/41-hu-33-resolver-rectificacion.md`: `POST /rectificaciones/{id}/aprobar` y `POST /rectificaciones/{id}/rechazar`, con el permiso nuevo `RECTIFICACION_RESOLVER` (solo REVISOR, que también recibe `RECTIFICACION_CONSULTAR`). Diferencias con la historia:
+
+- La resuelve cualquier revisor de la DDRISS del reporte, no solo el que lo revisó; el administrador no.
+- Aprobar autoriza y aplica de una vez, en una transacción: el reporte pasa de `CERRADO` a `RECTIFICACION` y de vuelta a `CERRADO` (dos filas de historial, revisadas en `transicion_estado`), las celdas toman la cantidad nueva, `numero_rectificacion` y `version_fila` suben 1, el `total_declarado` de cada vacuna que cambia pasa a ser la suma nueva, y la solicitud pasa directo a `APLICADA` (no queda `AUTORIZADA`). Si una celda ya no tiene la cantidad anterior, responde 409 y no aplica nada.
+- El comentario es opcional al aprobar y obligatorio al rechazar (el motivo). La bitácora lleva `APLICAR_RECTIFICACION` (con la cantidad anterior y la nueva de cada celda) o `RECHAZAR_RECTIFICACION`, además de los `CAMBIO_ESTADO` del reporte.
+- No se recalculan indicadores (HU-36 todavía no existe) ni se corre el motor de validación. Si el campo adicional `total_dosis_declarado` deja de cuadrar, el detalle de la solicitud lo avisa antes de aprobar.
+- Pantalla: en «Rectificaciones», la lista del revisor arranca en pendientes, y el detalle de una pendiente tiene «Aprobar» y «Rechazar» (cada uno con su diálogo), el aviso de totales y el enlace «Ver reporte», cuyo «Volver» regresa a la solicitud.
+- Las solicitudes de la semilla del flujo anterior (la 2 `AUTORIZADA` y el reporte 228 en `RECTIFICACION`; la 3 `PENDIENTE` sin detalle) no se tocaron: la 3 solo se puede rechazar.
+
+Verificado contra la API real el 2026-11-01, después de correr el 05. Como la estadígrafa, «Rectificaciones» abrió en pendientes con las solicitudes 12, 13 y 3; «Ver reporte» abrió el reporte 223 en solo lectura; «Aprobar» sin comentario aplicó la 12 (reporte 223: 1.ª dosis de migrantes 4 → 5 y 3.ª dosis propia 91 → 97), y «Rechazar» la 13 sin motivo mostró el error con el foco en el campo; con motivo quedó `RECHAZADA`. En la base, el 223 quedó `CERRADO` con `numero_rectificacion` 1, `version_fila` 6, las dos filas de historial y su `APLICAR_RECTIFICACION`; el 233 quedó igual (17, `version_fila` 5) con su `RECHAZAR_RECTIFICACION`. Como `cs1206`, «Mis reportes» volvió a ofrecer «Solicitar rectificación» en agosto de 2026 y la lista mostró la 12 `APLICADA`, sin «Aprobar» ni «Rechazar».
 
 #### HU-34. Historial de estados del reporte
 
@@ -1022,6 +1033,8 @@ Verificado contra la API real el 2026-11-01, después de correr el 05. Como `cs1
 | Epidemiología | 8 | S4 | Christian Ramírez |
 
 **Cómo se hará:** Servicio de cálculo en el backend; endpoint `POST /indicadores/corridas`; usa solo reportes cerrados y la vista `v_produccion_atribuida` (Excel 3); guarda en `corrida_calculo` y `resultado_indicador`.
+
+**Nota (2026-11-01, spec 41):** aprobar una rectificación (`POST /rectificaciones/{id}/aprobar`, `aprobarRectificacion` en `modulos/revision/rectificaciones.service.js`) cambia las cantidades de un reporte ya cerrado y no recalcula nada, porque el motor todavía no existe. Al implementarlo, una rectificación aplicada debe disparar una corrida con motivo `RECTIFICACION` para el año y el mes del reporte (y los meses siguientes del acumulado).
 
 **Criterios de aceptación:**
 - [ ] Meta del mes = población ÷ 12 × número de mes, y el avance es dosis acumuladas ÷ meta del mes × 100.

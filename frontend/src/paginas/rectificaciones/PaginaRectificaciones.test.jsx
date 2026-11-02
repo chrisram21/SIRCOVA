@@ -154,3 +154,35 @@ test('una carga fallida muestra el error y «Reintentar» vuelve a pedir la list
   await waitFor(() => expect(screen.getByText('Agosto de 2026')).toBeTruthy())
   expect(listarRectificaciones).toHaveBeenCalledTimes(2)
 })
+
+describe('quien resuelve (SPEC 41)', () => {
+  const RESUELVE = ['RECTIFICACION_CONSULTAR', 'RECTIFICACION_RESOLVER']
+
+  test('sin estado en la URL pide las PENDIENTE, y «Todos los estados» guarda estado=todos', async () => {
+    const router = await montar({ permisos: RESUELVE })
+    expect(listarRectificaciones).toHaveBeenCalledWith({ estado: 'PENDIENTE', pagina: 1, porPagina: 20 })
+    expect(screen.queryByRole('button', { name: 'Limpiar filtros' })).toBeNull()
+
+    fireEvent.change(nativo(), { target: { value: 'todos' } })
+    await waitFor(() => expect(router.state.location.search).toBe('?estado=todos'))
+    await waitFor(() => expect(listarRectificaciones).toHaveBeenLastCalledWith({ pagina: 1, porPagina: 20 }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar filtros' }))
+    await waitFor(() => expect(router.state.location.search).toBe(''))
+    await waitFor(() =>
+      expect(listarRectificaciones).toHaveBeenLastCalledWith({ estado: 'PENDIENTE', pagina: 1, porPagina: 20 }),
+    )
+  })
+
+  test('elegir PENDIENTE no escribe el estado en la URL, y otro estado sí', async () => {
+    const router = await montar({ url: '/rectificaciones?estado=APLICADA', permisos: RESUELVE })
+    expect(listarRectificaciones).toHaveBeenLastCalledWith({ estado: 'APLICADA', pagina: 1, porPagina: 20 })
+    fireEvent.change(nativo(), { target: { value: 'PENDIENTE' } })
+    await waitFor(() => expect(router.state.location.search).toBe(''))
+  })
+
+  test('sin RECTIFICACION_RESOLVER, «todos» en la URL es lo mismo que no filtrar', async () => {
+    await montar({ url: '/rectificaciones?estado=todos' })
+    expect(listarRectificaciones).toHaveBeenCalledWith({ pagina: 1, porPagina: 20 })
+  })
+})

@@ -4055,8 +4055,9 @@ paths:
         Crea una `solicitud_rectificacion` `PENDIENTE` y una fila de `rectificacion_detalle` por celda que cambia,
         en una transacción de MySQL, con una `CREAR` (módulo `RECTIFICACION`, entidad `solicitud_rectificacion`)
         que lleva el objeto completo: `reporteId`, `motivo`, `estado` y `cambios` con cada celda, su cantidad
-        anterior y la nueva. El reporte **no cambia**: sigue `CERRADO` y su `versionFila` no sube. Autorizar,
-        rechazar y aplicar la solicitud es de HU-33.
+        anterior y la nueva. El reporte **no cambia**: sigue `CERRADO` y su `versionFila` no sube. El revisor la
+        aprueba (y la aplica) con `POST /rectificaciones/{id}/aprobar` o la rechaza con
+        `POST /rectificaciones/{id}/rechazar`.
 
         La piden el Personal (reportes de su establecimiento) y el administrador (de los establecimientos de su
         DDRISS). Uno que no existe o está fuera del alcance responde 404.
@@ -4156,7 +4157,7 @@ paths:
       tags: [Revisión]
       summary: Listar las solicitudes de rectificación del alcance del usuario
       description: |
-        El Personal ve las de los reportes de su establecimiento y el administrador las de su DDRISS. Ordenadas
+        El Personal ve las de los reportes de su establecimiento, y el administrador y el revisor las de su DDRISS. Ordenadas
         por fecha de solicitud, de la más reciente a la más antigua, con la forma paginada común. Un parámetro
         inválido, desconocido o repetido responde 400 `ENTRADA_INVALIDA`; una página fuera de rango responde 200
         con `elementos` vacío y el `total` real.
@@ -4194,6 +4195,10 @@ paths:
         Las etiquetas de la dosis y de las dimensiones salen de la versión del esquema fijada en `reporte_vacuna`,
         incluidas las inactivas. Los cambios van en el orden de las vacunas del reporte, la dosis, la procedencia
         y la combinación. Una que no existe o está fuera del alcance del usuario responde 404.
+
+        Una `PENDIENTE` trae además `totales`: las vacunas con cambios cuyo campo adicional
+        `total_dosis_declarado` (el que compara la regla `TOTAL_CUADRA`) ya no cuadraría con la suma de sus celdas
+        después de aplicar. Solo informa; no impide aprobar.
       x-permiso: RECTIFICACION_CONSULTAR
       parameters:
         - { $ref: "#/components/parameters/Id" }
@@ -4207,6 +4212,143 @@ paths:
         "401": { $ref: "#/components/responses/NoAutenticado" }
         "403": { $ref: "#/components/responses/SinPermiso" }
         "404": { $ref: "#/components/responses/NoEncontrado" }
+
+  /rectificaciones/{id}/aprobar:
+    post:
+      tags: [Revisión]
+      summary: Aprobar una solicitud PENDIENTE y aplicar sus cambios al reporte
+      description: |
+        Lo hace cualquier revisor de la DDRISS del reporte. En una transacción de MySQL:
+
+        - el reporte pasa de `CERRADO` a `RECTIFICACION` y de vuelta a `CERRADO`, con las dos transiciones
+          revisadas en `transicion_estado` para el rol y una fila de `historial_estado_reporte` por cada una (los
+          comentarios los arma el backend con el número de rectificación y, en la primera, el comentario del
+          revisor si lo hay);
+        - cada celda de la solicitud toma su cantidad nueva: se actualiza la de `detalle_produccion` o se crea con
+          su `detalle_dimension` si no existía. Cada celda se busca por su vacuna, dosis, procedencia y
+          combinación, y su cantidad actual (0 si no existe) debe seguir siendo la anterior guardada en la
+          solicitud; si no, no se aplica nada. El `total_declarado` de cada vacuna que cambia pasa a ser la suma
+          nueva de sus celdas, como al guardar;
+        - `numero_rectificacion` y `version_fila` del reporte suben 1 (`cerrado_en` no cambia);
+        - la solicitud pasa directo a `APLICADA`, con `resuelto_por`, `comentario_resolucion`, `resuelto_en` y
+          `aplicado_en`.
+
+        Bitácora (módulo `RECTIFICACION`): una `APLICAR_RECTIFICACION` sobre `solicitud_rectificacion` con el
+        estado anterior y el nuevo, el comentario, el número de rectificación y, por celda, la cantidad anterior y
+        la nueva; y una `CAMBIO_ESTADO` sobre `reporte_produccion` por cada transición. No se corren las reglas de
+        validación ni se recalculan los indicadores.
+
+        Los errores se revisan en este orden: cuerpo, solicitud y alcance, estado de la solicitud, estado del
+        reporte, detalle, transiciones y celdas.
+      x-permiso: RECTIFICACION_RESOLVER
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ResolucionRectificacionAprobar" }
+            example:
+              comentario: Se verificó con el libro de vacunación.
+      responses:
+        "200":
+          description: Solicitud `APLICADA` y reporte rectificado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SolicitudRectificacion" }
+        "400":
+          description: El id o el cuerpo no son válidos (comentario de más de 500 caracteres o un campo desconocido)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                comentario:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El comentario no puede tener más de 500 caracteres. }
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: motivo." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: La solicitud ya fue resuelta, el reporte no está cerrado o una celda ya no tiene la cantidad anterior
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                resuelta:
+                  value:
+                    error: { codigo: RECTIFICACION_RESUELTA, mensaje: La solicitud ya fue resuelta. }
+                noCerrado:
+                  value:
+                    error: { codigo: REPORTE_NO_CERRADO, mensaje: Solo se rectifican reportes cerrados. }
+                desactualizada:
+                  value:
+                    error: { codigo: RECTIFICACION_DESACTUALIZADA, mensaje: Los datos del reporte cambiaron desde la solicitud; rechácela y pida otra. }
+        "422":
+          description: La solicitud no tiene cambios (datos anteriores al SPEC 40) o el rol no tiene las transiciones
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                sinCambios:
+                  value:
+                    error: { codigo: RECTIFICACION_SIN_CAMBIOS, mensaje: La solicitud no tiene cambios que aplicar. }
+                noPermitida:
+                  value:
+                    error: { codigo: TRANSICION_NO_PERMITIDA, mensaje: El reporte no puede pasar de Cerrado a Rectificación. }
+
+  /rectificaciones/{id}/rechazar:
+    post:
+      tags: [Revisión]
+      summary: Rechazar una solicitud PENDIENTE con un motivo; el reporte no cambia
+      description: |
+        Lo hace cualquier revisor de la DDRISS del reporte. La solicitud pasa a `RECHAZADA` con `resuelto_por`,
+        `comentario_resolucion` (el motivo) y `resuelto_en`; el reporte y sus celdas no cambian, y el estado del
+        reporte no se revisa (también se rechaza una solicitud sin detalle). Bitácora: una
+        `RECHAZAR_RECTIFICACION` (módulo `RECTIFICACION`) sobre `solicitud_rectificacion` con el estado anterior y
+        el nuevo, y el motivo.
+
+        Los errores se revisan en este orden: cuerpo, solicitud y alcance, y estado de la solicitud.
+      x-permiso: RECTIFICACION_RESOLVER
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ResolucionRectificacionRechazar" }
+            example:
+              comentario: El libro de vacunación no muestra esas dosis.
+      responses:
+        "200":
+          description: Solicitud `RECHAZADA`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SolicitudRectificacion" }
+        "400":
+          description: El id o el cuerpo no son válidos (sin motivo, de más de 500 caracteres o un campo desconocido)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                comentario:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El motivo del rechazo es obligatorio. }
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: motivo." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: La solicitud ya fue resuelta
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: RECTIFICACION_RESUELTA, mensaje: La solicitud ya fue resuelta. }
 
   # ---------------------------------------------------------------- Indicadores
   /indicadores/corridas:
@@ -6731,14 +6873,43 @@ components:
         resueltoPor:
           allOf: [{ $ref: "#/components/schemas/RevisorResumen" }]
           nullable: true
-          description: "`null` mientras está `PENDIENTE` (lo escribe HU-33)"
-        comentarioResolucion: { type: string, nullable: true, example: null }
+          description: "`null` mientras está `PENDIENTE`; el revisor que la aprobó o rechazó"
+        comentarioResolucion: { type: string, nullable: true, description: "El comentario al aprobar (opcional) o el motivo del rechazo", example: null }
         resueltoEn: { type: string, format: date-time, nullable: true, example: null }
         aplicadoEn: { type: string, format: date-time, nullable: true, example: null }
         cambios:
           type: array
-          minItems: 1
+          description: Vacía solo en solicitudes anteriores al SPEC 40
           items: { $ref: "#/components/schemas/CambioRectificacion" }
+        totales:
+          type: array
+          description: |
+            Solo en una `PENDIENTE`: las vacunas con cambios cuyo total declarado no coincidiría con la suma de sus
+            celdas después de aplicar. Vacía si todo cuadra.
+          items: { $ref: "#/components/schemas/TotalRectificacion" }
+
+    TotalRectificacion:
+      type: object
+      required: [vacunaId, vacuna, totalDeclarado, sumaActual, sumaConCambios]
+      properties:
+        vacunaId: { type: integer, example: 3 }
+        vacuna: { type: string, example: Hexavalente }
+        totalDeclarado: { type: integer, minimum: 0, description: "El campo adicional `total_dosis_declarado`", example: 201 }
+        sumaActual: { type: integer, minimum: 0, example: 201 }
+        sumaConCambios: { type: integer, minimum: 0, example: 207 }
+
+    ResolucionRectificacionAprobar:
+      type: object
+      additionalProperties: false
+      properties:
+        comentario: { type: string, maxLength: 500, description: Opcional; se recorta y vacío cuenta como ausente, example: Se verificó con el libro de vacunación. }
+
+    ResolucionRectificacionRechazar:
+      type: object
+      additionalProperties: false
+      required: [comentario]
+      properties:
+        comentario: { type: string, minLength: 1, maxLength: 500, description: El motivo del rechazo; se recorta, example: El libro de vacunación no muestra esas dosis. }
 
     PaginaRectificaciones:
       description: Página de solicitudes de rectificación, con la forma paginada común (ver `PaginaUsuarios`)

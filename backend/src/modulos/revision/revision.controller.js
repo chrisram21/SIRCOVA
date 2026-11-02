@@ -56,3 +56,11 @@ export async function listarRectificaciones(req, res) {
 export async function obtenerRectificacion(req, res) {
   res.json(await rectificacionesService.obtenerRectificacion(req.params.id, req.usuario));
 }
+
+export async function aprobarRectificacion(req, res) {
+  res.json(await rectificacionesService.aprobarRectificacion(req.params.id, req.body, req));
+}
+
+export async function rechazarRectificacion(req, res) {
+  res.json(await rectificacionesService.rechazarRectificacion(req.params.id, req.body, req));
+}

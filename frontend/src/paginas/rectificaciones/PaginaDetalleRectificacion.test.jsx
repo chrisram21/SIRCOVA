@@ -1,10 +1,18 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { toast } from 'sonner'
 import { ErrorApi } from '@/api/cliente.js'
-import { obtenerRectificacion } from '@/api/rectificaciones.js'
+import { aprobarRectificacion, obtenerRectificacion, rechazarRectificacion } from '@/api/rectificaciones.js'
+import { guardarSesion } from '@/api/sesion.js'
+import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 import PaginaDetalleRectificacion from './PaginaDetalleRectificacion.jsx'
 
-vi.mock('@/api/rectificaciones.js', () => ({ obtenerRectificacion: vi.fn() }))
+vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
+vi.mock('@/api/rectificaciones.js', () => ({
+  obtenerRectificacion: vi.fn(),
+  aprobarRectificacion: vi.fn(),
+  rechazarRectificacion: vi.fn(),
+}))
 
 const SOLICITUD = {
   id: 7,
@@ -59,11 +67,38 @@ const SOLICITUD = {
   ],
 }
 
-function montar({ state } = {}) {
+const REVISOR = ['RECTIFICACION_CONSULTAR', 'RECTIFICACION_RESOLVER', 'REPORTE_REVISAR']
+
+function crearSesion(permisos) {
+  const codificar = (objeto) => btoa(JSON.stringify(objeto)).replace(/=+$/, '')
+  const exp = Math.floor(Date.now() / 1000) + 3600
+  return {
+    token: `${codificar({ alg: 'HS256', typ: 'JWT' })}.${codificar({ sub: '2', exp })}.firma`,
+    usuario: {
+      id: 2,
+      nombreUsuario: 'estadigrafa',
+      rol: 'REVISOR',
+      permisos,
+      empleado: { nombres: 'Ana', apellidos: 'Pérez', ddrissId: 1, establecimientoId: null, municipioId: null },
+    },
+  }
+}
+
+// Sin permisos se monta sin sesión, como en el SPEC 40.
+function montar({ state, permisos } = {}) {
+  if (permisos) guardarSesion(crearSesion(permisos))
+  const pagina = permisos ? (
+    <ProveedorSesion>
+      <PaginaDetalleRectificacion />
+    </ProveedorSesion>
+  ) : (
+    <PaginaDetalleRectificacion />
+  )
   const router = createMemoryRouter(
     [
-      { path: '/rectificaciones/:id', element: <PaginaDetalleRectificacion /> },
+      { path: '/rectificaciones/:id', element: pagina },
       { path: '/rectificaciones', element: <p>Lista</p> },
+      { path: '/revision/reportes/:id', element: <p>Revisar reporte</p> },
     ],
     { initialEntries: [{ pathname: '/rectificaciones/7', state }] },
   )
@@ -139,4 +174,157 @@ test('un error muestra el mensaje y «Reintentar» vuelve a pedir la solicitud',
   fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Rectificación de agosto de 2026' })).toBeTruthy())
   expect(obtenerRectificacion).toHaveBeenCalledTimes(2)
+})
+
+describe('resolver la solicitud (SPEC 41)', () => {
+  const RESUELTA = {
+    resueltoPor: { id: 2, nombre: 'Ana Pérez' },
+    resueltoEn: '2026-11-02T15:00:00.000Z',
+  }
+  const APLICADA = {
+    ...SOLICITUD,
+    ...RESUELTA,
+    estado: 'APLICADA',
+    aplicadoEn: '2026-11-02T15:00:00.000Z',
+    comentarioResolucion: 'Verificado con el libro.',
+  }
+  const RECHAZADA = { ...SOLICITUD, ...RESUELTA, estado: 'RECHAZADA', comentarioResolucion: 'El libro no muestra esas dosis.' }
+  const dialogo = () => within(screen.getByRole('alertdialog'))
+
+  async function abrir(accion) {
+    montar({ permisos: REVISOR })
+    fireEvent.click(await screen.findByRole('button', { name: accion }))
+    return dialogo()
+  }
+
+  test('«Aprobar» y «Rechazar» aparecen con RECTIFICACION_RESOLVER y la solicitud PENDIENTE', async () => {
+    montar({ permisos: REVISOR })
+    expect(await screen.findByRole('button', { name: 'Aprobar' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Rechazar' })).toBeTruthy()
+  })
+
+  test('sin RECTIFICACION_RESOLVER no aparecen las acciones', async () => {
+    montar({ permisos: ['RECTIFICACION_CONSULTAR', 'RECTIFICACION_SOLICITAR'] })
+    await screen.findByRole('heading', { name: 'Rectificación de agosto de 2026' })
+    expect(screen.queryByRole('button', { name: 'Aprobar' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Rechazar' })).toBeNull()
+  })
+
+  test('una solicitud ya resuelta no ofrece las acciones', async () => {
+    obtenerRectificacion.mockResolvedValue(RECHAZADA)
+    montar({ permisos: REVISOR })
+    await screen.findByText('Rechazada')
+    expect(screen.queryByRole('button', { name: 'Aprobar' })).toBeNull()
+  })
+
+  test('aprobar manda el comentario recortado, avisa y muestra la solicitud aplicada', async () => {
+    aprobarRectificacion.mockResolvedValue(APLICADA)
+    const enDialogo = await abrir('Aprobar')
+    expect(
+      enDialogo.getByText(/Se cambiarán 3 celdas del reporte de agosto de 2026 de Centro de Salud San Marcos/),
+    ).toBeTruthy()
+
+    fireEvent.change(enDialogo.getByLabelText('Comentario (opcional)'), {
+      target: { value: '  Verificado con el libro.  ' },
+    })
+    fireEvent.click(enDialogo.getByRole('button', { name: 'Aprobar y aplicar' }))
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Rectificación aplicada.'))
+    expect(aprobarRectificacion).toHaveBeenCalledTimes(1)
+    expect(aprobarRectificacion).toHaveBeenCalledWith(7, { comentario: 'Verificado con el libro.' })
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(screen.getByText('Aplicada')).toBeTruthy()
+    expect(screen.getByText('Verificado con el libro.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Aprobar' })).toBeNull()
+  })
+
+  test('aprobar sin comentario no lo manda', async () => {
+    aprobarRectificacion.mockResolvedValue(APLICADA)
+    const enDialogo = await abrir('Aprobar')
+    fireEvent.click(enDialogo.getByRole('button', { name: 'Aprobar y aplicar' }))
+    await waitFor(() => expect(aprobarRectificacion).toHaveBeenCalledWith(7, { comentario: undefined }))
+  })
+
+  test('rechazar sin motivo muestra el error, pone el foco en el campo y no llama a la API', async () => {
+    const enDialogo = await abrir('Rechazar')
+    fireEvent.change(enDialogo.getByLabelText('Motivo del rechazo'), { target: { value: '   ' } })
+    fireEvent.click(enDialogo.getByRole('button', { name: 'Rechazar' }))
+
+    expect(enDialogo.getByText('Escriba el motivo del rechazo.')).toBeTruthy()
+    const campo = enDialogo.getByLabelText('Motivo del rechazo')
+    expect(campo.getAttribute('aria-invalid')).toBe('true')
+    expect(document.activeElement).toBe(campo)
+    expect(rechazarRectificacion).not.toHaveBeenCalled()
+  })
+
+  test('rechazar con motivo lo manda recortado, avisa y muestra la solicitud rechazada', async () => {
+    rechazarRectificacion.mockResolvedValue(RECHAZADA)
+    const enDialogo = await abrir('Rechazar')
+    fireEvent.change(enDialogo.getByLabelText('Motivo del rechazo'), {
+      target: { value: '  El libro no muestra esas dosis. ' },
+    })
+    fireEvent.click(enDialogo.getByRole('button', { name: 'Rechazar' }))
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Solicitud rechazada.'))
+    expect(rechazarRectificacion).toHaveBeenCalledWith(7, { comentario: 'El libro no muestra esas dosis.' })
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(screen.getByText('Rechazada')).toBeTruthy()
+  })
+
+  test('un 409 se muestra en el diálogo con «Recargar», que lo cierra y vuelve a pedir la solicitud', async () => {
+    aprobarRectificacion.mockRejectedValue(
+      new ErrorApi(
+        409,
+        'RECTIFICACION_DESACTUALIZADA',
+        'Los datos del reporte cambiaron desde la solicitud; rechácela y pida otra.',
+      ),
+    )
+    const enDialogo = await abrir('Aprobar')
+    fireEvent.click(enDialogo.getByRole('button', { name: 'Aprobar y aplicar' }))
+
+    expect(await enDialogo.findByText(/Los datos del reporte cambiaron desde la solicitud/)).toBeTruthy()
+    fireEvent.click(enDialogo.getByRole('button', { name: 'Recargar' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    await waitFor(() => expect(obtenerRectificacion).toHaveBeenCalledTimes(2))
+  })
+
+  test('otro error se muestra en el diálogo sin «Recargar»', async () => {
+    rechazarRectificacion.mockRejectedValue(new ErrorApi(500, 'ERROR_INTERNO', 'Ocurrió un error interno.'))
+    const enDialogo = await abrir('Rechazar')
+    fireEvent.change(enDialogo.getByLabelText('Motivo del rechazo'), { target: { value: 'No hay respaldo.' } })
+    fireEvent.click(enDialogo.getByRole('button', { name: 'Rechazar' }))
+
+    expect(await enDialogo.findByText('Ocurrió un error interno.')).toBeTruthy()
+    expect(enDialogo.queryByRole('button', { name: 'Recargar' })).toBeNull()
+    expect(enDialogo.getByRole('button', { name: 'Rechazar' }).hasAttribute('disabled')).toBe(false)
+  })
+
+  test('con totales avisa que el total declarado ya no cuadrará', async () => {
+    obtenerRectificacion.mockResolvedValue({
+      ...SOLICITUD,
+      totales: [{ vacunaId: 3, vacuna: 'Hexavalente', totalDeclarado: 201, sumaActual: 201, sumaConCambios: 207 }],
+    })
+    montar({ permisos: REVISOR })
+    expect(
+      await screen.findByText('Hexavalente: el total declarado (201) ya no cuadrará con la suma (201 → 207).'),
+    ).toBeTruthy()
+  })
+
+  test('«Ver reporte» lleva a la revisión del reporte con REPORTE_REVISAR y pide regresar a la solicitud', async () => {
+    const router = montar({ permisos: REVISOR, state: { volverA: '?estado=todos' } })
+    const enlace = await screen.findByRole('link', { name: 'Ver reporte' })
+    expect(enlace.getAttribute('href')).toBe('/revision/reportes/412')
+
+    fireEvent.click(enlace)
+    await waitFor(() => expect(router.state.location.pathname).toBe('/revision/reportes/412'))
+    expect(router.state.location.state).toEqual({
+      regresarA: { ruta: '/rectificaciones/7', texto: 'Volver a la solicitud', estado: { volverA: '?estado=todos' } },
+    })
+  })
+
+  test('sin REPORTE_REVISAR no aparece «Ver reporte»', async () => {
+    montar({ permisos: ['RECTIFICACION_CONSULTAR'] })
+    await screen.findByRole('heading', { name: 'Rectificación de agosto de 2026' })
+    expect(screen.queryByRole('link', { name: 'Ver reporte' })).toBeNull()
+  })
 })

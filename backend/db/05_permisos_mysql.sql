@@ -156,6 +156,10 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('RECTIFICACION_SOLICITAR',   'RECTIFICACION',           'Solicitar la rectificación de un reporte cerrado de su ámbito'),
  ('RECTIFICACION_CONSULTAR',   'RECTIFICACION',           'Consultar las solicitudes de rectificación de su ámbito');
 
+-- SPEC 41 (HU-33): aprobar o rechazar las solicitudes de rectificación
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('RECTIFICACION_RESOLVER',    'RECTIFICACION',           'Aprobar o rechazar las solicitudes de rectificación de su DDRISS');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -302,6 +306,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'ADMINISTRADOR'
    AND p.codigo = 'REPORTE_CONSULTAR';
+
+-- SPEC 41 (HU-33): el Revisor consulta y resuelve las rectificaciones de su DDRISS
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'REVISOR'
+   AND p.codigo IN ('RECTIFICACION_CONSULTAR', 'RECTIFICACION_RESOLVER');
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

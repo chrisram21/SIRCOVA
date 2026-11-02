@@ -17,7 +17,17 @@ export function listarRectificaciones({ estado, pagina, porPagina } = {}) {
   return solicitar(texto ? `/rectificaciones?${texto}` : '/rectificaciones')
 }
 
-// Con el valor anterior y el nuevo de cada celda.
+// Con el valor anterior y el nuevo de cada celda; una PENDIENTE trae también `totales`.
 export function obtenerRectificacion(id) {
   return solicitar(`/rectificaciones/${id}`)
+}
+
+// SPEC 41: aplica los cambios y deja el reporte CERRADO; el comentario es opcional. Responde la solicitud APLICADA.
+export function aprobarRectificacion(id, { comentario } = {}) {
+  return solicitar(`/rectificaciones/${id}/aprobar`, { metodo: 'POST', cuerpo: comentario ? { comentario } : {} })
+}
+
+// El motivo (comentario) es obligatorio; el reporte no cambia. Responde la solicitud RECHAZADA.
+export function rechazarRectificacion(id, { comentario }) {
+  return solicitar(`/rectificaciones/${id}/rechazar`, { metodo: 'POST', cuerpo: { comentario } })
 }

@@ -269,7 +269,7 @@ const estadoParaBitacora = (celdas, datosAdicionales, totalDeclarado) => ({
   totalDeclarado,
 });
 
-async function escribirCeldas(conexion, { repVacId, actuales, pedidas, dosis, usuarioId }) {
+export async function escribirCeldas(conexion, { repVacId, actuales, pedidas, dosis, usuarioId }) {
   const porLlave = new Map(actuales.map((c) => [llaveDeCelda(c), c]));
   const llavesPedidas = new Set(pedidas.map(llaveDeCelda));
   const borradas = actuales.filter((c) => !llavesPedidas.has(llaveDeCelda(c))).map((c) => c.id);

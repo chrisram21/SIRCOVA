@@ -21,21 +21,25 @@ const TODOS = 'todos'
 
 const entero = (texto, minimo) => (/^\d+$/.test(texto ?? '') && Number(texto) >= minimo ? Number(texto) : undefined)
 
-// Un valor inválido en la URL se ignora: a la API solo llegan filtros válidos.
-export function filtrosDeUrl(parametros) {
+// Un valor inválido en la URL se ignora: a la API solo llegan filtros válidos. Sin estado en la URL vale el inicial
+// (PENDIENTE para quien resuelve), y "todos" quita el filtro.
+export function filtrosDeUrl(parametros, estadoInicial) {
   const porPagina = Number(parametros.get('porPagina'))
+  const estado = parametros.get('estado')
   const filtros = {
-    estado: parametros.get('estado') in ESTADOS_RECTIFICACION ? parametros.get('estado') : undefined,
+    estado: estado in ESTADOS_RECTIFICACION ? estado : estado === TODOS ? undefined : estadoInicial,
     pagina: entero(parametros.get('pagina'), 1) ?? 1,
     porPagina: FILAS_POR_PAGINA.includes(porPagina) ? porPagina : POR_PAGINA_INICIAL,
   }
   return Object.fromEntries(Object.entries(filtros).filter(([, valor]) => valor !== undefined))
 }
 
-// Los valores por defecto no se escriben en la URL.
-function consultaDe(filtros) {
+// Los valores por defecto no se escriben en la URL; sin filtro de estado y con un estado inicial, va "todos".
+function consultaDe(filtros, estadoInicial) {
   const consulta = new URLSearchParams()
+  if ((filtros.estado ?? TODOS) !== (estadoInicial ?? TODOS)) consulta.set('estado', filtros.estado ?? TODOS)
   for (const [nombre, valor] of Object.entries(filtros)) {
+    if (nombre === 'estado') continue
     if (valor === undefined || valor === '') continue
     if (nombre === 'pagina' && valor === 1) continue
     if (nombre === 'porPagina' && valor === POR_PAGINA_INICIAL) continue
@@ -47,9 +51,11 @@ function consultaDe(filtros) {
 export default function PaginaRectificaciones() {
   const { pathname, search } = useLocation()
   const [parametros, setParametros] = useSearchParams()
-  const filtros = filtrosDeUrl(parametros)
-  const clave = consultaDe(filtros)
-  const puedeSolicitar = useSesion()?.tienePermiso('RECTIFICACION_SOLICITAR') ?? false
+  const sesion = useSesion()
+  const puedeSolicitar = sesion?.tienePermiso('RECTIFICACION_SOLICITAR') ?? false
+  const estadoInicial = sesion?.tienePermiso('RECTIFICACION_RESOLVER') ? 'PENDIENTE' : undefined
+  const filtros = filtrosDeUrl(parametros, estadoInicial)
+  const clave = consultaDe(filtros, estadoInicial)
 
   const [resultado, setResultado] = useState(null)
   const [cargando, setCargando] = useState(true)
@@ -58,18 +64,18 @@ export default function PaginaRectificaciones() {
 
   // Cualquier cambio que no sea de página vuelve a la página 1.
   function irA(cambios) {
-    setParametros(new URLSearchParams(consultaDe({ ...filtros, pagina: 1, ...cambios })))
+    setParametros(new URLSearchParams(consultaDe({ ...filtros, pagina: 1, ...cambios }, estadoInicial)))
   }
 
   function hrefDe(pagina) {
-    const consulta = consultaDe({ ...filtros, pagina })
+    const consulta = consultaDe({ ...filtros, pagina }, estadoInicial)
     return consulta ? `${pathname}?${consulta}` : pathname
   }
 
   useEffect(() => {
     // Al cambiar la URL antes de que llegue la respuesta, la respuesta vieja se descarta.
     let vigente = true
-    const pedidos = filtrosDeUrl(new URLSearchParams(clave))
+    const pedidos = filtrosDeUrl(new URLSearchParams(clave), estadoInicial)
     setCargando(true)
     setErrorCarga(null)
     listarRectificaciones(pedidos)
@@ -77,7 +83,7 @@ export default function PaginaRectificaciones() {
         if (!vigente) return
         if (respuesta.elementos.length === 0 && respuesta.total > 0) {
           const ultima = Math.ceil(respuesta.total / respuesta.porPagina)
-          setParametros(new URLSearchParams(consultaDe({ ...pedidos, pagina: ultima })), { replace: true })
+          setParametros(new URLSearchParams(consultaDe({ ...pedidos, pagina: ultima }, estadoInicial)), { replace: true })
           return
         }
         setResultado(respuesta)
@@ -131,7 +137,7 @@ export default function PaginaRectificaciones() {
             ))}
           </SelectContent>
         </Select>
-        {filtros.estado && (
+        {(filtros.estado ?? TODOS) !== (estadoInicial ?? TODOS) && (
           <Button type="button" variant="ghost" onClick={() => setParametros(new URLSearchParams())}>
             Limpiar filtros
           </Button>

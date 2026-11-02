@@ -30,5 +30,17 @@ router.get(
   requierePermiso('RECTIFICACION_CONSULTAR'),
   revisionController.obtenerRectificacion,
 );
+router.post(
+  '/rectificaciones/:id/aprobar',
+  autenticar,
+  requierePermiso('RECTIFICACION_RESOLVER'),
+  revisionController.aprobarRectificacion,
+);
+router.post(
+  '/rectificaciones/:id/rechazar',
+  autenticar,
+  requierePermiso('RECTIFICACION_RESOLVER'),
+  revisionController.rechazarRectificacion,
+);
 
 export default router;
