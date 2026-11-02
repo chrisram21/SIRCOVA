@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ClipboardPen } from 'lucide-react'
+import { ClipboardPen, History } from 'lucide-react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -16,6 +16,7 @@ import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import { cn } from '@/lib/utils'
 import { EDITABLES_EN_CIERRE } from '@/paginas/registro/mesesAbiertos.js'
 import PaginacionUsuarios, { FILAS_POR_PAGINA } from '@/paginas/usuarios/PaginacionUsuarios.jsx'
+import DialogoHistorialReporte from './DialogoHistorialReporte.jsx'
 
 const POR_PAGINA_INICIAL = 20
 // Radix Select no acepta '' como valor de una opción; "todos" equivale a no filtrar.
@@ -99,6 +100,7 @@ export default function PaginaMisReportes() {
   const puedeRectificar = useSesion()?.tienePermiso('RECTIFICACION_SOLICITAR') ?? false
   // reporteId → id de su solicitud de rectificación PENDIENTE (SPEC 40).
   const [pendientes, setPendientes] = useState(new Map())
+  const [historialDe, setHistorialDe] = useState(null)
 
   // Cualquier cambio que no sea de página vuelve a la página 1.
   function irA(cambios) {
@@ -275,7 +277,16 @@ export default function PaginaMisReportes() {
                         <InsigniaEstadoReporte estado={reporte.estado} />
                       </TableCell>
                       <TableCell>{aFechaHora(reporte.estadoDesde)}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="space-x-2 text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Historial de ${nombreDelMes(reporte.periodo).toLowerCase()}`}
+                          onClick={() => setHistorialDe(reporte)}
+                        >
+                          <History />
+                          Historial
+                        </Button>
                         {/* /registro solo carga estos meses (mesesAbiertos.js). */}
                         {(reporte.periodo.estado === 'ABIERTO' ||
                           (reporte.periodo.estado === 'EN_CIERRE' && EDITABLES_EN_CIERRE.includes(reporte.estado))) && (
@@ -309,6 +320,7 @@ export default function PaginaMisReportes() {
           />
         </div>
       )}
+      <DialogoHistorialReporte reporte={historialDe} alCerrar={() => setHistorialDe(null)} />
     </section>
   )
 }

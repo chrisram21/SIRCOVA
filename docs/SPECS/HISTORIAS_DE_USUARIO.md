@@ -1002,9 +1002,16 @@ Verificado contra la API real el 2026-11-01, después de correr el 05. Como la e
 **Nota (2026-10-31, spec 37):** el historial ya guarda cada creación, envío, asignación, devolución y corrección (`CORRECCION_SOLICITADA → BORRADOR`), cada una con su usuario, en `historial_estado_reporte`; lo comprueba `backend/tests/corregirReporte.test.js` con el ciclo completo. `GET /reportes/{id}/historial` sigue provisional en el contrato (sin implementar).
 
 **Criterios de aceptación:**
-- [ ] Cada cambio de estado muestra estado anterior, nuevo, usuario, fecha y comentario.
-- [ ] El historial no se puede editar ni borrar.
-- [ ] El personal del establecimiento puede ver el historial de sus propios reportes.
+- [x] Cada cambio de estado muestra estado anterior, nuevo, usuario, fecha y comentario.
+- [x] El historial no se puede editar ni borrar.
+- [x] El personal del establecimiento puede ver el historial de sus propios reportes.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 42 a `main`. Backend y frontend, en `specs/42-hu-34-historial-de-estados-del-reporte.md`: `GET /reportes/{id}/historial` con `REPORTE_CONSULTAR` (sin permisos nuevos), por ámbito, del más antiguo al más reciente. Diferencias con la historia:
+
+- «No se puede editar ni borrar»: la base impide el `UPDATE` con un trigger (`09_historial_inmutable_mysql.sql`), pero no el `DELETE`, porque las pruebas borran el historial de sus reportes al limpiar; la API no tiene ningún endpoint que modifique o borre el historial.
+- Cada cambio muestra el usuario con su rol **actual**: la tabla no guarda el que tenía en ese momento.
+- Solo cambios de estado: la reasignación de revisor no escribe historial y no aparece.
+- Pantallas: una tarjeta «Historial de estados» en «Revisar reporte» (el revisor, en cualquier estado), un botón «Historial» con diálogo en cada fila de «Mis reportes» (el Personal, también en los meses cerrados) y una tarjeta plegable en la captura, que pide el historial al desplegarse. El administrador puede usar el endpoint, pero no tiene pantalla.
 
 ### Sprint 4 (24/10 – 02/11): Indicadores, análisis y visualización
 

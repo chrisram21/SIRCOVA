@@ -51,5 +51,11 @@ router.get(
   requierePermiso('REPORTE_CONSULTAR'),
   produccionController.listarObservaciones,
 );
+router.get(
+  '/reportes/:id/historial',
+  autenticar,
+  requierePermiso('REPORTE_CONSULTAR'),
+  produccionController.listarHistorial,
+);
 
 export default router;

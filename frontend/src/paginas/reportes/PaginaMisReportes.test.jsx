@@ -2,14 +2,14 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { listarPeriodos } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
-import { listarReportes } from '@/api/produccion.js'
+import { listarHistorial, listarReportes } from '@/api/produccion.js'
 import { listarRectificaciones } from '@/api/rectificaciones.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 import PaginaMisReportes from './PaginaMisReportes.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
-vi.mock('@/api/produccion.js', () => ({ listarReportes: vi.fn() }))
+vi.mock('@/api/produccion.js', () => ({ listarReportes: vi.fn(), listarHistorial: vi.fn() }))
 vi.mock('@/api/catalogos.js', () => ({ listarPeriodos: vi.fn() }))
 vi.mock('@/api/rectificaciones.js', () => ({ listarRectificaciones: vi.fn() }))
 
@@ -264,5 +264,66 @@ describe('rectificación (SPEC 40)', () => {
   test('un reporte aprobado, que todavía no está cerrado, no ofrece la rectificación', async () => {
     await abrirConSesion(CON_PERMISO)
     expect(within(fila('Agosto de 2026')).queryByRole('link', { name: 'Solicitar rectificación' })).toBeNull()
+  })
+})
+
+describe('historial (SPEC 42)', () => {
+  const HISTORIAL = [
+    {
+      id: 1,
+      estadoAnterior: null,
+      estadoNuevo: 'BORRADOR',
+      usuario: { id: 13, nombre: 'Marta López', rol: { codigo: 'ESTABLECIMIENTO', nombre: 'Personal del establecimiento' } },
+      fecha: '2026-08-03T15:00:00.000Z',
+      comentario: null,
+    },
+    {
+      id: 2,
+      estadoAnterior: 'APROBADO',
+      estadoNuevo: 'CERRADO',
+      usuario: { id: 2, nombre: 'Ana Pérez', rol: { codigo: 'REVISOR', nombre: 'Estadígrafa / revisor DDRISS' } },
+      fecha: '2026-09-15T15:00:00.000Z',
+      comentario: 'Cierre del periodo.',
+    },
+  ]
+
+  beforeEach(() => {
+    listarReportes.mockResolvedValue(respuesta(REPORTES))
+  })
+
+  test('«Historial» aparece en cada fila, también en un mes cerrado y sin «Abrir»', async () => {
+    await abrir()
+    const filas = screen.getAllByRole('row').slice(1)
+    expect(filas).toHaveLength(3)
+    for (const fila of filas) expect(within(fila).getByRole('button', { name: /^Historial de / })).toBeTruthy()
+    const agosto = filas[2]
+    expect(within(agosto).queryByRole('link', { name: 'Abrir' })).toBeNull()
+  })
+
+  test('al pulsarlo abre el diálogo, pide una vez el historial de ese reporte y lo muestra', async () => {
+    listarHistorial.mockResolvedValue(HISTORIAL)
+    await abrir()
+    fireEvent.click(screen.getByRole('button', { name: 'Historial de agosto de 2026' }))
+
+    const dialogo = within(await screen.findByRole('dialog'))
+    expect(dialogo.getByText('Historial · agosto de 2026')).toBeTruthy()
+    const filas = within(await dialogo.findByRole('list', { name: 'Historial de estados' })).getAllByRole('listitem')
+    expect(filas).toHaveLength(2)
+    expect(filas[1].textContent).toContain('Cierre del periodo.')
+    expect(listarHistorial).toHaveBeenCalledTimes(1)
+    expect(listarHistorial).toHaveBeenCalledWith(240)
+  })
+
+  test('si falla, el diálogo muestra el error y «Reintentar» lo vuelve a pedir', async () => {
+    listarHistorial.mockRejectedValueOnce(new ErrorApi(500, 'ERROR_INTERNO', 'Falló el servidor.')).mockResolvedValue(HISTORIAL)
+    await abrir()
+    fireEvent.click(screen.getByRole('button', { name: 'Historial de octubre de 2026' }))
+
+    const dialogo = within(await screen.findByRole('dialog'))
+    expect(await dialogo.findByText('No se pudo cargar el historial: Falló el servidor.')).toBeTruthy()
+    fireEvent.click(dialogo.getByRole('button', { name: 'Reintentar' }))
+    expect(await dialogo.findByRole('list', { name: 'Historial de estados' })).toBeTruthy()
+    expect(listarHistorial).toHaveBeenCalledTimes(2)
+    expect(listarHistorial).toHaveBeenLastCalledWith(287)
   })
 })

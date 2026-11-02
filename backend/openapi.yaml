@@ -3928,10 +3928,67 @@ paths:
     get:
       tags: [Revisión]
       summary: Historial de estados del reporte
+      description: |
+        Los cambios de estado del reporte, del más antiguo al más reciente (a igual fecha, por id: la
+        rectificación y el cierre del mes insertan filas en el mismo segundo). La primera fila es la creación
+        (`estadoAnterior: null`).
+
+        Las filas se escriben solo al crear el reporte, con `POST /reportes/{id}/transiciones`, al cerrar el mes
+        (`POST /periodos/{id}/cerrar`) y al aplicar una rectificación; la API no tiene ninguna operación para
+        modificarlas ni borrarlas, y la base impide el `UPDATE` (trigger del script `09`). El rol del usuario es
+        el que tiene **hoy** su cuenta: la tabla no guarda el de ese momento.
+
+        Uno que no existe o está fuera del alcance del usuario (para el Personal, de otro establecimiento; para el
+        Revisor y el administrador, de otra DDRISS) responde 404.
+      x-permiso: REPORTE_CONSULTAR
       parameters:
         - { $ref: "#/components/parameters/Id" }
       responses:
-        "200": { description: "Lista de cambios de estado con usuario, fecha y comentario" }
+        "200":
+          description: Los cambios de estado
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CambioEstadoReporte" }
+              example:
+                - id: 1520
+                  estadoAnterior: null
+                  estadoNuevo: BORRADOR
+                  usuario:
+                    id: 14
+                    nombre: Ana Pérez
+                    rol: { codigo: ESTABLECIMIENTO, nombre: Personal del establecimiento }
+                  fecha: "2026-10-02T15:10:00.000Z"
+                  comentario: null
+                - id: 1534
+                  estadoAnterior: BORRADOR
+                  estadoNuevo: ENVIADO
+                  usuario:
+                    id: 14
+                    nombre: Ana Pérez
+                    rol: { codigo: ESTABLECIMIENTO, nombre: Personal del establecimiento }
+                  fecha: "2026-10-05T21:42:00.000Z"
+                  comentario: null
+                - id: 1541
+                  estadoAnterior: ENVIADO
+                  estadoNuevo: EN_REVISION
+                  usuario:
+                    id: 2
+                    nombre: María López
+                    rol: { codigo: REVISOR, nombre: Estadígrafa / revisor DDRISS }
+                  fecha: "2026-10-06T14:05:00.000Z"
+                  comentario: null
+        "400":
+          description: El id no es válido o hay un parámetro de consulta
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: estado." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
 
   /reportes/{id}/observaciones:
     get:
@@ -6285,6 +6342,32 @@ components:
         creadoEn: { type: string, format: date-time, example: "2026-10-31T15:10:00.000Z" }
         atendida: { type: boolean, description: "Pasa a `true` al reenviar el reporte después de la devolución", example: false }
         atendidaEn: { type: string, format: date-time, nullable: true, description: "Cuándo se reenvió; `null` si está pendiente", example: null }
+
+    CambioEstadoReporte:
+      type: object
+      required: [id, estadoAnterior, estadoNuevo, usuario, fecha, comentario]
+      properties:
+        id: { type: integer, description: "`historial_estado_reporte.id`", example: 1534 }
+        estadoAnterior:
+          allOf: [{ $ref: "#/components/schemas/EstadoReporte" }]
+          nullable: true
+          description: "`null` en la creación del reporte"
+        estadoNuevo: { $ref: "#/components/schemas/EstadoReporte" }
+        usuario:
+          type: object
+          required: [id, nombre, rol]
+          properties:
+            id: { type: integer, description: "`usuario.id`", example: 14 }
+            nombre: { type: string, description: Nombres y apellidos del empleado, example: Ana Pérez }
+            rol:
+              type: object
+              description: El rol actual de la cuenta
+              required: [codigo, nombre]
+              properties:
+                codigo: { type: string, example: ESTABLECIMIENTO }
+                nombre: { type: string, example: Personal del establecimiento }
+        fecha: { type: string, format: date-time, example: "2026-10-05T21:42:00.000Z" }
+        comentario: { type: string, maxLength: 1000, nullable: true, example: null }
 
     ElementoBandeja:
       type: object

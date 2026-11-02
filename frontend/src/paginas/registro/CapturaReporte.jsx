@@ -1,14 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CircleAlert, CircleCheck, Info, Layers, Lock, MessageSquareWarning, Save, Send, Trash2 } from 'lucide-react'
+import {
+  ChevronDown,
+  CircleAlert,
+  CircleCheck,
+  Info,
+  Layers,
+  Lock,
+  MessageSquareWarning,
+  Save,
+  Send,
+  Trash2,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
 import { AvisoError } from '@/componentes/Avisos.jsx'
+import HistorialEstadosReporte from '@/componentes/HistorialEstadosReporte.jsx'
 import { ESTADOS_REPORTE } from '@/componentes/InsigniaEstadoReporte.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import { armarFormulario } from '@/componentes/formulario/armarFormulario.js'
@@ -30,6 +43,7 @@ import { mensajeDeError } from '@/api/cliente.js'
 import {
   agregarVacuna,
   guardarVacuna,
+  listarHistorial,
   listarObservaciones,
   obtenerFormulario,
   obtenerReporte,
@@ -343,6 +357,63 @@ function PestanaVacuna({
 
 // reporte: GET /reportes/{id}, con las etiquetas de las dosis y de las dimensiones de cada vacuna. formularioPedido:
 // la promesa de GET /reportes/{id}/formulario si ya se pidió (PaginaRegistro la pide junto con el detalle).
+// SPEC 42: plegada al abrir, sin pedir nada; lo pide al desplegarse y otra vez si el estado cambió desde entonces.
+function HistorialPlegable({ reporteId, estado }) {
+  const [abierto, setAbierto] = useState(false)
+  const [cambios, setCambios] = useState(null)
+  const [error, setError] = useState(null)
+  const [intento, setIntento] = useState(0)
+  const cargadoCon = useRef(null)
+
+  useEffect(() => {
+    const clave = `${estado}-${intento}`
+    if (!abierto || cargadoCon.current === clave) return undefined
+    cargadoCon.current = clave
+    let vigente = true
+    setCambios(null)
+    setError(null)
+    listarHistorial(reporteId)
+      .then((lista) => vigente && setCambios(lista))
+      .catch((err) => {
+        if (!vigente) return
+        cargadoCon.current = null
+        setError(mensajeDeError(err))
+      })
+    return () => {
+      vigente = false
+    }
+  }, [abierto, reporteId, estado, intento])
+
+  return (
+    <Collapsible open={abierto} onOpenChange={setAbierto} asChild>
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 rounded-md text-left focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+              Historial de estados
+              <ChevronDown
+                aria-hidden="true"
+                className="size-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
+              />
+            </CollapsibleTrigger>
+          </CardTitle>
+        </CardHeader>
+        <CollapsibleContent>
+          <CardContent>
+            {error ? (
+              <AvisoError onReintentar={() => setIntento((n) => n + 1)}>No se pudo cargar el historial: {error}</AvisoError>
+            ) : cambios ? (
+              <HistorialEstadosReporte cambios={cambios} />
+            ) : (
+              <Skeleton aria-label="Cargando historial" className="h-24 w-full" />
+            )}
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
+  )
+}
+
 // alEnviar: avisa a la página el reporte ya enviado o corregido, para que muestre su estado nuevo.
 export default function CapturaReporte({ reporte, formularioPedido = null, alEnviar }) {
   // formulario: GET /reportes/{id}/formulario; cantidades, otras, datos y firmas van por vacunaId. otras es la
@@ -916,6 +987,8 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
           {aviso.mensaje}
         </AvisoError>
       )}
+
+      <HistorialPlegable reporteId={reporte.id} estado={estado} />
 
       {!soloLectura && (
         <div className="sticky bottom-0 z-10 -mx-6 flex flex-wrap items-center justify-end gap-3 border-t bg-background/90 px-6 py-3 backdrop-blur-md">
