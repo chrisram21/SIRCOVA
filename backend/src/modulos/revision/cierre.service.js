@@ -3,6 +3,7 @@ import { ErrorApi } from '../../middlewares/errores.js';
 import { registrarBitacora, contextoAuditoria, MODULOS, ACCIONES } from '../auditoria/auditoria.service.js';
 import { entradaInvalida, revisarCampos } from '../catalogos/catalogos.service.js';
 import { buscarPeriodos, hoyGuatemala } from '../catalogos/periodos.service.js';
+import { calcularSinFallar } from '../indicadores/corridas.service.js';
 
 const INTERVALO_MS = 60 * 60 * 1000;
 
@@ -98,8 +99,14 @@ export async function cerrarPeriodo(id, cuerpo, req) {
   });
 
   if (resultado.pendientes) return { pendientes: resultado.pendientes };
+  // Después de confirmar el cierre: si el cálculo falla, el mes sigue cerrado (SPEC 44).
+  const [[{ anio, mes }]] = await pool.query('SELECT anio, mes FROM periodo WHERE id = ?', [periodoId]);
+  const corrida = await calcularSinFallar(
+    { ddrissId: usuario.ddrissId, anio, mesHasta: mes, motivo: 'CIERRE_PERIODO', usuarioId: usuario.id },
+    contexto,
+  );
   const [periodo] = await buscarPeriodos(pool, usuario, { id: periodoId });
-  return { periodo: { ...periodo, reportesCerrados: resultado.reportesCerrados } };
+  return { periodo: { ...periodo, reportesCerrados: resultado.reportesCerrados, corrida } };
 }
 
 // El mes pasa a EN_CIERRE el día después de su fecha límite, en todas las DDRISS. hoy es un parámetro para que las

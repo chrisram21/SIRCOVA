@@ -16,6 +16,7 @@ import {
   revisarContraActuales,
 } from '../produccion/captura.service.js';
 import { claveCombinacion } from '../produccion/celdas.service.js';
+import { calcularSinFallar, mesesCerradosDesde } from '../indicadores/corridas.service.js';
 
 const LARGO_MOTIVO = 1000; // solicitud_rectificacion.motivo
 const LARGO_COMENTARIO = 500; // solicitud_rectificacion.comentario_resolucion
@@ -595,7 +596,29 @@ export async function aprobarRectificacion(id, cuerpo, req) {
     });
   });
 
-  return (await leerSolicitud(pool, pedido.id)).solicitud;
+  return { ...(await leerSolicitud(pool, pedido.id)).solicitud, corridas: await recalcularIndicadores(reporteId, contexto) };
+}
+
+// Después de confirmar: el mes del reporte y cada mes cerrado siguiente del año, porque el acumulado cambia (SPEC 44).
+// Un fallo deja su corrida FALLIDA y la rectificación sigue aplicada.
+async function recalcularIndicadores(reporteId, contexto) {
+  const [[reporte]] = await pool.query(
+    `SELECT e.ddriss_id, p.anio, p.mes FROM reporte_produccion r
+       JOIN establecimiento e ON e.id = r.establecimiento_id
+       JOIN periodo p ON p.id = r.periodo_id
+      WHERE r.id = ?`,
+    [reporteId],
+  );
+  const corridas = [];
+  for (const mes of await mesesCerradosDesde(reporte.ddriss_id, reporte.anio, reporte.mes)) {
+    corridas.push(
+      await calcularSinFallar(
+        { ddrissId: reporte.ddriss_id, anio: reporte.anio, mesHasta: mes, motivo: 'RECTIFICACION', usuarioId: contexto.usuarioId },
+        contexto,
+      ),
+    );
+  }
+  return corridas;
 }
 
 // El estado del reporte no se revisa: también se rechaza una solicitud sin detalle (de la semilla).

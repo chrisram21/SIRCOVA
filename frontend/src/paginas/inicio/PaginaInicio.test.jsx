@@ -106,7 +106,7 @@ test('sin permisos no aparece "Accesos rápidos"', () => {
   expect(screen.queryByRole('region', { name: 'Accesos rápidos' })).toBeNull()
 })
 
-test('con INDICADOR_CONSULTAR aparece un acceso a Indicadores que lleva a /indicadores', () => {
+test('con INDICADOR_CONSULTAR aparece un acceso a Indicadores que lleva a /indicadores', async () => {
   abrirInicio({ permisos: ['INDICADOR_CONSULTAR'] })
 
   const accesos = within(screen.getByRole('region', { name: 'Accesos rápidos' }))
@@ -117,7 +117,8 @@ test('con INDICADOR_CONSULTAR aparece un acceso a Indicadores que lleva a /indic
 
   fireEvent.click(enlaces[0])
 
-  expect(screen.getByText('Esta pantalla está en construcción.')).toBeTruthy()
+  // La pantalla se carga al entrar (lazy).
+  expect(await screen.findByRole('heading', { name: 'Cobertura contra la meta del mes' }, { timeout: 5000 })).toBeTruthy()
 })
 
 const titulosDeAccesos = () =>

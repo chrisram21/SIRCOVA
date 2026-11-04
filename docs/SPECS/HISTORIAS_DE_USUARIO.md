@@ -1052,10 +1052,20 @@ Verificado contra la API real el 2026-11-01, después de correr el 05. Como la e
 **Nota (2026-11-01, spec 41):** aprobar una rectificación (`POST /rectificaciones/{id}/aprobar`, `aprobarRectificacion` en `modulos/revision/rectificaciones.service.js`) cambia las cantidades de un reporte ya cerrado y no recalcula nada, porque el motor todavía no existe. Al implementarlo, una rectificación aplicada debe disparar una corrida con motivo `RECTIFICACION` para el año y el mes del reporte (y los meses siguientes del acumulado).
 
 **Criterios de aceptación:**
-- [ ] Meta del mes = población ÷ 12 × número de mes, y el avance es dosis acumuladas ÷ meta del mes × 100.
-- [ ] Las dosis se asignan al municipio de residencia (procedencia); las de Migrantes no cuentan para la cobertura y las del Hospital de San Marcos sí.
-- [ ] Un caso de prueba con datos conocidos (por ejemplo, 541 de población a junio ≈ 270 dosis) da el resultado esperado.
-- [ ] Cada resultado guarda la versión de configuración usada.
+- [x] Meta del mes = población ÷ 12 × número de mes, y el avance es dosis acumuladas ÷ meta del mes × 100.
+- [x] Las dosis se asignan al municipio de residencia (procedencia); las de Migrantes no cuentan para la cobertura y las del Hospital de San Marcos sí.
+- [x] Un caso de prueba con datos conocidos (por ejemplo, 541 de población a junio ≈ 270 dosis) da el resultado esperado.
+- [x] Cada resultado guarda la versión de configuración usada.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 44 a `main`. Backend y frontend, en `specs/44-hu-36-calcular-cobertura-contra-meta.md`: el motor `modulos/indicadores/` calcula `COBERTURA` y `AVANCE_META_MES` (con `brecha_dosis` y `cumple_meta`) por municipio de procedencia y para toda la DDRISS, y lo guarda en una `corrida_calculo` con sus `resultado_indicador`. Endpoints `POST /indicadores/corridas` (`INDICADOR_CALCULAR`), `GET /indicadores/corridas`, `GET /indicadores/corridas/{id}` y `GET /indicadores/resultados` (`INDICADOR_CONSULTAR`), y la pantalla «Indicadores» en su versión mínima. Diferencias con la historia, decididas por el equipo:
+
+- El modelo pasa a la v0.11: `corrida_calculo.ddriss_id` (script `10_corrida_ddriss_mysql.sql`). Cada corrida es de una DDRISS y la vigente es la última `COMPLETADA` de su DDRISS, año y mes.
+- «Usa solo reportes cerrados»: el numerador solo cuenta reportes `CERRADO`, pero una corrida manual puede tener como corte cualquier mes del calendario; si algún mes de enero al corte no estaba cerrado, la corrida es parcial y la pantalla lo avisa.
+- La fórmula de la historia es la de `AVANCE_META_MES`; `COBERTURA` usa el prorrateo y la meta de su versión. `BRECHA`, `DESERCION` y `PROYECCION` se omiten en la corrida (con «Su cálculo todavía no está disponible.») hasta sus historias. Un municipio sin población deja la fila sin calcular, y entonces tampoco se calcula la de la DDRISS.
+- Se calcula sola al cerrar el mes (`CIERRE_PERIODO`) y al aplicar una rectificación (`RECTIFICACION`, por el mes del reporte y cada mes cerrado siguiente del año), después de confirmar; si falla, la corrida queda `FALLIDA` y el cierre o la rectificación siguen confirmados.
+- Calculan Epidemiología, el Revisor y el Administrador; consultan ellos y la Autoridad (la nacional elige la DDRISS). Epidemiología recibe `PERIODO_CONSULTAR` (ve «Periodos» en solo lectura) y la Autoridad `DDRISS_CONSULTAR`.
+
+Verificado contra la API real el 2026-11-04, después de correr el 10 y el 05. Como `admin.prueba`, «Indicadores» mostró la corrida de la semilla de agosto de 2026; «Calcular» agosto creó la corrida 95 (93 resultados: `COB_HEXA3`, `AVANCE_HEXA3` y `COB_BCG`; `BRECHA_HEXA3`, `DES_HEXA1_3` y `PROY_COB_HEXA3` omitidos), vigente en lugar de la 1. El total de la DDRISS dio 13,680 dosis contra 13,707 de la semilla: Concepción Tutuapa +6 por la rectificación 12 aplicada (SPEC 41) y San Rafael −33 porque su reporte 228 sigue en `RECTIFICACION`. Septiembre (`EN_CIERRE`) avisó en el diálogo y quedó como corrida 96 parcial. Como `autoridad.nacional`, la pantalla mostró el selector de DDRISS sin «Calcular»; como `epidemiologia`, «Calcular» y «Periodos» en solo lectura. Las corridas 95 y 96 quedan en la base.
 
 **Nota (2026-11-03, spec 43):** los indicadores que se calculan son los que aplican a la DDRISS en el momento de la corrida (SPEC 43: la `VIGENTE` de la DDRISS antes que la nacional del mismo código, como las reglas), con `aplica_a[0]` (un solo elemento). `resultado_indicador` guarda el código y la versión usados. El semáforo son tres franjas `verde`/`amarillo`/`rojo` (`aCortes` en `tiposIndicador.js`); `DES_HEXA1_3` de la semilla tiene dos. La configuración la leen `listarConfigIndicadores` o los documentos de `configuracion_indicadores` (`modulos/configuracion/indicadores.service.js`).
 
@@ -1070,6 +1080,8 @@ Verificado contra la API real el 2026-11-01, después de correr el 05. Como la e
 | Epidemiología | 3 | S4 | Christian Ramírez |
 
 **Cómo se hará:** Se calcula en la misma corrida de indicadores: brecha = meta − dosis acumuladas.
+
+**Nota (2026-11-04, spec 44):** la corrida ya existe (`modulos/indicadores/`): esta historia agrega `BRECHA` a `CALCULADORES` en `calculadores.js` (hoy la corrida la omite), con la misma lectura de `motor.service.js`. Las filas de `COBERTURA` y `AVANCE_META_MES` ya llenan `brecha_dosis` contra su propia meta, y la pantalla «Indicadores» la muestra como «Dosis que faltan».
 
 **Criterios de aceptación:**
 - [ ] La brecha se muestra por vacuna y municipio.
@@ -1087,6 +1099,8 @@ Verificado contra la API real el 2026-11-01, después de correr el 05. Como la e
 
 **Nota (2026-11-03, spec 43):** los indicadores `DESERCION` (con `dosis_inicial` y `dosis_final`) los crea Epidemiología desde «Configuración de indicadores», y su semáforo es descendente (verde hasta el primer corte). Se calculan los que aplican a la DDRISS en el momento de la corrida.
 
+**Nota (2026-11-04, spec 44):** esta historia agrega `DESERCION` a `CALCULADORES` (`modulos/indicadores/calculadores.js`); hoy la corrida la omite. `leerDatos` de `motor.service.js` lee los numeradores por vacuna y dosis de todas las vacunas de la corrida, así que la primera y la última dosis ya están ahí; `referenciasDe` hoy exige `aplica_a[0].dosis` y `clasificacion_poblacion`, y habrá que adaptarlo a `dosis_inicial`/`dosis_final`. `colorDelValor` ya pinta el semáforo descendente.
+
 **Criterios de aceptación:**
 - [ ] Se calcula por vacuna, municipio y periodo.
 - [ ] Si no hay primeras dosis, el indicador se muestra como no calculable, sin error.
@@ -1100,6 +1114,8 @@ Verificado contra la API real el 2026-11-01, después de correr el 05. Como la e
 | Epidemiología | 8 | S4 | Luis Suárez |
 
 **Cómo se hará:** Proyección lineal en el backend a partir del promedio mensual de dosis; se guarda como resultado de tipo estimación.
+
+**Nota (2026-11-04, spec 44):** esta historia agrega `PROYECCION` a `CALCULADORES` (hoy la corrida la omite) y guarda sus filas con `es_proyeccion = TRUE`. «Se recalcula al cerrar cada periodo» ya ocurre: el cierre del mes crea una corrida `CIERRE_PERIODO`.
 
 **Nota (2026-11-03, spec 43):** los indicadores `PROYECCION` no se crean desde la pantalla: solo se publican versiones que cambian el nombre, la descripción y la meta. Su método (`parametros`: `indicador_base`, `metodo`, `meses_ventana`, `horizonte`) se copia de la versión base, así que esta historia lo define.
 
@@ -1132,6 +1148,8 @@ Verificado contra la API real el 2026-11-01, después de correr el 05. Como la e
 | Epidemiología | 8 | S4 | Kenneth García |
 
 **Cómo se hará:** Pantalla de indicadores con gráficas de Recharts a través del componente Chart de shadcn/ui (toman los colores del tema); endpoint `GET /indicadores/resultados` con filtros.
+
+**Nota (2026-11-04, spec 44):** la opción «Indicadores» ya tiene una versión mínima (`paginas/indicadores/PaginaIndicadores.jsx`): año, mes de corte e indicador en la URL, la corrida vigente con su aviso de parcial, la tabla por municipio con el color del semáforo y el historial de corridas. Lee `GET /indicadores/resultados` (la corrida vigente del mes, con `color` y `calculable`) y `GET /indicadores/corridas`; esta historia la amplía con gráficas y filtros.
 
 **Criterios de aceptación:**
 - [ ] Puedo filtrar por vacuna, municipio, distrito y rango de meses.
@@ -1287,6 +1305,8 @@ Verificado contra la API real el 2026-11-01, después de correr el 05. Como la e
 | Epidemiología | 5 | S5 | Andrea López |
 
 **Cómo se hará:** Se generan al terminar cada corrida de indicadores y se guardan en `alerta` con su DDRISS.
+
+**Nota (2026-11-04, spec 44):** las corridas se guardan en `guardarCorrida` (`modulos/indicadores/corridas.service.js`), en una transacción por DDRISS, año y mes: las alertas pueden escribirse ahí con los resultados recién calculados (`resultado_indicador_id`). La configuración trae `alerta: { generar, tipo, rol_destino }`, que el motor todavía no usa. Una corrida `FALLIDA` no tiene resultados.
 
 **Criterios de aceptación:**
 - [ ] Se crea una alerta cuando el avance de un municipio queda en el rango más bajo del semáforo (menos de 80 %, provisional).

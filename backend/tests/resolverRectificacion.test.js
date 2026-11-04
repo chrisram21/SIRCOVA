@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import { Int32, ObjectId } from 'mongodb';
 import app from '../src/app.js';
 import pool from '../src/config/mysql.js';
 import { obtenerDb } from '../src/config/mongodb.js';
+import { CALCULADORES } from '../src/modulos/indicadores/calculadores.js';
 import { tokenDePrueba } from './sesionDePrueba.js';
 
 // Crean por SQL los meses de 2008 (abiertos en la DDRISS 1) y la vacuna ZVT_HU33 (D1 y D2, desagregada por sexo, con
@@ -11,6 +12,10 @@ import { tokenDePrueba } from './sesionDePrueba.js';
 // propio de CS-1201, lo crea y lo guarda cs1201 por la API; luego el reporte y su mes pasan a CERRADO por SQL y la
 // solicitud se pide por la API. Todo se borra al inicio y al final; las filas de la bitácora quedan.
 const ANIO = 2008;
+// Los 12 meses de 2008 los usan los casos de HU-33; los del SPEC 44 siguen en 2005 (periodoIds 13 a 24 = enero a
+// diciembre de 2005), porque cada uno necesita dos meses cerrados seguidos.
+const ANIO_INDICADORES = 2005;
+const ANIOS = [ANIO, ANIO_INDICADORES];
 const VACUNA = 'ZVT_HU33';
 const periodoIds = {};
 let vacunaId;
@@ -34,7 +39,7 @@ const esquema = () => ({
   version: new Int32(1),
   territorio: { nivel: 'NACIONAL', ddriss_codigo: null },
   estado: 'VIGENTE',
-  vigencia: { desde: new Date(`${ANIO}-01-01T00:00:00.000Z`), hasta: null },
+  vigencia: { desde: new Date(`${ANIO_INDICADORES}-01-01T00:00:00.000Z`), hasta: null },
   version_anterior_id: null,
   basado_en: null,
   reglas: [],
@@ -58,7 +63,14 @@ const esquema = () => ({
 const dosDigitos = (n) => String(n).padStart(2, '0');
 
 async function limpiar() {
-  const reportes = `SELECT r.id FROM reporte_produccion r JOIN periodo p ON p.id = r.periodo_id WHERE p.anio = ${ANIO}`;
+  // Aplicar una rectificación calcula los indicadores (SPEC 44): sus corridas no caen con el periodo, y una corrida de
+  // otro archivo también calcula ZVT_HU33_COB.
+  const corridas = 'SELECT id FROM corrida_calculo WHERE anio IN (?)';
+  await pool.query(`DELETE FROM resultado_indicador WHERE corrida_id IN (SELECT id FROM (${corridas}) t)`, [ANIOS]);
+  await pool.query('DELETE FROM corrida_calculo WHERE anio IN (?)', [ANIOS]);
+  await pool.query('DELETE ri FROM resultado_indicador ri JOIN vacuna v ON v.id = ri.vacuna_id WHERE v.codigo = ?', [VACUNA]);
+  await (await obtenerDb()).collection('configuracion_indicadores').deleteMany({ codigo: /^ZVT_HU33/ });
+  const reportes = `SELECT r.id FROM reporte_produccion r JOIN periodo p ON p.id = r.periodo_id WHERE p.anio IN (${ANIOS.join(', ')})`;
   // Ni las solicitudes, ni su detalle, ni el historial caen en cascada con el reporte.
   await pool.query(
     `DELETE rd FROM rectificacion_detalle rd JOIN solicitud_rectificacion s ON s.id = rd.solicitud_id
@@ -68,8 +80,8 @@ async function limpiar() {
   await pool.query(`DELETE FROM resultado_validacion WHERE reporte_id IN (SELECT id FROM (${reportes}) t)`);
   await pool.query(`DELETE FROM historial_estado_reporte WHERE reporte_id IN (SELECT id FROM (${reportes}) t)`);
   await pool.query(`DELETE FROM reporte_produccion WHERE id IN (SELECT id FROM (${reportes}) t)`);
-  await pool.query('DELETE cp FROM cierre_periodo cp JOIN periodo p ON p.id = cp.periodo_id WHERE p.anio = ?', [ANIO]);
-  await pool.query('DELETE FROM periodo WHERE anio = ?', [ANIO]);
+  await pool.query('DELETE cp FROM cierre_periodo cp JOIN periodo p ON p.id = cp.periodo_id WHERE p.anio IN (?)', [ANIOS]);
+  await pool.query('DELETE FROM periodo WHERE anio IN (?)', [ANIOS]);
   const db = await obtenerDb();
   await db.collection('esquemas_captura').deleteMany({ 'vacuna.codigo': VACUNA });
   await pool.query('DELETE d FROM dosis d JOIN vacuna v ON v.id = d.vacuna_id WHERE v.codigo = ?', [VACUNA]);
@@ -77,19 +89,21 @@ async function limpiar() {
 }
 
 async function preparar() {
-  for (let mes = 1; mes <= 12; mes += 1) {
-    const fin = new Date(Date.UTC(ANIO, mes, 0)).getUTCDate();
-    const [periodo] = await pool.query('INSERT INTO periodo (anio, mes, fecha_inicio, fecha_fin) VALUES (?, ?, ?, ?)', [
-      ANIO,
-      mes,
-      `${ANIO}-${dosDigitos(mes)}-01`,
-      `${ANIO}-${dosDigitos(mes)}-${fin}`,
-    ]);
-    periodoIds[mes] = periodo.insertId;
-    await pool.query(
-      "INSERT INTO cierre_periodo (periodo_id, ddriss_id, fecha_limite_envio, estado) VALUES (?, 1, ?, 'ABIERTO')",
-      [periodo.insertId, '2099-12-31'],
-    );
+  for (const [desfase, anio] of ANIOS.entries()) {
+    for (let mes = 1; mes <= 12; mes += 1) {
+      const fin = new Date(Date.UTC(anio, mes, 0)).getUTCDate();
+      const [periodo] = await pool.query('INSERT INTO periodo (anio, mes, fecha_inicio, fecha_fin) VALUES (?, ?, ?, ?)', [
+        anio,
+        mes,
+        `${anio}-${dosDigitos(mes)}-01`,
+        `${anio}-${dosDigitos(mes)}-${fin}`,
+      ]);
+      periodoIds[desfase * 12 + mes] = periodo.insertId;
+      await pool.query(
+        "INSERT INTO cierre_periodo (periodo_id, ddriss_id, fecha_limite_envio, estado) VALUES (?, 1, ?, 'ABIERTO')",
+        [periodo.insertId, '2099-12-31'],
+      );
+    }
   }
   const [vacuna] = await pool.query("INSERT INTO vacuna (codigo, nombre, orden_informe, activa) VALUES (?, ?, 1, TRUE)", [
     VACUNA,
@@ -442,4 +456,93 @@ describe('GET /rectificaciones para el revisor', () => {
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(res.body.elementos.map((e) => e.id)).toContain(solicitud.id);
   });
+});
+
+describe('indicadores al aplicar (SPEC 44)', () => {
+  const COB = 'ZVT_HU33_COB';
+
+  beforeAll(async () => {
+    ultimoMes = 12;
+    const fecha = new Date();
+    await (await obtenerDb()).collection('configuracion_indicadores').insertOne({
+      codigo: COB,
+      version: new Int32(1),
+      nombre: `vitest-hu33 ${COB}`,
+      tipo_calculo: 'COBERTURA',
+      aplica_a: [{ vacuna: VACUNA, dosis: 'D1', clasificacion_poblacion: 'MENOR_1' }],
+      numerador: { fuente: 'PRODUCCION', estados_reporte: ['CERRADO'], atribucion: 'PROCEDENCIA', acumulado: 'ANUAL' },
+      denominador: { fuente: 'POBLACION_OBJETIVO', prorrateo: 'NINGUNO' },
+      meta: { valor: 95, unidad: 'PORCENTAJE', comparador: '>', homogeneidad_municipal: true },
+      umbrales: [],
+      niveles: ['MUNICIPIO', 'DEPARTAMENTO'],
+      periodicidad: 'MENSUAL',
+      alerta: { generar: false },
+      es_estimacion: false,
+      territorio: { nivel: 'DDRISS', ddriss_codigo: 'DDRISS_SM' },
+      estado: 'VIGENTE',
+      vigencia: { desde: fecha, hasta: null },
+      auditoria: { ...auditoria(), creado_en: fecha, publicado_en: fecha },
+    });
+  });
+
+  // Las dosis acumuladas de D1 del municipio propio en la corrida.
+  const numeradorEn = async (corridaId) => {
+    const res = await api('get', `/indicadores/corridas/${corridaId}`);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    return res.body.resultados.find((r) => r.indicadorCodigo === COB && r.municipio?.id === municipioPropio).numerador;
+  };
+
+  // Una solicitud de un mes nuevo y el mes siguiente también cerrado (sin reportes), para que haya dos meses que recalcular.
+  async function conMesSiguienteCerrado(cambios) {
+    const solicitud = await solicitudPendiente(cambios);
+    ultimoMes += 1;
+    await pool.query(
+      "UPDATE cierre_periodo SET estado = 'CERRADO', cerrado_por = ?, cerrado_en = NOW() WHERE periodo_id = ? AND ddriss_id = 1",
+      [estadigrafa.id, periodoIds[ultimoMes]],
+    );
+    return { solicitud, mes: ultimoMes - 1 - 12 };
+  }
+
+  it('recalcula el mes del reporte y cada mes cerrado siguiente, y el acumulado del siguiente cambia', async () => {
+    const { solicitud, mes } = await conMesSiguienteCerrado([cambio('D1', 'F', 12)]);
+    const antes = await api('post', '/indicadores/corridas').send({ anio: ANIO_INDICADORES, mesHasta: mes + 1 });
+    expect(antes.status, JSON.stringify(antes.body)).toBe(201);
+
+    const res = await aprobar(solicitud);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.corridas.map((c) => [c.mesHasta, c.estado])).toEqual([
+      [mes, 'COMPLETADA'],
+      [mes + 1, 'COMPLETADA'],
+    ]);
+    const [corridas] = await pool.query('SELECT motivo, disparada_por, vigente FROM corrida_calculo WHERE id IN (?)', [
+      res.body.corridas.map((c) => c.id),
+    ]);
+    expect(corridas.every((c) => c.motivo === 'RECTIFICACION' && c.disparada_por === estadigrafa.id && c.vigente === 1)).toBe(
+      true,
+    );
+    const anterior = await numeradorEn(antes.body.id);
+    expect(await numeradorEn(res.body.corridas[1].id)).toBe(anterior + 2);
+  }, 120000);
+
+  it('si el cálculo falla, la rectificación sigue aplicada y las corridas quedan FALLIDA', async () => {
+    const { solicitud, mes } = await conMesSiguienteCerrado([cambio('D1', 'M', 9)]);
+    const espia = vi.spyOn(CALCULADORES, 'COBERTURA').mockImplementation(() => {
+      throw new Error('vitest-hu36 fallo');
+    });
+    const silencio = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let res;
+    try {
+      res = await aprobar(solicitud);
+    } finally {
+      espia.mockRestore();
+      silencio.mockRestore();
+    }
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.estado).toBe('APLICADA');
+    expect(res.body.corridas.map((c) => [c.mesHasta, c.estado])).toEqual([
+      [mes, 'FALLIDA'],
+      [mes + 1, 'FALLIDA'],
+    ]);
+    expect((await celdasEnBase(solicitud.reporteId)).celdas['D1|M']).toBe(9);
+  }, 120000);
 });

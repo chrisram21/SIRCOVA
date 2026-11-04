@@ -1,0 +1,234 @@
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { listarDdriss, listarPeriodos } from '@/api/catalogos.js'
+import { ErrorApi } from '@/api/cliente.js'
+import { calcularIndicadores, listarCorridas, listarResultados } from '@/api/indicadores.js'
+import { guardarSesion } from '@/api/sesion.js'
+import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
+import PaginaIndicadores, { filtrosDeUrl, indicadorElegido, mesPorDefecto } from './PaginaIndicadores.jsx'
+
+vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
+vi.mock('@/api/catalogos.js', () => ({ listarDdriss: vi.fn(), listarPeriodos: vi.fn() }))
+vi.mock('@/api/indicadores.js', () => ({
+  calcularIndicadores: vi.fn(),
+  listarCorridas: vi.fn(),
+  listarResultados: vi.fn(),
+}))
+
+// Hoy fijo: el mes por defecto es octubre de 2026.
+const HOY = new Date(2026, 10, 3)
+
+const corrida = (cambios = {}) => ({
+  id: 7,
+  ddriss: { id: 1, codigo: 'DDRISS_SM' },
+  anio: 2026,
+  mesHasta: 10,
+  motivo: 'MANUAL',
+  estado: 'COMPLETADA',
+  vigente: true,
+  parcial: false,
+  mesesSinCerrar: [],
+  disparadaPor: { id: 4, nombre: 'Rosa Méndez' },
+  iniciadaEn: '2026-11-03T16:05:00.000Z',
+  finalizadaEn: '2026-11-03T16:05:02.000Z',
+  indicadores: [
+    { codigo: 'COB_HEXA3', version: 1, nombre: 'Cobertura de Hexavalente 3.ª dosis', tipoCalculo: 'COBERTURA' },
+    { codigo: 'AVANCE_HEXA3', version: 1, nombre: 'Avance de Hexavalente 3.ª dosis', tipoCalculo: 'AVANCE_META_MES' },
+  ],
+  omitidos: [{ codigo: 'DES_HEXA1_3', motivo: 'Su cálculo todavía no está disponible.' }],
+  totalResultados: 6,
+  ...cambios,
+})
+
+const resultado = (indicadorCodigo, municipio, cambios = {}) => ({
+  indicadorCodigo,
+  indicadorVersion: 1,
+  tipoCalculo: indicadorCodigo.startsWith('COB') ? 'COBERTURA' : 'AVANCE_META_MES',
+  municipio,
+  vacuna: { codigo: 'HEXA', nombre: 'Hexavalente' },
+  dosis: 'D3',
+  filtroDimensiones: 'grupo_edad=MENOR_1',
+  anio: 2026,
+  mes: 10,
+  numerador: 975,
+  denominador: 1208.33,
+  valor: 80.6897,
+  meta: 100,
+  brechaDosis: 234,
+  cumpleMeta: false,
+  calculable: true,
+  color: 'amarillo',
+  esProyeccion: false,
+  ...cambios,
+})
+const SAN_MARCOS = { id: 1, nombre: 'San Marcos' }
+const TAJUMULCO = { id: 9, nombre: 'Tajumulco' }
+const RESULTADOS = [
+  resultado('AVANCE_HEXA3', null, { numerador: 1300, denominador: 2000, valor: 65, brechaDosis: 700, color: 'rojo' }),
+  resultado('AVANCE_HEXA3', SAN_MARCOS, { numerador: 1000, denominador: 1000, valor: 100, brechaDosis: 0, cumpleMeta: true, color: 'verde' }),
+  resultado('AVANCE_HEXA3', TAJUMULCO, {
+    numerador: 300, denominador: null, valor: null, meta: null, brechaDosis: null, cumpleMeta: null, calculable: false, color: null,
+  }),
+  resultado('COB_HEXA3', null, { meta: 95 }),
+  resultado('COB_HEXA3', SAN_MARCOS, { meta: 95 }),
+  resultado('COB_HEXA3', TAJUMULCO, { meta: 95 }),
+]
+const CORRIDAS = {
+  elementos: [corrida(), corrida({ id: 5, vigente: false, motivo: 'CIERRE_PERIODO', mesHasta: 9, disparadaPor: null, parcial: true })],
+  total: 2,
+  pagina: 1,
+  porPagina: 20,
+}
+
+function crearSesion(permisos, { rol = 'EPIDEMIOLOGIA', ddrissId = 1 } = {}) {
+  const codificar = (objeto) => btoa(JSON.stringify(objeto)).replace(/=+$/, '')
+  const exp = Math.floor(Date.now() / 1000) + 3600
+  return {
+    token: `${codificar({ alg: 'HS256', typ: 'JWT' })}.${codificar({ sub: '4', exp })}.firma`,
+    usuario: {
+      id: 4,
+      nombreUsuario: 'epidemiologia',
+      rol,
+      permisos,
+      empleado: { nombres: 'Rosa', apellidos: 'Méndez', ddrissId, establecimientoId: null, municipioId: null },
+    },
+  }
+}
+
+async function montar({ url = '/indicadores', permisos = ['INDICADOR_CONSULTAR', 'INDICADOR_CALCULAR'], ...opciones } = {}) {
+  guardarSesion(crearSesion(permisos, opciones))
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/indicadores',
+        element: (
+          <ProveedorSesion>
+            <PaginaIndicadores hoy={HOY} />
+          </ProveedorSesion>
+        ),
+      },
+    ],
+    { initialEntries: [url] },
+  )
+  render(<RouterProvider router={router} />)
+  return router
+}
+
+const tabla = () => within(screen.getAllByRole('table')[0])
+const filaDe = (nombre) => tabla().getByText(nombre).closest('tr')
+const celdas = (fila) => [...fila.querySelectorAll('td')].map((c) => c.textContent)
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  listarResultados.mockResolvedValue({ corrida: corrida(), resultados: RESULTADOS })
+  listarCorridas.mockResolvedValue(CORRIDAS)
+  listarPeriodos.mockResolvedValue([])
+})
+
+test('mes por defecto, filtros de la URL e indicador elegido', () => {
+  expect(mesPorDefecto(new Date(2026, 10, 3))).toEqual({ anio: 2026, mes: 10 })
+  expect(mesPorDefecto(new Date(2027, 0, 15))).toEqual({ anio: 2026, mes: 12 })
+  expect(filtrosDeUrl(new URLSearchParams('anio=2025&mes=13&indicador=cob'), HOY)).toEqual({
+    anio: 2025, mes: 10, indicador: undefined, ddriss: undefined,
+  })
+  const indicadores = corrida().indicadores
+  expect(indicadorElegido(indicadores, 'COB_HEXA3').codigo).toBe('COB_HEXA3')
+  expect(indicadorElegido(indicadores, 'OTRO').codigo).toBe('AVANCE_HEXA3')
+  expect(indicadorElegido([], undefined)).toBeNull()
+})
+
+test('pide la corrida vigente del mes por defecto y muestra el avance con la fila de la DDRISS primero', async () => {
+  await montar()
+
+  await screen.findByText('Total de la DDRISS')
+  expect(listarResultados).toHaveBeenCalledWith({ anio: 2026, mes: 10, ddrissId: undefined })
+  expect(listarCorridas).toHaveBeenCalledWith({ anio: 2026, ddrissId: undefined })
+  expect(screen.getByRole('heading', { name: 'Cobertura contra la meta del mes' })).toBeTruthy()
+  expect(screen.getByText(/Calculada el .* por Rosa Méndez · Cálculo manual/)).toBeTruthy()
+  expect(document.querySelector('select[name="indicador"]').value).toBe('AVANCE_HEXA3')
+
+  const filas = tabla().getAllByRole('row').slice(1)
+  expect(filas.map((f) => f.querySelector('td').textContent)).toEqual(['Total de la DDRISS', 'San Marcos', 'Tajumulco'])
+  expect(celdas(filaDe('San Marcos'))).toEqual(['San Marcos', '1,000', '1,000', '100.0 %', '100 %', '0', 'Sí'])
+  expect(celdas(filaDe('Tajumulco'))).toEqual(['Tajumulco', '300', '—', 'Sin población', '—', '—', '—'])
+  expect(within(filaDe('Total de la DDRISS')).getByText('65.0 %').className).toContain('text-destructive')
+  expect(within(filaDe('San Marcos')).getByText('100.0 %').className).toContain('bg-exito')
+})
+
+test('lista los indicadores omitidos y avisa cuando la corrida es parcial', async () => {
+  listarResultados.mockResolvedValue({ corrida: corrida({ parcial: true, mesesSinCerrar: [9, 10] }), resultados: RESULTADOS })
+  await montar()
+
+  expect(await screen.findByText(/Cálculo parcial\. Septiembre y octubre no están cerrados/)).toBeTruthy()
+  expect(screen.getByText('DES_HEXA1_3')).toBeTruthy()
+  expect(screen.getByText(/Su cálculo todavía no está disponible\./)).toBeTruthy()
+})
+
+test('sin corrida vigente lo dice y conserva el historial', async () => {
+  listarResultados.mockResolvedValue({ corrida: null, resultados: [] })
+  await montar()
+
+  expect(await screen.findByText('Este mes todavía no tiene indicadores calculados.')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: /Historial de corridas del año/ }))
+  const historial = within(await screen.findByRole('table'))
+  expect(historial.getAllByText('Vigente')).toHaveLength(1)
+  expect(historial.getByText('Parcial')).toBeTruthy()
+  expect(historial.getByText('Automático')).toBeTruthy()
+})
+
+test('el año, el mes y el indicador van en la URL y cambian lo que se pide', async () => {
+  const router = await montar()
+  await screen.findByText('Total de la DDRISS')
+
+  fireEvent.change(document.querySelector('select[name="indicador"]'), { target: { value: 'COB_HEXA3' } })
+  await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&indicador=COB_HEXA3'))
+  expect(tabla().getByText('Población')).toBeTruthy()
+
+  fireEvent.change(document.querySelector('select[name="mes"]'), { target: { value: '8' } })
+  await waitFor(() => expect(listarResultados).toHaveBeenLastCalledWith({ anio: 2026, mes: 8, ddrissId: undefined }))
+  fireEvent.change(document.querySelector('select[name="anio"]'), { target: { value: '2025' } })
+  await waitFor(() => expect(listarResultados).toHaveBeenLastCalledWith({ anio: 2025, mes: 8, ddrissId: undefined }))
+})
+
+test('«Calcular» solo aparece con INDICADOR_CALCULAR y, al terminar, recarga el mes', async () => {
+  listarPeriodos.mockResolvedValue([{ id: 1, anio: 2026, mes: 10, estado: 'CERRADO' }])
+  calcularIndicadores.mockResolvedValue(corrida({ id: 8 }))
+  await montar()
+  await screen.findByText('Total de la DDRISS')
+
+  fireEvent.click(screen.getByRole('button', { name: 'Calcular' }))
+  const dialogo = within(screen.getByRole('alertdialog'))
+  await waitFor(() => expect(document.querySelector('select[name="mes"]')?.value).toBe('10'))
+  fireEvent.click(dialogo.getByRole('button', { name: 'Calcular' }))
+  await waitFor(() => expect(listarResultados).toHaveBeenCalledTimes(2))
+  expect(calcularIndicadores).toHaveBeenCalledWith({ anio: 2026, mesHasta: 10 })
+})
+
+test('sin INDICADOR_CALCULAR no hay «Calcular»', async () => {
+  await montar({ permisos: ['INDICADOR_CONSULTAR'], rol: 'AUTORIDAD' })
+  await screen.findByText('Total de la DDRISS')
+
+  expect(screen.queryByRole('button', { name: 'Calcular' })).toBeNull()
+})
+
+test('la Autoridad nacional elige la DDRISS, que va en la URL y en lo que se pide', async () => {
+  listarDdriss.mockResolvedValue([
+    { id: 1, codigo: 'DDRISS_SM', nombre: 'DDRISS San Marcos' },
+    { id: 2, codigo: 'DDRISS_QZ', nombre: 'DDRISS Quetzaltenango' },
+  ])
+  const router = await montar({ permisos: ['INDICADOR_CONSULTAR', 'DDRISS_CONSULTAR'], rol: 'AUTORIDAD', ddrissId: null })
+
+  await waitFor(() => expect(listarResultados).toHaveBeenCalledWith({ anio: 2026, mes: 10, ddrissId: 1 }))
+  fireEvent.change(document.querySelector('select[name="ddriss"]'), { target: { value: '2' } })
+  await waitFor(() => expect(router.state.location.search).toContain('ddriss=2'))
+  await waitFor(() => expect(listarResultados).toHaveBeenLastCalledWith({ anio: 2026, mes: 10, ddrissId: 2 }))
+})
+
+test('si falla la carga, «Reintentar» vuelve a pedir', async () => {
+  listarResultados.mockRejectedValueOnce(new ErrorApi(500, 'ERROR_INTERNO', 'Ocurrió un error interno. Intente de nuevo.'))
+  await montar()
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Reintentar' }))
+  expect(await screen.findByText('Total de la DDRISS')).toBeTruthy()
+  expect(listarResultados).toHaveBeenCalledTimes(2)
+})

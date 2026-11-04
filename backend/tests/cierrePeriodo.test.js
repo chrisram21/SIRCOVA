@@ -1,10 +1,11 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import { Int32, ObjectId } from 'mongodb';
 import app from '../src/app.js';
 import pool from '../src/config/mysql.js';
 import { obtenerDb } from '../src/config/mongodb.js';
 import { pasarMesesVencidos } from '../src/modulos/revision/cierre.service.js';
+import { CALCULADORES } from '../src/modulos/indicadores/calculadores.js';
 import { tokenDePrueba } from './sesionDePrueba.js';
 
 // Crean por SQL los meses de 2011, abiertos en la DDRISS 1, cada uno con la fecha límite que pide su caso (diciembre
@@ -59,6 +60,10 @@ const esquema = () => ({
 const dosDigitos = (n) => String(n).padStart(2, '0');
 
 async function limpiar() {
+  // Cada cierre calcula los indicadores del mes (SPEC 44): sus corridas no caen con el periodo.
+  const corridas = 'SELECT id FROM corrida_calculo WHERE anio = ?';
+  await pool.query(`DELETE FROM resultado_indicador WHERE corrida_id IN (SELECT id FROM (${corridas}) t)`, [ANIO]);
+  await pool.query('DELETE FROM corrida_calculo WHERE anio = ?', [ANIO]);
   const reportes = `SELECT r.id FROM reporte_produccion r JOIN periodo p ON p.id = r.periodo_id WHERE p.anio = ${ANIO}`;
   // Ni las observaciones, ni los resultados, ni el historial caen en cascada con el reporte.
   await pool.query(`DELETE FROM observacion_revision WHERE reporte_id IN (SELECT id FROM (${reportes}) t)`);
@@ -322,6 +327,23 @@ describe('cierre del periodo (HU-31)', () => {
       ]);
     });
 
+    it('calcula los indicadores del mes en una corrida CIERRE_PERIODO de la DDRISS, vigente y con quien cerró', async () => {
+      expect(res.body.corrida).toMatchObject({ mesHasta: 4, estado: 'COMPLETADA' });
+      const [[corrida]] = await pool.query(
+        'SELECT ddriss_id, anio, mes_hasta, motivo, estado, vigente, disparada_por FROM corrida_calculo WHERE id = ?',
+        [res.body.corrida.id],
+      );
+      expect(corrida).toEqual({
+        ddriss_id: 1, anio: ANIO, mes_hasta: 4, motivo: 'CIERRE_PERIODO', estado: 'COMPLETADA', vigente: 1,
+        disparada_por: estadigrafa.id,
+      });
+      const [[bitacora]] = await pool.query(
+        "SELECT usuario_id FROM bitacora WHERE entidad = 'corrida_calculo' AND entidad_id = ? AND accion = 'CALCULAR_INDICADORES'",
+        [String(res.body.corrida.id)],
+      );
+      expect(bitacora.usuario_id).toBe(estadigrafa.id);
+    });
+
     it('ya cerrado, el reporte no se edita ni se valida y el mes no se vuelve a cerrar', async () => {
       const respuestas = await Promise.all([guardar(aprobado, 7), api('post', `/reportes/${aprobado.id}/validar`)]);
       expect(respuestas.map(error)).toEqual(Array(2).fill([409, 'REPORTE_NO_EDITABLE']));
@@ -331,9 +353,23 @@ describe('cierre del periodo (HU-31)', () => {
     it('un mes sin aprobados también se cierra, y su borrador nunca enviado ya no se guarda', async () => {
       const borrador = await reporteDe(5, 'BORRADOR');
       await enCierre(5);
-      const cerrado = await cerrar(5);
+      // Además, el cálculo de indicadores falla: el mes queda cerrado igual y la corrida FALLIDA (SPEC 44).
+      const espias = ['COBERTURA', 'AVANCE_META_MES'].map((tipo) =>
+        vi.spyOn(CALCULADORES, tipo).mockImplementation(() => {
+          throw new Error('vitest-hu36 fallo');
+        }));
+      const silencio = vi.spyOn(console, 'error').mockImplementation(() => {});
+      let cerrado;
+      try {
+        cerrado = await cerrar(5);
+      } finally {
+        espias.forEach((espia) => espia.mockRestore());
+        silencio.mockRestore();
+      }
       expect(cerrado.status, JSON.stringify(cerrado.body)).toBe(200);
       expect(cerrado.body.reportesCerrados).toBe(0);
+      expect(cerrado.body.corrida).toMatchObject({ mesHasta: 5, estado: 'FALLIDA' });
+      expect((await cierreDe(5)).estado).toBe('CERRADO');
       expect((await enBase(borrador.id)).estado).toBe('BORRADOR');
       expect(error(await guardar(borrador, 7))).toEqual([409, 'PERIODO_CERRADO']);
     }, 60000);
