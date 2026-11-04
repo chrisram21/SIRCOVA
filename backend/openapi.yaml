@@ -2985,6 +2985,301 @@ paths:
                     error: { codigo: REGLA_DESACTUALIZADA, mensaje: La regla RANGO_01 cambió mientras la editaba; vuelva a abrirla. }
         "422": { $ref: "#/components/responses/ReglaInvalida" }
 
+  /configuracion-indicadores:
+    get:
+      tags: [Configuración]
+      summary: Indicadores configurados visibles para la DDRISS del usuario, una fila por código
+      description: |
+        Una fila por código que tenga al menos una versión `VIGENTE` o `HISTORICO` `NACIONAL` o de la DDRISS del
+        usuario. Los códigos que solo tienen borradores y los de otras DDRISS no aparecen.
+
+        - `aplica`: la versión que aplica a la DDRISS: su `VIGENTE` si existe; si no, el `VIGENTE` nacional del
+          mismo código; si no, null (el indicador está inactivo en la DDRISS).
+        - `ultimaDdriss`: la versión más reciente de la DDRISS, `VIGENTE` o `HISTORICO`, o null.
+        - `vigenteNacional`: la versión del `VIGENTE` nacional, o null.
+
+        Ordenadas por el nombre de la vacuna y luego por el tipo (`COBERTURA`, `AVANCE_META_MES`, `BRECHA`,
+        `DESERCION`, `PROYECCION`). Sin parámetros (uno desconocido responde 400) y sin paginar.
+
+        Estos son también los indicadores que calcula el motor (HU-36 a HU-39): los que aplican a la DDRISS en
+        el momento de la corrida. `resultado_indicador` guarda el código y la versión usados, así que un cambio de
+        configuración no altera los resultados ya guardados.
+      x-permiso: INDICADOR_CONFIG_CONSULTAR
+      responses:
+        "200":
+          description: Los indicadores de la DDRISS
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/IndicadorPorCodigo" }
+        "400":
+          description: Parámetro no permitido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: vacuna." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+    post:
+      tags: [Configuración]
+      summary: Crear un indicador de la DDRISS (código generado, versión 1)
+      description: |
+        Solo de los tipos `COBERTURA`, `AVANCE_META_MES`, `BRECHA` y `DESERCION` (`PROYECCION` solo se versiona).
+        Los campos que admite cada tipo están en `IndicadorCrear`; uno que el tipo no tiene responde 400.
+
+        El backend genera el código `{PREFIJO}_{VACUNA}{DOSIS}`: el prefijo sale del tipo (`COB`, `AVANCE`,
+        `BRECHA`, `DES`), `{VACUNA}` es el código de la vacuna y `{DOSIS}` el de la dosis sin la `D` inicial
+        (`D3` → `3`, `R1` → `R1`, `UNICA` → `U`); en `DESERCION`, las dos dosis unidas con `_` (`DES_HEXA1_3`).
+        Si el código ya existe en cualquier territorio y estado, agrega `_2`, `_3`… (el primero libre). Si pasa
+        de 40 caracteres, responde 422 `INDICADOR_INVALIDO`.
+
+        Lo que no se edita sale de los valores por defecto del tipo: numerador de producción `CERRADO`, por
+        procedencia y acumulado anual; `niveles` `MUNICIPIO` y `DEPARTAMENTO`; periodicidad `MENSUAL`; alerta sin
+        generar; y los `parametros` del tipo.
+
+        Guarda la versión 1 `VIGENTE` con el territorio de la DDRISS del usuario y `vigencia.desde` = el instante
+        de la publicación. Se revisa, en este orden: el cuerpo (400), la vacuna, las dosis y el grupo de edad
+        (422 `INDICADOR_INVALIDO`) y que otro código que aplica a la DDRISS no tenga el mismo tipo, vacuna y dosis
+        (409 `INDICADOR_DUPLICADO`). Si dos altas chocan en el código, la segunda responde 409
+        `INDICADOR_DESACTUALIZADO`.
+
+        Bitácora (módulo `CONFIGURACION`, entidad `configuracion_indicadores`, `entidadId` el ObjectId): `CREAR`
+        con el documento completo.
+      x-permiso: INDICADOR_CONFIG_EDITAR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IndicadorCrear" }
+      responses:
+        "201":
+          description: Indicador creado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfiguracionIndicador" }
+        "400": { $ref: "#/components/responses/IndicadorEntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "409": { $ref: "#/components/responses/IndicadorConflicto" }
+        "422": { $ref: "#/components/responses/IndicadorInvalido" }
+
+  /configuracion-indicadores/opciones:
+    get:
+      tags: [Configuración]
+      summary: Lo que necesita el editor de indicadores (vacunas, dosis, poblaciones y grupos de edad)
+      description: |
+        Las vacunas activas con sus dosis activas, en el orden de `GET /vacunas` (por `ordenInforme` y nombre, las
+        dosis por `orden`); las clasificaciones de `clasificacion_poblacion`, por id; y los valores activos de la
+        dimensión `grupo_edad`, por `orden`. Sin parámetros (uno desconocido responde 400).
+      x-permiso: INDICADOR_CONFIG_CONSULTAR
+      responses:
+        "200":
+          description: Las opciones del editor
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OpcionesIndicador" }
+        "400":
+          description: Parámetro no permitido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: activa." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+
+  /configuracion-indicadores/{codigo}/historial:
+    get:
+      tags: [Configuración]
+      summary: Historial de versiones de un indicador
+      description: |
+        Las versiones `NACIONAL` y de la DDRISS del usuario del código, sin borradores, de la más reciente a la
+        más antigua. `desactivacion` sale de la fila `DESACTIVAR` de la bitácora de esa versión, o es null.
+        Sin parámetros (uno desconocido responde 400) y sin paginar.
+      x-permiso: INDICADOR_CONFIG_CONSULTAR
+      parameters:
+        - { $ref: "#/components/parameters/CodigoIndicador" }
+      responses:
+        "200":
+          description: Las versiones del indicador
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/IndicadorEnHistorial" }
+        "400":
+          description: Parámetro no permitido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: estado." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+
+  /configuracion-indicadores/{codigo}/versiones:
+    post:
+      tags: [Configuración]
+      summary: Publicar una versión nueva del indicador para la DDRISS
+      description: |
+        Guarda una versión `VIGENTE` de la DDRISS del usuario con `version` = la mayor del código en todo el país
+        + 1. El código, el tipo y la vacuna no cambian. Lo que no se edita (numerador, alerta, `parametros`,
+        niveles, periodicidad, unidad y comparador de la meta) se copia de la versión base. En `PROYECCION` solo
+        cambian el nombre, la descripción y la meta.
+
+        Si la DDRISS tenía un `VIGENTE` del código, pasa a `HISTORICO` con `vigencia.hasta` = el instante de la
+        publicación; solo cambian su `estado` y su `vigencia.hasta`. El `VIGENTE` nacional no cambia: la versión
+        de la DDRISS lo reemplaza solo en ella.
+
+        `versionBase` es la versión que cargó el editor: la de `aplica`, o si no hay, la de `ultimaDdriss`, o si
+        no hay, la última nacional. Se revisa, en este orden: que el código sea visible (404), el cuerpo (400),
+        `versionBase` (409 `INDICADOR_DESACTUALIZADO`), la vacuna, las dosis y el grupo de edad (422
+        `INDICADOR_INVALIDO`), que otro código que aplica no mida lo mismo (409 `INDICADOR_DUPLICADO`) y que el
+        contenido cambie algo de la versión que aplica (422 `INDICADOR_SIN_CAMBIOS`).
+
+        Los dos documentos se escriben en una transacción de MongoDB. Si otra escritura ganó la carrera,
+        responde 409 `INDICADOR_DESACTUALIZADO` y no cambia nada.
+
+        Bitácora: `CREAR` de la versión nueva y, si reemplaza a otra de la DDRISS, `ACTUALIZAR` de esa versión.
+      x-permiso: INDICADOR_CONFIG_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/CodigoIndicador" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IndicadorVersion" }
+      responses:
+        "201":
+          description: Versión publicada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfiguracionIndicador" }
+        "400": { $ref: "#/components/responses/IndicadorEntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409": { $ref: "#/components/responses/IndicadorConflicto" }
+        "422":
+          description: Vacuna, dosis o grupo de edad inactivos, o la versión no cambia nada de la que aplica
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                dosis:
+                  value:
+                    error: { codigo: INDICADOR_INVALIDO, mensaje: La dosis D4 no existe o está inactiva en HEXA. }
+                sinCambios:
+                  value:
+                    error: { codigo: INDICADOR_SIN_CAMBIOS, mensaje: La versión no cambia nada de la que aplica. }
+
+  /configuracion-indicadores/{codigo}/desactivar:
+    post:
+      tags: [Configuración]
+      summary: Desactivar la versión de la DDRISS (pasa a HISTORICO sin reemplazo)
+      description: |
+        El `VIGENTE` de la DDRISS del usuario pasa a `HISTORICO` con `vigencia.hasta` = el instante del cambio;
+        solo cambian su `estado` y su `vigencia.hasta`. Si hay un `VIGENTE` nacional del mismo código, vuelve a
+        aplicar ese; si no, el indicador deja de calcularse para la DDRISS. Un indicador nacional no se desactiva.
+
+        `version` es la del `VIGENTE` de la DDRISS que se ve. Se revisa, en este orden: que el código sea visible
+        (404), el cuerpo (400), que la DDRISS tenga un `VIGENTE` del código (409 `INDICADOR_SIN_VERSION_PROPIA`) y
+        que sea `version` (409 `INDICADOR_DESACTUALIZADO`). La escritura lleva la condición `estado: VIGENTE`.
+
+        Bitácora: `DESACTIVAR` de la versión, con `estado`, `vigencia.hasta` y `motivoCambio` en `valoresNuevos`.
+      x-permiso: INDICADOR_CONFIG_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/CodigoIndicador" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IndicadorEstado" }
+      responses:
+        "200":
+          description: Indicador desactivado; la fila actualizada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndicadorPorCodigo" }
+        "400": { $ref: "#/components/responses/IndicadorEstadoInvalido" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: La DDRISS no tiene una versión activa del código, o la versión cambió mientras tanto
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                sinVersionPropia:
+                  value:
+                    error: { codigo: INDICADOR_SIN_VERSION_PROPIA, mensaje: Su DDRISS no tiene una versión activa de este indicador; los indicadores nacionales no se desactivan. }
+                desactualizado:
+                  value:
+                    error: { codigo: INDICADOR_DESACTUALIZADO, mensaje: El indicador COB_HEXA3 cambió mientras lo editaba; vuelva a abrirlo. }
+
+  /configuracion-indicadores/{codigo}/activar:
+    post:
+      tags: [Configuración]
+      summary: Activar un indicador de la DDRISS (publica una copia de su última versión)
+      description: |
+        Copia el contenido de la última versión de la DDRISS del usuario (que está en `HISTORICO`) en una versión
+        nueva `VIGENTE` de la DDRISS, con `version` = la mayor del código en todo el país + 1 y el motivo del
+        cuerpo.
+
+        `version` es la de `ultimaDdriss`. Se revisa, en este orden: que el código sea visible (404), el cuerpo
+        (400), que la DDRISS tenga versiones del código y ninguna `VIGENTE` (409 `INDICADOR_SIN_VERSION_PROPIA`),
+        que `version` sea su última versión (409 `INDICADOR_DESACTUALIZADO`), que la vacuna, las dosis y el grupo
+        de edad de la copia sigan activos (422 `INDICADOR_INVALIDO`) y que otro código que aplica no mida lo mismo
+        (409 `INDICADOR_DUPLICADO`).
+
+        Bitácora: `REACTIVAR` de la versión nueva, con el documento completo.
+      x-permiso: INDICADOR_CONFIG_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/CodigoIndicador" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IndicadorEstado" }
+      responses:
+        "201":
+          description: Versión publicada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfiguracionIndicador" }
+        "400": { $ref: "#/components/responses/IndicadorEstadoInvalido" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: |
+            La DDRISS ya tiene un `VIGENTE` del código o no tiene versiones, la versión cambió mientras tanto, u
+            otro código que aplica mide lo mismo
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/Error" }
+                  - type: object
+                    properties:
+                      codigoExistente: { type: string, description: Solo con `INDICADOR_DUPLICADO`, example: COB_SPR1_2 }
+              examples:
+                sinVersionPropia:
+                  value:
+                    error: { codigo: INDICADOR_SIN_VERSION_PROPIA, mensaje: Solo se activa un indicador de su DDRISS que esté desactivado. }
+                desactualizado:
+                  value:
+                    error: { codigo: INDICADOR_DESACTUALIZADO, mensaje: El indicador COB_SPR1 cambió mientras lo editaba; vuelva a abrirlo. }
+                duplicado:
+                  value:
+                    error: { codigo: INDICADOR_DUPLICADO, mensaje: Ya existe el indicador COB_SPR1_2 para la misma vacuna y dosis; publique una versión de ese. }
+                    codigoExistente: COB_SPR1_2
+        "422": { $ref: "#/components/responses/IndicadorInvalido" }
+
   # ---------------------------------------------------------------- Producción
   /reportes:
     get:
@@ -4530,6 +4825,14 @@ components:
         Código de la regla en `reglas_validacion`: mayúsculas, dígitos y guion bajo, hasta 40 caracteres. Uno
         con otro formato, inexistente o no visible para la DDRISS del usuario responde 404
       schema: { type: string, pattern: "^[A-Z0-9_]{1,40}$", example: VARIACION_HISTORICA }
+    CodigoIndicador:
+      name: codigo
+      in: path
+      required: true
+      description: |
+        Código del indicador en `configuracion_indicadores`: mayúsculas, dígitos y guion bajo, hasta 40
+        caracteres. Uno con otro formato, inexistente o no visible para la DDRISS del usuario responde 404
+      schema: { type: string, pattern: "^[A-Z0-9_]{1,40}$", example: COB_HEXA3 }
     Pagina:
       name: pagina
       in: query
@@ -4878,6 +5181,99 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
           example:
             error: { codigo: REGLA_INVALIDA, mensaje: La vacuna BCG no existe o está inactiva. }
+    IndicadorEntradaInvalida:
+      description: |
+        El cuerpo de un indicador no cumple el formato: campo faltante, no permitido o que el tipo no tiene, tipo
+        que no se crea, meta o cortes fuera de rango, dosis inicial después de la final, o nombre, descripción o
+        motivo inválidos. Los campos de cada tipo están en `IndicadorCrear`.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            campo:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: codigo." }
+            campoDelTipo:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Los indicadores de tipo DESERCION no llevan prorrateo." }
+            tipo:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: Solo se crean indicadores de tipo COBERTURA, AVANCE_META_MES, BRECHA o DESERCION. }
+            meta:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: La meta debe ser un número de 1 a 100, con un decimal como máximo. }
+            cortes:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Los cortes del semáforo deben ser dos números de 0 a 100, con un decimal como máximo, y el primero menor que el segundo." }
+            dosis:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: La dosis inicial debe ir antes que la final. }
+            nombre:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: El nombre del indicador debe tener entre 3 y 120 caracteres. }
+            descripcion:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: La descripción del indicador debe tener como máximo 300 caracteres. }
+            motivo:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: El motivo del cambio debe tener entre 1 y 300 caracteres. }
+    IndicadorEstadoInvalido:
+      description: Falta `version` o `motivoCambio`, son inválidos, o hay un campo no permitido
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            campo:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: meta." }
+            version:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: version debe ser un número entero positivo. }
+            motivo:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: El motivo del cambio debe tener entre 1 y 300 caracteres. }
+    IndicadorConflicto:
+      description: |
+        La versión que cargó el editor ya no es la actual o dos escrituras chocaron en un índice único
+        (`INDICADOR_DESACTUALIZADO`), u otro código que aplica a la DDRISS tiene el mismo tipo, vacuna y dosis
+        (`INDICADOR_DUPLICADO`, con `codigoExistente`)
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: "#/components/schemas/Error" }
+              - type: object
+                properties:
+                  codigoExistente: { type: string, description: Solo con `INDICADOR_DUPLICADO`, example: COB_HEXA3 }
+          examples:
+            desactualizado:
+              value:
+                error: { codigo: INDICADOR_DESACTUALIZADO, mensaje: El indicador COB_HEXA3 cambió mientras lo editaba; vuelva a abrirlo. }
+            altaSimultanea:
+              value:
+                error: { codigo: INDICADOR_DESACTUALIZADO, mensaje: Se creó otro indicador con el mismo código al mismo tiempo; intente de nuevo. }
+            duplicado:
+              value:
+                error: { codigo: INDICADOR_DUPLICADO, mensaje: Ya existe el indicador COB_HEXA3 para la misma vacuna y dosis; publique una versión de ese. }
+                codigoExistente: COB_HEXA3
+    IndicadorInvalido:
+      description: La vacuna, una dosis o el grupo de edad no existen o están inactivos, o el código generado pasa de 40 caracteres
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            vacuna:
+              value:
+                error: { codigo: INDICADOR_INVALIDO, mensaje: La vacuna SPR no existe o está inactiva. }
+            dosis:
+              value:
+                error: { codigo: INDICADOR_INVALIDO, mensaje: La dosis D4 no existe o está inactiva en HEXA. }
+            grupoEdad:
+              value:
+                error: { codigo: INDICADOR_INVALIDO, mensaje: El grupo de edad 1_A_4 no existe o está inactivo. }
+            codigoLargo:
+              value:
+                error: { codigo: INDICADOR_INVALIDO, mensaje: El código generado pasa de 40 caracteres; use una vacuna con un código más corto. }
     Conflicto:
       description: Duplicado o versionFila desactualizada
       content:
@@ -6260,6 +6656,295 @@ components:
           description: "Al desactivar, la del `VIGENTE` de la DDRISS; al activar, la de `ultimaDdriss`"
           example: 2
         motivoCambio: { type: string, minLength: 1, maxLength: 300, description: Se recorta, example: La DDRISS revisará este control a mano este mes. }
+
+    TipoCalculoIndicador:
+      type: string
+      enum: [COBERTURA, AVANCE_META_MES, BRECHA, DESERCION, PROYECCION]
+      description: |
+        Qué fórmula usa el motor y qué campos se configuran:
+
+        | Tipo | Se crea | Dosis | Población | Prorrateo | Meta (comparador) | Semáforo | Mapa |
+        |---|---|---|---|---|---|---|---|
+        | `COBERTURA` | Sí | `dosis` | obligatoria | `NINGUNO` o `MENSUAL_LINEAL` (por defecto) | editable, 95 por defecto (`>`) | ascendente | sí |
+        | `AVANCE_META_MES` | Sí | `dosis` | obligatoria | siempre `MENSUAL_LINEAL` | siempre 100 (`>=`) | ascendente | sí |
+        | `BRECHA` | Sí | `dosis` | obligatoria | `NINGUNO` (por defecto) o `MENSUAL_LINEAL` | editable, 95 por defecto (`>`) | no | no |
+        | `DESERCION` | Sí | `dosisInicial` y `dosisFinal` | no | no | editable, 10 por defecto (`<=`) | descendente | no |
+        | `PROYECCION` | No | se copia | se copia | se copia | editable (`>`) | no | no |
+
+    VacunaDeIndicador:
+      type: object
+      required: [codigo, nombre, activa]
+      properties:
+        codigo: { type: string, example: HEXA }
+        nombre: { type: string, description: De MySQL; el código si la vacuna ya no existe, example: Hexavalente }
+        activa: { type: boolean, description: false si la vacuna está inactiva o ya no existe }
+
+    UmbralIndicador:
+      type: object
+      required: [color, desde, hasta]
+      description: Una franja del semáforo; `desde` incluido y `hasta` excluido en ascendente, al revés en descendente
+      properties:
+        color: { type: string, enum: [verde, amarillo, rojo], description: Nombre del color; el mapa lo pinta con sus tonos }
+        desde: { type: number, nullable: true, example: 80 }
+        hasta: { type: number, nullable: true, example: 90 }
+
+    ConfiguracionIndicador:
+      type: object
+      description: |
+        Una versión de la configuración de un indicador. `parametros` conserva las claves en snake_case de la base:
+        son datos del método del indicador, no campos de la API, y no se editan.
+      required: [id, codigo, version, nombre, descripcion, tipoCalculo, vacuna, dosis, dosisInicial, dosisFinal,
+        clasificacionPoblacion, grupoEdad, numerador, denominador, meta, umbrales, umbralesProvisionales,
+        esIndicadorMapa, parametros, alerta, esEstimacion, territorio, estado, vigencia, publicadoPor, publicadoEn,
+        motivoCambio]
+      properties:
+        id: { type: string, description: ObjectId de la versión, example: 6727c0c1a2b3c4d5e6f70a01 }
+        codigo: { type: string, example: AVANCE_HEXA3 }
+        version: { type: integer, minimum: 1, example: 1 }
+        nombre: { type: string, example: Avance de Hexavalente 3.ª dosis contra la meta del mes }
+        descripcion: { type: string, nullable: true, example: "Dosis acumuladas al mes ÷ (población ÷ 12 × número de mes) × 100. La meta del mes vale 100 %." }
+        tipoCalculo: { $ref: "#/components/schemas/TipoCalculoIndicador" }
+        vacuna: { $ref: "#/components/schemas/VacunaDeIndicador" }
+        dosis: { type: string, nullable: true, description: Null en `DESERCION`, example: D3 }
+        dosisInicial: { type: string, nullable: true, description: Solo en `DESERCION`, example: null }
+        dosisFinal: { type: string, nullable: true, description: Solo en `DESERCION`, example: null }
+        clasificacionPoblacion: { type: string, nullable: true, description: Código de `clasificacion_poblacion`; null en `DESERCION`, example: MENOR_1 }
+        grupoEdad:
+          type: string
+          nullable: true
+          description: El único valor de `filtros_dimension.grupo_edad`; null si no hay filtro (todas las edades) o tiene más de un valor
+          example: MENOR_1
+        numerador:
+          type: object
+          properties:
+            fuente: { type: string, enum: [PRODUCCION, INDICADOR] }
+            estadosReporte: { type: array, items: { type: string }, example: [CERRADO] }
+            atribucion: { type: string, enum: [PROCEDENCIA, APLICACION] }
+            acumulado: { type: string, enum: [MENSUAL, ANUAL] }
+        denominador:
+          type: object
+          properties:
+            fuente: { type: string, enum: [POBLACION_OBJETIVO, PRODUCCION, INDICADOR] }
+            prorrateo:
+              type: string
+              enum: [NINGUNO, MENSUAL_LINEAL]
+              description: "`MENSUAL_LINEAL`: población ÷ 12 × número de mes"
+        meta:
+          type: object
+          required: [valor, unidad, comparador]
+          properties:
+            valor: { type: number, example: 100 }
+            unidad: { type: string, enum: [PORCENTAJE, DOSIS] }
+            comparador: { type: string, enum: [">", ">=", "<", "<="] }
+        umbrales:
+          type: array
+          description: Las franjas del semáforo; vacío si la versión no tiene
+          items: { $ref: "#/components/schemas/UmbralIndicador" }
+        umbralesProvisionales: { type: boolean, description: Rangos sin confirmar por Epidemiología }
+        esIndicadorMapa: { type: boolean, description: El mapa puede mostrarlo; varios pueden tenerlo }
+        parametros:
+          type: object
+          additionalProperties: true
+          description: Claves en snake_case; no se editan
+          example: { mostrar_diferencia: true, redondeo: ARRIBA, minimo_cero: true }
+        alerta:
+          type: object
+          description: No se edita
+          properties:
+            generar: { type: boolean }
+            tipo: { type: string, enum: [COBERTURA_BAJO_META, CALIDAD, PROCESO] }
+            rolDestino: { type: array, items: { type: string } }
+        esEstimacion: { type: boolean, description: true en `PROYECCION` }
+        territorio: { $ref: "#/components/schemas/TerritorioEsquema" }
+        estado: { type: string, enum: [VIGENTE, HISTORICO] }
+        vigencia:
+          type: object
+          required: [desde, hasta]
+          description: "`desde` es el instante de la publicación; `hasta`, el instante en que la reemplazaron o la desactivaron"
+          properties:
+            desde: { type: string, format: date-time, example: "2026-01-01T00:00:00.000Z" }
+            hasta: { type: string, format: date-time, nullable: true, example: null }
+        publicadoPor: { $ref: "#/components/schemas/PublicadoPor" }
+        publicadoEn:
+          type: string
+          format: date-time
+          description: En las versiones de la semilla sin fecha de publicación, la de creación
+          example: "2026-01-01T00:00:00.000Z"
+        motivoCambio: { type: string, nullable: true, example: null }
+
+    IndicadorPorCodigo:
+      type: object
+      required: [codigo, tipoCalculo, vacuna, aplica, ultimaDdriss, vigenteNacional]
+      properties:
+        codigo: { type: string, example: AVANCE_HEXA3 }
+        tipoCalculo: { $ref: "#/components/schemas/TipoCalculoIndicador" }
+        vacuna: { $ref: "#/components/schemas/VacunaDeIndicador" }
+        aplica:
+          allOf: [{ $ref: "#/components/schemas/ConfiguracionIndicador" }]
+          nullable: true
+          description: La versión que aplica a la DDRISS; null si el indicador está inactivo en ella
+        ultimaDdriss:
+          allOf: [{ $ref: "#/components/schemas/ConfiguracionIndicador" }]
+          nullable: true
+          description: La versión más reciente de la DDRISS, `VIGENTE` o `HISTORICO`; null si la DDRISS no tiene
+        vigenteNacional:
+          type: object
+          nullable: true
+          required: [version]
+          properties:
+            version: { type: integer, example: 1 }
+
+    IndicadorEnHistorial:
+      allOf:
+        - $ref: "#/components/schemas/ConfiguracionIndicador"
+        - type: object
+          required: [desactivacion]
+          properties:
+            desactivacion:
+              type: object
+              nullable: true
+              description: Si la versión se desactivó (fila `DESACTIVAR` de la bitácora); null si no
+              required: [en, por, motivo]
+              properties:
+                en: { type: string, format: date-time, example: "2026-11-03T16:40:00.000Z" }
+                por: { $ref: "#/components/schemas/PublicadoPor" }
+                motivo: { type: string, example: Epidemiología usará el indicador nacional este año. }
+
+    OpcionesIndicador:
+      type: object
+      required: [vacunas, clasificaciones, gruposEdad]
+      properties:
+        vacunas:
+          type: array
+          description: Vacunas activas con sus dosis activas
+          items:
+            type: object
+            required: [codigo, nombre, dosis]
+            properties:
+              codigo: { type: string, example: HEXA }
+              nombre: { type: string, example: Hexavalente }
+              dosis:
+                type: array
+                items:
+                  type: object
+                  required: [codigo, nombre, orden, completaEsquema]
+                  properties:
+                    codigo: { type: string, example: D3 }
+                    nombre: { type: string, example: Tercera dosis }
+                    orden: { type: integer, example: 3 }
+                    completaEsquema: { type: boolean, example: true }
+        clasificaciones:
+          type: array
+          items:
+            type: object
+            required: [codigo, descripcion]
+            properties:
+              codigo: { type: string, example: MENOR_1 }
+              descripcion: { type: string, example: Menores de 1 año }
+        gruposEdad:
+          type: array
+          description: Valores activos de la dimensión `grupo_edad`
+          items:
+            type: object
+            required: [codigo, etiqueta]
+            properties:
+              codigo: { type: string, example: MENOR_1 }
+              etiqueta: { type: string, example: Menor de 1 año }
+
+    ContenidoIndicador:
+      type: object
+      required: [nombre, motivoCambio]
+      description: |
+        Los campos que van dependen del tipo (ver `TipoCalculoIndicador`); uno que el tipo no tiene responde 400.
+        En `PROYECCION` solo van `nombre`, `descripcion`, `meta` y `motivoCambio`.
+      properties:
+        nombre: { type: string, minLength: 3, maxLength: 120, description: Se recorta, example: Cobertura de SPR 1.ª dosis en niñas y niños de 1 año }
+        descripcion:
+          type: string
+          nullable: true
+          maxLength: 300
+          description: Opcional; se recorta, y vacía o null no guarda descripción
+        dosis: { type: string, description: Dosis activa de la vacuna; salvo en `DESERCION`, example: D1 }
+        dosisInicial: { type: string, description: Solo en `DESERCION`; con `orden` menor que la final, example: D1 }
+        dosisFinal: { type: string, description: Solo en `DESERCION`, example: D3 }
+        clasificacionPoblacion: { type: string, description: Código de `clasificacion_poblacion`; salvo en `DESERCION`, example: 1_A_MENOR_2 }
+        grupoEdad: { type: string, nullable: true, description: Valor activo de `grupo_edad`; null o ausente = todas las edades, example: 1_A_MENOR_2 }
+        prorrateo: { type: string, enum: [NINGUNO, MENSUAL_LINEAL], description: Solo en `COBERTURA` y `BRECHA` }
+        meta: { type: number, minimum: 1, maximum: 100, description: Porcentaje con un decimal como máximo; no va en `AVANCE_META_MES`, example: 95 }
+        cortes:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items: { type: number, minimum: 0, maximum: 100 }
+          description: |
+            Los dos cortes del semáforo `[c1, c2]`, con `c1 < c2` y un decimal como máximo. Solo en `COBERTURA`,
+            `AVANCE_META_MES` y `DESERCION`, donde es obligatorio. Se guardan como tres franjas: ascendente =
+            rojo `[0, c1)`, amarillo `[c1, c2)`, verde `[c2, …)`; descendente (`DESERCION`) = verde `(…, c1]`,
+            amarillo `(c1, c2]`, rojo `(c2, …)`.
+          example: [80, 90]
+        umbralesProvisionales: { type: boolean, description: Con `cortes`; por defecto false }
+        esIndicadorMapa: { type: boolean, description: Solo en `COBERTURA` y `AVANCE_META_MES`; por defecto false }
+        motivoCambio: { type: string, minLength: 1, maxLength: 300, description: Se recorta, example: Meta pedida por Epidemiología. }
+
+    IndicadorCrear:
+      allOf:
+        - $ref: "#/components/schemas/ContenidoIndicador"
+        - type: object
+          required: [tipoCalculo, vacuna]
+          properties:
+            tipoCalculo: { type: string, enum: [COBERTURA, AVANCE_META_MES, BRECHA, DESERCION] }
+            vacuna: { type: string, description: Código de una vacuna activa, example: SPR }
+      description: No admite otros campos
+      example:
+        tipoCalculo: COBERTURA
+        vacuna: SPR
+        nombre: Cobertura de SPR 1.ª dosis en niñas y niños de 1 año
+        dosis: D1
+        clasificacionPoblacion: 1_A_MENOR_2
+        grupoEdad: 1_A_MENOR_2
+        prorrateo: MENSUAL_LINEAL
+        meta: 95
+        cortes: [80, 90]
+        umbralesProvisionales: false
+        esIndicadorMapa: false
+        motivoCambio: Indicador pedido por Epidemiología.
+
+    IndicadorVersion:
+      allOf:
+        - $ref: "#/components/schemas/ContenidoIndicador"
+        - type: object
+          required: [versionBase]
+          properties:
+            versionBase:
+              type: integer
+              minimum: 1
+              description: La versión que cargó el editor; si ya no es la base, responde 409 `INDICADOR_DESACTUALIZADO`
+              example: 1
+      description: No admite otros campos (ni `tipoCalculo`, ni `vacuna`, ni `codigo`)
+      example:
+        versionBase: 1
+        nombre: Cobertura de Hexavalente 3.ª dosis en menores de 1 año
+        dosis: D3
+        clasificacionPoblacion: MENOR_1
+        grupoEdad: MENOR_1
+        prorrateo: MENSUAL_LINEAL
+        meta: 95
+        cortes: [85, 95]
+        umbralesProvisionales: false
+        esIndicadorMapa: false
+        motivoCambio: Semáforo confirmado por Epidemiología.
+
+    IndicadorEstado:
+      type: object
+      required: [version, motivoCambio]
+      additionalProperties: false
+      properties:
+        version:
+          type: integer
+          minimum: 1
+          description: "Al desactivar, la del `VIGENTE` de la DDRISS; al activar, la de `ultimaDdriss`"
+          example: 2
+        motivoCambio: { type: string, minLength: 1, maxLength: 300, description: Se recorta, example: Epidemiología usará el indicador nacional este año. }
 
     ReporteNuevo:
       type: object

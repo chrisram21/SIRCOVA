@@ -9,6 +9,7 @@ export const LARGOS = {
   tituloSeccion: 60,
   motivoCambio: 300,
   nombreRegla: 100, descripcionRegla: 300, mensajeRegla: 300,
+  nombreIndicador: 120, descripcionIndicador: 300,
 }
 
 export const MENSAJES = {
@@ -61,6 +62,8 @@ export const MENSAJES = {
   nombreRegla: 'El nombre de la regla debe tener entre 3 y 100 caracteres.',
   descripcionRegla: 'La descripción de la regla debe tener como máximo 300 caracteres.',
   mensajeRegla: 'El mensaje de la regla debe tener entre 10 y 300 caracteres.',
+  nombreIndicador: 'El nombre del indicador debe tener entre 3 y 120 caracteres.',
+  descripcionIndicador: 'La descripción del indicador debe tener como máximo 300 caracteres.',
 }
 
 const demasiadoLargo = (campo, largo) => `${campo}: como máximo ${largo} caracteres.`
@@ -332,5 +335,18 @@ export function validarDescripcionRegla(valor) {
 export function validarMensajeRegla(valor) {
   const texto = limpiar(valor)
   if (!texto || texto.length < 10 || texto.length > LARGOS.mensajeRegla) return { error: MENSAJES.mensajeRegla }
+  return { valor: texto }
+}
+
+export function validarNombreIndicador(valor) {
+  const texto = limpiar(valor)
+  if (!texto || texto.length < 3 || texto.length > LARGOS.nombreIndicador) return { error: MENSAJES.nombreIndicador }
+  return { valor: texto }
+}
+
+export function validarDescripcionIndicador(valor) {
+  const texto = limpiar(valor)
+  if (texto === '') return { valor: null }
+  if (texto === null || texto.length > LARGOS.descripcionIndicador) return { error: MENSAJES.descripcionIndicador }
   return { valor: texto }
 }

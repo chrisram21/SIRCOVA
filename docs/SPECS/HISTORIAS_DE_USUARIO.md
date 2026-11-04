@@ -1026,10 +1026,18 @@ Verificado contra la API real el 2026-11-01, después de correr el 05. Como la e
 **Cómo se hará:** Colección `configuracion_indicadores` en MongoDB con versión; prorrateo `MENSUAL_LINEAL` (población ÷ 12 × número de mes).
 
 **Criterios de aceptación:**
-- [ ] Puedo definir la meta de cada indicador.
-- [ ] Puedo indicar qué dosis cuenta para el numerador (la que completa el esquema, es decir, la última dosis sin refuerzos).
-- [ ] Puedo definir los umbrales del semáforo que usa el mapa.
-- [ ] Un cambio de configuración crea una versión nueva y no altera resultados anteriores.
+- [x] Puedo definir la meta de cada indicador.
+- [x] Puedo indicar qué dosis cuenta para el numerador (la que completa el esquema, es decir, la última dosis sin refuerzos).
+- [x] Puedo definir los umbrales del semáforo que usa el mapa.
+- [x] Un cambio de configuración crea una versión nueva y no altera resultados anteriores.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 43 a `main`. Backend y frontend, en `specs/43-hu-35-configurar-indicadores.md`: la pantalla «Configuración de indicadores» (`/administracion/indicadores`, hijo de «Administración») y siete operaciones bajo `/configuracion-indicadores` con los permisos `INDICADOR_CONFIG_CONSULTAR` e `INDICADOR_CONFIG_EDITAR`, solo de Epidemiología (que también recibe `CONFIGURACION_CONSULTAR`). Diferencias con la historia, decididas por el equipo:
+
+- Epidemiología maneja solo los indicadores de su DDRISS. Una versión de la DDRISS reemplaza a la nacional del mismo código; las nacionales se ven y se les publica una versión de la DDRISS, pero no se apagan. Publicación directa, sin borradores, con motivo obligatorio; desactivar y activar como las reglas (HU-24).
+- Se crean indicadores `COBERTURA`, `AVANCE_META_MES`, `BRECHA` y `DESERCION`, de una vacuna cada uno; `PROYECCION` solo se versiona (su método es de HU-39). El backend genera el código `{PREFIJO}_{VACUNA}{DOSIS}` (`COB_SPR1`, `DES_HEXA1_3`) y rechaza (409) otro indicador con el mismo tipo, vacuna y dosis que ya aplique.
+- Se editan la dosis (el editor precarga la que completa el esquema, pero acepta cualquier dosis activa), el grupo de población, el grupo de edad que cuenta, el prorrateo (`NINGUNO` o `MENSUAL_LINEAL` en cobertura y brecha; en avance es siempre `MENSUAL_LINEAL`), el valor de la meta (en avance, siempre 100) y el semáforo. La atribución, los estados del reporte, el acumulado, la alerta y los `parametros` no se editan.
+- El semáforo son dos cortes y tres franjas (rojo, amarillo y verde; invertidas en deserción). `DES_HEXA1_3` de la semilla tiene dos franjas: se ve tal cual y una versión nueva pide los dos cortes.
+- «No altera resultados anteriores»: las versiones publicadas no se editan y `resultado_indicador` guarda código y versión; el motor (HU-36) todavía no existe.
 
 #### HU-36. Calcular la cobertura contra la meta del mes
 
@@ -1048,6 +1056,8 @@ Verificado contra la API real el 2026-11-01, después de correr el 05. Como la e
 - [ ] Las dosis se asignan al municipio de residencia (procedencia); las de Migrantes no cuentan para la cobertura y las del Hospital de San Marcos sí.
 - [ ] Un caso de prueba con datos conocidos (por ejemplo, 541 de población a junio ≈ 270 dosis) da el resultado esperado.
 - [ ] Cada resultado guarda la versión de configuración usada.
+
+**Nota (2026-11-03, spec 43):** los indicadores que se calculan son los que aplican a la DDRISS en el momento de la corrida (SPEC 43: la `VIGENTE` de la DDRISS antes que la nacional del mismo código, como las reglas), con `aplica_a[0]` (un solo elemento). `resultado_indicador` guarda el código y la versión usados. El semáforo son tres franjas `verde`/`amarillo`/`rojo` (`aCortes` en `tiposIndicador.js`); `DES_HEXA1_3` de la semilla tiene dos. La configuración la leen `listarConfigIndicadores` o los documentos de `configuracion_indicadores` (`modulos/configuracion/indicadores.service.js`).
 
 **Nota (2026-10-31, spec 39):** el cálculo debe dispararse al cerrar el mes. `POST /periodos/{id}/cerrar` (`modulos/revision/cierre.service.js`) todavía no crea `corrida_calculo`; esta historia la agrega con el motivo `CIERRE_PERIODO`.
 
@@ -1075,6 +1085,8 @@ Verificado contra la API real el 2026-11-01, después de correr el 05. Como la e
 
 **Cómo se hará:** Indicador configurado en MongoDB: (primera dosis − última dosis) ÷ primera dosis × 100.
 
+**Nota (2026-11-03, spec 43):** los indicadores `DESERCION` (con `dosis_inicial` y `dosis_final`) los crea Epidemiología desde «Configuración de indicadores», y su semáforo es descendente (verde hasta el primer corte). Se calculan los que aplican a la DDRISS en el momento de la corrida.
+
 **Criterios de aceptación:**
 - [ ] Se calcula por vacuna, municipio y periodo.
 - [ ] Si no hay primeras dosis, el indicador se muestra como no calculable, sin error.
@@ -1088,6 +1100,8 @@ Verificado contra la API real el 2026-11-01, después de correr el 05. Como la e
 | Epidemiología | 8 | S4 | Luis Suárez |
 
 **Cómo se hará:** Proyección lineal en el backend a partir del promedio mensual de dosis; se guarda como resultado de tipo estimación.
+
+**Nota (2026-11-03, spec 43):** los indicadores `PROYECCION` no se crean desde la pantalla: solo se publican versiones que cambian el nombre, la descripción y la meta. Su método (`parametros`: `indicador_base`, `metodo`, `meses_ventana`, `horizonte`) se copia de la versión base, así que esta historia lo define.
 
 **Criterios de aceptación:**
 - [ ] La proyección se muestra claramente marcada como estimación, distinta de los datos reales.
@@ -1138,6 +1152,8 @@ Verificado contra la API real el 2026-11-01, después de correr el 05. Como la e
 - [ ] Cada municipio se colorea según su avance para la vacuna y el mes elegidos.
 - [ ] Al pasar o hacer clic sobre un municipio veo dosis, meta, avance y brecha.
 - [ ] Los umbrales del semáforo se toman de la configuración del indicador (HU-35), no están fijos en el código.
+
+**Nota (2026-11-03, spec 43):** los umbrales salen de la versión que aplica a la DDRISS (tres franjas con los nombres `verde`, `amarillo` y `rojo`, que el mapa pinta con sus tonos suaves; `aCortes` en `tiposIndicador.js` los lee). Varios indicadores pueden tener `es_indicador_mapa`: el mapa decide cuál muestra primero. Solo `COBERTURA` y `AVANCE_META_MES` pueden llevar esa marca.
 - [ ] El mapa muestra siempre, en su control de atribución, el crédito de los límites con el enlace a la fuente, el enlace a la licencia CC BY 3.0 IGO y la indicación "adaptado", además del crédito de Leaflet.
 - [ ] El sistema tiene una sección de créditos con la fuente completa de los límites, los cambios hechos y la nota de que son límites de referencia, no límites legales oficiales; no usa logos de CONRED, OCHA, HDX ni de las Naciones Unidas.
 

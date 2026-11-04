@@ -9,6 +9,7 @@ import {
   FileCog,
   FilePenLine,
   FileSpreadsheet,
+  Gauge,
   FileText,
   House,
   LandPlot,
@@ -45,6 +46,7 @@ const PaginaEditarEsquema = lazy(() => import('@/paginas/configuracion/PaginaEdi
 const PaginaHistorialEsquemas = lazy(() => import('@/paginas/configuracion/PaginaHistorialEsquemas.jsx'))
 const PaginaVerEsquema = lazy(() => import('@/paginas/configuracion/PaginaVerEsquema.jsx'))
 const PaginaReglas = lazy(() => import('@/paginas/configuracion/PaginaReglas.jsx'))
+const PaginaConfigIndicadores = lazy(() => import('@/paginas/configuracion/PaginaConfigIndicadores.jsx'))
 const PaginaEditarUsuario = lazy(() => import('@/paginas/usuarios/PaginaEditarUsuario.jsx'))
 const PaginaRegistrarPersonal = lazy(() => import('@/paginas/usuarios/PaginaRegistrarPersonal.jsx'))
 const PaginaUsuarios = lazy(() => import('@/paginas/usuarios/PaginaUsuarios.jsx'))
@@ -293,6 +295,14 @@ const opcionesMenu = [
         permisos: ['CONFIGURACION_CONSULTAR', 'REGLA_CONSULTAR', 'VACUNA_CONSULTAR'],
         icono: ListChecks,
         pagina: PaginaReglas,
+      },
+      {
+        titulo: 'Configuración de indicadores',
+        descripcion: 'Cómo se calcula cada indicador: dosis, población, meta y semáforo.',
+        ruta: '/administracion/indicadores',
+        permisos: ['CONFIGURACION_CONSULTAR', 'INDICADOR_CONFIG_CONSULTAR'],
+        icono: Gauge,
+        pagina: PaginaConfigIndicadores,
       },
       {
         titulo: 'Periodos',

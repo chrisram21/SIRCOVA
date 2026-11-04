@@ -34,6 +34,7 @@ const HIJOS_ADMINISTRACION = [
   'Dimensiones',
   'Esquemas',
   'Reglas de validación',
+  'Configuración de indicadores',
   'Periodos',
   'Población',
   'Roles y permisos',
@@ -122,7 +123,7 @@ test('con todos los permisos ve las 11 opciones en el orden de la tabla; «Admin
   expect(hijosVisibles()).toEqual([])
 })
 
-test('un clic en «Administración» despliega sus diez hijos en orden, y otro la pliega', () => {
+test('un clic en «Administración» despliega sus once hijos en orden, y otro la pliega', () => {
   abrir('/inicio', { permisos: TODOS_LOS_PERMISOS })
 
   fireEvent.click(padre())
@@ -141,6 +142,23 @@ test('con los permisos del Revisor, «Administración» muestra solo sus hijos',
   fireEvent.click(padre())
   // Sin REGLA_CONSULTAR (SPEC 32: solo el Administrador), «Reglas de validación» no aparece.
   expect(hijosVisibles()).toEqual(['Vacunas', 'Dimensiones', 'Esquemas', 'Periodos', 'Población'])
+})
+
+test('con los permisos de Epidemiología, «Administración» muestra solo «Configuración de indicadores»', () => {
+  abrir('/inicio', {
+    permisos: ['CONFIGURACION_CONSULTAR', 'INDICADOR_CONFIG_CONSULTAR', 'INDICADOR_CONFIG_EDITAR'],
+  })
+
+  fireEvent.click(padre())
+  expect(hijosVisibles()).toEqual(['Configuración de indicadores'])
+  expect(menu().getByRole('link', { name: 'Configuración de indicadores' }).getAttribute('href')).toBe(
+    '/administracion/indicadores',
+  )
+})
+
+test('«Configuración de indicadores» pide INDICADOR_CONFIG_CONSULTAR', () => {
+  abrir('/inicio', { permisos: ['CONFIGURACION_CONSULTAR'] })
+  expect(menu().queryByRole('button', { name: 'Administración' })).toBeNull()
 })
 
 test('«Reglas de validación» pide REGLA_CONSULTAR y VACUNA_CONSULTAR', () => {
