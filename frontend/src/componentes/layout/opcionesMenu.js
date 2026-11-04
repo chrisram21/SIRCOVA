@@ -47,6 +47,7 @@ const PaginaHistorialEsquemas = lazy(() => import('@/paginas/configuracion/Pagin
 const PaginaVerEsquema = lazy(() => import('@/paginas/configuracion/PaginaVerEsquema.jsx'))
 const PaginaReglas = lazy(() => import('@/paginas/configuracion/PaginaReglas.jsx'))
 const PaginaConfigIndicadores = lazy(() => import('@/paginas/configuracion/PaginaConfigIndicadores.jsx'))
+const PaginaIndicadores = lazy(() => import('@/paginas/indicadores/PaginaIndicadores.jsx'))
 const PaginaEditarUsuario = lazy(() => import('@/paginas/usuarios/PaginaEditarUsuario.jsx'))
 const PaginaRegistrarPersonal = lazy(() => import('@/paginas/usuarios/PaginaRegistrarPersonal.jsx'))
 const PaginaUsuarios = lazy(() => import('@/paginas/usuarios/PaginaUsuarios.jsx'))
@@ -121,6 +122,7 @@ const opcionesMenu = [
     ruta: '/indicadores',
     permiso: 'INDICADOR_CONSULTAR',
     icono: ChartLine,
+    pagina: PaginaIndicadores,
   },
   {
     titulo: 'Mapa territorial',

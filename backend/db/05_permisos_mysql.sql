@@ -341,6 +341,17 @@ SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo IN ('EPIDEMIOLOGIA', 'REVISOR', 'ADMINISTRADOR', 'AUTORIDAD')
    AND p.codigo = 'INDICADOR_CONSULTAR';
 
+-- SPEC 44 (HU-36): la pantalla «Indicadores» lee el estado de los meses (Epidemiología) y la Autoridad nacional elige la DDRISS
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'EPIDEMIOLOGIA'
+   AND p.codigo = 'PERIODO_CONSULTAR';
+
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'AUTORIDAD'
+   AND p.codigo = 'DDRISS_CONSULTAR';
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas
 -- -----------------------------------------------------------------------------

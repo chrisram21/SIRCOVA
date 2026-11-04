@@ -1,6 +1,6 @@
 # SPEC 44 — Calcular la cobertura y el avance contra la meta del mes
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-36
 > **Depende de:** SPEC 04, SPEC 05, SPEC 17, SPEC 39, SPEC 41 y SPEC 43
 > **Fecha:** 2026-11-03
@@ -17,7 +17,7 @@ Este spec trae el motor con un **calculador por tipo** y los de `COBERTURA` y `A
 - `corrida_calculo` no tenía DDRISS: la corrida era «vigente por año y mes» en todo el país y la fila departamental (`municipio_id NULL`) quedaba ambigua con varias DDRISS. Se agrega `corrida_calculo.ddriss_id`; cada corrida es de una DDRISS.
 - «Usa solo reportes cerrados»: el numerador solo cuenta reportes `CERRADO`, pero una corrida manual puede tener como corte cualquier mes del calendario; si algún mes de enero al corte no estaba cerrado al calcular, la corrida es **parcial** y la pantalla lo dice.
 - La fórmula de la historia es la de `AVANCE_META_MES`. `COBERTURA` usa el prorrateo de su versión (`NINGUNO` = población anual; `MENSUAL_LINEAL` = la del mes) y su meta (95 % por defecto).
-- `meta.homogeneidad_municipal` y `alerta` no se usan: las alertas son de HU-46.
+- `meta.homogeneidad_municipal` y `alerta` no se usan: las alertas son de HU-51.
 
 ## Alcance
 
@@ -31,12 +31,12 @@ Este spec trae el motor con un **calculador por tipo** y los de `COBERTURA` y `A
 - Acción de bitácora `CALCULAR_INDICADORES` (módulo `INDICADORES`).
 - Pantalla `/indicadores` (la opción del menú que ya existe): corridas, «Calcular» y tabla de resultados por municipio.
 - Pruebas del backend (contra las bases de prueba) y del frontend (con `vi.mock`).
-- Verificación manual con Playwright; avance de HU-36, notas en HU-37 a HU-41 y HU-46, `CONTEXTO BD.md` y `CLAUDE.md`.
+- Verificación manual con Playwright; avance de HU-36, notas en HU-37 a HU-41 y HU-51, `CONTEXTO BD.md` y `CLAUDE.md`.
 
 **Fuera de alcance (para otros specs):**
 
 - Calcular `BRECHA`, `DESERCION` y `PROYECCION` (HU-37, HU-38, HU-39).
-- Generar alertas (`alerta`, HU-46) y la tarea programada (`PROGRAMADA`).
+- Generar alertas (`alerta`, HU-51) y la tarea programada (`PROGRAMADA`).
 - Gráficas, mapa, dashboard y exportar a Excel o PDF (HU-40 a HU-44).
 - Nivel distrito o establecimiento, agrupar por sexo u otras dimensiones, rangos de meses.
 - Corridas asíncronas o en cola.
@@ -229,24 +229,24 @@ docs/SPECS/HISTORIAS_DE_USUARIO.md, docs/base-de-datos/CONTEXTO BD.md, CLAUDE.md
    - 400, 404 de otra DDRISS, 422 de un mes fuera del calendario; Personal 403; la Autoridad consulta con `ddrissId`.
 5. **Disparo automático.** En `cerrarPeriodo` y `aprobarRectificacion`. Pruebas en `cierrePeriodo.test.js` (cerrar crea la corrida `CIERRE_PERIODO`) y `resolverRectificacion.test.js` (aplicar en un mes con otro mes cerrado después crea dos corridas `RECTIFICACION` y el acumulado del segundo cambia; un fallo del motor no deshace la rectificación). Comprobación: los archivos que tocó el spec pasan.
 6. **Frontend.** `api/indicadores.js`, la página y el diálogo. Pruebas: la tabla con la fila departamental, colores e «Sin población»; el aviso de parcial y los omitidos; sin corrida; «Calcular» solo con `INDICADOR_CALCULAR`, el aviso de mes sin cerrar y `toast.success`; filtros en la URL; `AvisoError` con «Reintentar». Comprobación: `npm test` del frontend pasa completo.
-7. **Verificación manual y documentación.** Con Playwright (acceso rápido o inicio de sesión a mano): como `epidemiologia`, calcular agosto de 2026 y comparar con la corrida de la semilla; ver septiembre (`EN_CIERRE`) parcial; como Autoridad, solo consulta. Revisar por SQL la corrida, sus resultados y la bitácora. Documentación: avance y criterios de HU-36; notas en HU-37, HU-38 y HU-39 (agregar su calculador en `CALCULADORES`), HU-40/41 (leer `GET /indicadores/resultados`) y HU-46 (alertas); `CONTEXTO BD.md` (v0.11 y reglas del motor); nota en `CLAUDE.md`.
+7. **Verificación manual y documentación.** Con Playwright (acceso rápido o inicio de sesión a mano): como `epidemiologia`, calcular agosto de 2026 y comparar con la corrida de la semilla; ver septiembre (`EN_CIERRE`) parcial; como Autoridad, solo consulta. Revisar por SQL la corrida, sus resultados y la bitácora. Documentación: avance y criterios de HU-36; notas en HU-37, HU-38 y HU-39 (agregar su calculador en `CALCULADORES`), HU-40/41 (leer `GET /indicadores/resultados`) y HU-51 (alertas); `CONTEXTO BD.md` (v0.11 y reglas del motor); nota en `CLAUDE.md`.
 
 ## Criterios de aceptación
 
-- [ ] `backend/openapi.yaml` documenta las cuatro operaciones con su `x-permiso` y `/api/docs` carga.
-- [ ] Solo cambian en `backend/db/` el 01, el 03, el 05 y el 10 nuevo; el 10 es idempotente. Los `package.json` no cambian.
-- [ ] Meta del mes = población ÷ 12 × número de mes, y el avance = dosis acumuladas ÷ meta del mes × 100; el caso de 541 en junio da 270,50 de meta.
-- [ ] Las dosis se atribuyen al municipio de procedencia; Migrantes y otros departamentos no cuentan y el Hospital de San Marcos sí, con pruebas de cada caso.
-- [ ] Cada resultado guarda el código y la versión de configuración usados, y publicar otra versión después no los cambia.
-- [ ] Cada corrida es de una DDRISS; solo una `COMPLETADA` es vigente por DDRISS, año y mes, también con dos corridas en paralelo.
-- [ ] Cerrar un mes crea su corrida `CIERRE_PERIODO`; aplicar una rectificación crea una `RECTIFICACION` por ese mes y cada mes cerrado siguiente del año; si el cálculo falla, el cierre o la rectificación siguen confirmados y la corrida queda `FALLIDA`.
-- [ ] Un municipio sin población deja una fila no calculable; un tipo sin calculador se omite sin hacer fallar la corrida.
-- [ ] Una corrida con meses sin cerrar se muestra como parcial.
-- [ ] Sin `INDICADOR_CALCULAR` o `INDICADOR_CONSULTAR` los endpoints responden 403 y la pantalla oculta «Calcular» o la opción; cada rol ve solo su DDRISS salvo la Autoridad nacional.
-- [ ] Cada corrida deja su `CALCULAR_INDICADORES` en la bitácora, también las `FALLIDA`.
-- [ ] Las pruebas que tocó el spec pasan en `backend/`, `npm test` pasa en `frontend/`, sin desactivar pruebas, y no quedan datos `ZVT_HU36…` ni del año 2006.
-- [ ] Ningún componente propio tiene colores escritos a mano ni llama a `fetch`.
-- [ ] HU-36 tiene su avance y sus criterios, las historias siguientes sus notas, y `CONTEXTO BD.md` y `CLAUDE.md` están al día.
+- [x] `backend/openapi.yaml` documenta las cuatro operaciones con su `x-permiso` y `/api/docs` carga.
+- [x] Solo cambian en `backend/db/` el 01, el 03, el 05 y el 10 nuevo; el 10 es idempotente. Los `package.json` no cambian.
+- [x] Meta del mes = población ÷ 12 × número de mes, y el avance = dosis acumuladas ÷ meta del mes × 100; el caso de 541 en junio da 270,50 de meta.
+- [x] Las dosis se atribuyen al municipio de procedencia; Migrantes y otros departamentos no cuentan y el Hospital de San Marcos sí, con pruebas de cada caso.
+- [x] Cada resultado guarda el código y la versión de configuración usados, y publicar otra versión después no los cambia.
+- [x] Cada corrida es de una DDRISS; solo una `COMPLETADA` es vigente por DDRISS, año y mes, también con dos corridas en paralelo.
+- [x] Cerrar un mes crea su corrida `CIERRE_PERIODO`; aplicar una rectificación crea una `RECTIFICACION` por ese mes y cada mes cerrado siguiente del año; si el cálculo falla, el cierre o la rectificación siguen confirmados y la corrida queda `FALLIDA`.
+- [x] Un municipio sin población deja una fila no calculable; un tipo sin calculador se omite sin hacer fallar la corrida.
+- [x] Una corrida con meses sin cerrar se muestra como parcial.
+- [x] Sin `INDICADOR_CALCULAR` o `INDICADOR_CONSULTAR` los endpoints responden 403 y la pantalla oculta «Calcular» o la opción; cada rol ve solo su DDRISS salvo la Autoridad nacional.
+- [x] Cada corrida deja su `CALCULAR_INDICADORES` en la bitácora, también las `FALLIDA`.
+- [x] Las pruebas que tocó el spec pasan en `backend/`, `npm test` pasa en `frontend/`, sin desactivar pruebas, y no quedan datos `ZVT_HU36…` ni del año 2006.
+- [x] Ningún componente propio tiene colores escritos a mano ni llama a `fetch`.
+- [x] HU-36 tiene su avance y sus criterios, las historias siguientes sus notas, y `CONTEXTO BD.md` y `CLAUDE.md` están al día.
 
 ## Decisiones
 
@@ -265,6 +265,19 @@ docs/SPECS/HISTORIAS_DE_USUARIO.md, docs/base-de-datos/CONTEXTO BD.md, CLAUDE.md
 - **Sí:** `disparada_por` lleva al usuario que cerró o aprobó (decidido al escribir el spec): la corrida automática también tiene responsable.
 - **Sí:** las pruebas usan el año 2006 (libre: 2007 a 2025 ya tienen dueño) y datos `ZVT_HU36*`.
 
+Decididas al implementar:
+
+- **Sí:** una población de 0 deja la fila no calculable, como la que falta, para no dividir entre cero (paso 3).
+- **Sí:** las alertas de cobertura son de HU-51, no de HU-46 (que agrupa informes por dimensión); el spec decía HU-46 (paso 7).
+- **Sí:** las lecturas de la corrida van antes y fuera de la transacción, en paralelo por el pool (`leerDatos`), y la transacción solo bloquea `ddriss`, quita la vigente anterior e inserta la corrida ya `COMPLETADA`, sus resultados y la bitácora. Lo pidió Chris para que las pruebas no tarden tanto: cada viaje a Aiven cuesta unos 130 ms y una corrida bajó de más de 20 viajes a unos 9 (`corridas.test.js`, de 91 s a 47 s). El bloqueo sigue garantizando una sola vigente (prueba de dos corridas en paralelo). **No:** leer dentro de la transacción, como decía «Escritura y concurrencia» (paso 5).
+- **Sí:** el numerador agrupa por `vacuna_codigo` y `dosis_codigo` de `v_produccion`, así no hace falta leer los ids antes; un filtro de varias dimensiones (que la pantalla no crea) conserva su propia consulta (paso 5).
+- **Sí:** para provocar el fallo, las pruebas espían el calculador (`vi.spyOn(CALCULADORES, tipo)`) y no el `INSERT` de resultados: la conexión de la transacción no se puede espiar desde la prueba (pasos 4 y 5).
+- **Sí:** los casos del SPEC 44 de `resolverRectificacion.test.js` usan meses de 2005 (libre), porque los de HU-33 ocupan los 12 de 2008; el esquema de prueba de `ZVT_HU33` es vigente desde enero de 2005. `configIndicadores.test.js` borra en su limpieza los `resultado_indicador` de sus vacunas, porque una corrida de otro archivo los calcula (paso 4).
+- **Sí:** `PERIODO_CONSULTAR` para Epidemiología (el diálogo «Calcular» lee el estado de los meses), aunque con eso ve «Administración › Periodos» en solo lectura, y `DDRISS_CONSULTAR` para la Autoridad (la nacional elige la DDRISS) (decidido en el paso 6). **No:** avisar solo después de calcular; **no:** un endpoint propio de DDRISS.
+- **Sí:** el aviso del diálogo lista todos los meses de enero al corte que no están cerrados, no solo el elegido, porque son los que hacen parcial la corrida; en cobertura la columna se llama «Población» y no «Meta del mes» (paso 6).
+- **Sí:** los años de la pantalla son el actual y los seis anteriores (la Autoridad no lee el calendario) y el mes por defecto es el anterior al actual; el diálogo toma los años y meses del calendario (paso 6).
+- **Sí:** las pruebas existentes que usaban `/indicadores` como pantalla en construcción pasan a `/mapa` (`RutaConPermiso.test.jsx`) o esperan la pantalla real (`PaginaInicio.test.jsx`) (paso 6).
+
 ## Riesgos
 
 | Riesgo | Mitigación |
@@ -279,7 +292,7 @@ docs/SPECS/HISTORIAS_DE_USUARIO.md, docs/base-de-datos/CONTEXTO BD.md, CLAUDE.md
 ## Lo que **no** entra en este spec
 
 - Brecha, deserción y proyección (HU-37 a HU-39).
-- Alertas y la corrida `PROGRAMADA` (HU-46).
+- Alertas y la corrida `PROGRAMADA` (HU-51).
 - Gráficas, mapa, dashboard e informes (HU-40 a HU-44).
 - Otros niveles (distrito, establecimiento) y agrupar por dimensiones.
 - Borrar corridas o resultados.

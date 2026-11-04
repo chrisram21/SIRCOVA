@@ -49,15 +49,16 @@ beforeEach(() => {
   sessionStorage.clear()
 })
 
-test('con el permiso, /indicadores muestra su página', () => {
-  abrir('/indicadores', ['INDICADOR_CONSULTAR'])
+// /mapa sigue en construcción (sin pagina en opcionesMenu.js): su página es la de «En construcción».
+test('con el permiso, /mapa muestra su página', () => {
+  abrir('/mapa', ['MAPA_CONSULTAR'])
 
-  expect(screen.getByRole('heading', { name: 'Indicadores' })).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'Mapa territorial' })).toBeTruthy()
   expect(enConstruccion()).toBeTruthy()
 })
 
-test('sin el permiso, /indicadores lleva a /inicio', () => {
-  abrir('/indicadores', ['BITACORA_CONSULTAR'])
+test('sin el permiso, /mapa lleva a /inicio', () => {
+  abrir('/mapa', ['BITACORA_CONSULTAR'])
 
   expect(enConstruccion()).toBeNull()
   expect(screen.getByText('Usuarios activos')).toBeTruthy()
