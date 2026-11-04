@@ -8647,8 +8647,8 @@ INSERT INTO rectificacion_detalle (solicitud_id, detalle_id, reporte_vacuna_id, 
 -- de la producción de arriba; municipio NULL = total departamental). La
 -- rectificación de San Rafael se autorizó después de esa corrida: mientras su
 -- reporte de agosto esté en RECTIFICACION, v_produccion_atribuida no lo cuenta.
-INSERT INTO corrida_calculo (id, anio, mes_hasta, disparada_por, motivo, estado, iniciada_en, finalizada_en, vigente) VALUES
- (1, 2026, 8, NULL, 'CIERRE_PERIODO', 'COMPLETADA', '2026-09-20 16:05:00', '2026-09-20 16:06:00', TRUE);
+INSERT INTO corrida_calculo (id, ddriss_id, anio, mes_hasta, disparada_por, motivo, estado, iniciada_en, finalizada_en, vigente) VALUES
+ (1, (SELECT id FROM ddriss WHERE codigo = 'DDRISS_SM'), 2026, 8, NULL, 'CIERRE_PERIODO', 'COMPLETADA', '2026-09-20 16:05:00', '2026-09-20 16:06:00', TRUE);
 
 INSERT INTO resultado_indicador (id, corrida_id, indicador_codigo, indicador_version, municipio_id, vacuna_id, dosis_id, filtro_dimensiones, anio, mes, es_proyeccion, numerador, denominador, valor, meta, brecha_dosis, cumple_meta, calculado_en) VALUES
  (1, 1, 'COB_HEXA3', 1, 1, 2, 4, 'grupo_edad=MENOR_1', 2026, 8, FALSE, 975, 966.67, 100.8621, 95, 0, TRUE, '2026-09-20 16:05:00'),

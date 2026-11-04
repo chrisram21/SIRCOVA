@@ -4344,7 +4344,11 @@ paths:
         `{ estado: 'CERRADO', cierrePeriodoId }` después; el mes deja una `ACTUALIZAR` (entidad `cierre_periodo`)
         con `{ estado: 'EN_CIERRE' }` antes y `{ estado: 'CERRADO', reportesCerrados }` después.
 
-        Sin cuerpo: un cuerpo con campos responde 400. No calcula indicadores todavía (HU-36).
+        Sin cuerpo: un cuerpo con campos responde 400.
+
+        Después de confirmar el cierre calcula los indicadores del mes (una corrida `CIERRE_PERIODO` de la DDRISS,
+        como `POST /indicadores/corridas`, con el usuario que cerró) y la respuesta la trae en `corrida`. Si el
+        cálculo falla, el mes sigue cerrado y la corrida queda `FALLIDA`; se puede recalcular a mano.
       x-permiso: PERIODO_CERRAR
       parameters:
         - { $ref: "#/components/parameters/Id" }
@@ -4588,7 +4592,12 @@ paths:
         Bitácora (módulo `RECTIFICACION`): una `APLICAR_RECTIFICACION` sobre `solicitud_rectificacion` con el
         estado anterior y el nuevo, el comentario, el número de rectificación y, por celda, la cantidad anterior y
         la nueva; y una `CAMBIO_ESTADO` sobre `reporte_produccion` por cada transición. No se corren las reglas de
-        validación ni se recalculan los indicadores.
+        validación.
+
+        Después de confirmar recalcula los indicadores: una corrida `RECTIFICACION` de la DDRISS del reporte por el
+        mes del reporte y por cada mes `CERRADO` siguiente del mismo año (el acumulado también cambia), en orden y
+        con el usuario que aprobó; la respuesta las trae en `corridas`. Si una falla, queda `FALLIDA` y la
+        rectificación sigue aplicada.
 
         Los errores se revisan en este orden: cuerpo, solicitud y alcance, estado de la solicitud, estado del
         reporte, detalle, transiciones y celdas.
@@ -4604,10 +4613,10 @@ paths:
               comentario: Se verificó con el libro de vacunación.
       responses:
         "200":
-          description: Solicitud `APLICADA` y reporte rectificado
+          description: Solicitud `APLICADA`, reporte rectificado y las corridas de indicadores
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/SolicitudRectificacion" }
+              schema: { $ref: "#/components/schemas/SolicitudRectificacionAplicada" }
         "400":
           description: El id o el cuerpo no son válidos (comentario de más de 500 caracteres o un campo desconocido)
           content:
@@ -4706,37 +4715,165 @@ paths:
   /indicadores/corridas:
     post:
       tags: [Indicadores]
-      summary: Ejecutar manualmente el cálculo de indicadores
+      summary: Calcular los indicadores de la DDRISS del usuario con corte a un mes
+      description: |
+        Crea una `corrida_calculo` (motivo `MANUAL`) de la DDRISS del usuario y la calcula en el momento: la respuesta
+        trae la corrida ya `COMPLETADA`. Calcula cada indicador que aplica a la DDRISS al iniciar (su `VIGENTE`
+        antes que la nacional del mismo código, SPEC 43) cuyo tipo tenga cálculo; hoy `COBERTURA` y
+        `AVANCE_META_MES`. Los demás tipos (`BRECHA`, `DESERCION`, `PROYECCION`) y los indicadores cuya vacuna,
+        dosis o grupo de población ya no existen quedan en `omitidos`, sin hacer fallar la corrida.
+
+        Por cada indicador deja una fila por municipio (los activos del departamento sede de la DDRISS, sin el
+        `9999`) y una departamental (`municipio: null`):
+
+        - **numerador**: dosis de la vacuna y la dosis del indicador en reportes `CERRADO` de establecimientos de
+          la DDRISS, de enero al mes de corte, atribuidas al municipio de **procedencia** del mismo departamento
+          (Migrantes y otros departamentos no cuentan; el Hospital de San Marcos, `solo_cobertura`, sí), con el
+          filtro de `grupo_edad` del indicador si lo tiene;
+        - **denominador**: la población del municipio, el año y el grupo del indicador; con prorrateo
+          `MENSUAL_LINEAL`, población ÷ 12 × mes de corte (la meta del mes);
+        - **valor**: numerador ÷ denominador × 100; **brechaDosis**: máx(0, ⌈meta ÷ 100 × denominador −
+          numerador⌉); **cumpleMeta**: el valor comparado con la meta según el comparador del indicador.
+
+        Un municipio sin población deja la fila con el numerador y lo demás en `null` (`calculable: false`); la
+        fila departamental tampoco se calcula si a algún municipio le falta la población.
+
+        El mes de corte puede ser cualquier mes del calendario de periodos: si algún mes de enero al corte no
+        estaba cerrado en la DDRISS al calcular, la corrida es `parcial` (solo cuentan los reportes ya cerrados).
+        La corrida nueva pasa a ser la vigente de su DDRISS, año y mes, y la anterior deja de serlo.
+
+        Todo va en una transacción de MySQL. Si el cálculo falla, no queda nada escrito salvo una corrida
+        `FALLIDA` sin resultados, y responde 500. Bitácora: `CALCULAR_INDICADORES` (módulo `INDICADORES`,
+        entidad `corrida_calculo`) con la DDRISS, el corte, el motivo, el estado, `parcial`, los indicadores
+        calculados con su versión, los omitidos y el número de resultados (o el error en una `FALLIDA`).
+
+        También se calcula sin este endpoint: al cerrar el mes (`POST /periodos/{id}/cerrar`, motivo
+        `CIERRE_PERIODO`) y al aplicar una rectificación (`POST /rectificaciones/{id}/aprobar`, motivo
+        `RECTIFICACION`, para el mes del reporte y cada mes cerrado siguiente del año).
+      x-permiso: INDICADOR_CALCULAR
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [anio, mesHasta]
-              properties:
-                anio: { type: integer }
-                mesHasta: { type: integer, minimum: 1, maximum: 12 }
+            schema: { $ref: "#/components/schemas/CorridaNueva" }
+            example: { anio: 2026, mesHasta: 8 }
       responses:
-        "202": { description: Corrida iniciada }
+        "201":
+          description: Corrida `COMPLETADA` y vigente
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Corrida" }
+        "400":
+          description: El cuerpo no es válido (campo desconocido, año fuera de 2000 a 2100 o mes fuera de 1 a 12)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: motivo." }
+                mes:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El mes de corte debe ser un número de 1 a 12. }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403":
+          description: El usuario no tiene el permiso o no tiene DDRISS
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: SIN_PERMISO, mensaje: No tiene permiso para realizar esta acción. }
+        "422":
+          description: El mes no está en el calendario de periodos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: CORRIDA_INVALIDA, mensaje: El mes 8 de 2031 no está en el calendario. }
+        "500":
+          description: El cálculo falló; queda una corrida `FALLIDA` sin resultados
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ERROR_INTERNO, mensaje: Ocurrió un error interno. Intente de nuevo. }
+    get:
+      tags: [Indicadores]
+      summary: Corridas de una DDRISS en un año, de la más reciente a la más antigua
+      description: |
+        Las corridas de la DDRISS del usuario. La Autoridad sin DDRISS (nacional) elige la DDRISS con `ddrissId`,
+        que para ella es obligatorio; para los demás roles, `ddrissId` responde 400.
+      x-permiso: INDICADOR_CONSULTAR
+      parameters:
+        - { name: anio, in: query, required: true, schema: { type: integer, minimum: 2000, maximum: 2100, example: 2026 } }
+        - { name: mesHasta, in: query, schema: { type: integer, minimum: 1, maximum: 12, example: 8 } }
+        - { $ref: "#/components/parameters/DdrissIdAutoridad" }
+        - { $ref: "#/components/parameters/Pagina" }
+        - { $ref: "#/components/parameters/PorPagina" }
+      responses:
+        "200":
+          description: Página de corridas (sin `resultados`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaginaCorridas" }
+        "400":
+          description: Un parámetro falta, no es válido, es desconocido o está repetido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: ddrissId." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+
+  /indicadores/corridas/{id}:
+    get:
+      tags: [Indicadores]
+      summary: Una corrida con todos sus resultados
+      x-permiso: INDICADOR_CONSULTAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: La corrida y sus resultados
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CorridaConResultados" }
+        "400": { $ref: "#/components/responses/EntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
 
   /indicadores/resultados:
     get:
       tags: [Indicadores]
-      summary: Cobertura, brecha, deserción y proyección (de la corrida vigente)
+      summary: Resultados de la corrida vigente de una DDRISS, un año y un mes
+      description: |
+        Lee la corrida vigente (la última `COMPLETADA`) de la DDRISS, el año y el mes. Sin corrida responde 200
+        con `corrida: null` y `resultados` vacío. La fila departamental va primero y luego los municipios por
+        nombre. `ddrissId`, como en `GET /indicadores/corridas`.
+      x-permiso: INDICADOR_CONSULTAR
       parameters:
-        - { name: indicador, in: query, schema: { type: string, example: COB_PENTA3 } }
-        - { name: anio, in: query, schema: { type: integer } }
-        - { name: mes, in: query, schema: { type: integer } }
-        - { name: municipioId, in: query, schema: { type: integer } }
+        - { name: anio, in: query, required: true, schema: { type: integer, minimum: 2000, maximum: 2100, example: 2026 } }
+        - { name: mes, in: query, required: true, schema: { type: integer, minimum: 1, maximum: 12, example: 8 } }
+        - { name: indicador, in: query, schema: { type: string, pattern: "^[A-Z0-9_]{1,40}$", example: AVANCE_HEXA3 } }
+        - { name: municipioId, in: query, schema: { type: integer, example: 1 } }
+        - { $ref: "#/components/parameters/DdrissIdAutoridad" }
       responses:
         "200":
-          description: Resultados
+          description: La corrida vigente y sus resultados filtrados
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/ResultadoIndicador" }
+              schema: { $ref: "#/components/schemas/ResultadosVigentes" }
+        "400":
+          description: Un parámetro falta, no es válido, es desconocido o está repetido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: El mes debe ser un número de 1 a 12. }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
 
   # ---------------------------------------------------------------- Alertas y auditoría
   /alertas:
@@ -4841,6 +4978,13 @@ components:
       name: porPagina
       in: query
       schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+    DdrissIdAutoridad:
+      name: ddrissId
+      in: query
+      description: |
+        Solo la Autoridad sin DDRISS (nacional), para la que es obligatorio. Los demás roles consultan su DDRISS y
+        este parámetro les responde 400
+      schema: { type: integer, example: 1 }
 
   responses:
     EntradaInvalida:
@@ -7142,9 +7286,12 @@ components:
       allOf:
         - { $ref: "#/components/schemas/Periodo" }
         - type: object
-          required: [reportesCerrados]
+          required: [reportesCerrados, corrida]
           properties:
             reportesCerrados: { type: integer, minimum: 0, example: 19 }
+            corrida:
+              allOf: [{ $ref: "#/components/schemas/CorridaDeCierre" }]
+              description: La corrida `CIERRE_PERIODO` del mes; `FALLIDA` no deshace el cierre
 
     PaginaReportes:
       description: Página de reportes, con la forma paginada común (ver `PaginaUsuarios`)
@@ -7656,6 +7803,17 @@ components:
             celdas después de aplicar. Vacía si todo cuadra.
           items: { $ref: "#/components/schemas/TotalRectificacion" }
 
+    SolicitudRectificacionAplicada:
+      allOf:
+        - { $ref: "#/components/schemas/SolicitudRectificacion" }
+        - type: object
+          required: [corridas]
+          properties:
+            corridas:
+              type: array
+              description: Las corridas `RECTIFICACION`, del mes del reporte en adelante
+              items: { $ref: "#/components/schemas/CorridaDeCierre" }
+
     TotalRectificacion:
       type: object
       required: [vacunaId, vacuna, totalDeclarado, sumaActual, sumaConCambios]
@@ -7691,16 +7849,148 @@ components:
         pagina: { type: integer, minimum: 1, example: 1 }
         porPagina: { type: integer, minimum: 1, maximum: 100, example: 20 }
 
+    CorridaNueva:
+      type: object
+      required: [anio, mesHasta]
+      additionalProperties: false
+      properties:
+        anio: { type: integer, minimum: 2000, maximum: 2100, example: 2026 }
+        mesHasta: { type: integer, minimum: 1, maximum: 12, description: Mes de corte del acumulado, example: 8 }
+
+    Corrida:
+      type: object
+      required: [id, ddriss, anio, mesHasta, motivo, estado, vigente, parcial, mesesSinCerrar, disparadaPor, iniciadaEn, finalizadaEn, indicadores, omitidos, totalResultados]
+      properties:
+        id: { type: integer, example: 7 }
+        ddriss:
+          type: object
+          required: [id, codigo]
+          properties:
+            id: { type: integer, example: 1 }
+            codigo: { type: string, example: DDRISS_SM }
+        anio: { type: integer, example: 2026 }
+        mesHasta: { type: integer, minimum: 1, maximum: 12, example: 8 }
+        motivo: { type: string, enum: [CIERRE_PERIODO, RECTIFICACION, MANUAL, PROGRAMADA], example: MANUAL }
+        estado: { type: string, enum: [COMPLETADA, FALLIDA], example: COMPLETADA }
+        vigente: { type: boolean, description: La última `COMPLETADA` de su DDRISS, año y mes, example: true }
+        parcial:
+          type: boolean
+          description: |
+            `true` si algún mes de enero al corte no estaba `CERRADO` en la DDRISS cuando empezó la corrida (se
+            deduce de `cierre_periodo.cerrado_en`; no se guarda)
+          example: false
+        mesesSinCerrar:
+          type: array
+          description: Los meses (1 a 12) que hacen parcial la corrida
+          items: { type: integer, minimum: 1, maximum: 12 }
+          example: []
+        disparadaPor:
+          allOf: [{ $ref: "#/components/schemas/RevisorResumen" }]
+          nullable: true
+          description: Quien la pidió, cerró el mes o aprobó la rectificación; `null` si no tuvo usuario
+        iniciadaEn: { type: string, format: date-time, example: "2026-11-03T16:05:00.000Z" }
+        finalizadaEn: { type: string, format: date-time, nullable: true, example: "2026-11-03T16:05:02.000Z" }
+        indicadores:
+          type: array
+          description: Los indicadores calculados con la versión usada (en la corrida de la semilla, sin bitácora, salen de sus resultados)
+          items:
+            type: object
+            required: [codigo, version, nombre, tipoCalculo]
+            properties:
+              codigo: { type: string, example: COB_HEXA3 }
+              version: { type: integer, example: 1 }
+              nombre: { type: string, nullable: true, description: "`null` si la versión ya no está en MongoDB", example: Cobertura de Hexavalente 3.ª dosis }
+              tipoCalculo: { type: string, nullable: true, example: COBERTURA }
+        omitidos:
+          type: array
+          description: Los indicadores que aplicaban y no se calcularon, con el motivo
+          items:
+            type: object
+            required: [codigo, motivo]
+            properties:
+              codigo: { type: string, example: DES_HEXA1_3 }
+              motivo: { type: string, example: Su cálculo todavía no está disponible. }
+        totalResultados: { type: integer, minimum: 0, example: 62 }
+
+    CorridaConResultados:
+      allOf:
+        - { $ref: "#/components/schemas/Corrida" }
+        - type: object
+          required: [resultados]
+          properties:
+            resultados:
+              type: array
+              items: { $ref: "#/components/schemas/ResultadoIndicador" }
+
+    PaginaCorridas:
+      description: Página de corridas, con la forma paginada común (ver `PaginaUsuarios`)
+      type: object
+      required: [elementos, total, pagina, porPagina]
+      properties:
+        elementos:
+          type: array
+          items: { $ref: "#/components/schemas/Corrida" }
+        total: { type: integer, minimum: 0, example: 1 }
+        pagina: { type: integer, minimum: 1, example: 1 }
+        porPagina: { type: integer, minimum: 1, maximum: 100, example: 20 }
+
+    ResultadosVigentes:
+      type: object
+      required: [corrida, resultados]
+      properties:
+        corrida:
+          allOf: [{ $ref: "#/components/schemas/Corrida" }]
+          nullable: true
+          description: "`null` si el mes todavía no tiene corrida vigente"
+        resultados:
+          type: array
+          items: { $ref: "#/components/schemas/ResultadoIndicador" }
+
     ResultadoIndicador:
       type: object
+      required: [indicadorCodigo, indicadorVersion, tipoCalculo, municipio, vacuna, dosis, filtroDimensiones, anio, mes, numerador, denominador, valor, meta, brechaDosis, cumpleMeta, calculable, color, esProyeccion]
       properties:
-        indicadorCodigo: { type: string }
-        municipioId: { type: integer, nullable: true, description: null = departamental }
-        anio: { type: integer }
-        mes: { type: integer }
-        numerador: { type: number }
-        denominador: { type: number }
-        valor: { type: number }
-        meta: { type: number }
-        cumpleMeta: { type: boolean }
-        esProyeccion: { type: boolean }
+        indicadorCodigo: { type: string, example: AVANCE_HEXA3 }
+        indicadorVersion: { type: integer, description: Versión de `configuracion_indicadores` usada, example: 1 }
+        tipoCalculo: { type: string, nullable: true, description: "`null` si la versión ya no está en MongoDB", example: AVANCE_META_MES }
+        municipio:
+          type: object
+          nullable: true
+          description: "`null` en la fila departamental (toda la DDRISS)"
+          required: [id, nombre]
+          properties:
+            id: { type: integer, example: 1 }
+            nombre: { type: string, example: San Marcos }
+        vacuna:
+          type: object
+          required: [codigo, nombre]
+          properties:
+            codigo: { type: string, example: HEXA }
+            nombre: { type: string, example: Hexavalente }
+        dosis: { type: string, nullable: true, example: D3 }
+        filtroDimensiones: { type: string, description: "Filtro aplicado en forma canónica; vacío sin filtro", example: grupo_edad=MENOR_1 }
+        anio: { type: integer, example: 2026 }
+        mes: { type: integer, description: Mes de corte, example: 8 }
+        numerador: { type: number, nullable: true, description: Dosis acumuladas, example: 975 }
+        denominador: { type: number, nullable: true, description: "Población (prorrateada al mes con `MENSUAL_LINEAL`); `null` sin población", example: 966.67 }
+        valor: { type: number, nullable: true, description: Porcentaje, example: 100.8621 }
+        meta: { type: number, nullable: true, example: 100 }
+        brechaDosis: { type: integer, nullable: true, description: Dosis que faltan para la meta (0 si se alcanzó), example: 0 }
+        cumpleMeta: { type: boolean, nullable: true, example: true }
+        calculable: { type: boolean, description: "`false` si falta la población (`valor` es `null`)", example: true }
+        color:
+          type: string
+          nullable: true
+          enum: [verde, amarillo, rojo, null]
+          description: Franja del semáforo de la versión usada; `null` sin umbrales o sin valor
+          example: verde
+        esProyeccion: { type: boolean, example: false }
+
+    CorridaDeCierre:
+      type: object
+      required: [id, mesHasta, estado]
+      description: Corrida de indicadores que se calculó después de confirmar el cierre o la rectificación
+      properties:
+        id: { type: integer, example: 8 }
+        mesHasta: { type: integer, minimum: 1, maximum: 12, example: 8 }
+        estado: { type: string, enum: [COMPLETADA, FALLIDA], example: COMPLETADA }

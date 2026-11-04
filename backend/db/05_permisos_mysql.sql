@@ -27,6 +27,7 @@
 --        USUARIOS                 (SPEC 07, HU-04)
 --        PRODUCCION               (SPEC 22, HU-19)
 --        RECTIFICACION            (SPEC 40, HU-32)
+--        INDICADORES              (SPEC 44, HU-36)
 --    - Un código no se borra ni se renombra (regla 6 de AGENTS.md).
 --    - Asignaciones y retiros siempre por códigos, nunca por ids.
 --
@@ -164,6 +165,11 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
 INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('INDICADOR_CONFIG_CONSULTAR', 'CONFIGURACION_CATALOGOS', 'Consultar la configuración de los indicadores que aplican a su DDRISS y su historial'),
  ('INDICADOR_CONFIG_EDITAR',   'CONFIGURACION_CATALOGOS', 'Crear indicadores para su DDRISS, publicar sus versiones y activar y desactivar los suyos');
+
+-- SPEC 44 (HU-36): corridas del motor de indicadores y sus resultados
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('INDICADOR_CALCULAR',        'INDICADORES',             'Calcular los indicadores de su DDRISS para un mes'),
+ ('INDICADOR_CONSULTAR',       'INDICADORES',             'Consultar las corridas y los resultados de los indicadores');
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
@@ -323,6 +329,17 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'EPIDEMIOLOGIA'
    AND p.codigo IN ('CONFIGURACION_CONSULTAR', 'INDICADOR_CONFIG_CONSULTAR', 'INDICADOR_CONFIG_EDITAR');
+
+-- SPEC 44 (HU-36): Epidemiología, el Revisor y el Administrador calculan; ellos y la Autoridad consultan
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo IN ('EPIDEMIOLOGIA', 'REVISOR', 'ADMINISTRADOR')
+   AND p.codigo = 'INDICADOR_CALCULAR';
+
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo IN ('EPIDEMIOLOGIA', 'REVISOR', 'ADMINISTRADOR', 'AUTORIDAD')
+   AND p.codigo = 'INDICADOR_CONSULTAR';
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

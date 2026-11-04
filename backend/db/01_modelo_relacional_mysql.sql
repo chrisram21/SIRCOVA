@@ -1,7 +1,12 @@
 -- =============================================================================
 --  Plataforma web de producción de vacunación — DDRISS San Marcos (MSPAS)
 --  Modelo relacional preliminar (MySQL 8.0, InnoDB, utf8mb4)
---  Versión: 0.10   Fecha: 2026-10-28
+--  Versión: 0.11   Fecha: 2026-11-03
+--  Cambios v0.11 (motor de indicadores por DDRISS, SPEC 44, 03/11/2026):
+--    corrida_calculo.ddriss_id: cada corrida del motor es de una DDRISS y la
+--    vigente es una por (DDRISS, año, mes_hasta); la fila departamental de
+--    resultado_indicador (municipio_id NULL) es la de la DDRISS de su corrida.
+--    Las bases que ya existían la agregan con 10_corrida_ddriss_mysql.sql.
 --  Cambios v0.10 (sesiones en el servidor, SPEC 27, 28/10/2026):
 --    Nueva tabla sesion: cada inicio de sesión crea una fila y el JWT lleva su
 --    id (sid), para poder cerrarla antes de que venza el token. Una sola
@@ -594,6 +599,7 @@ CREATE TABLE rectificacion_detalle (
 
 CREATE TABLE corrida_calculo (
   id                  INT UNSIGNED      NOT NULL AUTO_INCREMENT,
+  ddriss_id           TINYINT UNSIGNED  NOT NULL COMMENT 'DDRISS calculada',
   anio                SMALLINT UNSIGNED NOT NULL,
   mes_hasta           TINYINT UNSIGNED  NOT NULL COMMENT 'Mes de corte del cálculo acumulado',
   disparada_por       INT UNSIGNED      NULL COMMENT 'NULL = proceso automático (p. ej. al cerrar periodo)',
@@ -601,9 +607,10 @@ CREATE TABLE corrida_calculo (
   estado              ENUM('EN_PROCESO','COMPLETADA','FALLIDA') NOT NULL DEFAULT 'EN_PROCESO',
   iniciada_en         DATETIME          NOT NULL DEFAULT CURRENT_TIMESTAMP,
   finalizada_en       DATETIME          NULL,
-  vigente             BOOLEAN           NOT NULL DEFAULT FALSE COMMENT 'Solo una corrida vigente por (anio, mes_hasta)',
+  vigente             BOOLEAN           NOT NULL DEFAULT FALSE COMMENT 'Solo una corrida vigente por (ddriss, anio, mes_hasta)',
   PRIMARY KEY (id),
-  KEY ix_corrida_vigente (anio, mes_hasta, vigente),
+  KEY ix_corrida_vigente (ddriss_id, anio, mes_hasta, vigente),
+  CONSTRAINT fk_corrida_ddriss  FOREIGN KEY (ddriss_id)     REFERENCES ddriss (id),
   CONSTRAINT fk_corrida_usuario FOREIGN KEY (disparada_por) REFERENCES usuario (id)
 ) ENGINE=InnoDB COMMENT='Cada ejecución del motor de indicadores';
 
