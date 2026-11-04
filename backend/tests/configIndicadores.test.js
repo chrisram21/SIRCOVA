@@ -97,6 +97,11 @@ function desercion({ _id, codigo, version, territorio, estado, vigencia }) {
 
 async function limpiar() {
   await (await indicadores()).deleteMany({ $or: [{ codigo: /ZVT_HU35/ }, { nombre: /^vitest-hu35-/ }] });
+  // Una corrida de otro archivo que coincida en el tiempo calcula estos indicadores (SPEC 44): sin esto, la vacuna no se borra.
+  await pool.query(
+    'DELETE ri FROM resultado_indicador ri JOIN vacuna v ON v.id = ri.vacuna_id WHERE v.codigo IN (?)',
+    [[VACUNA, VACUNA_INACTIVA]],
+  );
   await pool.query(
     'DELETE d FROM dosis d JOIN vacuna v ON v.id = d.vacuna_id WHERE v.codigo IN (?)',
     [[VACUNA, VACUNA_INACTIVA]],

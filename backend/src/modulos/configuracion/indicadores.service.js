@@ -214,6 +214,15 @@ async function versionesVisibles(filtro, ddriss) {
     .toArray();
 }
 
+// Para el motor (SPEC 44): la versión que aplica de cada código a la DDRISS, la misma de la columna «Aplica».
+export async function indicadoresQueAplican(ddriss) {
+  const documentos = await versionesVisibles({}, ddriss);
+  return [...Map.groupBy(documentos, (d) => d.codigo).values()]
+    .map((versiones) => resumirCodigo(versiones).aplica)
+    .filter(Boolean)
+    .sort((a, b) => a.codigo.localeCompare(b.codigo));
+}
+
 export async function listarConfigIndicadores(query, usuario) {
   revisarConsulta(query, []);
   const ddriss = await codigoDdriss(usuario.ddrissId);
