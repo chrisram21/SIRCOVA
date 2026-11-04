@@ -1,5 +1,6 @@
 import * as dimensionesService from './dimensiones.service.js';
 import * as esquemasService from './esquemas.service.js';
+import * as indicadoresService from './indicadores.service.js';
 import * as reglasService from './reglas.service.js';
 import { contextoAuditoria } from '../auditoria/auditoria.service.js';
 
@@ -101,4 +102,56 @@ export async function activarRegla(req, res) {
 
 export async function historialRegla(req, res) {
   res.json(await reglasService.historialRegla(req.params.codigo, req.query, req.usuario));
+}
+
+export async function listarConfigIndicadores(req, res) {
+  res.json(await indicadoresService.listarConfigIndicadores(req.query, req.usuario));
+}
+
+export async function opcionesIndicadores(req, res) {
+  res.json(await indicadoresService.opcionesIndicadores(req.query));
+}
+
+export async function historialIndicador(req, res) {
+  res.json(await indicadoresService.historialIndicador(req.params.codigo, req.query, req.usuario));
+}
+
+// El 409 INDICADOR_DUPLICADO lleva codigoExistente junto al error, como RECTIFICACION_PENDIENTE (SPEC 40).
+function responderIndicador(res, status, { indicador, duplicado }) {
+  if (duplicado) {
+    return res.status(409).json({
+      error: { codigo: 'INDICADOR_DUPLICADO', mensaje: indicadoresService.mensajeDuplicado(duplicado) },
+      codigoExistente: duplicado,
+    });
+  }
+  res.status(status).json(indicador);
+}
+
+export async function crearIndicador(req, res) {
+  responderIndicador(res, 201, await indicadoresService.crearIndicador(req.body, contextoAuditoria(req), req.usuario));
+}
+
+export async function publicarVersionIndicador(req, res) {
+  const { codigo } = req.params;
+  const resultado = await indicadoresService.publicarVersionIndicador(
+    codigo,
+    req.body,
+    contextoAuditoria(req),
+    req.usuario,
+  );
+  responderIndicador(res, 201, resultado);
+}
+
+export async function desactivarIndicador(req, res) {
+  const { codigo } = req.params;
+  res.json(await indicadoresService.desactivarIndicador(codigo, req.body, contextoAuditoria(req), req.usuario));
+}
+
+export async function activarIndicador(req, res) {
+  const { codigo } = req.params;
+  responderIndicador(
+    res,
+    201,
+    await indicadoresService.activarIndicador(codigo, req.body, contextoAuditoria(req), req.usuario),
+  );
 }

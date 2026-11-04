@@ -118,3 +118,40 @@ export function desactivarRegla(codigo, datos) {
 export function activarRegla(codigo, datos) {
   return solicitar(`${rutaRegla(codigo)}/activar`, { metodo: 'POST', cuerpo: datos })
 }
+
+// Configuración de indicadores: una fila por código, con la versión que aplica a la DDRISS del usuario (la de su
+// DDRISS antes que la nacional). Como las reglas, cada escritura publica una versión nueva al momento.
+const rutaIndicador = (codigo) => `/configuracion-indicadores/${encodeURIComponent(codigo)}`
+
+export function listarConfigIndicadores() {
+  return solicitar('/configuracion-indicadores')
+}
+
+// Lo que necesita el editor: vacunas activas con sus dosis, grupos de población y grupos de edad.
+export function opcionesIndicadores() {
+  return solicitar('/configuracion-indicadores/opciones')
+}
+
+export function historialIndicador(codigo) {
+  return solicitar(`${rutaIndicador(codigo)}/historial`)
+}
+
+// El código lo genera el backend ({PREFIJO}_{VACUNA}{DOSIS}). Un 409 INDICADOR_DUPLICADO trae codigoExistente.
+export function crearIndicador(datos) {
+  return solicitar('/configuracion-indicadores', { metodo: 'POST', cuerpo: datos })
+}
+
+// datos.versionBase es la versión que se cargó en el editor; si cambió, responde 409.
+export function publicarVersionIndicador(codigo, datos) {
+  return solicitar(`${rutaIndicador(codigo)}/versiones`, { metodo: 'POST', cuerpo: datos })
+}
+
+// { version, motivoCambio }: la del VIGENTE de la DDRISS. Responde la fila actualizada.
+export function desactivarIndicador(codigo, datos) {
+  return solicitar(`${rutaIndicador(codigo)}/desactivar`, { metodo: 'POST', cuerpo: datos })
+}
+
+// { version, motivoCambio }: la de su última versión de la DDRISS. Responde la versión publicada.
+export function activarIndicador(codigo, datos) {
+  return solicitar(`${rutaIndicador(codigo)}/activar`, { metodo: 'POST', cuerpo: datos })
+}

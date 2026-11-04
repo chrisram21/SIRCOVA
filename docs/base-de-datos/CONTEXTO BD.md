@@ -356,6 +356,8 @@ Ejemplos incluidos en el script (todos NACIONAL; el 04 agrega Hexavalente v3 en 
 - `numerador` (fuente, estados del reporte, `atribucion` PROCEDENCIA o APLICACION, acumulado) y `denominador` (fuente, prorrateo).
 - `meta`, `umbrales` (semáforo), `periodicidad`, `alerta` (si genera alertas y a qué roles) y `es_estimacion`.
 - `territorio`: igual que en `reglas_validacion`, con la misma prioridad de la DDRISS sobre la nacional.
+- Quién la configura (SPEC 43): Epidemiología, desde «Configuración de indicadores», solo para su DDRISS. Una versión de la DDRISS reemplaza a la nacional del mismo código; cada cambio publica una versión `VIGENTE` al momento (sin borradores) y la anterior de la DDRISS pasa a `HISTORICO`. El motor calcula las versiones que aplican en el momento de la corrida. Cada indicador lleva una sola vacuna en `aplica_a`.
+- `umbrales` (SPEC 43): tres franjas `verde`, `amarillo` y `rojo` armadas desde dos cortes, ascendentes (rojo `[0, c1)`, amarillo `[c1, c2)`, verde `[c2, …)`) o descendentes en deserción (verde `(…, c1]`, amarillo `(c1, c2]`, rojo `(c2, …)`). `DES_HEXA1_3` de la semilla conserva sus dos franjas. `es_indicador_mapa` puede estar en varios indicadores; el 02 lo describe como «el que el mapa muestra por defecto».
 
 Ejemplos:
 

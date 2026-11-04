@@ -29,6 +29,8 @@ import {
   validarNombreRegla,
   validarDescripcionRegla,
   validarMensajeRegla,
+  validarNombreIndicador,
+  validarDescripcionIndicador,
 } from './campos.js'
 
 // La misma lista está en backend/tests/campos.test.js: si cambia una, se cambia la otra.
@@ -512,6 +514,34 @@ const CASOS = {
       ['a'.repeat(301), MENSAJES.mensajeRegla],
     ],
   },
+  validarNombreIndicador: {
+    validos: [
+      ['Cobertura de SPR 1.ª dosis en niñas y niños de 1 año', 'Cobertura de SPR 1.ª dosis en niñas y niños de 1 año'],
+      ['  Avance de   Hexavalente 3.ª dosis ', 'Avance de Hexavalente 3.ª dosis'],
+      ['abc', 'abc'],
+      ['a'.repeat(120), 'a'.repeat(120)],
+    ],
+    invalidos: [
+      ['', MENSAJES.nombreIndicador],
+      ['   ', MENSAJES.nombreIndicador],
+      [null, MENSAJES.nombreIndicador],
+      ['ab', MENSAJES.nombreIndicador],
+      ['a'.repeat(121), MENSAJES.nombreIndicador],
+    ],
+  },
+  validarDescripcionIndicador: {
+    validos: [
+      ['(D1 - D3) / D1 x 100, acumulado en el año.', '(D1 - D3) / D1 x 100, acumulado en el año.'],
+      ['  Meta   de la DDRISS ', 'Meta de la DDRISS'],
+      ['a'.repeat(300), 'a'.repeat(300)],
+      ['', null],
+      ['   ', null],
+      [null, null],
+    ],
+    invalidos: [
+      ['a'.repeat(301), MENSAJES.descripcionIndicador],
+    ],
+  },
 }
 
 const REGLAS = {
@@ -520,7 +550,7 @@ const REGLAS = {
   validarNombreVacuna, validarDescripcionVacuna, validarNombreDosis, validarCantidadPoblacion, validarFuentePoblacion,
   validarCodigoDimension, validarCodigoValorDimension, validarNombreDimension, validarDescripcionDimension,
   validarEtiquetaValorDimension, validarEdadMeses, validarTituloSeccion, validarMotivoCambio, validarNombreRegla,
-  validarDescripcionRegla, validarMensajeRegla,
+  validarDescripcionRegla, validarMensajeRegla, validarNombreIndicador, validarDescripcionIndicador,
 }
 
 describe.each(Object.entries(CASOS))('%s', (nombre, { validos, invalidos }) => {
@@ -564,5 +594,7 @@ describe('valores que no son texto', () => {
     expect(validarNombreRegla(5)).toEqual({ error: MENSAJES.nombreRegla })
     expect(validarDescripcionRegla({})).toEqual({ error: MENSAJES.descripcionRegla })
     expect(validarMensajeRegla(['{vacuna} sin datos'])).toEqual({ error: MENSAJES.mensajeRegla })
+    expect(validarNombreIndicador(5)).toEqual({ error: MENSAJES.nombreIndicador })
+    expect(validarDescripcionIndicador({})).toEqual({ error: MENSAJES.descripcionIndicador })
   })
 })

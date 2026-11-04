@@ -136,4 +136,47 @@ router.get(
   configuracionController.historialRegla,
 );
 
+router.get(
+  '/configuracion-indicadores',
+  autenticar,
+  requierePermiso('INDICADOR_CONFIG_CONSULTAR'),
+  configuracionController.listarConfigIndicadores,
+);
+router.post(
+  '/configuracion-indicadores',
+  autenticar,
+  requierePermiso('INDICADOR_CONFIG_EDITAR'),
+  configuracionController.crearIndicador,
+);
+router.get(
+  '/configuracion-indicadores/opciones',
+  autenticar,
+  requierePermiso('INDICADOR_CONFIG_CONSULTAR'),
+  configuracionController.opcionesIndicadores,
+);
+router.post(
+  '/configuracion-indicadores/:codigo/versiones',
+  autenticar,
+  requierePermiso('INDICADOR_CONFIG_EDITAR'),
+  configuracionController.publicarVersionIndicador,
+);
+router.post(
+  '/configuracion-indicadores/:codigo/desactivar',
+  autenticar,
+  requierePermiso('INDICADOR_CONFIG_EDITAR'),
+  configuracionController.desactivarIndicador,
+);
+router.post(
+  '/configuracion-indicadores/:codigo/activar',
+  autenticar,
+  requierePermiso('INDICADOR_CONFIG_EDITAR'),
+  configuracionController.activarIndicador,
+);
+router.get(
+  '/configuracion-indicadores/:codigo/historial',
+  autenticar,
+  requierePermiso('INDICADOR_CONFIG_CONSULTAR'),
+  configuracionController.historialIndicador,
+);
+
 export default router;

@@ -160,6 +160,11 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
 INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('RECTIFICACION_RESOLVER',    'RECTIFICACION',           'Aprobar o rechazar las solicitudes de rectificación de su DDRISS');
 
+-- SPEC 43 (HU-35): configuración de indicadores de la DDRISS (MongoDB)
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('INDICADOR_CONFIG_CONSULTAR', 'CONFIGURACION_CATALOGOS', 'Consultar la configuración de los indicadores que aplican a su DDRISS y su historial'),
+ ('INDICADOR_CONFIG_EDITAR',   'CONFIGURACION_CATALOGOS', 'Crear indicadores para su DDRISS, publicar sus versiones y activar y desactivar los suyos');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -312,6 +317,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'REVISOR'
    AND p.codigo IN ('RECTIFICACION_CONSULTAR', 'RECTIFICACION_RESOLVER');
+
+-- SPEC 43 (HU-35): solo Epidemiología configura los indicadores; CONFIGURACION_CONSULTAR, para ver «Administración»
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'EPIDEMIOLOGIA'
+   AND p.codigo IN ('CONFIGURACION_CONSULTAR', 'INDICADOR_CONFIG_CONSULTAR', 'INDICADOR_CONFIG_EDITAR');
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas
