@@ -9,7 +9,7 @@ import { tokenDePrueba } from './sesionDePrueba.js';
 
 // Todo por SQL y MongoDB, sin la API de captura: los meses de 2006 en la DDRISS 1 (enero y febrero CERRADO, marzo
 // ABIERTO con fecha límite de 2099), la vacuna ZVT_HU36 (D1 y D2), reportes ya CERRADO con sus celdas, la población de
-// 2006 y tres indicadores ZVT_HU36_* de la DDRISS en MongoDB. Además, la DDRISS ficticia ZVT_OTRA36 con una corrida
+// 2006 y cuatro indicadores ZVT_HU36_* de la DDRISS en MongoDB. Además, la DDRISS ficticia ZVT_OTRA36 con una corrida
 // propia para el ámbito. Todo se borra al inicio y al final (las corridas de 2006 y sus resultados antes que los
 // meses); las filas de la bitácora quedan. Las corridas también calculan los indicadores de la semilla, que en 2006 no
 // tienen producción: las pruebas solo miran los ZVT_HU36_*.
@@ -22,6 +22,7 @@ const MUNICIPIO_SP = 2;
 const COB = 'ZVT_HU36_COB';
 const AVANCE = 'ZVT_HU36_AV';
 const DES = 'ZVT_HU36_DES';
+const BRECHA = 'ZVT_HU36_BRECHA';
 
 const periodoIds = {};
 const cuentas = {};
@@ -43,7 +44,7 @@ const UMBRALES = [
   { color: 'rojo', desde: 0, hasta: 80 },
 ];
 
-function indicador({ codigo, version = 1, tipo, aplica, denominador, meta, estado = 'VIGENTE' }) {
+function indicador({ codigo, version = 1, tipo, aplica, denominador, meta, estado = 'VIGENTE', umbrales = UMBRALES }) {
   const fecha = new Date();
   return {
     _id: new ObjectId(),
@@ -55,7 +56,7 @@ function indicador({ codigo, version = 1, tipo, aplica, denominador, meta, estad
     numerador: { fuente: 'PRODUCCION', estados_reporte: ['CERRADO'], atribucion: 'PROCEDENCIA', acumulado: 'ANUAL' },
     denominador,
     meta,
-    umbrales: UMBRALES,
+    ...(umbrales ? { umbrales } : {}),
     umbrales_provisionales: false,
     es_indicador_mapa: false,
     niveles: ['MUNICIPIO', 'DEPARTAMENTO'],
@@ -90,6 +91,14 @@ const desercion = () => indicador({
   aplica: { dosis_inicial: 'D1', dosis_final: 'D2' },
   denominador: { fuente: 'PRODUCCION' },
   meta: { valor: 10, unidad: 'PORCENTAJE', comparador: '<=' },
+});
+// BRECHA de D2 contra la población anual de 1_A_MENOR_2, sin semáforo (como BRECHA_HEXA3). Con meta 5 %, San Marcos
+// (19 de 240) y San Pedro (9 de 120) la pasan y los demás municipios (0 de 120) no.
+const brecha = () => indicador({
+  codigo: BRECHA, tipo: 'BRECHA', umbrales: null,
+  aplica: { dosis: 'D2', clasificacion_poblacion: '1_A_MENOR_2' },
+  denominador: { fuente: 'POBLACION_OBJETIVO', prorrateo: 'NINGUNO' },
+  meta: { valor: 5, unidad: 'PORCENTAJE', comparador: '>' },
 });
 
 async function limpiar() {
@@ -209,7 +218,7 @@ async function preparar() {
     ]],
   );
 
-  await (await coleccion()).insertMany([cobertura(), avance(), desercion()]);
+  await (await coleccion()).insertMany([cobertura(), avance(), desercion(), brecha()]);
 
   const [otra] = await pool.query("INSERT INTO ddriss (codigo, nombre, departamento_id, activo) VALUES (?, 'vitest-hu36 Otra', 3, TRUE)", [
     DDRISS_OTRA,
@@ -334,6 +343,9 @@ describe('POST /indicadores/corridas', () => {
       calculable: true,
       color: 'rojo',
       esProyeccion: false,
+      metaDosis: 228,
+      excedenteDosis: 0,
+      sumaBrechasMunicipales: null,
     });
     const poblacion = 240 + 120 * (territorio.length - 1);
     expect(resultados.find((r) => r.indicadorCodigo === COB)).toMatchObject({
@@ -357,6 +369,30 @@ describe('POST /indicadores/corridas', () => {
       numerador: 9, denominador: null, valor: null, meta: null, brechaDosis: null, cumpleMeta: null, calculable: false, color: null,
     });
     expect(deMunicipio(resultados, AVANCE, null)).toMatchObject({ numerador: 24, calculable: false });
+    expect(deMunicipio(resultados, AVANCE, MUNICIPIO_SP)).toMatchObject({ metaDosis: null, excedenteDosis: null });
+    expect(deMunicipio(resultados, AVANCE, null).sumaBrechasMunicipales).toBeNull();
+  });
+
+  it('calcula BRECHA: lo que falta o el excedente por municipio, y la suma municipal en la departamental', () => {
+    expect(corrida.indicadores.map((i) => i.codigo)).toContain(BRECHA);
+    expect(corrida.omitidos.map((o) => o.codigo)).not.toContain(BRECHA);
+
+    expect(deMunicipio(resultados, BRECHA, MUNICIPIO_SM)).toMatchObject({
+      tipoCalculo: 'BRECHA', numerador: 19, denominador: 240, valor: 7.9167, meta: 5, brechaDosis: 0, cumpleMeta: true,
+      metaDosis: 12, excedenteDosis: 7, color: null, sumaBrechasMunicipales: null,
+    });
+    expect(deMunicipio(resultados, BRECHA, MUNICIPIO_SP)).toMatchObject({ brechaDosis: 0, metaDosis: 6, excedenteDosis: 3 });
+    const sinDosis = delIndicador(resultados, BRECHA).filter((r) => r.municipio && r.numerador === 0);
+    expect(sinDosis).toHaveLength(territorio.length - 2);
+    expect(sinDosis.every((r) => r.brechaDosis === 6 && r.metaDosis === 6 && r.excedenteDosis === 0)).toBe(true);
+
+    // Contra el total, los excedentes de San Marcos y San Pedro compensan; en la suma municipal, no.
+    const poblacion = 240 + 120 * (territorio.length - 1);
+    const metaTotal = Math.ceil(Number(((5 / 100) * poblacion).toFixed(6)));
+    expect(deMunicipio(resultados, BRECHA, null)).toMatchObject({
+      numerador: 28, metaDosis: metaTotal, brechaDosis: metaTotal - 28, excedenteDosis: 0,
+      sumaBrechasMunicipales: 6 * (territorio.length - 2),
+    });
   });
 
   it('el numerador sin filtro coincide con v_produccion_atribuida', async () => {
@@ -398,6 +434,11 @@ describe('vigencia y versiones', () => {
     expect(res.body.corrida.id).toBe(segunda.id);
     expect(res.body.resultados).toHaveLength(1);
     expect(res.body.resultados[0]).toMatchObject({ indicadorCodigo: COB, numerador: 19 });
+
+    // Con municipioId no viene la fila departamental, así que tampoco la suma municipal.
+    const brechaSm = await api('get', `/indicadores/resultados?anio=${ANIO}&mes=2&indicador=${BRECHA}&municipioId=${MUNICIPIO_SM}`);
+    expect(brechaSm.body.resultados).toHaveLength(1);
+    expect(brechaSm.body.resultados[0]).toMatchObject({ municipio: { id: MUNICIPIO_SM }, excedenteDosis: 7, sumaBrechasMunicipales: null });
   });
 
   it('una versión publicada después no cambia los resultados guardados; la corrida siguiente usa la nueva', async () => {

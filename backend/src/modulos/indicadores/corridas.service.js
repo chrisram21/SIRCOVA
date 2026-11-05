@@ -5,7 +5,7 @@ import { registrarBitacora, contextoAuditoria, MODULOS, ACCIONES } from '../audi
 import { esAlcanceNacional, verificarAlcance } from '../auth/alcance.service.js';
 import { entradaInvalida, revisarCampos, revisarParametros } from '../catalogos/catalogos.service.js';
 import { indicadoresQueAplican } from '../configuracion/indicadores.service.js';
-import { colorDelValor } from './calculadores.js';
+import { colorDelValor, metaYExcedente, sumaBrechasMunicipales } from './calculadores.js';
 import { calcularIndicadores, leerDatos } from './motor.service.js';
 
 // Una corrida es de una DDRISS y se calcula entera en una transacción (SPEC 44): nunca se ve EN_PROCESO. La última
@@ -302,10 +302,14 @@ async function leerResultados(corridaId, { indicador, municipioId } = {}) {
   const versiones = await versionesUsadas(
     filas.map((f) => ({ codigo: f.indicador_codigo, version: Number(f.indicador_version) })),
   );
-  return filas
+  const resultados = filas
     .map((f) => {
       const doc = versiones.get(`${f.indicador_codigo}:${Number(f.indicador_version)}`);
       const valor = aNumero(f.valor);
+      const numerador = aNumero(f.numerador);
+      const denominador = aNumero(f.denominador);
+      const meta = aNumero(f.meta);
+      const brechaDosis = aNumero(f.brecha_dosis);
       return {
         indicadorCodigo: f.indicador_codigo,
         indicadorVersion: Number(f.indicador_version),
@@ -316,17 +320,25 @@ async function leerResultados(corridaId, { indicador, municipioId } = {}) {
         filtroDimensiones: f.filtro_dimensiones,
         anio: f.anio,
         mes: f.mes,
-        numerador: aNumero(f.numerador),
-        denominador: aNumero(f.denominador),
+        numerador,
+        denominador,
         valor,
-        meta: aNumero(f.meta),
-        brechaDosis: aNumero(f.brecha_dosis),
+        meta,
+        brechaDosis,
         cumpleMeta: f.cumple_meta == null ? null : Boolean(f.cumple_meta),
         calculable: valor !== null,
         color: colorDelValor(doc?.umbrales, valor, doc?.tipo_calculo),
         esProyeccion: Boolean(f.es_proyeccion),
+        ...metaYExcedente({ numerador, denominador, meta, brechaDosis }),
+        sumaBrechasMunicipales: null,
       };
     });
+  // La fila departamental solo viene sin municipioId, y entonces vienen también todos los municipios del indicador.
+  for (const departamental of resultados.filter((r) => r.municipio === null)) {
+    const municipales = resultados.filter((r) => r.municipio !== null && r.indicadorCodigo === departamental.indicadorCodigo);
+    departamental.sumaBrechasMunicipales = sumaBrechasMunicipales(departamental, municipales);
+  }
+  return resultados;
 }
 
 export async function listarCorridas(usuario, query = {}) {

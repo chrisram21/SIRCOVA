@@ -1,5 +1,5 @@
 // Fórmulas del motor de indicadores (SPEC 44): funciones puras, sin acceso a datos. Cada tipo de
-// configuracion_indicadores con cálculo tiene su función en CALCULADORES; HU-37 a HU-39 agregan BRECHA, DESERCION y
+// configuracion_indicadores con cálculo tiene su función en CALCULADORES; HU-38 y HU-39 agregan DESERCION y
 // PROYECCION. Un tipo que no está aquí se omite en la corrida sin hacerla fallar.
 
 import { DESCENDENTE, TIPOS_INDICADOR } from '../configuracion/tiposIndicador.js';
@@ -70,10 +70,32 @@ export function calcularContraMeta({ version, mesHasta, municipios, numeradores,
   return [departamental, ...filas];
 }
 
+// BRECHA (SPEC 45) usa las mismas fórmulas, con el prorrateo y la meta de su versión: valor en porcentaje y
+// brecha_dosis en dosis, como la semilla.
 export const CALCULADORES = {
   COBERTURA: calcularContraMeta,
   AVANCE_META_MES: calcularContraMeta,
+  BRECHA: calcularContraMeta,
 };
+
+// La meta en dosis y el excedente de una fila guardada, que no se guardan (SPEC 45). El denominador guardado va
+// redondeado a 2 decimales y la brecha se calculó sin redondear, así que, para que siempre se cumpla
+// metaDosis − numerador = brechaDosis − excedenteDosis, la meta sale de la brecha cuando falta algo y, si no,
+// no pasa del numerador. Sin meta o sin denominador (fila no calculable), los dos son null.
+export function metaYExcedente({ numerador, denominador, meta, brechaDosis }) {
+  if (meta == null || denominador == null || brechaDosis == null) return { metaDosis: null, excedenteDosis: null };
+  const metaDosis = brechaDosis > 0
+    ? numerador + brechaDosis
+    : Math.min(numerador, Math.ceil(redondear((meta / 100) * denominador, 6)));
+  return { metaDosis, excedenteDosis: numerador - metaDosis + brechaDosis };
+}
+
+// Lo que falta en los municipios de un indicador, sin que los que pasaron la meta compensen a los demás. Un
+// municipio con población 0 (brecha null) no tiene meta y no suma. null si la departamental no es calculable.
+export function sumaBrechasMunicipales(departamental, municipales) {
+  if (departamental.brechaDosis == null) return null;
+  return municipales.reduce((suma, fila) => suma + (fila.brechaDosis ?? 0), 0);
+}
 
 // filtros_dimension → texto canónico de resultado_indicador.filtro_dimensiones, como clave_combinacion: dimensiones
 // ordenadas por código y separadas por «|»; varios valores de una dimensión, ordenados y separados por «,».

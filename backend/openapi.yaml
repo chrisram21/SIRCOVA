@@ -4719,9 +4719,10 @@ paths:
       description: |
         Crea una `corrida_calculo` (motivo `MANUAL`) de la DDRISS del usuario y la calcula en el momento: la respuesta
         trae la corrida ya `COMPLETADA`. Calcula cada indicador que aplica a la DDRISS al iniciar (su `VIGENTE`
-        antes que la nacional del mismo código, SPEC 43) cuyo tipo tenga cálculo; hoy `COBERTURA` y
-        `AVANCE_META_MES`. Los demás tipos (`BRECHA`, `DESERCION`, `PROYECCION`) y los indicadores cuya vacuna,
-        dosis o grupo de población ya no existen quedan en `omitidos`, sin hacer fallar la corrida.
+        antes que la nacional del mismo código, SPEC 43) cuyo tipo tenga cálculo; hoy `COBERTURA`,
+        `AVANCE_META_MES` y `BRECHA` (SPEC 45), que se calculan con las mismas fórmulas, cada uno con el prorrateo
+        y la meta de su versión. Los demás tipos (`DESERCION`, `PROYECCION`) y los indicadores cuya vacuna, dosis o
+        grupo de población ya no existen quedan en `omitidos`, sin hacer fallar la corrida.
 
         Por cada indicador deja una fila por municipio (los activos del departamento sede de la DDRISS, sin el
         `9999`) y una departamental (`municipio: null`):
@@ -4852,6 +4853,9 @@ paths:
         Lee la corrida vigente (la última `COMPLETADA`) de la DDRISS, el año y el mes. Sin corrida responde 200
         con `corrida: null` y `resultados` vacío. La fila departamental va primero y luego los municipios por
         nombre. `ddrissId`, como en `GET /indicadores/corridas`.
+
+        `metaDosis`, `excedenteDosis` y `sumaBrechasMunicipales` no se guardan: se calculan al leer (SPEC 45).
+        Con `municipioId` la respuesta no trae la fila departamental, así que tampoco `sumaBrechasMunicipales`.
       x-permiso: INDICADOR_CONSULTAR
       parameters:
         - { name: anio, in: query, required: true, schema: { type: integer, minimum: 2000, maximum: 2100, example: 2026 } }
@@ -7948,7 +7952,7 @@ components:
 
     ResultadoIndicador:
       type: object
-      required: [indicadorCodigo, indicadorVersion, tipoCalculo, municipio, vacuna, dosis, filtroDimensiones, anio, mes, numerador, denominador, valor, meta, brechaDosis, cumpleMeta, calculable, color, esProyeccion]
+      required: [indicadorCodigo, indicadorVersion, tipoCalculo, municipio, vacuna, dosis, filtroDimensiones, anio, mes, numerador, denominador, valor, meta, brechaDosis, cumpleMeta, calculable, color, esProyeccion, metaDosis, excedenteDosis, sumaBrechasMunicipales]
       properties:
         indicadorCodigo: { type: string, example: AVANCE_HEXA3 }
         indicadorVersion: { type: integer, description: Versión de `configuracion_indicadores` usada, example: 1 }
@@ -7985,6 +7989,29 @@ components:
           description: Franja del semáforo de la versión usada; `null` sin umbrales o sin valor
           example: verde
         esProyeccion: { type: boolean, example: false }
+        metaDosis:
+          type: integer
+          nullable: true
+          description: |
+            La meta en dosis: ⌈meta ÷ 100 × denominador⌉. Se calcula al leer; `null` si la fila no es calculable.
+            Siempre se cumple `metaDosis − numerador = brechaDosis − excedenteDosis`.
+          example: 967
+        excedenteDosis:
+          type: integer
+          nullable: true
+          description: |
+            Dosis por encima de la meta: máx(0, numerador − `metaDosis`). Se calcula al leer; `null` si la fila no
+            es calculable. Si es mayor que 0, `brechaDosis` es 0.
+          example: 8
+        sumaBrechasMunicipales:
+          type: integer
+          nullable: true
+          description: |
+            Solo en la fila departamental: la suma de `brechaDosis` de los municipios del mismo indicador, donde los
+            que pasaron la meta no compensan a los demás (a diferencia de `brechaDosis` de esa fila, que compara el
+            total del departamento). Se calcula al leer; `null` en las filas municipales y si la departamental no
+            es calculable.
+          example: null
 
     CorridaDeCierre:
       type: object

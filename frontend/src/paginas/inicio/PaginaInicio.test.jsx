@@ -118,7 +118,7 @@ test('con INDICADOR_CONSULTAR aparece un acceso a Indicadores que lleva a /indic
   fireEvent.click(enlaces[0])
 
   // La pantalla se carga al entrar (lazy).
-  expect(await screen.findByRole('heading', { name: 'Cobertura contra la meta del mes' }, { timeout: 5000 })).toBeTruthy()
+  expect(await screen.findByRole('heading', { name: 'Indicadores por municipio' }, { timeout: 5000 })).toBeTruthy()
 })
 
 const titulosDeAccesos = () =>
