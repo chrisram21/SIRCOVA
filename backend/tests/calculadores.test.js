@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  CALCULADORES, calcularContraMeta, colorDelValor, filtroCanonico, metaYExcedente, sumaBrechasMunicipales,
+  CALCULADORES, calcularContraMeta, calcularDesercion, colorDelValor, filtroCanonico, metaYExcedente,
+  sumaBrechasMunicipales,
 } from '../src/modulos/indicadores/calculadores.js';
 
 // Las fórmulas son puras: cada caso arma la versión, los numeradores y las poblaciones en memoria, sin base.
@@ -99,9 +100,89 @@ describe('calcularContraMeta', () => {
 });
 
 describe('CALCULADORES', () => {
-  it('calcula COBERTURA, AVANCE_META_MES y BRECHA con las mismas fórmulas', () => {
-    expect(Object.keys(CALCULADORES).sort()).toEqual(['AVANCE_META_MES', 'BRECHA', 'COBERTURA']);
+  it('calcula COBERTURA, AVANCE_META_MES y BRECHA con las mismas fórmulas, y DESERCION con la suya', () => {
+    expect(Object.keys(CALCULADORES).sort()).toEqual(['AVANCE_META_MES', 'BRECHA', 'COBERTURA', 'DESERCION']);
     expect(CALCULADORES.BRECHA).toBe(calcularContraMeta);
+    expect(CALCULADORES.DESERCION).toBe(calcularDesercion);
+  });
+});
+
+describe('DESERCION', () => {
+  const DES = { tipo_calculo: 'DESERCION', meta: { valor: 10, comparador: '<=' } };
+  // filas: [municipioId, dosis iniciales, dosis finales]
+  const desercion = (version, filas) => calcularDesercion({
+    version,
+    municipios: filas.map(([id]) => id),
+    iniciales: new Map(filas.map(([id, inicial]) => [id, inicial])),
+    finales: new Map(filas.map(([id, , final]) => [id, final])),
+  });
+
+  it('reproduce DES_HEXA1_3 de San Marcos en agosto de la semilla (D1 1051, D3 975)', () => {
+    const [, fila] = desercion(DES, [[1, 1051, 975]]);
+
+    expect(fila).toEqual({
+      municipioId: 1, numerador: 76, denominador: 1051, valor: 7.2312, meta: 10, brechaDosis: null, cumpleMeta: true,
+    });
+  });
+
+  it('sobre la meta no cumple y justo en la meta cumple con <=', () => {
+    const [, sobre, justa] = desercion(DES, [[1, 100, 85], [2, 100, 90]]);
+
+    expect(sobre).toMatchObject({ numerador: 15, valor: 15, cumpleMeta: false });
+    expect(justa).toMatchObject({ numerador: 10, valor: 10, cumpleMeta: true });
+  });
+
+  it('con más dosis finales que iniciales el valor es negativo y cumple', () => {
+    const [, fila] = desercion(DES, [[1, 40, 50]]);
+
+    expect(fila).toEqual({
+      municipioId: 1, numerador: -10, denominador: 40, valor: -25, meta: 10, brechaDosis: null, cumpleMeta: true,
+    });
+  });
+
+  it('sin dosis iniciales la fila no es calculable, sin error', () => {
+    const [, sinIniciales, sinNada] = desercion(DES, [[1, 0, 7], [2, 0, 0]]);
+
+    expect(sinIniciales).toEqual({
+      municipioId: 1, numerador: -7, denominador: 0, valor: null, meta: null, brechaDosis: null, cumpleMeta: null,
+    });
+    expect(sinNada).toMatchObject({ numerador: 0, denominador: 0, valor: null, cumpleMeta: null });
+  });
+
+  it('la departamental va primero y suma iniciales y finales; no se calcula solo sin iniciales en total', () => {
+    const filas = desercion(DES, [[1, 100, 90], [2, 0, 5], [3, 50, 40]]);
+    const [departamental] = filas;
+    const [sinIniciales] = desercion(DES, [[1, 0, 3], [2, 0, 0]]);
+
+    expect(filas.map((f) => f.municipioId)).toEqual([null, 1, 2, 3]);
+    expect(departamental).toEqual({
+      municipioId: null, numerador: 15, denominador: 150, valor: 10, meta: 10, brechaDosis: null, cumpleMeta: true,
+    });
+    expect(sinIniciales).toMatchObject({ municipioId: null, numerador: -3, valor: null, cumpleMeta: null });
+  });
+
+  it('no usa población: un municipio sin dosis cuenta 0 y la fila se calcula con lo que tiene', () => {
+    const [departamental, conDosis, sinDatos] = calcularDesercion({
+      version: DES, municipios: [1, 2], iniciales: new Map([[1, 20]]), finales: new Map([[1, 18]]),
+    });
+
+    expect(conDosis).toMatchObject({ valor: 10, cumpleMeta: true });
+    expect(sinDatos).toMatchObject({ numerador: 0, denominador: 0, valor: null });
+    expect(departamental).toMatchObject({ numerador: 2, denominador: 20, valor: 10 });
+  });
+
+  it('usa la meta y el comparador de la versión, y los del tipo si faltan', () => {
+    const [, propia] = desercion({ tipo_calculo: 'DESERCION', meta: { valor: 5, comparador: '<' } }, [[1, 100, 95]]);
+    const [, porDefecto] = desercion({ tipo_calculo: 'DESERCION' }, [[1, 100, 90]]);
+
+    expect(propia).toMatchObject({ valor: 5, meta: 5, cumpleMeta: false });
+    expect(porDefecto).toMatchObject({ valor: 10, meta: 10, cumpleMeta: true });
+  });
+
+  it('la fila no tiene brecha, así que la meta en dosis y el excedente son null', () => {
+    const [, fila] = desercion(DES, [[1, 1051, 975]]);
+
+    expect(metaYExcedente(fila)).toEqual({ metaDosis: null, excedenteDosis: null });
   });
 });
 
@@ -209,7 +290,7 @@ describe('colorDelValor', () => {
     (valor, color) => expect(colorDelValor(ascendente, valor, 'COBERTURA')).toBe(color),
   );
 
-  it.each([[10, 'verde'], [10.1, 'amarillo'], [15, 'amarillo'], [15.1, 'rojo']])(
+  it.each([[-25, 'verde'], [10, 'verde'], [10.1, 'amarillo'], [15, 'amarillo'], [15.1, 'rojo']])(
     'descendente (DESERCION): %s → %s',
     (valor, color) => expect(colorDelValor(descendente, valor, 'DESERCION')).toBe(color),
   );

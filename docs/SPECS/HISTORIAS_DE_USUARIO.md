@@ -1113,8 +1113,17 @@ Verificado contra la API real el 2026-11-04. Como `epidemiologia`, «Calcular» 
 **Nota (2026-11-04, spec 45):** `BRECHA` ya está en `CALCULADORES`. «Indicadores» elige la tabla por el tipo (`TablaBrecha` para `BRECHA`, en `PaginaIndicadores.jsx`) y el título sale de la `etiqueta` de `paginas/configuracion/tiposIndicador.js`: la deserción puede traer su propia tabla de la misma forma. `metaYExcedente` (`calculadores.js`) da `null` sin meta o sin denominador.
 
 **Criterios de aceptación:**
-- [ ] Se calcula por vacuna, municipio y periodo.
-- [ ] Si no hay primeras dosis, el indicador se muestra como no calculable, sin error.
+- [x] Se calcula por vacuna, municipio y periodo.
+- [x] Si no hay primeras dosis, el indicador se muestra como no calculable, sin error.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 46 a `main`. Backend y frontend, en `specs/46-hu-38-calcular-desercion-entre-dosis.md`: la corrida calcula los indicadores `DESERCION` (`CALCULADORES.DESERCION = calcularDesercion`), y `referenciasDe` y `dosisPorMunicipio` (`motor.service.js`) aceptan los indicadores de dos dosis sin grupo de población. En «Indicadores», un indicador `DESERCION` se ve en `TablaDesercion.jsx`: dosis iniciales, finales, pérdida y la deserción con su semáforo, de mayor a menor, y «Sin primeras dosis» al final. Sin cambios en la base, en los permisos ni en el contrato de `ResultadoIndicador` (solo sus descripciones). Diferencias con la historia, decididas por el equipo:
+
+- Se guarda como la semilla: `numerador` = dosis iniciales − dosis finales (la pérdida), `denominador` = dosis iniciales, `dosis_id` = la dosis final y `brecha_dosis` NULL. Las dosis finales se deducen al mostrar.
+- Con datos acumulados en el año, las dosis finales pueden superar a las iniciales: el valor negativo se guarda tal cual y la pantalla lo marca como «Deserción negativa», con una línea que lo explica.
+- La deserción no usa la población: solo deja de calcularse sin dosis iniciales, también en la fila departamental, que suma las iniciales y las finales de los municipios.
+- Sin gráficas ni mapa: las barras de deserción de `Indicadores.html` son de HU-41 y la capa del mapa, de HU-42.
+
+Verificado contra la API real el 2026-11-04. Como `epidemiologia`, «Calcular» agosto de 2026 creó la corrida 181, vigente en lugar de la 109, con las 31 filas de `DES_HEXA1_3` (dosis D3, meta 10, sin brecha); su bitácora ya solo omite `PROY_COB_HEXA3`. La deserción coincidió con la corrida 1 de la semilla en 28 municipios (San Marcos 76 de 1,051 = 7,2 %); Concepción Tutuapa dio 7,3 % (8,1 % en la semilla) y San Rafael 7,3 % (7,4 %), por las mismas diferencias del SPEC 44 (la rectificación 12 y el reporte 228 en `RECTIFICACION`). Departamental: 1,118 de 14,798 = 7,6 %. Esquipulas Palo Gordo (10,8 %) fue el único municipio sobre la meta y salió en rojo. La corrida 181 queda en la base.
 
 #### HU-39. Proyectar la cobertura al cierre del año
 
@@ -1166,6 +1175,8 @@ Verificado contra la API real el 2026-11-04. Como `epidemiologia`, «Calcular» 
 
 **Nota (2026-11-04, spec 45):** cada fila trae también `metaDosis` y `excedenteDosis`, y la departamental `sumaBrechasMunicipales` (calculados al leer). Las barras «Brecha a la meta proporcional» de `Indicadores.html` pueden leer `brechaDosis` de un indicador `BRECHA`; su total del mockup (1,801) es la suma municipal, no la brecha de la fila departamental. `TablaBrecha.jsx` ya ordena los municipios de mayor a menor brecha (`ordenarPorBrecha`).
 
+**Nota (2026-11-04, spec 46):** una fila `DESERCION` guarda la pérdida en `numerador` y las dosis iniciales en `denominador` (las finales son `denominador − numerador`); `valor` es la tasa, que puede ser negativa. Las barras «Deserción entre Hexa 1 y Hexa 3» de `Indicadores.html` pueden leer `valor` y dibujar `meta` como línea de umbral. `TablaDesercion.jsx` ya ordena de mayor a menor (`ordenarPorDesercion`) y reutiliza `InsigniaValor` de `PaginaIndicadores.jsx`.
+
 **Criterios de aceptación:**
 - [ ] Puedo filtrar por vacuna, municipio, distrito y rango de meses.
 - [ ] Veo cobertura, meta, brecha y deserción en tabla y gráfica.
@@ -1189,6 +1200,8 @@ Verificado contra la API real el 2026-11-04. Como `epidemiologia`, «Calcular» 
 **Nota (2026-11-03, spec 43):** los umbrales salen de la versión que aplica a la DDRISS (tres franjas con los nombres `verde`, `amarillo` y `rojo`, que el mapa pinta con sus tonos suaves; `aCortes` en `tiposIndicador.js` los lee). Varios indicadores pueden tener `es_indicador_mapa`: el mapa decide cuál muestra primero. Solo `COBERTURA` y `AVANCE_META_MES` pueden llevar esa marca.
 - [ ] El mapa muestra siempre, en su control de atribución, el crédito de los límites con el enlace a la fuente, el enlace a la licencia CC BY 3.0 IGO y la indicación "adaptado", además del crédito de Leaflet.
 - [ ] El sistema tiene una sección de créditos con la fuente completa de los límites, los cambios hechos y la nota de que son límites de referencia, no límites legales oficiales; no usa logos de CONRED, OCHA, HDX ni de las Naciones Unidas.
+
+**Nota (2026-11-04, spec 46):** la opción «Deserción» del selector de `Mapa.html` puede leer el `valor` y el `color` de un indicador `DESERCION` (semáforo descendente, ya calculado al leer). Sus filas no tienen `brechaDosis`, y un municipio sin primeras dosis llega con `calculable: false`.
 
 **Avance:** el GeoJSON está en `frontend/public/geo/` desde el 2026-10-20, con su `FUENTES.md`. Se tomó `gtm_admin2.geojson` del conjunto COD-AB de Guatemala (v01, CONRED/OCHA, en HDX) y se dejaron solo los 30 municipios de San Marcos con los atributos `codigo_ine` y `nombre`. Los contornos se simplificaron al 20 % con mapshaper (1676 vértices, unos 40 KB). Los metadatos de fuente, licencia y cambios van en el propio archivo y en `FUENTES.md`. Los 30 códigos coinciden con `municipio.codigo_ine` (1201 a 1230) en código y nombre, y al unir los municipios queda un solo polígono sin huecos. Falta la pantalla del mapa, la unión con los resultados de indicadores (HU-36) y el crédito en pantalla.
 

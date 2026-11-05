@@ -19,9 +19,10 @@ import { cn } from '@/lib/utils'
 import { TIPOS_INDICADOR } from '../configuracion/tiposIndicador.js'
 import DialogoCalcularIndicadores, { avisoDeMesesSinCerrar } from './DialogoCalcularIndicadores.jsx'
 import TablaBrecha from './TablaBrecha.jsx'
+import TablaDesercion from './TablaDesercion.jsx'
 
 // SPEC 44: la versión mínima de «Indicadores»: la corrida vigente de un mes, sus resultados por municipio y el
-// historial de corridas del año. SPEC 45 agrega la tabla de brecha; HU-41 la amplía con gráficas.
+// historial de corridas del año. SPEC 45 y 46 agregan las tablas de brecha y deserción; HU-41 la amplía con gráficas.
 
 const ANIOS_HACIA_ATRAS = 6
 const MOTIVOS = {
@@ -31,7 +32,7 @@ const MOTIVOS = {
   PROGRAMADA: 'Cálculo programado',
 }
 const ESTADOS_CORRIDA = { COMPLETADA: 'Completada', FALLIDA: 'Fallida', EN_PROCESO: 'En proceso' }
-const CLASES_COLOR = {
+export const CLASES_COLOR = {
   verde: 'border-transparent bg-exito text-exito-foreground',
   amarillo: 'border-transparent bg-advertencia text-advertencia-foreground',
   rojo: 'border-transparent bg-destructive/10 text-destructive',
@@ -85,7 +86,7 @@ export function indicadorElegido(indicadores, codigo) {
   )
 }
 
-function InsigniaValor({ resultado }) {
+export function InsigniaValor({ resultado }) {
   if (!resultado.calculable) return <span className="text-muted-foreground">Sin población</span>
   const texto = `${formatoPorcentaje.format(resultado.valor)} %`
   if (!resultado.color) return <span className="font-mono">{texto}</span>
@@ -386,7 +387,7 @@ export default function PaginaIndicadores({ hoy }) {
             <>
               <TarjetaCorrida corrida={corrida} />
               {indicador === null ? (
-                <p className="text-muted-foreground">La corrida no tiene resultados de cobertura, avance ni brecha.</p>
+                <p className="text-muted-foreground">La corrida no tiene resultados de cobertura, avance, brecha ni deserción.</p>
               ) : (
                 <div className="flex flex-col gap-2">
                   <p className="text-sm text-muted-foreground">
@@ -395,6 +396,8 @@ export default function PaginaIndicadores({ hoy }) {
                   </p>
                   {indicador.tipoCalculo === 'BRECHA' ? (
                     <TablaBrecha resultados={resultados} />
+                  ) : indicador.tipoCalculo === 'DESERCION' ? (
+                    <TablaDesercion resultados={resultados} />
                   ) : (
                     <TablaResultados resultados={resultados} tipoCalculo={indicador.tipoCalculo} />
                   )}

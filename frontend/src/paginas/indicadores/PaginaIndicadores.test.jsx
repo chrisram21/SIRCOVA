@@ -35,8 +35,9 @@ const corrida = (cambios = {}) => ({
     { codigo: 'COB_HEXA3', version: 1, nombre: 'Cobertura de Hexavalente 3.ª dosis', tipoCalculo: 'COBERTURA' },
     { codigo: 'AVANCE_HEXA3', version: 1, nombre: 'Avance de Hexavalente 3.ª dosis', tipoCalculo: 'AVANCE_META_MES' },
     { codigo: 'BRECHA_HEXA3', version: 1, nombre: 'Brecha de Hexavalente 3.ª dosis', tipoCalculo: 'BRECHA' },
+    { codigo: 'DES_HEXA1_3', version: 1, nombre: 'Tasa de deserción Hexavalente 1.ª a 3.ª dosis', tipoCalculo: 'DESERCION' },
   ],
-  omitidos: [{ codigo: 'DES_HEXA1_3', motivo: 'Su cálculo todavía no está disponible.' }],
+  omitidos: [{ codigo: 'PROY_COB_HEXA3', motivo: 'Su cálculo todavía no está disponible.' }],
   totalResultados: 6,
   ...cambios,
 })
@@ -44,7 +45,7 @@ const corrida = (cambios = {}) => ({
 const resultado = (indicadorCodigo, municipio, cambios = {}) => ({
   indicadorCodigo,
   indicadorVersion: 1,
-  tipoCalculo: { COB: 'COBERTURA', BRECHA: 'BRECHA' }[indicadorCodigo.split('_')[0]] ?? 'AVANCE_META_MES',
+  tipoCalculo: { COB: 'COBERTURA', BRECHA: 'BRECHA', DES: 'DESERCION' }[indicadorCodigo.split('_')[0]] ?? 'AVANCE_META_MES',
   municipio,
   vacuna: { codigo: 'HEXA', nombre: 'Hexavalente' },
   dosis: 'D3',
@@ -76,6 +77,14 @@ const BRECHA_MUNICIPIOS = [
   resultado('BRECHA_HEXA3', TAJUMULCO, { ...NO_CALCULABLE, numerador: 300 }),
   resultado('BRECHA_HEXA3', COMITANCILLO, { numerador: 100, metaDosis: 500, brechaDosis: 400, color: null }),
 ]
+// Municipios de DESERCION (numerador = pérdida, denominador = iniciales): Comitancillo pierde más, San Marcos tiene
+// más finales que iniciales y Tajumulco no tuvo primeras dosis.
+const DES_FILA = { brechaDosis: null, metaDosis: null, excedenteDosis: null, meta: 10, dosis: 'D3' }
+const DES_MUNICIPIOS = [
+  resultado('DES_HEXA1_3', SAN_MARCOS, { ...DES_FILA, numerador: -5, denominador: 40, valor: -12.5, cumpleMeta: true, color: 'verde' }),
+  resultado('DES_HEXA1_3', TAJUMULCO, { ...NO_CALCULABLE, numerador: -7, denominador: 0 }),
+  resultado('DES_HEXA1_3', COMITANCILLO, { ...DES_FILA, numerador: 15, denominador: 100, valor: 15, cumpleMeta: false, color: 'rojo' }),
+]
 const RESULTADOS = [
   resultado('AVANCE_HEXA3', null, { numerador: 1300, denominador: 2000, valor: 65, brechaDosis: 700, color: 'rojo' }),
   resultado('AVANCE_HEXA3', SAN_MARCOS, { numerador: 1000, denominador: 1000, valor: 100, brechaDosis: 0, cumpleMeta: true, color: 'verde' }),
@@ -87,6 +96,8 @@ const RESULTADOS = [
   resultado('COB_HEXA3', TAJUMULCO, { meta: 95 }),
   resultado('BRECHA_HEXA3', null, { numerador: 1100, metaDosis: 1250, brechaDosis: 150, sumaBrechasMunicipales: 400, color: null }),
   ...BRECHA_MUNICIPIOS,
+  resultado('DES_HEXA1_3', null, { ...DES_FILA, numerador: 3, denominador: 140, valor: 2.1429, cumpleMeta: true, color: 'verde' }),
+  ...DES_MUNICIPIOS,
 ]
 const CORRIDAS = {
   elementos: [corrida(), corrida({ id: 5, vigente: false, motivo: 'CIERRE_PERIODO', mesHasta: 9, disparadaPor: null, parcial: true })],
@@ -175,7 +186,7 @@ test('lista los indicadores omitidos y avisa cuando la corrida es parcial', asyn
   await montar()
 
   expect(await screen.findByText(/Cálculo parcial\. Septiembre y octubre no están cerrados/)).toBeTruthy()
-  expect(screen.getByText('DES_HEXA1_3')).toBeTruthy()
+  expect(screen.getByText('PROY_COB_HEXA3')).toBeTruthy()
   expect(screen.getByText(/Su cálculo todavía no está disponible\./)).toBeTruthy()
 })
 
@@ -218,6 +229,20 @@ test('con un indicador BRECHA muestra «Brecha de dosis», lo que falta de mayor
   expect(celdas(filaDe('San Marcos'))).toEqual(['San Marcos', '1,000', '950', '0', '50', 'Sí'])
   expect(celdas(filaDe('Tajumulco'))).toEqual(['Tajumulco', '300', 'Sin población', '—', '—', '—'])
   expect(screen.getByText(/Suma de lo que falta en los municipios:/).textContent).toContain('400 dosis')
+})
+
+test('con un indicador DESERCION muestra «Deserción entre dosis», de mayor a menor y sin primeras dosis al final', async () => {
+  await montar({ url: '/indicadores?indicador=DES_HEXA1_3' })
+
+  expect(await screen.findByRole('heading', { name: 'Deserción entre dosis' })).toBeTruthy()
+  const encabezados = tabla().getAllByRole('columnheader').map((c) => c.textContent)
+  expect(encabezados).toEqual(['Municipio', 'Dosis iniciales', 'Dosis finales', 'Pérdida', 'Deserción', 'Meta', 'Cumple'])
+  const filas = tabla().getAllByRole('row').slice(1)
+  expect(filas.map((f) => f.querySelector('td').textContent)).toEqual(['Total de la DDRISS', 'Comitancillo', 'San Marcos', 'Tajumulco'])
+  expect(celdas(filaDe('Comitancillo'))).toEqual(['Comitancillo', '100', '85', '15', '15.0 %', '≤ 10 %', 'No'])
+  expect(celdas(filaDe('San Marcos'))).toEqual(['San Marcos', '40', '45', '-5', '-12.5 %Deserción negativa', '≤ 10 %', 'Sí'])
+  expect(celdas(filaDe('Tajumulco'))).toEqual(['Tajumulco', '0', '7', '-7', 'Sin primeras dosis', '—', '—'])
+  expect(screen.getByText(/Una deserción negativa indica/)).toBeTruthy()
 })
 
 test('en la cobertura, una fila sin brecha muestra el excedente', async () => {

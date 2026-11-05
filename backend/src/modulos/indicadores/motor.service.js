@@ -1,6 +1,7 @@
 // Lo que el motor lee de MySQL para calcular una corrida (SPEC 44). Con Aiven, cada consulta cuesta su viaje: todas
 // las lecturas van en paralelo por el pool (un solo viaje), fuera de la transacción de la corrida, que solo escribe.
 import pool from '../../config/mysql.js';
+import { TIPOS_INDICADOR } from '../configuracion/tiposIndicador.js';
 import { CALCULADORES, SIN_CALCULO, filtroCanonico } from './calculadores.js';
 
 const MIGRANTES = '9999';
@@ -20,6 +21,15 @@ const filtrosDe = (version) => Object.fromEntries(
   Object.entries(aplicaDe(version).filtros_dimension ?? {}).filter(([, valores]) => Array.isArray(valores) && valores.length > 0),
 );
 const filas = async (consulta) => (await consulta)[0];
+// DESERCION (SPEC 46) tiene dosis inicial y final y no usa población.
+const esDeDosDosis = (version) => TIPOS_INDICADOR[version.tipo_calculo]?.dosis === 'DOS';
+const dosisDe = (version) => {
+  const aplica = aplicaDe(version);
+  return esDeDosDosis(version) ? [aplica.dosis_inicial, aplica.dosis_final] : [aplica.dosis];
+};
+
+// Cada consulta de varias dimensiones es de un indicador y una dosis.
+const llaveVarias = (version, dosis) => llave(version.codigo, dosis);
 
 function sumar(destino, clave, municipioId, dosis) {
   if (!destino.has(clave)) destino.set(clave, new Map());
@@ -37,7 +47,9 @@ function consultasDeNumeradores({ ddrissId, anio, mesHasta, versiones }) {
     const claves = Object.keys(filtrosDe(v));
     return claves.length === 1 ? claves : [];
   }))];
-  const varias = versiones.filter((v) => Object.keys(filtrosDe(v)).length > 1);
+  const varias = versiones
+    .filter((v) => Object.keys(filtrosDe(v)).length > 1)
+    .flatMap((v) => [...new Set(dosisDe(v))].map((dosis) => [v, dosis]));
   return {
     totales: filas(pool.query(
       `SELECT vp.vacuna_codigo, vp.dosis_codigo, vp.municipio_procedencia_id AS municipio_id, SUM(vp.cantidad) AS dosis
@@ -56,8 +68,8 @@ function consultasDeNumeradores({ ddrissId, anio, mesHasta, versiones }) {
         GROUP BY vp.vacuna_codigo, vp.dosis_codigo, vp.municipio_procedencia_id, dd.dimension_codigo, dd.valor_codigo`,
       [dimensiones, ...base, vacunas],
     )),
-    varias: varias.map((version) => {
-      const { vacuna, dosis } = aplicaDe(version);
+    varias: varias.map(([version, dosis]) => {
+      const { vacuna } = aplicaDe(version);
       const condiciones = [];
       const parametros = [...base, [vacuna], dosis ?? ''];
       for (const [dimension, valores] of Object.entries(filtrosDe(version))) {
@@ -72,7 +84,7 @@ function consultasDeNumeradores({ ddrissId, anio, mesHasta, versiones }) {
           WHERE ${CONDICIONES_ATRIBUIDA} AND vp.dosis_codigo = ? ${condiciones.join(' ')}
           GROUP BY vp.municipio_procedencia_id`,
         parametros,
-      )).then((resultado) => [version, new Map(resultado.map((f) => [f.municipio_id, Number(f.dosis)]))]);
+      )).then((resultado) => [llaveVarias(version, dosis), new Map(resultado.map((f) => [f.municipio_id, Number(f.dosis)]))]);
     }),
   };
 }
@@ -131,11 +143,12 @@ export async function leerDatos({ ddrissId, anio, mesHasta, versiones }) {
   };
 }
 
-function numeradorDe(version, datos) {
-  const { vacuna, dosis } = aplicaDe(version);
+// Las dosis por municipio de una dosis del indicador, con su filtro de dimensiones.
+function dosisPorMunicipio(version, dosis, datos) {
+  const { vacuna } = aplicaDe(version);
   const filtros = Object.entries(filtrosDe(version));
   if (filtros.length === 0) return datos.totalPorDosis.get(llave(vacuna, dosis)) ?? new Map();
-  if (filtros.length > 1) return datos.deVarias.get(version) ?? new Map();
+  if (filtros.length > 1) return datos.deVarias.get(llaveVarias(version, dosis)) ?? new Map();
   const [[dimension, valores]] = filtros;
   const suma = new Map();
   for (const valor of new Set(valores)) {
@@ -146,14 +159,21 @@ function numeradorDe(version, datos) {
   return suma;
 }
 
-// Los ids de MySQL de la vacuna, la dosis y el grupo de población del indicador, o el motivo para omitirlo.
+// Los ids de MySQL de la vacuna, la dosis y el grupo de población del indicador, o el motivo para omitirlo. En los
+// de dos dosis, dosisId es la final (la que guarda resultado_indicador) y no hay grupo de población.
 function referenciasDe(version, datos) {
-  const { vacuna, dosis, clasificacion_poblacion: clasificacion } = aplicaDe(version);
+  const { vacuna, clasificacion_poblacion: clasificacion } = aplicaDe(version);
   const vacunaId = datos.vacunaPorCodigo.get(vacuna);
   if (!vacunaId) return { omitido: `La vacuna ${vacuna} no existe.` };
-  if (!dosis) return { omitido: 'El indicador no tiene dosis.' };
-  const dosisId = datos.dosisPorLlave.get(llave(vacuna, dosis));
-  if (!dosisId) return { omitido: `La dosis ${dosis} no existe en ${vacuna}.` };
+  const dosisIds = [];
+  for (const dosis of dosisDe(version)) {
+    if (!dosis) return { omitido: 'El indicador no tiene dosis.' };
+    const dosisId = datos.dosisPorLlave.get(llave(vacuna, dosis));
+    if (!dosisId) return { omitido: `La dosis ${dosis} no existe en ${vacuna}.` };
+    dosisIds.push(dosisId);
+  }
+  const dosisId = dosisIds.at(-1);
+  if (esDeDosDosis(version)) return { vacunaId, dosisId };
   const clasificacionId = datos.clasificacionPorCodigo.get(clasificacion);
   if (!clasificacionId) return { omitido: `El grupo de población ${clasificacion} no existe.` };
   return { vacunaId, dosisId, clasificacionId };
@@ -176,13 +196,21 @@ export function calcularIndicadores({ mesHasta, versiones, datos }) {
       omitidos.push({ codigo: version.codigo, motivo: referencias.omitido });
       continue;
     }
-    const resultado = calcular({
-      version,
-      mesHasta,
-      municipios: datos.municipios,
-      numeradores: numeradorDe(version, datos),
-      poblaciones: datos.poblacionPorClasificacion.get(referencias.clasificacionId) ?? new Map(),
-    });
+    const dosis = dosisDe(version);
+    const resultado = calcular(esDeDosDosis(version)
+      ? {
+        version,
+        municipios: datos.municipios,
+        iniciales: dosisPorMunicipio(version, dosis[0], datos),
+        finales: dosisPorMunicipio(version, dosis[1], datos),
+      }
+      : {
+        version,
+        mesHasta,
+        municipios: datos.municipios,
+        numeradores: dosisPorMunicipio(version, dosis[0], datos),
+        poblaciones: datos.poblacionPorClasificacion.get(referencias.clasificacionId) ?? new Map(),
+      });
     const filtro = filtroCanonico(filtrosDe(version));
     const numeroVersion = Number(version.version);
     for (const fila of resultado) filasResultado.push({ ...fila, codigo: version.codigo, version: numeroVersion, ...referencias, filtro });
