@@ -34,6 +34,7 @@ const corrida = (cambios = {}) => ({
   indicadores: [
     { codigo: 'COB_HEXA3', version: 1, nombre: 'Cobertura de Hexavalente 3.ª dosis', tipoCalculo: 'COBERTURA' },
     { codigo: 'AVANCE_HEXA3', version: 1, nombre: 'Avance de Hexavalente 3.ª dosis', tipoCalculo: 'AVANCE_META_MES' },
+    { codigo: 'BRECHA_HEXA3', version: 1, nombre: 'Brecha de Hexavalente 3.ª dosis', tipoCalculo: 'BRECHA' },
   ],
   omitidos: [{ codigo: 'DES_HEXA1_3', motivo: 'Su cálculo todavía no está disponible.' }],
   totalResultados: 6,
@@ -43,7 +44,7 @@ const corrida = (cambios = {}) => ({
 const resultado = (indicadorCodigo, municipio, cambios = {}) => ({
   indicadorCodigo,
   indicadorVersion: 1,
-  tipoCalculo: indicadorCodigo.startsWith('COB') ? 'COBERTURA' : 'AVANCE_META_MES',
+  tipoCalculo: { COB: 'COBERTURA', BRECHA: 'BRECHA' }[indicadorCodigo.split('_')[0]] ?? 'AVANCE_META_MES',
   municipio,
   vacuna: { codigo: 'HEXA', nombre: 'Hexavalente' },
   dosis: 'D3',
@@ -59,10 +60,22 @@ const resultado = (indicadorCodigo, municipio, cambios = {}) => ({
   calculable: true,
   color: 'amarillo',
   esProyeccion: false,
+  metaDosis: 1209,
+  excedenteDosis: 0,
+  sumaBrechasMunicipales: null,
   ...cambios,
 })
 const SAN_MARCOS = { id: 1, nombre: 'San Marcos' }
 const TAJUMULCO = { id: 9, nombre: 'Tajumulco' }
+const COMITANCILLO = { id: 4, nombre: 'Comitancillo' }
+const NO_CALCULABLE = { denominador: null, valor: null, meta: null, brechaDosis: null, cumpleMeta: null, calculable: false, color: null, metaDosis: null, excedenteDosis: null }
+// Municipios de BRECHA, a propósito desordenados: San Marcos pasa la meta, Comitancillo es el que más necesita y
+// Tajumulco no tiene población.
+const BRECHA_MUNICIPIOS = [
+  resultado('BRECHA_HEXA3', SAN_MARCOS, { numerador: 1000, metaDosis: 950, brechaDosis: 0, excedenteDosis: 50, cumpleMeta: true, color: null }),
+  resultado('BRECHA_HEXA3', TAJUMULCO, { ...NO_CALCULABLE, numerador: 300 }),
+  resultado('BRECHA_HEXA3', COMITANCILLO, { numerador: 100, metaDosis: 500, brechaDosis: 400, color: null }),
+]
 const RESULTADOS = [
   resultado('AVANCE_HEXA3', null, { numerador: 1300, denominador: 2000, valor: 65, brechaDosis: 700, color: 'rojo' }),
   resultado('AVANCE_HEXA3', SAN_MARCOS, { numerador: 1000, denominador: 1000, valor: 100, brechaDosis: 0, cumpleMeta: true, color: 'verde' }),
@@ -70,8 +83,10 @@ const RESULTADOS = [
     numerador: 300, denominador: null, valor: null, meta: null, brechaDosis: null, cumpleMeta: null, calculable: false, color: null,
   }),
   resultado('COB_HEXA3', null, { meta: 95 }),
-  resultado('COB_HEXA3', SAN_MARCOS, { meta: 95 }),
+  resultado('COB_HEXA3', SAN_MARCOS, { meta: 95, numerador: 975, metaDosis: 967, brechaDosis: 0, excedenteDosis: 8, cumpleMeta: true }),
   resultado('COB_HEXA3', TAJUMULCO, { meta: 95 }),
+  resultado('BRECHA_HEXA3', null, { numerador: 1100, metaDosis: 1250, brechaDosis: 150, sumaBrechasMunicipales: 400, color: null }),
+  ...BRECHA_MUNICIPIOS,
 ]
 const CORRIDAS = {
   elementos: [corrida(), corrida({ id: 5, vigente: false, motivo: 'CIERRE_PERIODO', mesHasta: 9, disparadaPor: null, parcial: true })],
@@ -143,7 +158,7 @@ test('pide la corrida vigente del mes por defecto y muestra el avance con la fil
   await screen.findByText('Total de la DDRISS')
   expect(listarResultados).toHaveBeenCalledWith({ anio: 2026, mes: 10, ddrissId: undefined })
   expect(listarCorridas).toHaveBeenCalledWith({ anio: 2026, ddrissId: undefined })
-  expect(screen.getByRole('heading', { name: 'Cobertura contra la meta del mes' })).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'Avance contra la meta del mes' })).toBeTruthy()
   expect(screen.getByText(/Calculada el .* por Rosa Méndez · Cálculo manual/)).toBeTruthy()
   expect(document.querySelector('select[name="indicador"]').value).toBe('AVANCE_HEXA3')
 
@@ -183,11 +198,34 @@ test('el año, el mes y el indicador van en la URL y cambian lo que se pide', as
   fireEvent.change(document.querySelector('select[name="indicador"]'), { target: { value: 'COB_HEXA3' } })
   await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&indicador=COB_HEXA3'))
   expect(tabla().getByText('Población')).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'Cobertura' })).toBeTruthy()
 
   fireEvent.change(document.querySelector('select[name="mes"]'), { target: { value: '8' } })
   await waitFor(() => expect(listarResultados).toHaveBeenLastCalledWith({ anio: 2026, mes: 8, ddrissId: undefined }))
   fireEvent.change(document.querySelector('select[name="anio"]'), { target: { value: '2025' } })
   await waitFor(() => expect(listarResultados).toHaveBeenLastCalledWith({ anio: 2025, mes: 8, ddrissId: undefined }))
+})
+
+test('con un indicador BRECHA muestra «Brecha de dosis», lo que falta de mayor a menor y la suma municipal', async () => {
+  await montar({ url: '/indicadores?indicador=BRECHA_HEXA3' })
+
+  expect(await screen.findByRole('heading', { name: 'Brecha de dosis' })).toBeTruthy()
+  const encabezados = tabla().getAllByRole('columnheader').map((c) => c.textContent)
+  expect(encabezados).toEqual(['Municipio', 'Dosis acumuladas', 'Dosis para la meta', 'Dosis que faltan', 'Excedente', 'Cumple'])
+  const filas = tabla().getAllByRole('row').slice(1)
+  expect(filas.map((f) => f.querySelector('td').textContent)).toEqual(['Total de la DDRISS', 'Comitancillo', 'San Marcos', 'Tajumulco'])
+  expect(celdas(filaDe('Comitancillo'))).toEqual(['Comitancillo', '100', '500', '400', '0', 'No'])
+  expect(celdas(filaDe('San Marcos'))).toEqual(['San Marcos', '1,000', '950', '0', '50', 'Sí'])
+  expect(celdas(filaDe('Tajumulco'))).toEqual(['Tajumulco', '300', 'Sin población', '—', '—', '—'])
+  expect(screen.getByText(/Suma de lo que falta en los municipios:/).textContent).toContain('400 dosis')
+})
+
+test('en la cobertura, una fila sin brecha muestra el excedente', async () => {
+  await montar({ url: '/indicadores?indicador=COB_HEXA3' })
+  await screen.findByText('Total de la DDRISS')
+
+  expect(celdas(filaDe('San Marcos'))[5]).toBe('0 (+8 de excedente)')
+  expect(celdas(filaDe('Tajumulco'))[5]).toBe('234')
 })
 
 test('«Calcular» solo aparece con INDICADOR_CALCULAR y, al terminar, recarga el mes', async () => {

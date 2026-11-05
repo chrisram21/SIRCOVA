@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  CALCULADORES, calcularContraMeta, colorDelValor, filtroCanonico,
+  CALCULADORES, calcularContraMeta, colorDelValor, filtroCanonico, metaYExcedente, sumaBrechasMunicipales,
 } from '../src/modulos/indicadores/calculadores.js';
 
 // Las fórmulas son puras: cada caso arma la versión, los numeradores y las poblaciones en memoria, sin base.
@@ -99,8 +99,84 @@ describe('calcularContraMeta', () => {
 });
 
 describe('CALCULADORES', () => {
-  it('solo calcula COBERTURA y AVANCE_META_MES', () => {
-    expect(Object.keys(CALCULADORES).sort()).toEqual(['AVANCE_META_MES', 'COBERTURA']);
+  it('calcula COBERTURA, AVANCE_META_MES y BRECHA con las mismas fórmulas', () => {
+    expect(Object.keys(CALCULADORES).sort()).toEqual(['AVANCE_META_MES', 'BRECHA', 'COBERTURA']);
+    expect(CALCULADORES.BRECHA).toBe(calcularContraMeta);
+  });
+});
+
+describe('BRECHA, meta en dosis y excedente', () => {
+  const brecha = (prorrateo = 'NINGUNO', valor = 95) => ({
+    tipo_calculo: 'BRECHA', denominador: { prorrateo }, meta: { valor, comparador: '>' },
+  });
+  const conDosis = (fila) => ({ ...fila, ...metaYExcedente(fila) });
+  const cuadra = (f) => f.metaDosis - f.numerador === f.brechaDosis - f.excedenteDosis;
+
+  it('reproduce BRECHA_HEXA3 de San Marcos en agosto de la semilla (975 de 1,450)', () => {
+    const [, fila] = calcular(brecha(), 8, [[1, 975, 1450]]);
+
+    expect(conDosis(fila)).toMatchObject({
+      denominador: 1450, valor: 67.2414, meta: 95, brechaDosis: 403, cumpleMeta: false, metaDosis: 1378, excedenteDosis: 0,
+    });
+  });
+
+  it('con la meta superada la brecha es 0 y el excedente es lo que pasa de la meta en dosis', () => {
+    const [, fila] = calcular(AVANCE, 6, [[1, 300, 541]]);
+
+    expect(conDosis(fila)).toMatchObject({ denominador: 270.5, brechaDosis: 0, metaDosis: 271, excedenteDosis: 29 });
+  });
+
+  it('con la meta justa la brecha y el excedente son 0', () => {
+    const [, fila] = calcular(AVANCE, 12, [[1, 100, 100]]);
+
+    expect(conDosis(fila)).toMatchObject({ brechaDosis: 0, metaDosis: 100, excedenteDosis: 0 });
+  });
+
+  it('el redondeo a 6 decimales quita el error de coma flotante (0,07 × 100 = 7,000…01)', () => {
+    const fila = conDosis({ numerador: 50, denominador: 100, meta: 7, brechaDosis: 0 });
+
+    expect(fila).toMatchObject({ metaDosis: 7, excedenteDosis: 43 });
+  });
+
+  it('con el denominador guardado redondeado, la meta en dosis no pasa del numerador si no falta nada', () => {
+    const fila = conDosis({ numerador: 10, denominador: 10.01, meta: 100, brechaDosis: 0 });
+
+    expect(fila).toMatchObject({ metaDosis: 10, excedenteDosis: 0 });
+    expect(cuadra(fila)).toBe(true);
+  });
+
+  it('NINGUNO compara con la población anual y MENSUAL_LINEAL con la del mes', () => {
+    const [, anual] = calcular(brecha('NINGUNO'), 8, [[1, 975, 1450]]);
+    const [, mensual] = calcular(brecha('MENSUAL_LINEAL'), 8, [[1, 975, 1450]]);
+
+    expect(conDosis(anual)).toMatchObject({ brechaDosis: 403, metaDosis: 1378, excedenteDosis: 0 });
+    expect(conDosis(mensual)).toMatchObject({ denominador: 966.67, brechaDosis: 0, metaDosis: 919, excedenteDosis: 56 });
+  });
+
+  it('sin población la meta en dosis, el excedente y la suma municipal son null', () => {
+    const [departamental, , sinPoblacion] = calcular(brecha(), 6, [[1, 270, 541], [2, 40, null]]);
+
+    expect(metaYExcedente(sinPoblacion)).toEqual({ metaDosis: null, excedenteDosis: null });
+    expect(metaYExcedente(departamental)).toEqual({ metaDosis: null, excedenteDosis: null });
+    expect(sumaBrechasMunicipales(departamental, [sinPoblacion])).toBeNull();
+  });
+
+  it('la suma municipal no descuenta los excedentes y difiere de la brecha departamental', () => {
+    const [departamental, ...municipales] = calcular(AVANCE, 6, [[1, 300, 541], [2, 10, 59], [3, 0, 600]]);
+
+    expect(municipales.map((f) => f.brechaDosis)).toEqual([0, 20, 300]);
+    expect(departamental.brechaDosis).toBe(290);
+    expect(sumaBrechasMunicipales(departamental, municipales)).toBe(320);
+    expect([departamental, ...municipales].map(conDosis).every(cuadra)).toBe(true);
+  });
+
+  it('un municipio con población 0 no suma a la brecha municipal', () => {
+    const resultado = calcularContraMeta({
+      version: brecha(), mesHasta: 3, municipios: [1, 2], numeradores: new Map([[1, 50]]), poblaciones: new Map([[1, 100], [2, 0]]),
+    });
+
+    expect(resultado[2].brechaDosis).toBeNull();
+    expect(sumaBrechasMunicipales(resultado[0], resultado.slice(1))).toBe(45);
   });
 });
 

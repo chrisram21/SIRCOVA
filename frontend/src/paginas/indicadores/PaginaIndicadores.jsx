@@ -16,10 +16,12 @@ import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import { MESES } from '@/lib/fechas.js'
 import { cn } from '@/lib/utils'
+import { TIPOS_INDICADOR } from '../configuracion/tiposIndicador.js'
 import DialogoCalcularIndicadores, { avisoDeMesesSinCerrar } from './DialogoCalcularIndicadores.jsx'
+import TablaBrecha from './TablaBrecha.jsx'
 
 // SPEC 44: la versión mínima de «Indicadores»: la corrida vigente de un mes, sus resultados por municipio y el
-// historial de corridas del año. HU-41 la amplía con gráficas.
+// historial de corridas del año. SPEC 45 agrega la tabla de brecha; HU-41 la amplía con gráficas.
 
 const ANIOS_HACIA_ATRAS = 6
 const MOTIVOS = {
@@ -96,6 +98,12 @@ function InsigniaValor({ resultado }) {
 
 const textoCumple = (cumple) => (cumple === null ? '—' : cumple ? 'Sí' : 'No')
 
+export function textoDosisQueFaltan({ brechaDosis, excedenteDosis }) {
+  if (brechaDosis === null) return '—'
+  if (brechaDosis === 0 && excedenteDosis > 0) return `0 (+${formatoEntero.format(excedenteDosis)} de excedente)`
+  return formatoEntero.format(brechaDosis)
+}
+
 function TablaResultados({ resultados, tipoCalculo }) {
   const etiquetaValor = tipoCalculo === 'COBERTURA' ? 'Cobertura' : 'Avance'
   return (
@@ -126,9 +134,7 @@ function TablaResultados({ resultados, tipoCalculo }) {
                   <InsigniaValor resultado={r} />
                 </TableCell>
                 <TableCell className="text-right font-mono">{r.meta === null ? '—' : `${formatoDecimal.format(r.meta)} %`}</TableCell>
-                <TableCell className="text-right font-mono">
-                  {r.brechaDosis === null ? '—' : formatoEntero.format(r.brechaDosis)}
-                </TableCell>
+                <TableCell className="text-right font-mono">{textoDosisQueFaltan(r)}</TableCell>
                 <TableCell>{textoCumple(r.cumpleMeta)}</TableCell>
               </TableRow>
             )
@@ -291,12 +297,13 @@ export default function PaginaIndicadores({ hoy }) {
   const indicador = indicadorElegido(conResultados, filtros.indicador)
   const resultados = indicador ? datos.resultados.filter((r) => r.indicadorCodigo === indicador.codigo) : []
   const muestra = resultados[0]
+  const titulo = TIPOS_INDICADOR[indicador?.tipoCalculo]?.etiqueta ?? 'Indicadores por municipio'
 
   return (
     <section className="flex flex-col gap-6 p-6">
       <EncabezadoPagina
         antetitulo="Indicadores"
-        titulo="Cobertura contra la meta del mes"
+        titulo={titulo}
         descripcion={`Dosis acumuladas de enero a ${MESES[filtros.mes - 1]} de ${filtros.anio}, por municipio de residencia.`}
         acciones={puedeCalcular && !nacional && <Button onClick={() => setCalculando(true)}>Calcular</Button>}
       />
@@ -379,14 +386,18 @@ export default function PaginaIndicadores({ hoy }) {
             <>
               <TarjetaCorrida corrida={corrida} />
               {indicador === null ? (
-                <p className="text-muted-foreground">La corrida no tiene resultados de cobertura ni de avance.</p>
+                <p className="text-muted-foreground">La corrida no tiene resultados de cobertura, avance ni brecha.</p>
               ) : (
                 <div className="flex flex-col gap-2">
                   <p className="text-sm text-muted-foreground">
                     <span className="font-mono">{indicador.codigo}</span> · {muestra.vacuna.nombre}
                     {muestra.dosis ? ` · ${muestra.dosis}` : ''} · versión {muestra.indicadorVersion}
                   </p>
-                  <TablaResultados resultados={resultados} tipoCalculo={indicador.tipoCalculo} />
+                  {indicador.tipoCalculo === 'BRECHA' ? (
+                    <TablaBrecha resultados={resultados} />
+                  ) : (
+                    <TablaResultados resultados={resultados} tipoCalculo={indicador.tipoCalculo} />
+                  )}
                 </div>
               )}
             </>

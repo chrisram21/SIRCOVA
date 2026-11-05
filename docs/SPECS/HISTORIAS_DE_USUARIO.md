@@ -1084,8 +1084,17 @@ Verificado contra la API real el 2026-11-04, después de correr el 10 y el 05. C
 **Nota (2026-11-04, spec 44):** la corrida ya existe (`modulos/indicadores/`): esta historia agrega `BRECHA` a `CALCULADORES` en `calculadores.js` (hoy la corrida la omite), con la misma lectura de `motor.service.js`. Las filas de `COBERTURA` y `AVANCE_META_MES` ya llenan `brecha_dosis` contra su propia meta, y la pantalla «Indicadores» la muestra como «Dosis que faltan».
 
 **Criterios de aceptación:**
-- [ ] La brecha se muestra por vacuna y municipio.
-- [ ] Si se superó la meta, la brecha se muestra como 0 y se indica el excedente.
+- [x] La brecha se muestra por vacuna y municipio.
+- [x] Si se superó la meta, la brecha se muestra como 0 y se indica el excedente.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 45 a `main`. Backend y frontend, en `specs/45-hu-37-calcular-brecha-de-dosis.md`: la corrida calcula los indicadores `BRECHA` (`CALCULADORES.BRECHA = calcularContraMeta`) y `GET /indicadores/resultados` agrega, al leer, `metaDosis`, `excedenteDosis` y, en la fila departamental, `sumaBrechasMunicipales`. En «Indicadores», un indicador `BRECHA` se ve en `TablaBrecha.jsx`, ordenado de mayor a menor brecha, y en cobertura y avance «Dosis que faltan» indica el excedente («0 (+8 de excedente)»). Sin cambios en la base ni en los permisos. Diferencias con la historia, decididas por el equipo:
+
+- La fórmula es la de cobertura y la semilla: `valor` es el porcentaje contra el denominador (con el prorrateo y la meta de la versión, `NINGUNO` y 95 % por defecto) y `brecha_dosis` las dosis que faltan.
+- El excedente no se guarda: se calcula al leer. `metaDosis` sale de la brecha guardada (numerador + brecha si falta algo y, si no, ⌈meta × denominador⌉ sin pasar del numerador), porque el denominador se guarda redondeado a 2 decimales.
+- La fila «Total de la DDRISS» muestra la brecha contra el total del departamento y, debajo, la suma de lo que falta en cada municipio, donde los que pasaron la meta no compensan a los demás.
+- Sin gráficas: las barras de brecha de `Indicadores.html` son de HU-41.
+
+Verificado contra la API real el 2026-11-04. Como `epidemiologia`, «Calcular» agosto de 2026 creó la corrida 109, vigente, con 124 resultados (31 de `BRECHA_HEXA3`; solo `DES_HEXA1_3` y `PROY_COB_HEXA3` omitidos). La brecha coincidió con la corrida 1 de la semilla en 28 municipios (San Marcos 403, Malacatán 904); Concepción Tutuapa dio 694 (700 en la semilla) por la rectificación 12 y San Rafael 155 (122) por el reporte 228 en `RECTIFICACION`, las mismas diferencias del SPEC 44. Departamental: 9,643 contra el total y 9,648 de suma municipal. En el avance, El Rodeo, Esquipulas Palo Gordo y San Marcos mostraron su excedente (+6, +11 y +8). La corrida 109 queda en la base.
 
 #### HU-38. Calcular la tasa de deserción entre dosis
 
@@ -1100,6 +1109,8 @@ Verificado contra la API real el 2026-11-04, después de correr el 10 y el 05. C
 **Nota (2026-11-03, spec 43):** los indicadores `DESERCION` (con `dosis_inicial` y `dosis_final`) los crea Epidemiología desde «Configuración de indicadores», y su semáforo es descendente (verde hasta el primer corte). Se calculan los que aplican a la DDRISS en el momento de la corrida.
 
 **Nota (2026-11-04, spec 44):** esta historia agrega `DESERCION` a `CALCULADORES` (`modulos/indicadores/calculadores.js`); hoy la corrida la omite. `leerDatos` de `motor.service.js` lee los numeradores por vacuna y dosis de todas las vacunas de la corrida, así que la primera y la última dosis ya están ahí; `referenciasDe` hoy exige `aplica_a[0].dosis` y `clasificacion_poblacion`, y habrá que adaptarlo a `dosis_inicial`/`dosis_final`. `colorDelValor` ya pinta el semáforo descendente.
+
+**Nota (2026-11-04, spec 45):** `BRECHA` ya está en `CALCULADORES`. «Indicadores» elige la tabla por el tipo (`TablaBrecha` para `BRECHA`, en `PaginaIndicadores.jsx`) y el título sale de la `etiqueta` de `paginas/configuracion/tiposIndicador.js`: la deserción puede traer su propia tabla de la misma forma. `metaYExcedente` (`calculadores.js`) da `null` sin meta o sin denominador.
 
 **Criterios de aceptación:**
 - [ ] Se calcula por vacuna, municipio y periodo.
@@ -1116,6 +1127,8 @@ Verificado contra la API real el 2026-11-04, después de correr el 10 y el 05. C
 **Cómo se hará:** Proyección lineal en el backend a partir del promedio mensual de dosis; se guarda como resultado de tipo estimación.
 
 **Nota (2026-11-04, spec 44):** esta historia agrega `PROYECCION` a `CALCULADORES` (hoy la corrida la omite) y guarda sus filas con `es_proyeccion = TRUE`. «Se recalcula al cerrar cada periodo» ya ocurre: el cierre del mes crea una corrida `CIERRE_PERIODO`.
+
+**Nota (2026-11-04, spec 45):** `GET /indicadores/resultados` calcula `metaDosis` y `excedenteDosis` en todas las filas que tienen meta y denominador, también las de proyección; si una proyección no debe mostrarlos, la tabla de su tipo (como `TablaBrecha` en `PaginaIndicadores.jsx`) los omite.
 
 **Nota (2026-11-03, spec 43):** los indicadores `PROYECCION` no se crean desde la pantalla: solo se publican versiones que cambian el nombre, la descripción y la meta. Su método (`parametros`: `indicador_base`, `metodo`, `meses_ventana`, `horizonte`) se copia de la versión base, así que esta historia lo define.
 
@@ -1150,6 +1163,8 @@ Verificado contra la API real el 2026-11-04, después de correr el 10 y el 05. C
 **Cómo se hará:** Pantalla de indicadores con gráficas de Recharts a través del componente Chart de shadcn/ui (toman los colores del tema); endpoint `GET /indicadores/resultados` con filtros.
 
 **Nota (2026-11-04, spec 44):** la opción «Indicadores» ya tiene una versión mínima (`paginas/indicadores/PaginaIndicadores.jsx`): año, mes de corte e indicador en la URL, la corrida vigente con su aviso de parcial, la tabla por municipio con el color del semáforo y el historial de corridas. Lee `GET /indicadores/resultados` (la corrida vigente del mes, con `color` y `calculable`) y `GET /indicadores/corridas`; esta historia la amplía con gráficas y filtros.
+
+**Nota (2026-11-04, spec 45):** cada fila trae también `metaDosis` y `excedenteDosis`, y la departamental `sumaBrechasMunicipales` (calculados al leer). Las barras «Brecha a la meta proporcional» de `Indicadores.html` pueden leer `brechaDosis` de un indicador `BRECHA`; su total del mockup (1,801) es la suma municipal, no la brecha de la fila departamental. `TablaBrecha.jsx` ya ordena los municipios de mayor a menor brecha (`ordenarPorBrecha`).
 
 **Criterios de aceptación:**
 - [ ] Puedo filtrar por vacuna, municipio, distrito y rango de meses.
