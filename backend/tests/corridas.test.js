@@ -4,7 +4,7 @@ import { Int32, ObjectId } from 'mongodb';
 import app from '../src/app.js';
 import pool from '../src/config/mysql.js';
 import { obtenerDb } from '../src/config/mongodb.js';
-import { CALCULADORES, SIN_CALCULO } from '../src/modulos/indicadores/calculadores.js';
+import { CALCULADORES } from '../src/modulos/indicadores/calculadores.js';
 import { tokenDePrueba } from './sesionDePrueba.js';
 
 // Todo por SQL y MongoDB, sin la API de captura: los meses de 2006 en la DDRISS 1 (enero y febrero CERRADO, marzo
@@ -73,7 +73,7 @@ function indicador({ codigo, version = 1, tipo, aplica, denominador, meta, estad
 }
 
 // COBERTURA de D2 con la población anual de 1_A_MENOR_2 y sin filtro de edad; AVANCE de D2 contra MENOR_1, solo
-// menores de 1 año; DESERCION, que todavía no tiene cálculo.
+// menores de 1 año.
 const cobertura = (version = 1, metaValor = 95) => indicador({
   codigo: COB, version, tipo: 'COBERTURA',
   aplica: { dosis: 'D2', clasificacion_poblacion: '1_A_MENOR_2' },
@@ -86,11 +86,15 @@ const avance = () => indicador({
   denominador: { fuente: 'POBLACION_OBJETIVO', prorrateo: 'MENSUAL_LINEAL' },
   meta: { valor: 100, unidad: 'PORCENTAJE', comparador: '>=', homogeneidad_municipal: true },
 });
+// DESERCION de D1 a D2, sin filtro y con el semáforo descendente de DES_HEXA1_3. Con corte a febrero: San Marcos
+// 20 → 19 (5 %), San Pedro sin D1 y con D2 (no calculable) y la departamental 20 → 28 (−40 %); con corte a marzo,
+// San Pedro 4 → 9 (−125 %).
 const desercion = () => indicador({
   codigo: DES, tipo: 'DESERCION',
   aplica: { dosis_inicial: 'D1', dosis_final: 'D2' },
   denominador: { fuente: 'PRODUCCION' },
   meta: { valor: 10, unidad: 'PORCENTAJE', comparador: '<=' },
+  umbrales: [{ color: 'verde', desde: null, hasta: 10 }, { color: 'rojo', desde: 10, hasta: null }],
 });
 // BRECHA de D2 contra la población anual de 1_A_MENOR_2, sin semáforo (como BRECHA_HEXA3). Con meta 5 %, San Marcos
 // (19 de 240) y San Pedro (9 de 120) la pasan y los demás municipios (0 de 120) no.
@@ -202,7 +206,7 @@ async function preparar() {
   await reporte(cs1202.id, 2, 'CERRADO', [['D2', MUNICIPIO_SP, 'MENOR_1', 6]]);
   await reporte(cs1201.id, 2, 'APROBADO', [['D2', MUNICIPIO_SM, 'MENOR_1', 100]]);
   // Marzo, mes abierto, con un reporte ya cerrado: solo entra con corte a marzo.
-  await reporte(cs1201.id, 3, 'CERRADO', [['D2', MUNICIPIO_SM, 'MENOR_1', 8]]);
+  await reporte(cs1201.id, 3, 'CERRADO', [['D2', MUNICIPIO_SM, 'MENOR_1', 8], ['D1', MUNICIPIO_SP, 'MENOR_1', 4]]);
 
   // 1_A_MENOR_2: 120 en todo el territorio y 240 en San Marcos. MENOR_1: solo San Marcos (120).
   territorio = (await pool.query(
@@ -308,8 +312,10 @@ describe('POST /indicadores/corridas', () => {
     expect(corrida.indicadores).toContainEqual({
       codigo: COB, version: 1, nombre: `vitest-hu36 ${COB} v1`, tipoCalculo: 'COBERTURA',
     });
-    expect(corrida.omitidos).toContainEqual({ codigo: DES, motivo: SIN_CALCULO });
-    expect(corrida.indicadores.map((i) => i.codigo)).not.toContain(DES);
+    expect(corrida.indicadores).toContainEqual({
+      codigo: DES, version: 1, nombre: `vitest-hu36 ${DES} v1`, tipoCalculo: 'DESERCION',
+    });
+    expect(corrida.omitidos.map((o) => o.codigo)).not.toContain(DES);
     expect(corrida.totalResultados).toBe(resultados.length);
   });
 
@@ -395,6 +401,58 @@ describe('POST /indicadores/corridas', () => {
     });
   });
 
+  it('calcula DESERCION: la pérdida entre D1 y D2 por municipio, sin población y con la dosis final', () => {
+    expect(deMunicipio(resultados, DES, MUNICIPIO_SM)).toEqual({
+      indicadorCodigo: DES,
+      indicadorVersion: 1,
+      tipoCalculo: 'DESERCION',
+      municipio: { id: MUNICIPIO_SM, nombre: 'San Marcos' },
+      vacuna: { codigo: VACUNA, nombre: 'vitest-hu36 Vacuna' },
+      dosis: 'D2',
+      filtroDimensiones: '',
+      anio: ANIO,
+      mes: 2,
+      numerador: 1,
+      denominador: 20,
+      valor: 5,
+      meta: 10,
+      brechaDosis: null,
+      cumpleMeta: true,
+      calculable: true,
+      color: 'verde',
+      esProyeccion: false,
+      metaDosis: null,
+      excedenteDosis: null,
+      sumaBrechasMunicipales: null,
+    });
+    // San Pedro tiene D2 y no D1: no es calculable, sin hacer fallar la corrida.
+    expect(deMunicipio(resultados, DES, MUNICIPIO_SP)).toMatchObject({
+      numerador: -9, denominador: 0, valor: null, meta: null, cumpleMeta: null, calculable: false, color: null,
+    });
+    const sinDosis = delIndicador(resultados, DES).filter((r) => r.municipio && r.numerador === 0);
+    expect(sinDosis).toHaveLength(territorio.length - 2);
+    expect(sinDosis.every((r) => r.calculable === false)).toBe(true);
+    // La departamental suma 20 D1 y 28 D2: más finales que iniciales da un valor negativo, que cumple.
+    expect(deMunicipio(resultados, DES, null)).toMatchObject({
+      numerador: -8, denominador: 20, valor: -40, meta: 10, brechaDosis: null, cumpleMeta: true, calculable: true, color: 'verde',
+    });
+  });
+
+  it('la deserción coincide con las D1 y D2 de v_produccion_atribuida', async () => {
+    const [filas] = await pool.query(
+      `SELECT municipio_id, SUM(IF(dosis_id = ?, dosis_atribuidas, 0)) AS d1, SUM(IF(dosis_id = ?, dosis_atribuidas, 0)) AS d2
+         FROM v_produccion_atribuida
+        WHERE ddriss_id = 1 AND anio = ? AND mes <= 2 AND vacuna_id = ? GROUP BY municipio_id`,
+      [dosisIds.D1, dosisIds.D2, ANIO, vacunaId],
+    );
+    for (const fila of filas) {
+      expect(deMunicipio(resultados, DES, fila.municipio_id)).toMatchObject({
+        numerador: Number(fila.d1) - Number(fila.d2), denominador: Number(fila.d1),
+      });
+    }
+    expect(filas.length).toBeGreaterThan(0);
+  });
+
   it('el numerador sin filtro coincide con v_produccion_atribuida', async () => {
     const [filas] = await pool.query(
       `SELECT municipio_id, SUM(dosis_atribuidas) AS dosis FROM v_produccion_atribuida
@@ -460,6 +518,10 @@ describe('vigencia y versiones', () => {
     expect(corrida).toMatchObject({ parcial: true, mesesSinCerrar: [3] });
     const { resultados } = (await api('get', `/indicadores/corridas/${corrida.id}`)).body;
     expect(deMunicipio(resultados, COB, MUNICIPIO_SM).numerador).toBe(27);
+    // La D1 de San Pedro en marzo: 4 iniciales contra 9 finales.
+    expect(deMunicipio(resultados, DES, MUNICIPIO_SP)).toMatchObject({
+      numerador: -5, denominador: 4, valor: -125, cumpleMeta: true, calculable: true, color: 'verde',
+    });
   });
 
   it('dos corridas al mismo tiempo terminan las dos y queda una sola vigente', async () => {

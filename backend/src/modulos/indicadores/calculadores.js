@@ -1,6 +1,6 @@
 // Fórmulas del motor de indicadores (SPEC 44): funciones puras, sin acceso a datos. Cada tipo de
-// configuracion_indicadores con cálculo tiene su función en CALCULADORES; HU-38 y HU-39 agregan DESERCION y
-// PROYECCION. Un tipo que no está aquí se omite en la corrida sin hacerla fallar.
+// configuracion_indicadores con cálculo tiene su función en CALCULADORES; HU-39 agrega PROYECCION. Un tipo que no
+// está aquí se omite en la corrida sin hacerla fallar.
 
 import { DESCENDENTE, TIPOS_INDICADOR } from '../configuracion/tiposIndicador.js';
 
@@ -70,12 +70,50 @@ export function calcularContraMeta({ version, mesHasta, municipios, numeradores,
   return [departamental, ...filas];
 }
 
+function filaDesercion(municipioId, inicial, final, { meta, comparador }) {
+  const perdida = inicial - final;
+  if (inicial === 0) {
+    return { municipioId, numerador: perdida, denominador: 0, valor: null, meta: null, brechaDosis: null, cumpleMeta: null };
+  }
+  const valor = redondear((perdida / inicial) * 100, 4);
+  return {
+    municipioId,
+    numerador: perdida,
+    denominador: inicial,
+    valor,
+    meta,
+    brechaDosis: null,
+    cumpleMeta: COMPARADORES[comparador](valor, meta),
+  };
+}
+
+// DESERCION (SPEC 46), como la semilla: numerador = inicial − final (negativo si hubo más finales), denominador =
+// inicial. No usa población: solo deja de calcularse sin dosis iniciales. iniciales y finales son Map por municipio.
+export function calcularDesercion({ version, municipios, iniciales, finales }) {
+  const tipo = TIPOS_INDICADOR[version.tipo_calculo];
+  const parametros = {
+    meta: version.meta?.valor ?? tipo.meta.porDefecto,
+    comparador: version.meta?.comparador ?? tipo.meta.comparador,
+  };
+  let inicialTotal = 0;
+  let finalTotal = 0;
+  const filas = municipios.map((municipioId) => {
+    const inicial = iniciales.get(municipioId) ?? 0;
+    const final = finales.get(municipioId) ?? 0;
+    inicialTotal += inicial;
+    finalTotal += final;
+    return filaDesercion(municipioId, inicial, final, parametros);
+  });
+  return [filaDesercion(null, inicialTotal, finalTotal, parametros), ...filas];
+}
+
 // BRECHA (SPEC 45) usa las mismas fórmulas, con el prorrateo y la meta de su versión: valor en porcentaje y
 // brecha_dosis en dosis, como la semilla.
 export const CALCULADORES = {
   COBERTURA: calcularContraMeta,
   AVANCE_META_MES: calcularContraMeta,
   BRECHA: calcularContraMeta,
+  DESERCION: calcularDesercion,
 };
 
 // La meta en dosis y el excedente de una fila guardada, que no se guardan (SPEC 45). El denominador guardado va

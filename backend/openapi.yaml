@@ -4721,7 +4721,7 @@ paths:
         trae la corrida ya `COMPLETADA`. Calcula cada indicador que aplica a la DDRISS al iniciar (su `VIGENTE`
         antes que la nacional del mismo código, SPEC 43) cuyo tipo tenga cálculo; hoy `COBERTURA`,
         `AVANCE_META_MES` y `BRECHA` (SPEC 45), que se calculan con las mismas fórmulas, cada uno con el prorrateo
-        y la meta de su versión. Los demás tipos (`DESERCION`, `PROYECCION`) y los indicadores cuya vacuna, dosis o
+        y la meta de su versión, y `DESERCION` (SPEC 46). `PROYECCION` y los indicadores cuya vacuna, dosis o
         grupo de población ya no existen quedan en `omitidos`, sin hacer fallar la corrida.
 
         Por cada indicador deja una fila por municipio (los activos del departamento sede de la DDRISS, sin el
@@ -4738,6 +4738,13 @@ paths:
 
         Un municipio sin población deja la fila con el numerador y lo demás en `null` (`calculable: false`); la
         fila departamental tampoco se calcula si a algún municipio le falta la población.
+
+        `DESERCION` no usa la población. Con las dosis inicial y final del indicador, acumuladas con la misma regla
+        y el mismo filtro de dimensiones: **numerador** = inicial − final (negativo si se aplicaron más finales que
+        iniciales), **denominador** = inicial, **valor** = numerador ÷ denominador × 100, **brechaDosis** `null`,
+        **dosis** = la dosis final, y **cumpleMeta** con la meta y el comparador (`<=`) del indicador. Sin dosis
+        iniciales, la fila queda con el valor, la meta y `cumpleMeta` en `null` (`calculable: false`). La
+        departamental suma las iniciales y las finales de los municipios.
 
         El mes de corte puede ser cualquier mes del calendario de periodos: si algún mes de enero al corte no
         estaba cerrado en la DDRISS al calcular, la corrida es `parcial` (solo cuentan los reportes ya cerrados).
@@ -7912,7 +7919,7 @@ components:
             type: object
             required: [codigo, motivo]
             properties:
-              codigo: { type: string, example: DES_HEXA1_3 }
+              codigo: { type: string, example: PROY_COB_HEXA3 }
               motivo: { type: string, example: Su cálculo todavía no está disponible. }
         totalResultados: { type: integer, minimum: 0, example: 62 }
 
@@ -7971,17 +7978,28 @@ components:
           properties:
             codigo: { type: string, example: HEXA }
             nombre: { type: string, example: Hexavalente }
-        dosis: { type: string, nullable: true, example: D3 }
+        dosis: { type: string, nullable: true, description: "La dosis evaluada; en `DESERCION`, la final", example: D3 }
         filtroDimensiones: { type: string, description: "Filtro aplicado en forma canónica; vacío sin filtro", example: grupo_edad=MENOR_1 }
         anio: { type: integer, example: 2026 }
         mes: { type: integer, description: Mes de corte, example: 8 }
-        numerador: { type: number, nullable: true, description: Dosis acumuladas, example: 975 }
-        denominador: { type: number, nullable: true, description: "Población (prorrateada al mes con `MENSUAL_LINEAL`); `null` sin población", example: 966.67 }
-        valor: { type: number, nullable: true, description: Porcentaje, example: 100.8621 }
+        numerador:
+          type: number
+          nullable: true
+          description: |
+            Dosis acumuladas. En `DESERCION`, la pérdida: dosis iniciales − dosis finales (puede ser negativa).
+          example: 975
+        denominador:
+          type: number
+          nullable: true
+          description: |
+            Población (prorrateada al mes con `MENSUAL_LINEAL`); `null` sin población. En `DESERCION`, las dosis
+            iniciales (las finales son `denominador − numerador`).
+          example: 966.67
+        valor: { type: number, nullable: true, description: "Porcentaje; en `DESERCION`, la tasa de deserción (puede ser negativa)", example: 100.8621 }
         meta: { type: number, nullable: true, example: 100 }
-        brechaDosis: { type: integer, nullable: true, description: Dosis que faltan para la meta (0 si se alcanzó), example: 0 }
+        brechaDosis: { type: integer, nullable: true, description: "Dosis que faltan para la meta (0 si se alcanzó); `null` en `DESERCION`", example: 0 }
         cumpleMeta: { type: boolean, nullable: true, example: true }
-        calculable: { type: boolean, description: "`false` si falta la población (`valor` es `null`)", example: true }
+        calculable: { type: boolean, description: "`false` si falta la población, o en `DESERCION` si no hubo dosis iniciales (`valor` es `null`)", example: true }
         color:
           type: string
           nullable: true
