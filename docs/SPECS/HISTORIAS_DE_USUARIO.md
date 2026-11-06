@@ -1166,9 +1166,18 @@ Verificado contra la API real el 2026-11-05. Como `epidemiologia`, «Calcular» 
 **Cómo se hará:** Pantalla inicial en React con tarjetas (componente Card de shadcn/ui): reportes pendientes, avance general y alertas activas según el rol.
 
 **Criterios de aceptación:**
-- [ ] La pantalla muestra solo tarjetas de resumen, sin gráficas pesadas.
-- [ ] El contenido cambia según el rol (por ejemplo, el establecimiento ve sus reportes pendientes).
-- [ ] Carga en menos de 3 segundos con datos de prueba.
+- [x] La pantalla muestra solo tarjetas de resumen, sin gráficas pesadas.
+- [x] El contenido cambia según el rol (por ejemplo, el establecimiento ve sus reportes pendientes).
+- [x] Carga en menos de 3 segundos con datos de prueba.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 48 a `main`. Backend y frontend, en `specs/48-hu-40-dashboard-por-rol.md`: las tarjetas del Inicio de los cinco roles (HU-11) que ya tienen de dónde leer muestran datos reales, con los endpoints existentes y uno nuevo, `GET /revision/avance` (permiso `REPORTE_AVANCE_CONSULTAR`: cuántos reportes del mes hay en cada estado; sin `periodoId`, el mes que se está cerrando). Diferencias con la historia, decididas por el equipo:
+
+- Además de Epidemiología y la Autoridad, el Revisor (la estadígrafa) tiene su resumen completo, y el Establecimiento suma «Validaciones pendientes».
+- Las tarjetas de indicadores usan el último mes con corrida vigente y el primer indicador `AVANCE_META_MES` (el que «Indicadores» muestra por defecto); la Autoridad nacional elige la DDRISS, con selector solo si hay más de una.
+- La segunda fila de `Main.html` («Avance del cierre») es una barra apilada hecha con CSS, sin Recharts.
+- Siguen en «Sin datos todavía»: las alertas (HU-50 a HU-52), «Cambios en catálogos» y «Actividad de la bitácora» (HU-54), y «Cobertura de mi municipio» y «Tendencia mensual» del Establecimiento (ninguna historia las cubre todavía).
+
+Verificado contra la API real el 2026-11-05, con el build servido por `vite preview` (en `npm run dev` React dobla cada petición y los tiempos no son los de producción). Tiempo desde la recarga de `/inicio`, con la recuperación de la sesión, hasta que no queda ningún esqueleto: Epidemiología 2,2 a 2,5 s, Autoridad nacional 2,7 s, Revisor 1,8 s, Establecimiento (CS-1201) 1,8 a 1,9 s y Administrador 1,3 s. Las cifras coinciden con la API: avance departamental de Hexavalente 3 74,3 % (corrida 233, septiembre, parcial), 0 de 30 municipios en meta, proyección a diciembre 76,6 %, los cinco de menor avance (Tajumulco, Ixchiguán, Concepción Tutuapa, Ocós y San Lorenzo), septiembre en cierre con 0 de 31 cerrados (11 aprobados, 5 en revisión, 1 en corrección, 5 enviados y 9 sin enviar), 10 reportes por atender (5 asignados a la estadígrafa), 1 rectificación pendiente y 8 errores abiertos en el reporte de octubre de CS-1201.
 
 #### HU-41. Pantalla de indicadores con gráficas y filtros
 
@@ -1330,6 +1339,8 @@ Verificado contra la API real el 2026-11-05. Como `epidemiologia`, «Calcular» 
 
 **Cómo se hará:** Tarea programada (cron) en el backend que revisa fechas límite y estados y guarda en la tabla `alerta`.
 
+**Nota (2026-11-05, spec 48):** el Inicio ya tiene las tarjetas de alertas («Alertas activas» de Epidemiología y «Alertas de calidad y de proceso» del Revisor), en «Sin datos todavía». Para llenarlas, agregar su `Datos` y sus `permisos` en `paginas/inicio/roles/` (`TarjetasDelInicio`); la columna «Alertas que requieren acción» de `Main.html` iría junto a «Avance del cierre» (`AvanceCierre.jsx`).
+
 **Criterios de aceptación:**
 - [ ] Se genera una alerta cuando un establecimiento que envía el 5C no envió su reporte al vencer la fecha límite.
 - [ ] Se genera una alerta cuando un reporte lleva más de N días sin revisar; N es un valor fijo definido en el backend (pendiente de confirmar con la estadígrafa).
@@ -1347,6 +1358,8 @@ Verificado contra la API real el 2026-11-05. Como `epidemiologia`, «Calcular» 
 
 **Nota (2026-11-04, spec 44):** las corridas se guardan en `guardarCorrida` (`modulos/indicadores/corridas.service.js`), en una transacción por DDRISS, año y mes: las alertas pueden escribirse ahí con los resultados recién calculados (`resultado_indicador_id`). La configuración trae `alerta: { generar, tipo, rol_destino }`, que el motor todavía no usa. Una corrida `FALLIDA` no tiene resultados.
 
+**Nota (2026-11-05, spec 48):** el Inicio ya tiene las tarjetas de alertas («Alertas activas» de Epidemiología y «Alertas de calidad y de proceso» del Revisor), en «Sin datos todavía». Para llenarlas, agregar su `Datos` y sus `permisos` en `paginas/inicio/roles/` (`TarjetasDelInicio`); la columna «Alertas que requieren acción» de `Main.html` iría junto a «Avance del cierre» (`AvanceCierre.jsx`).
+
 **Criterios de aceptación:**
 - [ ] Se crea una alerta cuando el avance de un municipio queda en el rango más bajo del semáforo (menos de 80 %, provisional).
 - [ ] Se crea una alerta cuando la cobertura supera el 100 %.
@@ -1361,6 +1374,8 @@ Verificado contra la API real el 2026-11-05. Como `epidemiologia`, «Calcular» 
 | Todos los roles (según permiso) | 2 | S5 | Luis Suárez |
 
 **Cómo se hará:** Icono de alertas en la barra de navegación; endpoint `GET /alertas` filtrado por `rol_destino_id` y ámbito del usuario; acción para marcarlas.
+
+**Nota (2026-11-05, spec 48):** el Inicio ya tiene las tarjetas de alertas («Alertas activas» de Epidemiología y «Alertas de calidad y de proceso» del Revisor), en «Sin datos todavía». Para llenarlas, agregar su `Datos` y sus `permisos` en `paginas/inicio/roles/` (`TarjetasDelInicio`); la columna «Alertas que requieren acción» de `Main.html` iría junto a «Avance del cierre» (`AvanceCierre.jsx`).
 
 **Criterios de aceptación:**
 - [ ] Veo solo las alertas dirigidas a mi rol, dentro de mi establecimiento o DDRISS.
@@ -1394,6 +1409,8 @@ Verificado contra la API real el 2026-11-05. Como `epidemiologia`, «Calcular» 
 | Administrador | 3 | S5 | Christian Ramírez |
 
 **Cómo se hará:** Pantalla de auditoría; endpoint `GET /auditoria/bitacora` con filtros y paginación.
+
+**Nota (2026-11-05, spec 48):** el Inicio del Administrador tiene «Cambios en catálogos» y «Actividad de la bitácora» en «Sin datos todavía»: esperan `GET /auditoria/bitacora`. Para llenarlas, agregar su `Datos` y sus `permisos` en `paginas/inicio/roles/InicioAdministrador.jsx`.
 
 **Criterios de aceptación:**
 - [ ] Puedo combinar filtros por usuario, rango de fechas, acción y módulo.

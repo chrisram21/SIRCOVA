@@ -8,21 +8,23 @@ import { mensajeDeError } from '@/api/cliente.js'
 import { seguirPuntero, useCifraAnimada } from '@/componentes/efectos.js'
 import { cn } from '@/lib/utils'
 
-// Pide los datos de una tarjeta al montarla; `reintentar` vuelve a pedirlos.
-export function useConsulta(consultar) {
+// Pide los datos de una tarjeta al montarla; `reintentar` vuelve a pedirlos. Con `activa` en false no pide nada (sin
+// permiso, o mientras falta un dato del que depende) y queda cargando; un cambio de `clave` vuelve a pedir.
+export function useConsulta(consultar, { activa = true, clave } = {}) {
   const [estado, setEstado] = useState({ cargando: true, datos: null, error: null })
   const [intento, setIntento] = useState(0)
 
   useEffect(() => {
     let vigente = true
     setEstado({ cargando: true, datos: null, error: null })
+    if (!activa) return undefined
     consultar()
       .then((datos) => vigente && setEstado({ cargando: false, datos, error: null }))
       .catch((err) => vigente && setEstado({ cargando: false, datos: null, error: mensajeDeError(err) }))
     return () => {
       vigente = false
     }
-  }, [intento])
+  }, [intento, activa, clave])
 
   return { ...estado, reintentar: () => setIntento((n) => n + 1) }
 }

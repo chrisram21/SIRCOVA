@@ -8,7 +8,7 @@ import { EN_CICLO } from './cierre.service.js';
 const aFechaIso = (segundos) => (segundos == null ? null : new Date(Number(segundos) * 1000).toISOString());
 
 // La condición de cada chip sobre la consulta base; ASIGNADOS_A_MI recibe el id del usuario.
-const GRUPOS = {
+export const GRUPOS = {
   POR_ATENDER: () => ({ sql: "r.estado IN ('ENVIADO', 'EN_REVISION')", parametros: [] }),
   ASIGNADOS_A_MI: (usuarioId) => ({ sql: "r.estado = 'EN_REVISION' AND r.revisor_id = ?", parametros: [usuarioId] }),
   EN_REVISION: () => ({ sql: "r.estado = 'EN_REVISION'", parametros: [] }),
@@ -20,7 +20,7 @@ const GRUPOS = {
   TODOS: () => ({ sql: 'TRUE', parametros: [] }),
 };
 
-function leerEntero(valor, nombre, { minimo = 1, maximo = Number.MAX_SAFE_INTEGER } = {}) {
+export function leerEntero(valor, nombre, { minimo = 1, maximo = Number.MAX_SAFE_INTEGER } = {}) {
   const numero = /^\d+$/.test(valor) ? Number(valor) : NaN;
   if (!(numero >= minimo && numero <= maximo)) {
     throw entradaInvalida(
@@ -47,7 +47,7 @@ function leerFiltros(query) {
 
 // La consulta base: los establecimientos de la DDRISS que deben reportar (activos con reporta_5c) y los que, sin
 // serlo ya, tienen reporte del mes. La usan el COUNT de los grupos y la página, así no se separan.
-function consultaBase(filtros, ddrissId, uniones = '') {
+export function consultaBase(filtros, ddrissId, uniones = '') {
   const condiciones = ['e.ddriss_id = ?', '(r.id IS NOT NULL OR (e.activo = TRUE AND e.reporta_5c = TRUE))'];
   const parametros = [filtros.periodoId, ddrissId];
   if (filtros.municipioId !== null) {

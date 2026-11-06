@@ -3364,7 +3364,7 @@ paths:
               examples:
                 periodo:
                   value:
-                    error: { codigo: ENTRADA_INVALIDA, mensaje: periodoId debe ser un número entero positivo. }
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: periodoId debe ser un número entero mayor o igual a 1. }
                 campo:
                   value:
                     error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: establecimientoId." }
@@ -4218,6 +4218,54 @@ paths:
                 error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: ddrissId." }
         "401": { $ref: "#/components/responses/NoAutenticado" }
         "403": { $ref: "#/components/responses/SinPermiso" }
+
+  /revision/avance:
+    get:
+      tags: [Revisión]
+      summary: Cuántos reportes de un mes hay en cada estado (avance del cierre)
+      description: |
+        Solo conteos, para el resumen del Inicio (SPEC 48). Cuenta los mismos establecimientos que
+        `GET /revision/bandeja` (los activos con `reporta_5c` de la DDRISS, más los que tienen reporte del mes), con
+        sus mismos grupos: `esperados` es el conteo de «Todos» y `CERRADO` incluye `RECTIFICACION`. No escribe
+        nada ni deja bitácora.
+
+        Sin `periodoId`, el mes que se está cerrando, según el `cierre_periodo` de la DDRISS: el más antiguo
+        `EN_CIERRE`; si no hay, el más antiguo `ABIERTO`; si no hay, el último `CERRADO`. Si la DDRISS no tiene
+        ninguno, responde 200 con `periodo: null`, `esperados: 0` y los conteos en 0.
+
+        Con `periodoId`, ese mes; si no tiene `cierre_periodo` de la DDRISS, 404. Un parámetro inválido,
+        desconocido o repetido responde 400 `ENTRADA_INVALIDA`. `ddrissId`, como en `GET /indicadores/resultados`.
+      x-permiso: REPORTE_AVANCE_CONSULTAR
+      parameters:
+        - { name: periodoId, in: query, schema: { type: integer, minimum: 1, example: 32 } }
+        - { $ref: "#/components/parameters/DdrissIdAutoridad" }
+      responses:
+        "200":
+          description: El mes elegido y sus conteos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AvanceCierre" }
+        "400":
+          description: Un parámetro inválido, desconocido o repetido, o falta `ddrissId` (Autoridad nacional)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                periodo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "periodoId debe ser un número entero mayor o igual a 1." }
+                desconocido:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: grupo." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404":
+          description: El mes no tiene `cierre_periodo` de la DDRISS
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: NO_ENCONTRADO, mensaje: El recurso solicitado no existe. }
 
   /reportes/{id}/historial:
     get:
@@ -7307,6 +7355,35 @@ components:
         aprobados: { type: integer, minimum: 0, example: 5 }
         cerrados: { type: integer, minimum: 0, example: 14 }
         faltanPorAprobar: { type: integer, minimum: 0, example: 9 }
+
+    AvanceCierre:
+      type: object
+      description: El avance del cierre de un mes de una DDRISS (`GET /revision/avance`)
+      required: [periodo, esperados, conteos]
+      properties:
+        periodo:
+          type: object
+          nullable: true
+          description: El mes elegido, con el estado y la fecha límite de la DDRISS; `null` si la DDRISS no tiene meses
+          required: [id, anio, mes, estado, fechaLimiteEnvio]
+          properties:
+            id: { type: integer, example: 32 }
+            anio: { type: integer, example: 2026 }
+            mes: { type: integer, minimum: 1, maximum: 12, example: 8 }
+            estado: { $ref: "#/components/schemas/EstadoPeriodo" }
+            fechaLimiteEnvio: { type: string, format: date, example: "2026-09-10" }
+        esperados: { type: integer, minimum: 0, description: El conteo de «Todos» de la bandeja, example: 30 }
+        conteos:
+          type: object
+          required: [SIN_ENVIAR, ENVIADO, EN_REVISION, CORRECCION_SOLICITADA, APROBADO, CERRADO]
+          additionalProperties: false
+          properties:
+            SIN_ENVIAR: { type: integer, minimum: 0, description: Sin reporte del mes o en `BORRADOR`, example: 2 }
+            ENVIADO: { type: integer, minimum: 0, example: 2 }
+            EN_REVISION: { type: integer, minimum: 0, example: 4 }
+            CORRECCION_SOLICITADA: { type: integer, minimum: 0, example: 3 }
+            APROBADO: { type: integer, minimum: 0, example: 5 }
+            CERRADO: { type: integer, minimum: 0, description: "`CERRADO` y `RECTIFICACION`", example: 14 }
 
     PeriodoCerrado:
       description: El mes ya cerrado (el mismo objeto de `GET /periodos`) y cuántos reportes pasaron a Cerrado

@@ -22,6 +22,17 @@ export function listarRevisores() {
   return solicitar('/revision/revisores')
 }
 
+// SPEC 48: cuántos reportes del mes hay en cada estado; sin periodoId, el mes que se está cerrando. Responde
+// { periodo, esperados, conteos }; ddrissId solo lo manda la Autoridad nacional.
+export function obtenerAvance({ periodoId, ddrissId } = {}) {
+  const consulta = new URLSearchParams()
+  for (const [nombre, valor] of Object.entries({ periodoId, ddrissId })) {
+    if (valor !== undefined && valor !== null && valor !== '') consulta.set(nombre, String(valor))
+  }
+  const texto = consulta.toString()
+  return solicitar(texto ? `/revision/avance?${texto}` : '/revision/avance')
+}
+
 // Asignar es la transición ENVIADO → EN_REVISION; responde el reporte.
 export function asignarRevisor(reporteId, { versionFila, revisorId }) {
   return solicitar(`/reportes/${reporteId}/transiciones`, {

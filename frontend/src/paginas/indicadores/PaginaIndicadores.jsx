@@ -18,6 +18,7 @@ import { MESES } from '@/lib/fechas.js'
 import { cn } from '@/lib/utils'
 import { TIPOS_INDICADOR } from '../configuracion/tiposIndicador.js'
 import DialogoCalcularIndicadores, { avisoDeMesesSinCerrar } from './DialogoCalcularIndicadores.jsx'
+import InsigniaValor from './InsigniaValor.jsx'
 import TablaBrecha from './TablaBrecha.jsx'
 import TablaDesercion from './TablaDesercion.jsx'
 import TablaProyeccion from './TablaProyeccion.jsx'
@@ -34,11 +35,6 @@ const MOTIVOS = {
   PROGRAMADA: 'Cálculo programado',
 }
 const ESTADOS_CORRIDA = { COMPLETADA: 'Completada', FALLIDA: 'Fallida', EN_PROCESO: 'En proceso' }
-export const CLASES_COLOR = {
-  verde: 'border-transparent bg-exito text-exito-foreground',
-  amarillo: 'border-transparent bg-advertencia text-advertencia-foreground',
-  rojo: 'border-transparent bg-destructive/10 text-destructive',
-}
 
 const formatoEntero = new Intl.NumberFormat('es-GT', { maximumFractionDigits: 0 })
 const formatoDecimal = new Intl.NumberFormat('es-GT', { maximumFractionDigits: 2 })
@@ -85,17 +81,6 @@ export function indicadorElegido(indicadores, codigo) {
     ?? indicadores.find((i) => i.tipoCalculo === 'AVANCE_META_MES')
     ?? indicadores[0]
     ?? null
-  )
-}
-
-export function InsigniaValor({ resultado }) {
-  if (!resultado.calculable) return <span className="text-muted-foreground">Sin población</span>
-  const texto = `${formatoPorcentaje.format(resultado.valor)} %`
-  if (!resultado.color) return <span className="font-mono">{texto}</span>
-  return (
-    <Badge variant="outline" className={cn('font-mono', CLASES_COLOR[resultado.color])}>
-      {texto}
-    </Badge>
   )
 }
 

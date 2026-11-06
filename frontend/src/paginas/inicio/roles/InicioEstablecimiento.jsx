@@ -1,4 +1,6 @@
 import { Badge } from '@/components/ui/badge'
+import { obtenerValidacionGuardada } from '@/api/produccion.js'
+import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import InsigniaEstadoReporte from '@/componentes/InsigniaEstadoReporte.jsx'
 import { aDiaMesAnio, diasHasta, nombreDelMes, textoPlazo } from '@/lib/fechas.js'
 import { cn } from '@/lib/utils'
@@ -14,8 +16,7 @@ async function consultarMiReporte() {
 }
 
 // El mes que toca reportar (el mismo que abre Registro), su estado y cuánto falta para la fecha límite.
-function TarjetaMiReporte({ titulo, tono }) {
-  const consulta = useConsulta(consultarMiReporte)
+function TarjetaMiReporte({ titulo, tono, consulta }) {
   const periodo = consulta.datos?.periodo
   return (
     <TarjetaResumen
@@ -47,17 +48,59 @@ function TarjetaMiReporte({ titulo, tono }) {
   )
 }
 
-const TARJETAS = [
-  {
-    titulo: 'Estado y fecha límite de mi reporte',
-    Datos: TarjetaMiReporte,
-    permisos: ['PERIODO_CONSULTAR', 'REPORTE_CONSULTAR'],
-  },
-  { titulo: 'Validaciones pendientes' },
-  { titulo: 'Cobertura de mi municipio' },
-  { titulo: 'Tendencia mensual' },
-]
+const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`
+
+// Las observaciones ABIERTO de la última validación del reporte del mes que toca (las justificadas ya se atendieron).
+function TarjetaValidaciones({ titulo, tono, consulta }) {
+  const reporte = consulta.datos?.reporte
+  const validacion = useConsulta(() => obtenerValidacionGuardada(reporte.id), {
+    activa: Boolean(reporte),
+    clave: reporte?.id,
+  })
+  const periodo = consulta.datos?.periodo
+  return (
+    <TarjetaResumen
+      titulo={titulo}
+      tono={tono}
+      consulta={reporte ? validacion : consulta}
+      enlace={periodo && { a: `/registro?periodo=${periodo.id}`, texto: 'Ir al registro' }}
+    >
+      {(datos) => {
+        if (!periodo) return <p className="text-sm text-muted-foreground">No hay meses abiertos para reportar.</p>
+        if (!reporte) return <p className="text-sm text-muted-foreground">Todavía no ha creado el reporte de {nombreDelMes(periodo)}.</p>
+        if (datos.validadoEn === null) return <p className="text-sm text-muted-foreground">Sin validar todavía.</p>
+        const abiertos = datos.resultados.filter((r) => r.estado === 'ABIERTO')
+        const errores = abiertos.filter((r) => r.severidad === 'ERROR').length
+        const advertencias = abiertos.length - errores
+        if (abiertos.length === 0) return <p className="text-sm text-muted-foreground">Sin observaciones pendientes.</p>
+        return (
+          <p className={cn('text-sm', errores > 0 ? 'font-medium text-destructive' : 'text-muted-foreground')}>
+            {plural(errores, 'error', 'errores')} · {plural(advertencias, 'advertencia', 'advertencias')}
+          </p>
+        )
+      }}
+    </TarjetaResumen>
+  )
+}
+
+const PERMISOS_MI_REPORTE = ['PERIODO_CONSULTAR', 'REPORTE_CONSULTAR']
 
 export default function InicioEstablecimiento() {
-  return <TarjetasDelInicio tarjetas={TARJETAS} />
+  const { tienePermiso } = useSesion()
+  const miReporte = useConsulta(consultarMiReporte, { activa: PERMISOS_MI_REPORTE.every(tienePermiso) })
+
+  // «Cobertura de mi municipio» y «Tendencia mensual» todavía no tienen de dónde leer (SPEC 48).
+  const tarjetas = [
+    {
+      titulo: 'Estado y fecha límite de mi reporte',
+      Datos: TarjetaMiReporte,
+      permisos: PERMISOS_MI_REPORTE,
+      props: { consulta: miReporte },
+    },
+    { titulo: 'Validaciones pendientes', Datos: TarjetaValidaciones, permisos: PERMISOS_MI_REPORTE, props: { consulta: miReporte } },
+    { titulo: 'Cobertura de mi municipio' },
+    { titulo: 'Tendencia mensual' },
+  ]
+
+  return <TarjetasDelInicio tarjetas={tarjetas} />
 }

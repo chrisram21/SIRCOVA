@@ -1,3 +1,4 @@
+import * as avanceService from './avance.service.js';
 import * as bandejaService from './bandeja.service.js';
 import * as cierreService from './cierre.service.js';
 import * as reasignacionService from './reasignacion.service.js';
@@ -21,6 +22,10 @@ export async function obtenerBandeja(req, res) {
 
 export async function listarRevisores(req, res) {
   res.json(await bandejaService.listarRevisores(req.usuario, req.query));
+}
+
+export async function obtenerAvance(req, res) {
+  res.json(await avanceService.obtenerAvance(req.usuario, req.query));
 }
 
 export async function cerrarPeriodo(req, res) {
