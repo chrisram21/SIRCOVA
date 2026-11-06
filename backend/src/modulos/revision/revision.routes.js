@@ -7,6 +7,12 @@ const router = Router();
 
 router.get('/revision/bandeja', autenticar, requierePermiso('REPORTE_REVISAR'), revisionController.obtenerBandeja);
 router.get('/revision/revisores', autenticar, requierePermiso('REPORTE_REVISAR'), revisionController.listarRevisores);
+router.get(
+  '/revision/avance',
+  autenticar,
+  requierePermiso('REPORTE_AVANCE_CONSULTAR'),
+  revisionController.obtenerAvance,
+);
 // El permiso depende de estadoDestino: lo revisa el servicio (PERMISO_POR_DESTINO).
 router.post('/reportes/:id/transiciones', autenticar, revisionController.cambiarEstado);
 // REPORTE_ASIGNAR lo revisa el servicio, después del cuerpo, como en las transiciones.

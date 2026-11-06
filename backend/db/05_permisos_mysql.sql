@@ -171,6 +171,10 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('INDICADOR_CALCULAR',        'INDICADORES',             'Calcular los indicadores de su DDRISS para un mes'),
  ('INDICADOR_CONSULTAR',       'INDICADORES',             'Consultar las corridas y los resultados de los indicadores');
 
+-- SPEC 48 (HU-40): el avance del cierre del mes (solo conteos) para el resumen del Inicio
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('REPORTE_AVANCE_CONSULTAR',  'REVISION',                'Consultar cuántos reportes de un mes de su DDRISS hay en cada estado');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -351,6 +355,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'AUTORIDAD'
    AND p.codigo = 'DDRISS_CONSULTAR';
+
+-- SPEC 48 (HU-40): Epidemiología, la Autoridad, el Revisor y el Administrador ven el avance del cierre en el Inicio
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo IN ('EPIDEMIOLOGIA', 'AUTORIDAD', 'REVISOR', 'ADMINISTRADOR')
+   AND p.codigo = 'REPORTE_AVANCE_CONSULTAR';
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import { TIPOS_INDICADOR } from '../configuracion/tiposIndicador.js'
-import { InsigniaValor } from './PaginaIndicadores.jsx'
+import InsigniaValor from './InsigniaValor.jsx'
 
 // SPEC 46: los resultados de un indicador DESERCION. El numerador guardado es la pérdida (iniciales − finales) y el
 // denominador, las iniciales: las finales se deducen.
