@@ -440,6 +440,36 @@ export async function resultadosVigentes(usuario, query = {}) {
   };
 }
 
+// SPEC 49: la fila de un indicador en la corrida vigente de cada mes del año (la línea de avance de «Indicadores»).
+export async function serieDelIndicador(usuario, query = {}) {
+  revisarParametros(query, ['anio', 'indicador', 'municipioId', 'ddrissId']);
+  const ddrissId = ddrissDeLaConsulta(usuario, query);
+  if (query.anio === undefined) throw entradaInvalida('El año es obligatorio.');
+  if (query.indicador === undefined) throw entradaInvalida('El indicador es obligatorio.');
+  const anio = leerAnio(query.anio);
+  if (!FORMATO_CODIGO.test(query.indicador)) {
+    throw entradaInvalida('indicador debe ser un código en mayúsculas, dígitos y guion bajo.');
+  }
+  const municipioId = query.municipioId === undefined ? undefined : leerId(query.municipioId, 'municipioId');
+  const [vigentes] = await pool.query(
+    `SELECT mes_hasta, MAX(id) AS id FROM corrida_calculo
+      WHERE ddriss_id = ? AND anio = ? AND vigente = TRUE AND estado = 'COMPLETADA'
+      GROUP BY mes_hasta
+      ORDER BY mes_hasta`,
+    [ddrissId, anio],
+  );
+  // Sin municipioId, leerResultados trae también los municipios para calcular sumaBrechasMunicipales de la departamental.
+  const porMes = await Promise.all(vigentes.map(async ({ mes_hasta: mes, id }) => {
+    const [filas, sinCerrar] = await Promise.all([
+      leerResultados(id, { indicador: query.indicador, municipioId }),
+      mesesCerradosAl(pool, { ddrissId, anio, mesHasta: mes, corridaId: id }),
+    ]);
+    const resultado = filas.find((r) => (municipioId ? r.municipio?.id === municipioId : r.municipio === null));
+    return resultado ? { mes, corridaId: id, parcial: sinCerrar.length > 0, resultado } : null;
+  }));
+  return { puntos: porMes.filter(Boolean) };
+}
+
 // Los meses CERRADO de la DDRISS en el año, desde mes: los que recalcula una rectificación aplicada.
 export async function mesesCerradosDesde(ddrissId, anio, mes) {
   const [filas] = await pool.query(

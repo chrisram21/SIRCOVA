@@ -1198,9 +1198,20 @@ Verificado contra la API real el 2026-11-05, con el build servido por `vite prev
 **Nota (2026-11-05, spec 47):** las filas `PROYECCION` llevan `esProyeccion: true`; `numerador` son las dosis proyectadas a diciembre, `denominador` la población anual y `valor` la cobertura estimada. Para la línea punteada de «Avance acumulado y proyección», el punto del mes k (después del corte) es `proyeccion.dosisAcumuladas + proyeccion.ritmoMensual × (k − mes)` ÷ `denominador` × 100, y diciembre es `valor`; la línea real sale de la cobertura de las corridas de cada mes. La banda de rango probable no se calcula. `TablaProyeccion.jsx` marca lo estimado con `bg-muted` y la insignia «Estimación».
 
 **Criterios de aceptación:**
-- [ ] Puedo filtrar por vacuna, municipio, distrito y rango de meses.
-- [ ] Veo cobertura, meta, brecha y deserción en tabla y gráfica.
-- [ ] Los datos proyectados se dibujan con un estilo distinto a los reales.
+- [x] Puedo filtrar por vacuna, municipio, distrito y rango de meses.
+- [x] Veo cobertura, meta, brecha y deserción en tabla y gráfica.
+- [x] Los datos proyectados se dibujan con un estilo distinto a los reales.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 49 a `main`. Backend y frontend, en `specs/49-hu-41-indicadores-graficas-y-filtros.md`. «Indicadores» tiene, sobre la tabla del indicador elegido, un panel de cinco gráficas (Recharts con el componente Chart de shadcn): avance acumulado y proyección, cobertura por vacuna, cobertura por municipio, brecha a la meta (las 8 mayores) y deserción (las 8 mayores, con el umbral). Los filtros nuevos (vacuna por su código, distrito y varios municipios) van en la URL. El endpoint nuevo `GET /indicadores/serie` da la fila de un indicador en la corrida vigente de cada mes del año. Epidemiología y la Autoridad reciben `DISTRITO_CONSULTAR` en el 05. Diferencias con la historia, decididas por el equipo:
+
+- El rango de meses es de enero al mes de corte, porque los resultados se guardan acumulados: la tabla y las barras muestran el acumulado al corte, y la línea, un punto por mes con su corrida vigente. No hay rangos que empiecen en otro mes.
+- El distrito solo filtra los municipios (cada municipio de la semilla tiene uno y la cobertura por distrito sigue en pausa): no hay fila ni cálculo por distrito.
+- Con un solo municipio visible, la línea y la cobertura por vacuna son las de ese municipio; con varios, las de la DDRISS (el motor no suma municipios elegidos).
+- La línea va contra la población anual de la proyección (lo real es el numerador de la serie ÷ esa población) y la meta es la de la proyección, proporcional al mes. Sin proyección calculable, muestra el valor del indicador base con su meta plana. El prorrateo del indicador base no viene en los resultados, y `COB_HEXA3` de la base de prueba usa `MENSUAL_LINEAL`.
+- El semáforo de las barras usa las variables nuevas `--semaforo-verde`, `--semaforo-amarillo` y `--semaforo-rojo` de `index.css`, en tonos suaves.
+- Fuera: exportar a Excel o PDF, agrupar por sexo o edad, los selectores «Nivel» y «Atribución» y la banda de rango probable.
+
+Verificado contra la API real el 2026-11-05. Como `epidemiologia`, en agosto de 2026 (corrida 232): la línea marca 55,7 % real en agosto (13,680 de 24,550) y 83,6 % proyectado a diciembre, como `PROY_COB_HEXA3`; octubre da 69,7 % con el ritmo de 1,711.25 dosis. Las barras de brecha (Malacatán 904 … Ayutla 421, total 9,648) y de deserción (Esquipulas Palo Gordo 10,8 %, la única sobre el umbral … Sipacapa 8,0 %) coinciden con la base. Con el distrito de Tacaná, la línea da 81,9 % a diciembre (como el SPEC 47), la brecha 475 y la tabla solo Tacaná; con Malacatán y Sibinal, la brecha suma 1,060 y la línea sigue siendo la de la DDRISS. A 390 px no hay desplazamiento horizontal. Como `autoridad.nacional`, el panel carga con el selector de DDRISS y el de distrito, sin «Calcular», y la consola queda sin errores.
 
 #### HU-42. Mapa territorial con semáforo
 
@@ -1220,6 +1231,8 @@ Verificado contra la API real el 2026-11-05, con el build servido por `vite prev
 **Nota (2026-11-03, spec 43):** los umbrales salen de la versión que aplica a la DDRISS (tres franjas con los nombres `verde`, `amarillo` y `rojo`, que el mapa pinta con sus tonos suaves; `aCortes` en `tiposIndicador.js` los lee). Varios indicadores pueden tener `es_indicador_mapa`: el mapa decide cuál muestra primero. Solo `COBERTURA` y `AVANCE_META_MES` pueden llevar esa marca.
 - [ ] El mapa muestra siempre, en su control de atribución, el crédito de los límites con el enlace a la fuente, el enlace a la licencia CC BY 3.0 IGO y la indicación "adaptado", además del crédito de Leaflet.
 - [ ] El sistema tiene una sección de créditos con la fuente completa de los límites, los cambios hechos y la nota de que son límites de referencia, no límites legales oficiales; no usa logos de CONRED, OCHA, HDX ni de las Naciones Unidas.
+
+**Nota (2026-11-05, spec 49):** los tonos suaves del semáforo ya existen como `--semaforo-verde`, `--semaforo-amarillo` y `--semaforo-rojo` en `index.css` (`COLOR_SEMAFORO` en `paginas/indicadores/TarjetaGrafica.jsx` los asocia al `color` del resultado). Para la ficha de un municipio y sus filtros, `paginas/indicadores/panelIndicadores.js` ya tiene `filaDeReferencia`, `filasDe`, `municipiosVisibles` y `vacunaElegida`, y `GET /indicadores/serie` da la evolución mensual de un indicador por municipio.
 
 **Nota (2026-11-04, spec 46):** la opción «Deserción» del selector de `Mapa.html` puede leer el `valor` y el `color` de un indicador `DESERCION` (semáforo descendente, ya calculado al leer). Sus filas no tienen `brechaDosis`, y un municipio sin primeras dosis llega con `calculable: false`.
 
@@ -1265,6 +1278,8 @@ Verificado contra la API real el 2026-11-05, con el build servido por `vite prev
 
 **Cómo se hará:** Pantalla de informes; consultas sobre `v_consolidado_establecimiento` (Excel 1 y 2) y `v_produccion_atribuida` (Excel 3); solo usa reportes cerrados salvo que se indique lo contrario.
 
+**Nota (2026-11-05, spec 49):** «Indicadores» ya filtra por distrito y por varios municipios, con los filtros en la URL (`distrito`, `municipios=1,4,7`, `vacuna` por su código; `filtrosDeUrl` en `PaginaIndicadores.jsx` y el menú con casillas de `BarraFiltrosIndicadores.jsx`). El distrito se lee de `GET /distritos`, y desde este spec Epidemiología y la Autoridad tienen `DISTRITO_CONSULTAR`; la estadígrafa (REVISOR) todavía no.
+
 **Criterios de aceptación:**
 - [ ] Puedo generar los tres informes que hoy hace la estadígrafa: producción a la población propia (Excel 1), producción total con Migrantes (Excel 2) y dosis por municipio de residencia (Excel 3).
 - [ ] Puedo elegir mes inicial y final y uno o varios municipios.
@@ -1295,6 +1310,8 @@ Verificado contra la API real el 2026-11-05, con el build servido por `vite prev
 | Estadígrafa / Epidemiología | 5 | S5 | Luis Suárez |
 
 **Cómo se hará:** Generación de .xlsx en el backend con ExcelJS, respetando los permisos y la DDRISS del usuario; botón de exportación en cada informe.
+
+**Nota (2026-11-05, spec 49):** el «Exportar Excel» de `Indicadores.html` quedó fuera del SPEC 49. Si esta historia lo agrega, los filtros de esa pantalla ya están en la URL (`anio`, `mes`, `ddriss`, `vacuna`, `indicador`, `distrito`, `municipios`) y pueden pasar tal cual al endpoint que genere el archivo.
 
 **Criterios de aceptación:**
 - [ ] El archivo respeta los filtros y la agrupación elegidos.

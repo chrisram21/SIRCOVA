@@ -362,6 +362,12 @@ SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo IN ('EPIDEMIOLOGIA', 'AUTORIDAD', 'REVISOR', 'ADMINISTRADOR')
    AND p.codigo = 'REPORTE_AVANCE_CONSULTAR';
 
+-- SPEC 49 (HU-41): Epidemiología y la Autoridad filtran «Indicadores» por distrito
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo IN ('EPIDEMIOLOGIA', 'AUTORIDAD')
+   AND p.codigo = 'DISTRITO_CONSULTAR';
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas
 -- -----------------------------------------------------------------------------

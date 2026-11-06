@@ -29,3 +29,9 @@ export function obtenerCorrida(id) {
 export function listarResultados({ anio, mes, indicador, municipioId, ddrissId } = {}) {
   return solicitar(conConsulta('/indicadores/resultados', { anio, mes, indicador, municipioId, ddrissId }))
 }
+
+// SPEC 49: { puntos } con la fila del indicador en la corrida vigente de cada mes del año (sin municipioId, la de la
+// DDRISS).
+export function obtenerSerie({ anio, indicador, municipioId, ddrissId }) {
+  return solicitar(conConsulta('/indicadores/serie', { anio, indicador, municipioId, ddrissId }))
+}
