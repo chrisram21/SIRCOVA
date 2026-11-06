@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  CALCULADORES, calcularContraMeta, calcularDesercion, colorDelValor, filtroCanonico, metaYExcedente,
-  sumaBrechasMunicipales,
+  CALCULADORES, calcularContraMeta, calcularDesercion, calcularProyeccion, colorDelValor, filtroCanonico,
+  metaYExcedente, sumaBrechasMunicipales,
 } from '../src/modulos/indicadores/calculadores.js';
 
 // Las fórmulas son puras: cada caso arma la versión, los numeradores y las poblaciones en memoria, sin base.
@@ -100,10 +100,91 @@ describe('calcularContraMeta', () => {
 });
 
 describe('CALCULADORES', () => {
-  it('calcula COBERTURA, AVANCE_META_MES y BRECHA con las mismas fórmulas, y DESERCION con la suya', () => {
-    expect(Object.keys(CALCULADORES).sort()).toEqual(['AVANCE_META_MES', 'BRECHA', 'COBERTURA', 'DESERCION']);
+  it('calcula COBERTURA, AVANCE_META_MES y BRECHA con las mismas fórmulas, y DESERCION y PROYECCION con la suya', () => {
+    expect(Object.keys(CALCULADORES).sort()).toEqual(['AVANCE_META_MES', 'BRECHA', 'COBERTURA', 'DESERCION', 'PROYECCION']);
     expect(CALCULADORES.BRECHA).toBe(calcularContraMeta);
     expect(CALCULADORES.DESERCION).toBe(calcularDesercion);
+    expect(CALCULADORES.PROYECCION).toBe(calcularProyeccion);
+  });
+});
+
+describe('PROYECCION', () => {
+  const PROY = { tipo_calculo: 'PROYECCION', meta: { valor: 95, comparador: '>' } };
+  // filas: [municipioId, dosis acumuladas, dosis de la ventana, población]
+  const proyectar = (mesHasta, mesesEnVentana, filas, version = PROY) => calcularProyeccion({
+    version,
+    mesHasta,
+    mesesEnVentana,
+    municipios: filas.map(([id]) => id),
+    acumulados: new Map(filas.map(([id, acumulado]) => [id, acumulado])),
+    enVentana: new Map(filas.map(([id, , ventana]) => [id, ventana])),
+    poblaciones: new Map(filas.filter(([, , , poblacion]) => poblacion != null).map(([id, , , p]) => [id, p])),
+  });
+
+  it('el ejemplo del spec: acumulado 100 y ritmo 30 con corte a abril dan 340 dosis, 85 % y brecha 40', () => {
+    const [, fila] = proyectar(4, 3, [[1, 100, 90, 400]]);
+
+    expect(fila).toEqual({
+      municipioId: 1, numerador: 340, denominador: 400, valor: 85, meta: 95, brechaDosis: 40, cumpleMeta: false,
+      esProyeccion: true,
+    });
+  });
+
+  it('un ritmo que pasa la meta deja la brecha en 0 y cumple', () => {
+    const [, fila] = proyectar(4, 3, [[1, 200, 150, 400]]);
+
+    expect(fila).toMatchObject({ numerador: 600, valor: 150, brechaDosis: 0, cumpleMeta: true });
+  });
+
+  it('el ritmo se divide entre los meses de la ventana y guarda las dosis a 2 decimales', () => {
+    // 2 meses en la ventana (corte a febrero): ritmo 25 / 2 = 12,5; 30 + 12,5 × 10 = 155. Con 3 meses: 10 / 3.
+    const [, dos] = proyectar(2, 2, [[1, 30, 25, 400]]);
+    const [, tres] = proyectar(5, 3, [[1, 50, 10, 400]]);
+
+    expect(dos.numerador).toBe(155);
+    expect(tres.numerador).toBe(73.33);
+    expect(tres.valor).toBe(18.3333);
+    expect(tres.brechaDosis).toBe(307);
+  });
+
+  it('con corte en diciembre, las dosis proyectadas son el acumulado', () => {
+    const [, fila] = proyectar(12, 3, [[1, 390, 99, 400]]);
+
+    expect(fila).toMatchObject({ numerador: 390, valor: 97.5, brechaDosis: 0, cumpleMeta: true });
+  });
+
+  it('sin meses cerrados en la ventana, las filas solo llevan la población', () => {
+    const [departamental, fila] = proyectar(1, 0, [[1, 0, 0, 400]]);
+
+    expect(fila).toEqual({
+      municipioId: 1, numerador: null, denominador: 400, valor: null, meta: null, brechaDosis: null, cumpleMeta: null,
+      esProyeccion: true,
+    });
+    expect(departamental).toMatchObject({ municipioId: null, numerador: null, denominador: 400, valor: null });
+  });
+
+  it('sin población la fila no es calculable, y tampoco la departamental', () => {
+    const [departamental, sinPoblacion, conPoblacion] = proyectar(4, 3, [[1, 100, 90], [2, 100, 90, 400]]);
+
+    expect(sinPoblacion).toMatchObject({ numerador: 340, denominador: null, valor: null, meta: null, cumpleMeta: null });
+    expect(conPoblacion.valor).toBe(85);
+    expect(departamental).toMatchObject({ numerador: 680, denominador: null, valor: null, brechaDosis: null });
+  });
+
+  it('la departamental suma las dosis proyectadas y las poblaciones', () => {
+    const [departamental] = proyectar(4, 3, [[1, 100, 90, 400], [2, 50, 30, 200], [3, 0, 0, 100]]);
+
+    // 340 + (50 + 10 × 8 = 130) + 0 = 470 de 700.
+    expect(departamental).toMatchObject({
+      municipioId: null, numerador: 470, denominador: 700, valor: 67.1429, meta: 95, brechaDosis: 195, cumpleMeta: false,
+      esProyeccion: true,
+    });
+  });
+
+  it('sin meta en la versión usa la del tipo (95, >)', () => {
+    const [, fila] = proyectar(4, 3, [[1, 100, 90, 400]], { tipo_calculo: 'PROYECCION' });
+
+    expect(fila).toMatchObject({ meta: 95, cumpleMeta: false });
   });
 });
 

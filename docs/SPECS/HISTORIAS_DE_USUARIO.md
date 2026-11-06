@@ -1142,9 +1142,18 @@ Verificado contra la API real el 2026-11-04. Como `epidemiologia`, «Calcular» 
 **Nota (2026-11-03, spec 43):** los indicadores `PROYECCION` no se crean desde la pantalla: solo se publican versiones que cambian el nombre, la descripción y la meta. Su método (`parametros`: `indicador_base`, `metodo`, `meses_ventana`, `horizonte`) se copia de la versión base, así que esta historia lo define.
 
 **Criterios de aceptación:**
-- [ ] La proyección se muestra claramente marcada como estimación, distinta de los datos reales.
-- [ ] Se recalcula al cerrar cada periodo.
-- [ ] Se explica el método en una nota visible en pantalla.
+- [x] La proyección se muestra claramente marcada como estimación, distinta de los datos reales.
+- [x] Se recalcula al cerrar cada periodo.
+- [x] Se explica el método en una nota visible en pantalla.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 47 a `main`. Backend y frontend, en `specs/47-hu-39-proyectar-cobertura-al-cierre-del-anio.md`: la corrida calcula los indicadores `PROYECCION` (`CALCULADORES.PROYECCION = calcularProyeccion`) y guarda sus filas con `es_proyeccion = TRUE`; `GET /indicadores/resultados` agrega en ellas el campo `proyeccion` (`indicadorBase`, `mesesVentana`, `mesesUsados`, `dosisAcumuladas`, `ritmoMensual`), armado al leer. En «Indicadores», un indicador `PROYECCION` se ve en `TablaProyeccion.jsx`: la insignia «Estimación», las columnas estimadas sobre fondo gris, de menor a mayor cobertura proyectada, y la nota del método debajo. Sin cambios en la base ni en los permisos. Diferencias con la historia, decididas por el equipo:
+
+- «Promedio mensual de dosis» es el promedio de los últimos `meses_ventana` (3) meses **cerrados** hasta el corte: dosis a diciembre = acumulado + ritmo × (12 − mes de corte). Un mes sin cerrar no entra en la ventana; si hay menos, se usan los que haya.
+- La vacuna, la dosis, el filtro de dimensiones y el grupo de población salen del indicador base (`parametros.indicador_base`, de cobertura, avance o brecha) que calcula la misma corrida; si no aplica o se omite, la proyección se omite con su motivo. La cobertura proyectada es contra la población anual, con la meta de la proyección.
+- Sin meses cerrados en la ventana, las filas quedan no calculables («Sin meses cerrados»). Otros métodos u horizontes se omiten.
+- Sin gráfica ni banda de rango probable: la línea punteada de `Indicadores.html` es de HU-41.
+
+Verificado contra la API real el 2026-11-05. Como `epidemiologia`, «Calcular» agosto de 2026 creó la corrida 232, vigente en lugar de la 181, con 186 resultados y sin omitidos: las 31 filas de `PROY_COB_HEXA3` con `es_proyeccion = TRUE`. San Marcos (975 acumuladas, ritmo 128,67 de junio a agosto) dio 1,490 dosis y 102,7 %; Malacatán 1,543 (75,3 %, faltarían 405) y Tacaná 966 (81,9 %, faltarían 155), iguales a la cuenta por SQL; departamental 20,525 de 24,550 (83,6 %). Septiembre (`EN_CIERRE`) quedó como corrida 233 parcial, con la ventana todavía de junio a agosto. Como `autoridad.nacional`, la tabla se vio en solo lectura. Las corridas 232 y 233 quedan en la base.
 
 #### HU-40. Dashboard por rol
 
@@ -1176,6 +1185,8 @@ Verificado contra la API real el 2026-11-04. Como `epidemiologia`, «Calcular» 
 **Nota (2026-11-04, spec 45):** cada fila trae también `metaDosis` y `excedenteDosis`, y la departamental `sumaBrechasMunicipales` (calculados al leer). Las barras «Brecha a la meta proporcional» de `Indicadores.html` pueden leer `brechaDosis` de un indicador `BRECHA`; su total del mockup (1,801) es la suma municipal, no la brecha de la fila departamental. `TablaBrecha.jsx` ya ordena los municipios de mayor a menor brecha (`ordenarPorBrecha`).
 
 **Nota (2026-11-04, spec 46):** una fila `DESERCION` guarda la pérdida en `numerador` y las dosis iniciales en `denominador` (las finales son `denominador − numerador`); `valor` es la tasa, que puede ser negativa. Las barras «Deserción entre Hexa 1 y Hexa 3» de `Indicadores.html` pueden leer `valor` y dibujar `meta` como línea de umbral. `TablaDesercion.jsx` ya ordena de mayor a menor (`ordenarPorDesercion`) y reutiliza `InsigniaValor` de `PaginaIndicadores.jsx`.
+
+**Nota (2026-11-05, spec 47):** las filas `PROYECCION` llevan `esProyeccion: true`; `numerador` son las dosis proyectadas a diciembre, `denominador` la población anual y `valor` la cobertura estimada. Para la línea punteada de «Avance acumulado y proyección», el punto del mes k (después del corte) es `proyeccion.dosisAcumuladas + proyeccion.ritmoMensual × (k − mes)` ÷ `denominador` × 100, y diciembre es `valor`; la línea real sale de la cobertura de las corridas de cada mes. La banda de rango probable no se calcula. `TablaProyeccion.jsx` marca lo estimado con `bg-muted` y la insignia «Estimación».
 
 **Criterios de aceptación:**
 - [ ] Puedo filtrar por vacuna, municipio, distrito y rango de meses.

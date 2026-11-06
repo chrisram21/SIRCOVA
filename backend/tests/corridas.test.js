@@ -352,6 +352,7 @@ describe('POST /indicadores/corridas', () => {
       metaDosis: 228,
       excedenteDosis: 0,
       sumaBrechasMunicipales: null,
+      proyeccion: null,
     });
     const poblacion = 240 + 120 * (territorio.length - 1);
     expect(resultados.find((r) => r.indicadorCodigo === COB)).toMatchObject({
@@ -424,6 +425,7 @@ describe('POST /indicadores/corridas', () => {
       metaDosis: null,
       excedenteDosis: null,
       sumaBrechasMunicipales: null,
+      proyeccion: null,
     });
     // San Pedro tiene D2 y no D1: no es calculable, sin hacer fallar la corrida.
     expect(deMunicipio(resultados, DES, MUNICIPIO_SP)).toMatchObject({

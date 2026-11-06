@@ -31,10 +31,35 @@ const dosisDe = (version) => {
 // Cada consulta de varias dimensiones es de un indicador y una dosis.
 const llaveVarias = (version, dosis) => llave(version.codigo, dosis);
 
+// PROYECCION (SPEC 47) toma la vacuna, la dosis, el filtro y la población de su indicador base.
+const TIPOS_BASE_PROYECCION = ['COBERTURA', 'AVANCE_META_MES', 'BRECHA'];
+const motivosProyeccion = {
+  baseNoAplica: (codigo) => `El indicador base ${codigo} no aplica a la DDRISS.`,
+  baseDeOtroTipo: (codigo) => `El indicador base ${codigo} no es de cobertura, avance ni brecha.`,
+  metodo: (metodo, horizonte) => `El método ${metodo} hasta ${horizonte} no está disponible.`,
+  ventana: 'La ventana de meses debe ser un número de 1 a 12.',
+};
+
 function sumar(destino, clave, municipioId, dosis) {
   if (!destino.has(clave)) destino.set(clave, new Map());
   const porMunicipio = destino.get(clave);
   porMunicipio.set(municipioId, (porMunicipio.get(municipioId) ?? 0) + Number(dosis));
+}
+
+// Los numeradores se guardan por mes (Map mes → Map municipio → dosis), para sacar la ventana de la proyección.
+function sumarEnMes(destino, clave, mes, municipioId, dosis) {
+  if (!destino.has(clave)) destino.set(clave, new Map());
+  sumar(destino.get(clave), Number(mes), municipioId, dosis);
+}
+
+// Suma los meses pedidos (todos con null) en un Map municipio → dosis.
+function sumarMeses(porMes, meses = null) {
+  const suma = new Map();
+  for (const [mes, porMunicipio] of porMes ?? []) {
+    if (meses && !meses.includes(mes)) continue;
+    for (const [municipioId, dosis] of porMunicipio) suma.set(municipioId, (suma.get(municipioId) ?? 0) + dosis);
+  }
+  return suma;
 }
 
 // Sin filtro, una consulta para todas las vacunas; con el filtro de una sola dimensión (el que arma el editor:
@@ -52,20 +77,22 @@ function consultasDeNumeradores({ ddrissId, anio, mesHasta, versiones }) {
     .flatMap((v) => [...new Set(dosisDe(v))].map((dosis) => [v, dosis]));
   return {
     totales: filas(pool.query(
-      `SELECT vp.vacuna_codigo, vp.dosis_codigo, vp.municipio_procedencia_id AS municipio_id, SUM(vp.cantidad) AS dosis
+      `SELECT vp.vacuna_codigo, vp.dosis_codigo, vp.mes, vp.municipio_procedencia_id AS municipio_id,
+              SUM(vp.cantidad) AS dosis
          ${PRODUCCION_ATRIBUIDA}
         WHERE ${CONDICIONES_ATRIBUIDA}
-        GROUP BY vp.vacuna_codigo, vp.dosis_codigo, vp.municipio_procedencia_id`,
+        GROUP BY vp.vacuna_codigo, vp.dosis_codigo, vp.mes, vp.municipio_procedencia_id`,
       [...base, vacunas],
     )),
     // detalle_dimension tiene una fila por (detalle, dimensión): agrupar por valor no cuenta dos veces una celda.
     porValor: dimensiones.length === 0 ? [] : filas(pool.query(
-      `SELECT vp.vacuna_codigo, vp.dosis_codigo, vp.municipio_procedencia_id AS municipio_id, dd.dimension_codigo,
-              dd.valor_codigo, SUM(vp.cantidad) AS dosis
+      `SELECT vp.vacuna_codigo, vp.dosis_codigo, vp.mes, vp.municipio_procedencia_id AS municipio_id,
+              dd.dimension_codigo, dd.valor_codigo, SUM(vp.cantidad) AS dosis
          ${PRODUCCION_ATRIBUIDA}
          JOIN detalle_dimension dd ON dd.detalle_id = vp.detalle_id AND dd.dimension_codigo IN (?)
         WHERE ${CONDICIONES_ATRIBUIDA}
-        GROUP BY vp.vacuna_codigo, vp.dosis_codigo, vp.municipio_procedencia_id, dd.dimension_codigo, dd.valor_codigo`,
+        GROUP BY vp.vacuna_codigo, vp.dosis_codigo, vp.mes, vp.municipio_procedencia_id, dd.dimension_codigo,
+                 dd.valor_codigo`,
       [dimensiones, ...base, vacunas],
     )),
     varias: varias.map(([version, dosis]) => {
@@ -79,17 +106,22 @@ function consultasDeNumeradores({ ddrissId, anio, mesHasta, versiones }) {
         parametros.push(dimension, valores);
       }
       return filas(pool.query(
-        `SELECT vp.municipio_procedencia_id AS municipio_id, SUM(vp.cantidad) AS dosis
+        `SELECT vp.mes, vp.municipio_procedencia_id AS municipio_id, SUM(vp.cantidad) AS dosis
            ${PRODUCCION_ATRIBUIDA}
           WHERE ${CONDICIONES_ATRIBUIDA} AND vp.dosis_codigo = ? ${condiciones.join(' ')}
-          GROUP BY vp.municipio_procedencia_id`,
+          GROUP BY vp.mes, vp.municipio_procedencia_id`,
         parametros,
-      )).then((resultado) => [llaveVarias(version, dosis), new Map(resultado.map((f) => [f.municipio_id, Number(f.dosis)]))]);
+      )).then((resultado) => {
+        const porMes = new Map();
+        for (const f of resultado) sumar(porMes, Number(f.mes), f.municipio_id, f.dosis);
+        return [llaveVarias(version, dosis), porMes];
+      });
     }),
   };
 }
 
-// Todo lo que la corrida necesita leer, en paralelo. mesesSinCerrar: los meses de enero al corte sin CERRADO al empezar.
+// Todo lo que la corrida necesita leer, en paralelo. mesesCerrados y mesesSinCerrar: los meses de enero al corte con
+// y sin CERRADO al empezar, en orden.
 export async function leerDatos({ ddrissId, anio, mesHasta, versiones }) {
   const vacunas = [...new Set(versiones.map((v) => aplicaDe(v).vacuna).filter(Boolean))];
   const numeradores = consultasDeNumeradores({ ddrissId, anio, mesHasta, versiones });
@@ -124,12 +156,16 @@ export async function leerDatos({ ddrissId, anio, mesHasta, versiones }) {
   const poblacionPorClasificacion = new Map();
   for (const f of poblaciones) sumar(poblacionPorClasificacion, f.clasificacion_poblacion_id, f.municipio_id, f.cantidad);
   const totalPorDosis = new Map();
-  for (const f of totales) sumar(totalPorDosis, llave(f.vacuna_codigo, f.dosis_codigo), f.municipio_id, f.dosis);
+  for (const f of totales) sumarEnMes(totalPorDosis, llave(f.vacuna_codigo, f.dosis_codigo), f.mes, f.municipio_id, f.dosis);
   const porValorDeDosis = new Map();
   for (const f of porValor) {
-    sumar(porValorDeDosis, llave(f.vacuna_codigo, f.dosis_codigo, f.dimension_codigo, f.valor_codigo), f.municipio_id, f.dosis);
+    sumarEnMes(
+      porValorDeDosis, llave(f.vacuna_codigo, f.dosis_codigo, f.dimension_codigo, f.valor_codigo), f.mes, f.municipio_id,
+      f.dosis,
+    );
   }
-  const cerradosSet = new Set(cerrados.map((f) => f.mes));
+  const cerradosSet = new Set(cerrados.map((f) => Number(f.mes)));
+  const meses = Array.from({ length: mesHasta }, (_, i) => i + 1);
   return {
     vacunaPorCodigo: new Map(vacunasDb.map((v) => [v.codigo, v.id])),
     dosisPorLlave: new Map(dosisDb.map((d) => [llave(d.vacuna, d.codigo), d.id])),
@@ -139,20 +175,22 @@ export async function leerDatos({ ddrissId, anio, mesHasta, versiones }) {
     totalPorDosis,
     porValorDeDosis,
     deVarias: new Map(varias),
-    mesesSinCerrar: Array.from({ length: mesHasta }, (_, i) => i + 1).filter((mes) => !cerradosSet.has(mes)),
+    mesesCerrados: meses.filter((mes) => cerradosSet.has(mes)),
+    mesesSinCerrar: meses.filter((mes) => !cerradosSet.has(mes)),
   };
 }
 
-// Las dosis por municipio de una dosis del indicador, con su filtro de dimensiones.
-function dosisPorMunicipio(version, dosis, datos) {
+// Las dosis por municipio de una dosis del indicador, con su filtro de dimensiones, de los meses pedidos (todos los
+// leídos, de enero al corte, con null).
+function dosisPorMunicipio(version, dosis, datos, meses = null) {
   const { vacuna } = aplicaDe(version);
   const filtros = Object.entries(filtrosDe(version));
-  if (filtros.length === 0) return datos.totalPorDosis.get(llave(vacuna, dosis)) ?? new Map();
-  if (filtros.length > 1) return datos.deVarias.get(llaveVarias(version, dosis)) ?? new Map();
+  if (filtros.length === 0) return sumarMeses(datos.totalPorDosis.get(llave(vacuna, dosis)), meses);
+  if (filtros.length > 1) return sumarMeses(datos.deVarias.get(llaveVarias(version, dosis)), meses);
   const [[dimension, valores]] = filtros;
   const suma = new Map();
   for (const valor of new Set(valores)) {
-    for (const [municipioId, cantidad] of datos.porValorDeDosis.get(llave(vacuna, dosis, dimension, valor)) ?? []) {
+    for (const [municipioId, cantidad] of sumarMeses(datos.porValorDeDosis.get(llave(vacuna, dosis, dimension, valor)), meses)) {
       suma.set(municipioId, (suma.get(municipioId) ?? 0) + cantidad);
     }
   }
@@ -179,21 +217,49 @@ function referenciasDe(version, datos) {
   return { vacunaId, dosisId, clasificacionId };
 }
 
+// La base de una proyección y sus referencias, o el motivo para omitirla. motivosOmitidos: los de los indicadores
+// que ya se omitieron en la corrida, por código.
+function baseDeProyeccion(version, versiones, motivosOmitidos, datos) {
+  const { indicador_base: codigoBase, metodo, horizonte, meses_ventana: ventana } = version.parametros ?? {};
+  const base = versiones.find((v) => v.codigo === codigoBase);
+  if (!base) return { omitido: motivosProyeccion.baseNoAplica(codigoBase) };
+  if (!TIPOS_BASE_PROYECCION.includes(base.tipo_calculo)) return { omitido: motivosProyeccion.baseDeOtroTipo(codigoBase) };
+  if (motivosOmitidos.has(base.codigo)) return { omitido: motivosOmitidos.get(base.codigo) };
+  if (metodo !== 'PROMEDIO_MOVIL' || horizonte !== 'FIN_DE_ANIO') return { omitido: motivosProyeccion.metodo(metodo, horizonte) };
+  const mesesVentana = Number(ventana);
+  if (!Number.isInteger(mesesVentana) || mesesVentana < 1 || mesesVentana > 12) return { omitido: motivosProyeccion.ventana };
+  const referencias = referenciasDe(base, datos);
+  if (referencias.omitido) return referencias;
+  return { base, mesesVentana, referencias };
+}
+
 // Las filas de resultado_indicador de todos los indicadores, y los que se omitieron con su motivo. Es puro: recibe lo
-// que leyó leerDatos.
+// que leyó leerDatos. Las proyecciones van al final porque usan lo que se resolvió de su indicador base.
 export function calcularIndicadores({ mesHasta, versiones, datos }) {
   const filasResultado = [];
   const calculados = [];
   const omitidos = [];
-  for (const version of versiones) {
+  const motivosOmitidos = new Map();
+  const omitir = (codigo, motivo) => {
+    omitidos.push({ codigo, motivo });
+    motivosOmitidos.set(codigo, motivo);
+  };
+  const guardar = (version, resultado, referencias, filtro) => {
+    const numeroVersion = Number(version.version);
+    for (const fila of resultado) filasResultado.push({ ...fila, codigo: version.codigo, version: numeroVersion, ...referencias, filtro });
+    calculados.push({ codigo: version.codigo, version: numeroVersion });
+  };
+  const proyecciones = versiones.filter((v) => v.tipo_calculo === 'PROYECCION');
+
+  for (const version of versiones.filter((v) => v.tipo_calculo !== 'PROYECCION')) {
     const calcular = CALCULADORES[version.tipo_calculo];
     if (!calcular) {
-      omitidos.push({ codigo: version.codigo, motivo: SIN_CALCULO });
+      omitir(version.codigo, SIN_CALCULO);
       continue;
     }
     const referencias = referenciasDe(version, datos);
     if (referencias.omitido) {
-      omitidos.push({ codigo: version.codigo, motivo: referencias.omitido });
+      omitir(version.codigo, referencias.omitido);
       continue;
     }
     const dosis = dosisDe(version);
@@ -211,10 +277,28 @@ export function calcularIndicadores({ mesHasta, versiones, datos }) {
         numeradores: dosisPorMunicipio(version, dosis[0], datos),
         poblaciones: datos.poblacionPorClasificacion.get(referencias.clasificacionId) ?? new Map(),
       });
-    const filtro = filtroCanonico(filtrosDe(version));
-    const numeroVersion = Number(version.version);
-    for (const fila of resultado) filasResultado.push({ ...fila, codigo: version.codigo, version: numeroVersion, ...referencias, filtro });
-    calculados.push({ codigo: version.codigo, version: numeroVersion });
+    guardar(version, resultado, referencias, filtroCanonico(filtrosDe(version)));
+  }
+
+  for (const version of proyecciones) {
+    const resuelta = baseDeProyeccion(version, versiones, motivosOmitidos, datos);
+    if (resuelta.omitido) {
+      omitir(version.codigo, resuelta.omitido);
+      continue;
+    }
+    const { base, mesesVentana, referencias } = resuelta;
+    const [dosis] = dosisDe(base);
+    const mesesUsados = datos.mesesCerrados.slice(-mesesVentana);
+    const resultado = CALCULADORES.PROYECCION({
+      version,
+      mesHasta,
+      municipios: datos.municipios,
+      acumulados: dosisPorMunicipio(base, dosis, datos),
+      enVentana: dosisPorMunicipio(base, dosis, datos, mesesUsados),
+      mesesEnVentana: mesesUsados.length,
+      poblaciones: datos.poblacionPorClasificacion.get(referencias.clasificacionId) ?? new Map(),
+    });
+    guardar(version, resultado, referencias, filtroCanonico(filtrosDe(base)));
   }
   return { filas: filasResultado, calculados, omitidos };
 }

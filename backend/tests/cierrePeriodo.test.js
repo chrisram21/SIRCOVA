@@ -338,10 +338,18 @@ describe('cierre del periodo (HU-31)', () => {
         disparada_por: estadigrafa.id,
       });
       const [[bitacora]] = await pool.query(
-        "SELECT usuario_id FROM bitacora WHERE entidad = 'corrida_calculo' AND entidad_id = ? AND accion = 'CALCULAR_INDICADORES'",
+        "SELECT usuario_id, valores_nuevos FROM bitacora WHERE entidad = 'corrida_calculo' AND entidad_id = ? AND accion = 'CALCULAR_INDICADORES'",
         [String(res.body.corrida.id)],
       );
       expect(bitacora.usuario_id).toBe(estadigrafa.id);
+      // La proyección de la semilla se recalcula con el cierre (SPEC 47).
+      expect(bitacora.valores_nuevos.indicadores.map((i) => i.codigo)).toContain('PROY_COB_HEXA3');
+      expect(bitacora.valores_nuevos.omitidos.map((o) => o.codigo)).not.toContain('PROY_COB_HEXA3');
+      const [[{ proyecciones }]] = await pool.query(
+        "SELECT COUNT(*) AS proyecciones FROM resultado_indicador WHERE corrida_id = ? AND indicador_codigo = 'PROY_COB_HEXA3' AND es_proyeccion = TRUE",
+        [res.body.corrida.id],
+      );
+      expect(Number(proyecciones)).toBeGreaterThan(0);
     });
 
     it('ya cerrado, el reporte no se edita ni se valida y el mes no se vuelve a cerrar', async () => {
