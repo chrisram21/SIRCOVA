@@ -20,9 +20,11 @@ import { TIPOS_INDICADOR } from '../configuracion/tiposIndicador.js'
 import DialogoCalcularIndicadores, { avisoDeMesesSinCerrar } from './DialogoCalcularIndicadores.jsx'
 import TablaBrecha from './TablaBrecha.jsx'
 import TablaDesercion from './TablaDesercion.jsx'
+import TablaProyeccion from './TablaProyeccion.jsx'
 
 // SPEC 44: la versión mínima de «Indicadores»: la corrida vigente de un mes, sus resultados por municipio y el
-// historial de corridas del año. SPEC 45 y 46 agregan las tablas de brecha y deserción; HU-41 la amplía con gráficas.
+// historial de corridas del año. SPEC 45 a 47 agregan las tablas de brecha, deserción y proyección; HU-41 la amplía
+// con gráficas.
 
 const ANIOS_HACIA_ATRAS = 6
 const MOTIVOS = {
@@ -387,7 +389,7 @@ export default function PaginaIndicadores({ hoy }) {
             <>
               <TarjetaCorrida corrida={corrida} />
               {indicador === null ? (
-                <p className="text-muted-foreground">La corrida no tiene resultados de cobertura, avance, brecha ni deserción.</p>
+                <p className="text-muted-foreground">La corrida no tiene resultados de cobertura, avance, brecha, deserción ni proyección.</p>
               ) : (
                 <div className="flex flex-col gap-2">
                   <p className="text-sm text-muted-foreground">
@@ -398,6 +400,8 @@ export default function PaginaIndicadores({ hoy }) {
                     <TablaBrecha resultados={resultados} />
                   ) : indicador.tipoCalculo === 'DESERCION' ? (
                     <TablaDesercion resultados={resultados} />
+                  ) : indicador.tipoCalculo === 'PROYECCION' ? (
+                    <TablaProyeccion resultados={resultados} />
                   ) : (
                     <TablaResultados resultados={resultados} tipoCalculo={indicador.tipoCalculo} />
                   )}

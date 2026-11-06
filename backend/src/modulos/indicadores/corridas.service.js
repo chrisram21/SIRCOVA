@@ -69,7 +69,7 @@ async function insertarResultados(conexion, corridaId, { anio, mesHasta }, filas
     [
       filas.map((f) => [
         corridaId, f.codigo, f.version, f.municipioId, f.vacunaId, f.dosisId, f.filtro,
-        anio, mesHasta, false, f.numerador, f.denominador, f.valor, f.meta, f.brechaDosis, f.cumpleMeta,
+        anio, mesHasta, f.esProyeccion ?? false, f.numerador, f.denominador, f.valor, f.meta, f.brechaDosis, f.cumpleMeta,
       ]),
     ],
   );
@@ -202,7 +202,7 @@ async function versionesUsadas(pares) {
   const documentos = await (await obtenerDb())
     .collection('configuracion_indicadores')
     .find({ $or: unicos.map(({ codigo, version }) => ({ codigo, version })) })
-    .project({ codigo: 1, version: 1, nombre: 1, tipo_calculo: 1, umbrales: 1 })
+    .project({ codigo: 1, version: 1, nombre: 1, tipo_calculo: 1, umbrales: 1, parametros: 1 })
     .toArray();
   return new Map(documentos.map((d) => [`${d.codigo}:${Number(d.version)}`, d]));
 }
@@ -275,6 +275,43 @@ async function leerCorrida(id) {
   return (await aCorridas(filas))[0];
 }
 
+// Lo que el campo proyeccion (SPEC 47) arma al leer: los meses cerrados al iniciar la corrida y el numerador de las
+// filas de los indicadores base de la misma corrida, por código y municipio ('' en la departamental).
+async function datosDeProyecciones(corridaId, codigosBase) {
+  if (codigosBase.length === 0) return { mesesCerrados: [], acumulados: new Map() };
+  const [[[corrida]], [filasBase]] = await Promise.all([
+    pool.query('SELECT ddriss_id, anio, mes_hasta FROM corrida_calculo WHERE id = ?', [corridaId]),
+    pool.query(
+      'SELECT indicador_codigo, municipio_id, numerador FROM resultado_indicador WHERE corrida_id = ? AND indicador_codigo IN (?)',
+      [corridaId, codigosBase],
+    ),
+  ]);
+  const sinCerrar = await mesesCerradosAl(pool, {
+    ddrissId: corrida.ddriss_id, anio: corrida.anio, mesHasta: corrida.mes_hasta, corridaId,
+  });
+  return {
+    mesesCerrados: Array.from({ length: corrida.mes_hasta }, (_, i) => i + 1).filter((mes) => !sinCerrar.includes(mes)),
+    acumulados: new Map(filasBase.map((f) => [`${f.indicador_codigo}:${f.municipio_id ?? ''}`, aNumero(f.numerador)])),
+  };
+}
+
+function proyeccionDe(doc, fila, { numerador, mes }, { mesesCerrados, acumulados }) {
+  if (doc?.tipo_calculo !== 'PROYECCION') return null;
+  const indicadorBase = doc.parametros?.indicador_base ?? null;
+  const mesesVentana = Number(doc.parametros?.meses_ventana);
+  const dosisAcumuladas = acumulados.get(`${indicadorBase}:${fila.municipio_id ?? ''}`) ?? null;
+  const ritmoMensual = mes < 12 && numerador != null && dosisAcumuladas != null
+    ? Math.round(((numerador - dosisAcumuladas) / (12 - mes)) * 100) / 100
+    : null;
+  return {
+    indicadorBase,
+    mesesVentana,
+    mesesUsados: mesesCerrados.slice(-mesesVentana),
+    dosisAcumuladas,
+    ritmoMensual,
+  };
+}
+
 async function leerResultados(corridaId, { indicador, municipioId } = {}) {
   const condiciones = ['ri.corrida_id = ?'];
   const parametros = [corridaId];
@@ -302,6 +339,10 @@ async function leerResultados(corridaId, { indicador, municipioId } = {}) {
   const versiones = await versionesUsadas(
     filas.map((f) => ({ codigo: f.indicador_codigo, version: Number(f.indicador_version) })),
   );
+  const codigosBase = [...new Set([...versiones.values()]
+    .filter((d) => d.tipo_calculo === 'PROYECCION' && d.parametros?.indicador_base)
+    .map((d) => d.parametros.indicador_base))];
+  const deProyecciones = await datosDeProyecciones(corridaId, codigosBase);
   const resultados = filas
     .map((f) => {
       const doc = versiones.get(`${f.indicador_codigo}:${Number(f.indicador_version)}`);
@@ -331,6 +372,7 @@ async function leerResultados(corridaId, { indicador, municipioId } = {}) {
         esProyeccion: Boolean(f.es_proyeccion),
         ...metaYExcedente({ numerador, denominador, meta, brechaDosis }),
         sumaBrechasMunicipales: null,
+        proyeccion: proyeccionDe(doc, f, { numerador, mes: f.mes }, deProyecciones),
       };
     });
   // La fila departamental solo viene sin municipioId, y entonces vienen también todos los municipios del indicador.

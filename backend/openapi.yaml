@@ -4721,8 +4721,9 @@ paths:
         trae la corrida ya `COMPLETADA`. Calcula cada indicador que aplica a la DDRISS al iniciar (su `VIGENTE`
         antes que la nacional del mismo código, SPEC 43) cuyo tipo tenga cálculo; hoy `COBERTURA`,
         `AVANCE_META_MES` y `BRECHA` (SPEC 45), que se calculan con las mismas fórmulas, cada uno con el prorrateo
-        y la meta de su versión, y `DESERCION` (SPEC 46). `PROYECCION` y los indicadores cuya vacuna, dosis o
-        grupo de población ya no existen quedan en `omitidos`, sin hacer fallar la corrida.
+        y la meta de su versión, `DESERCION` (SPEC 46) y `PROYECCION` (SPEC 47). Los indicadores cuya vacuna,
+        dosis o grupo de población ya no existen, y las proyecciones que no se pueden calcular (ver abajo), quedan
+        en `omitidos` con su motivo, sin hacer fallar la corrida.
 
         Por cada indicador deja una fila por municipio (los activos del departamento sede de la DDRISS, sin el
         `9999`) y una departamental (`municipio: null`):
@@ -4745,6 +4746,17 @@ paths:
         **dosis** = la dosis final, y **cumpleMeta** con la meta y el comparador (`<=`) del indicador. Sin dosis
         iniciales, la fila queda con el valor, la meta y `cumpleMeta` en `null` (`calculable: false`). La
         departamental suma las iniciales y las finales de los municipios.
+
+        `PROYECCION` estima la cobertura a diciembre y sus filas llevan `esProyeccion: true`. Usa el indicador de
+        `parametros.indicador_base` que calcula la misma corrida (de tipo `COBERTURA`, `AVANCE_META_MES` o
+        `BRECHA`): de él salen la vacuna, la dosis, el filtro de dimensiones y el grupo de población. El ritmo es
+        el promedio de las dosis de los últimos `parametros.meses_ventana` meses que estaban `CERRADO` en la DDRISS
+        al calcular (un mes sin cerrar no entra; si hay menos, se usan los que haya). **numerador** = dosis
+        acumuladas + ritmo × (12 − mes de corte); **denominador** = la población anual, sin prorrateo; **valor**,
+        **brechaDosis** y **cumpleMeta** como en la cobertura, con la meta de la proyección. Sin meses cerrados en
+        la ventana, la fila queda con la población y lo demás en `null` (`calculable: false`). Se omite con su
+        motivo si la base no aplica a la DDRISS, si es de otro tipo, si la base se omitió, si `metodo` no es
+        `PROMEDIO_MOVIL` u `horizonte` no es `FIN_DE_ANIO`, o si `meses_ventana` no es un entero de 1 a 12.
 
         El mes de corte puede ser cualquier mes del calendario de periodos: si algún mes de enero al corte no
         estaba cerrado en la DDRISS al calcular, la corrida es `parcial` (solo cuentan los reportes ya cerrados).
@@ -4863,6 +4875,10 @@ paths:
 
         `metaDosis`, `excedenteDosis` y `sumaBrechasMunicipales` no se guardan: se calculan al leer (SPEC 45).
         Con `municipioId` la respuesta no trae la fila departamental, así que tampoco `sumaBrechasMunicipales`.
+
+        `proyeccion` (SPEC 47) tampoco se guarda: en las filas `PROYECCION` se arma al leer con los `parametros` de
+        la versión usada, los meses cerrados al iniciar la corrida y la fila del indicador base del mismo
+        municipio en la misma corrida, aunque la consulta filtre por `indicador` o por `municipioId`.
       x-permiso: INDICADOR_CONSULTAR
       parameters:
         - { name: anio, in: query, required: true, schema: { type: integer, minimum: 2000, maximum: 2100, example: 2026 } }
@@ -7920,7 +7936,7 @@ components:
             required: [codigo, motivo]
             properties:
               codigo: { type: string, example: PROY_COB_HEXA3 }
-              motivo: { type: string, example: Su cálculo todavía no está disponible. }
+              motivo: { type: string, example: El indicador base COB_HEXA3 no aplica a la DDRISS. }
         totalResultados: { type: integer, minimum: 0, example: 62 }
 
     CorridaConResultados:
@@ -7959,7 +7975,7 @@ components:
 
     ResultadoIndicador:
       type: object
-      required: [indicadorCodigo, indicadorVersion, tipoCalculo, municipio, vacuna, dosis, filtroDimensiones, anio, mes, numerador, denominador, valor, meta, brechaDosis, cumpleMeta, calculable, color, esProyeccion, metaDosis, excedenteDosis, sumaBrechasMunicipales]
+      required: [indicadorCodigo, indicadorVersion, tipoCalculo, municipio, vacuna, dosis, filtroDimensiones, anio, mes, numerador, denominador, valor, meta, brechaDosis, cumpleMeta, calculable, color, esProyeccion, metaDosis, excedenteDosis, sumaBrechasMunicipales, proyeccion]
       properties:
         indicadorCodigo: { type: string, example: AVANCE_HEXA3 }
         indicadorVersion: { type: integer, description: Versión de `configuracion_indicadores` usada, example: 1 }
@@ -7978,7 +7994,7 @@ components:
           properties:
             codigo: { type: string, example: HEXA }
             nombre: { type: string, example: Hexavalente }
-        dosis: { type: string, nullable: true, description: "La dosis evaluada; en `DESERCION`, la final", example: D3 }
+        dosis: { type: string, nullable: true, description: "La dosis evaluada; en `DESERCION`, la final; en `PROYECCION`, la del indicador base", example: D3 }
         filtroDimensiones: { type: string, description: "Filtro aplicado en forma canónica; vacío sin filtro", example: grupo_edad=MENOR_1 }
         anio: { type: integer, example: 2026 }
         mes: { type: integer, description: Mes de corte, example: 8 }
@@ -7986,27 +8002,29 @@ components:
           type: number
           nullable: true
           description: |
-            Dosis acumuladas. En `DESERCION`, la pérdida: dosis iniciales − dosis finales (puede ser negativa).
+            Dosis acumuladas. En `DESERCION`, la pérdida: dosis iniciales − dosis finales (puede ser negativa). En
+            `PROYECCION`, las dosis proyectadas a diciembre (con decimales); `null` sin meses cerrados en la ventana.
           example: 975
         denominador:
           type: number
           nullable: true
           description: |
             Población (prorrateada al mes con `MENSUAL_LINEAL`); `null` sin población. En `DESERCION`, las dosis
-            iniciales (las finales son `denominador − numerador`).
+            iniciales (las finales son `denominador − numerador`). En `PROYECCION`, la población anual del grupo
+            del indicador base, sin prorrateo.
           example: 966.67
-        valor: { type: number, nullable: true, description: "Porcentaje; en `DESERCION`, la tasa de deserción (puede ser negativa)", example: 100.8621 }
+        valor: { type: number, nullable: true, description: "Porcentaje; en `DESERCION`, la tasa de deserción (puede ser negativa); en `PROYECCION`, la cobertura estimada a diciembre", example: 100.8621 }
         meta: { type: number, nullable: true, example: 100 }
-        brechaDosis: { type: integer, nullable: true, description: "Dosis que faltan para la meta (0 si se alcanzó); `null` en `DESERCION`", example: 0 }
-        cumpleMeta: { type: boolean, nullable: true, example: true }
-        calculable: { type: boolean, description: "`false` si falta la población, o en `DESERCION` si no hubo dosis iniciales (`valor` es `null`)", example: true }
+        brechaDosis: { type: integer, nullable: true, description: "Dosis que faltan para la meta (0 si se alcanzó); `null` en `DESERCION`; en `PROYECCION`, las que faltarían en diciembre", example: 0 }
+        cumpleMeta: { type: boolean, nullable: true, description: "En `PROYECCION`, si el municipio llegaría a la meta en diciembre", example: true }
+        calculable: { type: boolean, description: "`false` si falta la población, en `DESERCION` si no hubo dosis iniciales y en `PROYECCION` si no hubo meses cerrados en la ventana (`valor` es `null`)", example: true }
         color:
           type: string
           nullable: true
           enum: [verde, amarillo, rojo, null]
           description: Franja del semáforo de la versión usada; `null` sin umbrales o sin valor
           example: verde
-        esProyeccion: { type: boolean, example: false }
+        esProyeccion: { type: boolean, description: "`true` en `PROYECCION`: es una estimación, no un dato registrado", example: false }
         metaDosis:
           type: integer
           nullable: true
@@ -8030,6 +8048,34 @@ components:
             total del departamento). Se calcula al leer; `null` en las filas municipales y si la departamental no
             es calculable.
           example: null
+        proyeccion:
+          type: object
+          nullable: true
+          description: |
+            Solo en `PROYECCION` (SPEC 47); `null` en los demás tipos. Se arma al leer, no se guarda.
+          required: [indicadorBase, mesesVentana, mesesUsados, dosisAcumuladas, ritmoMensual]
+          properties:
+            indicadorBase: { type: string, description: "`parametros.indicador_base` de la versión usada", example: COB_HEXA3 }
+            mesesVentana: { type: integer, description: "`parametros.meses_ventana` de la versión usada", example: 3 }
+            mesesUsados:
+              type: array
+              description: |
+                Los meses de la ventana: los últimos `mesesVentana` meses de enero al corte que estaban `CERRADO`
+                al iniciar la corrida. Vacío si no hubo ninguno.
+              items: { type: integer, minimum: 1, maximum: 12 }
+              example: [6, 7, 8]
+            dosisAcumuladas:
+              type: number
+              nullable: true
+              description: El `numerador` de la fila del indicador base del mismo municipio en la misma corrida; `null` si no está
+              example: 975
+            ritmoMensual:
+              type: number
+              nullable: true
+              description: |
+                (`numerador` − `dosisAcumuladas`) ÷ (12 − `mes`), a 2 decimales. `null` con corte en diciembre o si
+                falta el `numerador` o `dosisAcumuladas`.
+              example: 121.33
 
     CorridaDeCierre:
       type: object

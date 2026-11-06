@@ -1,6 +1,6 @@
 // Fórmulas del motor de indicadores (SPEC 44): funciones puras, sin acceso a datos. Cada tipo de
-// configuracion_indicadores con cálculo tiene su función en CALCULADORES; HU-39 agrega PROYECCION. Un tipo que no
-// está aquí se omite en la corrida sin hacerla fallar.
+// configuracion_indicadores con cálculo tiene su función en CALCULADORES. Un tipo que no está aquí se omite en la
+// corrida sin hacerla fallar.
 
 import { DESCENDENTE, TIPOS_INDICADOR } from '../configuracion/tiposIndicador.js';
 
@@ -107,6 +107,44 @@ export function calcularDesercion({ version, municipios, iniciales, finales }) {
   return [filaDesercion(null, inicialTotal, finalTotal, parametros), ...filas];
 }
 
+// PROYECCION (SPEC 47): dosis proyectadas a diciembre = acumulado + ritmo × (12 − mes de corte), con ritmo = dosis de
+// la ventana ÷ meses de la ventana (los últimos meses cerrados), contra la población anual y la meta de la proyección.
+// acumulados, enVentana y poblaciones son Map por municipio; mesesEnVentana, cuántos meses cerrados se usaron. Sin
+// ninguno, las filas solo llevan la población. La departamental suma las proyecciones y las poblaciones.
+export function calcularProyeccion({ version, mesHasta, municipios, acumulados, enVentana, mesesEnVentana, poblaciones }) {
+  const tipo = TIPOS_INDICADOR[version.tipo_calculo];
+  const parametros = {
+    prorrateo: 'NINGUNO',
+    meta: version.meta?.valor ?? tipo.meta.porDefecto,
+    comparador: version.meta?.comparador ?? tipo.meta.comparador,
+    mesHasta,
+  };
+  const fila = (municipioId, proyectadas, poblacion) => {
+    if (mesesEnVentana === 0) {
+      return {
+        municipioId, numerador: null, denominador: poblacion, valor: null, meta: null, brechaDosis: null,
+        cumpleMeta: null, esProyeccion: true,
+      };
+    }
+    const calculada = filaContraMeta(municipioId, proyectadas, poblacion, parametros);
+    return { ...calculada, numerador: redondear(proyectadas, 2), esProyeccion: true };
+  };
+
+  let proyectadasTotal = 0;
+  let poblacionTotal = 0;
+  let faltaPoblacion = false;
+  const filas = municipios.map((municipioId) => {
+    const ritmo = mesesEnVentana === 0 ? 0 : (enVentana.get(municipioId) ?? 0) / mesesEnVentana;
+    const proyectadas = (acumulados.get(municipioId) ?? 0) + ritmo * (12 - mesHasta);
+    const poblacion = poblaciones.get(municipioId) ?? null;
+    proyectadasTotal += proyectadas;
+    if (poblacion == null) faltaPoblacion = true;
+    else poblacionTotal += poblacion;
+    return fila(municipioId, proyectadas, poblacion);
+  });
+  return [fila(null, proyectadasTotal, faltaPoblacion ? null : poblacionTotal), ...filas];
+}
+
 // BRECHA (SPEC 45) usa las mismas fórmulas, con el prorrateo y la meta de su versión: valor en porcentaje y
 // brecha_dosis en dosis, como la semilla.
 export const CALCULADORES = {
@@ -114,6 +152,7 @@ export const CALCULADORES = {
   AVANCE_META_MES: calcularContraMeta,
   BRECHA: calcularContraMeta,
   DESERCION: calcularDesercion,
+  PROYECCION: calcularProyeccion,
 };
 
 // La meta en dosis y el excedente de una fila guardada, que no se guardan (SPEC 45). El denominador guardado va

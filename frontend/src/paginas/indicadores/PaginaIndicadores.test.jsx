@@ -36,8 +36,9 @@ const corrida = (cambios = {}) => ({
     { codigo: 'AVANCE_HEXA3', version: 1, nombre: 'Avance de Hexavalente 3.ª dosis', tipoCalculo: 'AVANCE_META_MES' },
     { codigo: 'BRECHA_HEXA3', version: 1, nombre: 'Brecha de Hexavalente 3.ª dosis', tipoCalculo: 'BRECHA' },
     { codigo: 'DES_HEXA1_3', version: 1, nombre: 'Tasa de deserción Hexavalente 1.ª a 3.ª dosis', tipoCalculo: 'DESERCION' },
+    { codigo: 'PROY_COB_HEXA3', version: 1, nombre: 'Proyección de cobertura anual de Hexavalente 3.ª dosis', tipoCalculo: 'PROYECCION' },
   ],
-  omitidos: [{ codigo: 'PROY_COB_HEXA3', motivo: 'Su cálculo todavía no está disponible.' }],
+  omitidos: [{ codigo: 'PROY_COB_SPR1', motivo: 'El indicador base COB_SPR1 no aplica a la DDRISS.' }],
   totalResultados: 6,
   ...cambios,
 })
@@ -45,7 +46,8 @@ const corrida = (cambios = {}) => ({
 const resultado = (indicadorCodigo, municipio, cambios = {}) => ({
   indicadorCodigo,
   indicadorVersion: 1,
-  tipoCalculo: { COB: 'COBERTURA', BRECHA: 'BRECHA', DES: 'DESERCION' }[indicadorCodigo.split('_')[0]] ?? 'AVANCE_META_MES',
+  tipoCalculo: { COB: 'COBERTURA', BRECHA: 'BRECHA', DES: 'DESERCION', PROY: 'PROYECCION' }[indicadorCodigo.split('_')[0]]
+    ?? 'AVANCE_META_MES',
   municipio,
   vacuna: { codigo: 'HEXA', nombre: 'Hexavalente' },
   dosis: 'D3',
@@ -64,6 +66,7 @@ const resultado = (indicadorCodigo, municipio, cambios = {}) => ({
   metaDosis: 1209,
   excedenteDosis: 0,
   sumaBrechasMunicipales: null,
+  proyeccion: null,
   ...cambios,
 })
 const SAN_MARCOS = { id: 1, nombre: 'San Marcos' }
@@ -85,6 +88,21 @@ const DES_MUNICIPIOS = [
   resultado('DES_HEXA1_3', TAJUMULCO, { ...NO_CALCULABLE, numerador: -7, denominador: 0 }),
   resultado('DES_HEXA1_3', COMITANCILLO, { ...DES_FILA, numerador: 15, denominador: 100, valor: 15, cumpleMeta: false, color: 'rojo' }),
 ]
+// Municipios de PROYECCION con corte a octubre (faltan 2 meses): Comitancillo no llegará, San Marcos sí y Tajumulco
+// no tiene población (y por eso tampoco la DDRISS).
+const PROY_FILA = { meta: 95, color: null, esProyeccion: true, metaDosis: null, excedenteDosis: null }
+const proyeccion = (dosisAcumuladas, ritmoMensual) => ({
+  indicadorBase: 'COB_HEXA3', mesesVentana: 3, mesesUsados: [8, 9, 10], dosisAcumuladas, ritmoMensual,
+})
+const PROY_MUNICIPIOS = [
+  resultado('PROY_COB_HEXA3', SAN_MARCOS, {
+    ...PROY_FILA, numerador: 1300, denominador: 1000, valor: 130, brechaDosis: 0, cumpleMeta: true, proyeccion: proyeccion(1000, 150),
+  }),
+  resultado('PROY_COB_HEXA3', TAJUMULCO, { ...NO_CALCULABLE, esProyeccion: true, numerador: 300, proyeccion: proyeccion(200, 50) }),
+  resultado('PROY_COB_HEXA3', COMITANCILLO, {
+    ...PROY_FILA, numerador: 400, denominador: 1000, valor: 40, brechaDosis: 550, cumpleMeta: false, proyeccion: proyeccion(300, 50),
+  }),
+]
 const RESULTADOS = [
   resultado('AVANCE_HEXA3', null, { numerador: 1300, denominador: 2000, valor: 65, brechaDosis: 700, color: 'rojo' }),
   resultado('AVANCE_HEXA3', SAN_MARCOS, { numerador: 1000, denominador: 1000, valor: 100, brechaDosis: 0, cumpleMeta: true, color: 'verde' }),
@@ -98,6 +116,8 @@ const RESULTADOS = [
   ...BRECHA_MUNICIPIOS,
   resultado('DES_HEXA1_3', null, { ...DES_FILA, numerador: 3, denominador: 140, valor: 2.1429, cumpleMeta: true, color: 'verde' }),
   ...DES_MUNICIPIOS,
+  resultado('PROY_COB_HEXA3', null, { ...NO_CALCULABLE, esProyeccion: true, numerador: 2000, proyeccion: proyeccion(1500, 250) }),
+  ...PROY_MUNICIPIOS,
 ]
 const CORRIDAS = {
   elementos: [corrida(), corrida({ id: 5, vigente: false, motivo: 'CIERRE_PERIODO', mesHasta: 9, disparadaPor: null, parcial: true })],
@@ -186,8 +206,8 @@ test('lista los indicadores omitidos y avisa cuando la corrida es parcial', asyn
   await montar()
 
   expect(await screen.findByText(/Cálculo parcial\. Septiembre y octubre no están cerrados/)).toBeTruthy()
-  expect(screen.getByText('PROY_COB_HEXA3')).toBeTruthy()
-  expect(screen.getByText(/Su cálculo todavía no está disponible\./)).toBeTruthy()
+  expect(screen.getByText('PROY_COB_SPR1')).toBeTruthy()
+  expect(screen.getByText(/El indicador base COB_SPR1 no aplica a la DDRISS\./)).toBeTruthy()
 })
 
 test('sin corrida vigente lo dice y conserva el historial', async () => {
@@ -243,6 +263,31 @@ test('con un indicador DESERCION muestra «Deserción entre dosis», de mayor a 
   expect(celdas(filaDe('San Marcos'))).toEqual(['San Marcos', '40', '45', '-5', '-12.5 %Deserción negativa', '≤ 10 %', 'Sí'])
   expect(celdas(filaDe('Tajumulco'))).toEqual(['Tajumulco', '0', '7', '-7', 'Sin primeras dosis', '—', '—'])
   expect(screen.getByText(/Una deserción negativa indica/)).toBeTruthy()
+})
+
+test('con un indicador PROYECCION muestra la estimación de menor a mayor cobertura y la nota del método', async () => {
+  await montar({ url: '/indicadores?indicador=PROY_COB_HEXA3' })
+
+  expect(await screen.findByRole('heading', { name: 'Proyección al cierre del año' })).toBeTruthy()
+  expect(screen.getByText('Estimación')).toBeTruthy()
+  const encabezados = tabla().getAllByRole('columnheader').map((c) => c.textContent)
+  expect(encabezados).toEqual([
+    'Municipio', 'Dosis acumuladas', 'Ritmo mensual', 'Dosis proyectadas a diciembre', 'Población', 'Cobertura proyectada', 'Meta',
+    '¿Llega a la meta?', 'Dosis que faltarían',
+  ])
+  const filas = tabla().getAllByRole('row').slice(1)
+  expect(filas.map((f) => f.querySelector('td').textContent)).toEqual(['Total de la DDRISS', 'Comitancillo', 'San Marcos', 'Tajumulco'])
+  expect(celdas(filaDe('Comitancillo'))).toEqual(['Comitancillo', '300', '50', '400', '1,000', '40.0 %', '> 95 %', 'No', '550'])
+  expect(celdas(filaDe('San Marcos'))).toEqual(['San Marcos', '1,000', '150', '1,300', '1,000', '130.0 %', '> 95 %', 'Sí', '0'])
+  expect(celdas(filaDe('Tajumulco'))).toEqual(['Tajumulco', '200', '50', '300', '—', 'Sin población', '—', '—', '—'])
+  // Las dosis acumuladas son dato real; las proyectadas, estimación sobre fondo gris.
+  const [, acumuladas, , proyectadas] = filaDe('San Marcos').querySelectorAll('td')
+  expect(acumuladas.className).not.toContain('bg-muted')
+  expect(proyectadas.className).toContain('bg-muted')
+  expect(screen.getByText(/La proyección suma/).textContent).toBe(
+    'La proyección suma a las dosis acumuladas el promedio de los últimos 3 meses cerrados (agosto, septiembre y octubre) '
+      + 'por cada mes que falta hasta diciembre. Es una estimación, no un dato registrado.',
+  )
 })
 
 test('en la cobertura, una fila sin brecha muestra el excedente', async () => {
