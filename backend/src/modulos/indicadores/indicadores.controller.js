@@ -15,3 +15,7 @@ export async function obtenerCorrida(req, res) {
 export async function resultadosVigentes(req, res) {
   res.json(await corridasService.resultadosVigentes(req.usuario, req.query));
 }
+
+export async function serieDelIndicador(req, res) {
+  res.json(await corridasService.serieDelIndicador(req.usuario, req.query));
+}

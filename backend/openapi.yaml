@@ -4950,6 +4950,41 @@ paths:
         "401": { $ref: "#/components/responses/NoAutenticado" }
         "403": { $ref: "#/components/responses/SinPermiso" }
 
+  /indicadores/serie:
+    get:
+      tags: [Indicadores]
+      summary: Serie mensual de un indicador en las corridas vigentes de un año (SPEC 49)
+      description: |
+        Por cada mes del año con una corrida vigente `COMPLETADA` de la DDRISS (la misma que lee
+        `GET /indicadores/resultados`), la fila del indicador: la departamental sin `municipioId`, o la del municipio
+        pedido. Cada `resultado` trae los mismos campos que en `/indicadores/resultados`, calculados al leer
+        (`metaDosis`, `excedenteDosis`, `proyeccion`…). Un mes sin corrida vigente, o cuya corrida no tiene ese
+        indicador, no aparece; los puntos van de enero a diciembre y `puntos` es vacío si no hay ninguno.
+
+        `parcial` sigue la regla de la corrida (algún mes de enero al corte sin cerrar al empezarla). Es una
+        lectura: no deja bitácora. `ddrissId`, como en `GET /indicadores/corridas`.
+      x-permiso: INDICADOR_CONSULTAR
+      parameters:
+        - { name: anio, in: query, required: true, schema: { type: integer, minimum: 2000, maximum: 2100, example: 2026 } }
+        - { name: indicador, in: query, required: true, schema: { type: string, pattern: "^[A-Z0-9_]{1,40}$", example: COB_HEXA3 } }
+        - { name: municipioId, in: query, schema: { type: integer, example: 1 } }
+        - { $ref: "#/components/parameters/DdrissIdAutoridad" }
+      responses:
+        "200":
+          description: Un punto por mes con corrida vigente que tiene el indicador
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SerieIndicador" }
+        "400":
+          description: Un parámetro falta, no es válido, es desconocido o está repetido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: El indicador es obligatorio. }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+
   # ---------------------------------------------------------------- Alertas y auditoría
   /alertas:
     get:
@@ -8049,6 +8084,25 @@ components:
         resultados:
           type: array
           items: { $ref: "#/components/schemas/ResultadoIndicador" }
+
+    SerieIndicador:
+      type: object
+      required: [puntos]
+      properties:
+        puntos:
+          type: array
+          description: De enero a diciembre, solo los meses con corrida vigente que tiene el indicador
+          items:
+            type: object
+            required: [mes, corridaId, parcial, resultado]
+            properties:
+              mes: { type: integer, minimum: 1, maximum: 12, description: Mes de corte de la corrida, example: 1 }
+              corridaId: { type: integer, example: 210 }
+              parcial:
+                type: boolean
+                description: Como `Corrida.parcial`
+                example: false
+              resultado: { $ref: "#/components/schemas/ResultadoIndicador" }
 
     ResultadoIndicador:
       type: object

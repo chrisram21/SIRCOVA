@@ -19,5 +19,11 @@ router.get(
   requierePermiso('INDICADOR_CONSULTAR'),
   indicadoresController.resultadosVigentes,
 );
+router.get(
+  '/indicadores/serie',
+  autenticar,
+  requierePermiso('INDICADOR_CONSULTAR'),
+  indicadoresController.serieDelIndicador,
+);
 
 export default router;

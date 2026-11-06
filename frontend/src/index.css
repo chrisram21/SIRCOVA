@@ -28,6 +28,9 @@
     --color-advertencia-foreground: var(--advertencia-foreground);
     --color-exito: var(--exito);
     --color-exito-foreground: var(--exito-foreground);
+    --color-semaforo-verde: var(--semaforo-verde);
+    --color-semaforo-amarillo: var(--semaforo-amarillo);
+    --color-semaforo-rojo: var(--semaforo-rojo);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -100,6 +103,10 @@
     --chart-3: #eeb48c;
     --chart-4: #e0998d;
     --chart-5: #2f5f8a;
+    /* Semáforo de los indicadores en tonos suaves (SPEC 49; HU-42 los usa en el mapa): rellenos de barras y áreas. */
+    --semaforo-verde: #8cc7a0;
+    --semaforo-amarillo: #eeb48c;
+    --semaforo-rojo: #e0998d;
     --radius: 0.5rem;
     --sidebar: #edf3f9;
     --sidebar-foreground: #34506b;

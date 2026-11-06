@@ -5,10 +5,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { listarDdriss } from '@/api/catalogos.js'
+import { listarDdriss, listarDistritos } from '@/api/catalogos.js'
 import { mensajeDeError } from '@/api/cliente.js'
 import { listarCorridas, listarResultados } from '@/api/indicadores.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
@@ -17,15 +16,25 @@ import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import { MESES } from '@/lib/fechas.js'
 import { cn } from '@/lib/utils'
 import { TIPOS_INDICADOR } from '../configuracion/tiposIndicador.js'
+import BarraFiltrosIndicadores from './BarraFiltrosIndicadores.jsx'
 import DialogoCalcularIndicadores, { avisoDeMesesSinCerrar } from './DialogoCalcularIndicadores.jsx'
 import InsigniaValor from './InsigniaValor.jsx'
+import PanelGraficas from './PanelGraficas.jsx'
+import {
+  filasDe,
+  filasVisibles,
+  indicadoresDeLaVacuna,
+  municipiosDeLaCorrida,
+  municipiosVisibles,
+  vacunaElegida,
+  vacunasDeLaCorrida,
+} from './panelIndicadores.js'
 import TablaBrecha from './TablaBrecha.jsx'
 import TablaDesercion from './TablaDesercion.jsx'
 import TablaProyeccion from './TablaProyeccion.jsx'
 
-// SPEC 44: la versión mínima de «Indicadores»: la corrida vigente de un mes, sus resultados por municipio y el
-// historial de corridas del año. SPEC 45 a 47 agregan las tablas de brecha, deserción y proyección; HU-41 la amplía
-// con gráficas.
+// SPEC 44: la corrida vigente de un mes, sus resultados por municipio y el historial de corridas del año. SPEC 45 a
+// 47 agregan las tablas de brecha, deserción y proyección; SPEC 49, los filtros de vacuna, distrito y municipios.
 
 const ANIOS_HACIA_ATRAS = 6
 const MOTIVOS = {
@@ -55,21 +64,29 @@ export function mesPorDefecto(hoy = new Date()) {
   return mes === 0 ? { anio: hoy.getFullYear() - 1, mes: 12 } : { anio: hoy.getFullYear(), mes }
 }
 
+const FORMATO_CODIGO = /^[A-Z0-9_]{1,40}$/
+const codigo = (texto) => (FORMATO_CODIGO.test(texto ?? '') ? texto : undefined)
+const id = (texto) => entero(texto, 1, Number.MAX_SAFE_INTEGER)
+
 export function filtrosDeUrl(parametros, hoy) {
   const porDefecto = mesPorDefecto(hoy)
-  const indicador = parametros.get('indicador')
+  const municipios = (parametros.get('municipios') ?? '').split(',').map(id).filter((m) => m !== undefined)
   return {
     anio: entero(parametros.get('anio'), 2000, 2100) ?? porDefecto.anio,
     mes: entero(parametros.get('mes'), 1, 12) ?? porDefecto.mes,
-    indicador: /^[A-Z0-9_]{1,40}$/.test(indicador ?? '') ? indicador : undefined,
-    ddriss: entero(parametros.get('ddriss'), 1, Number.MAX_SAFE_INTEGER),
+    indicador: codigo(parametros.get('indicador')),
+    ddriss: id(parametros.get('ddriss')),
+    vacuna: codigo(parametros.get('vacuna')),
+    distrito: id(parametros.get('distrito')),
+    municipios: [...new Set(municipios)],
   }
 }
 
 function consultaDe(filtros) {
   const consulta = new URLSearchParams()
   for (const [nombre, valor] of Object.entries(filtros)) {
-    if (valor !== undefined && valor !== null && valor !== '') consulta.set(nombre, String(valor))
+    const texto = Array.isArray(valor) ? valor.join(',') : valor
+    if (texto !== undefined && texto !== null && texto !== '') consulta.set(nombre, String(texto))
   }
   return consulta
 }
@@ -220,11 +237,15 @@ export default function PaginaIndicadores({ hoy }) {
   const sesion = useSesion()
   const usuario = sesion?.sesion?.usuario
   const puedeCalcular = sesion?.tienePermiso('INDICADOR_CALCULAR') ?? false
+  const puedeVerDistritos = sesion?.tienePermiso('DISTRITO_CONSULTAR') ?? false
   const nacional = usuario?.rol === 'AUTORIDAD' && (usuario?.empleado?.ddrissId ?? null) === null
 
   const [ddriss, setDdriss] = useState(null)
   const [errorDdriss, setErrorDdriss] = useState(null)
   const [intentoDdriss, setIntentoDdriss] = useState(0)
+  const [distritos, setDistritos] = useState(null)
+  const [errorDistritos, setErrorDistritos] = useState(null)
+  const [intentoDistritos, setIntentoDistritos] = useState(0)
   const [datos, setDatos] = useState(null)
   const [errorCarga, setErrorCarga] = useState(null)
   const [intento, setIntento] = useState(0)
@@ -250,6 +271,18 @@ export default function PaginaIndicadores({ hoy }) {
       vigente = false
     }
   }, [nacional, intentoDdriss])
+
+  useEffect(() => {
+    if (!puedeVerDistritos) return undefined
+    let vigente = true
+    setErrorDistritos(null)
+    listarDistritos({ activo: true })
+      .then((recibidos) => vigente && setDistritos(recibidos))
+      .catch((err) => vigente && setErrorDistritos(mensajeDeError(err)))
+    return () => {
+      vigente = false
+    }
+  }, [puedeVerDistritos, intentoDistritos])
 
   useEffect(() => {
     if (esperandoDdriss) return undefined
@@ -281,9 +314,23 @@ export default function PaginaIndicadores({ hoy }) {
   ])].sort((a, b) => b - a)
 
   const corrida = datos?.corrida ?? null
-  const conResultados = corrida ? corrida.indicadores.filter((i) => datos.resultados.some((r) => r.indicadorCodigo === i.codigo)) : []
-  const indicador = indicadorElegido(conResultados, filtros.indicador)
-  const resultados = indicador ? datos.resultados.filter((r) => r.indicadorCodigo === indicador.codigo) : []
+  const todos = datos?.resultados ?? []
+  const conResultados = corrida ? corrida.indicadores.filter((i) => todos.some((r) => r.indicadorCodigo === i.codigo)) : []
+  const vacunas = vacunasDeLaCorrida(todos)
+  const vacuna = vacunaElegida(conResultados, todos, filtros)
+  const deLaVacuna = indicadoresDeLaVacuna(conResultados, todos, vacuna)
+  const indicador = indicadorElegido(deLaVacuna, filtros.indicador)
+
+  // Solo los distritos cuyo municipio está en la corrida: así quedan los de la DDRISS.
+  const municipiosCorrida = municipiosDeLaCorrida(todos)
+  const opcionesDistrito = distritos?.filter((d) => municipiosCorrida.some((m) => m.id === d.municipioId)) ?? null
+  const distrito = opcionesDistrito?.find((d) => d.id === filtros.distrito)
+  const delDistrito = distrito ? [distrito.municipioId] : null
+  const opcionesMunicipio = municipiosVisibles(municipiosCorrida, { delDistrito })
+  const elegidos = opcionesMunicipio.filter((m) => filtros.municipios.includes(m.id))
+  const visibles = municipiosVisibles(municipiosCorrida, { delDistrito, elegidos: filtros.municipios })
+
+  const resultados = indicador ? filasVisibles(filasDe(todos, indicador.codigo), visibles) : []
   const muestra = resultados[0]
   const titulo = TIPOS_INDICADOR[indicador?.tipoCalculo]?.etiqueta ?? 'Indicadores por municipio'
 
@@ -300,61 +347,26 @@ export default function PaginaIndicadores({ hoy }) {
         <AvisoError onReintentar={() => setIntentoDdriss((n) => n + 1)}>No se pudieron cargar las DDRISS: {errorDdriss}</AvisoError>
       )}
 
-      {/* Dentro de un form, Radix agrega el <select> nativo de cada Select. */}
-      <form role="search" className="flex flex-wrap items-center gap-3" onSubmit={(evento) => evento.preventDefault()}>
-        {nacional && ddriss && (
-          <Select name="ddriss" value={ddrissId ? String(ddrissId) : undefined} onValueChange={(id) => irA({ ddriss: Number(id), indicador: undefined })}>
-            <SelectTrigger aria-label="DDRISS" className="w-full bg-card sm:w-56">
-              <SelectValue placeholder="Elija la DDRISS" />
-            </SelectTrigger>
-            <SelectContent>
-              {ddriss.map((d) => (
-                <SelectItem key={d.id} value={String(d.id)}>
-                  {d.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        <Select name="anio" value={String(filtros.anio)} onValueChange={(a) => irA({ anio: Number(a) })}>
-          <SelectTrigger aria-label="Año" className="w-full bg-card sm:w-32">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {anios.map((a) => (
-              <SelectItem key={a} value={String(a)}>
-                {a}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select name="mes" value={String(filtros.mes)} onValueChange={(m) => irA({ mes: Number(m) })}>
-          <SelectTrigger aria-label="Mes de corte" className="w-full bg-card sm:w-44">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {MESES.map((nombre, i) => (
-              <SelectItem key={nombre} value={String(i + 1)}>
-                {nombre}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {conResultados.length > 0 && (
-          <Select name="indicador" value={indicador.codigo} onValueChange={(codigo) => irA({ indicador: codigo })}>
-            <SelectTrigger aria-label="Indicador" className="w-full bg-card sm:w-80">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {conResultados.map((i) => (
-                <SelectItem key={i.codigo} value={i.codigo}>
-                  {i.nombre ?? i.codigo}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      </form>
+      {errorDistritos && (
+        <AvisoError onReintentar={() => setIntentoDistritos((n) => n + 1)}>
+          No se pudieron cargar los distritos: {errorDistritos}
+        </AvisoError>
+      )}
+
+      <BarraFiltrosIndicadores
+        filtros={filtros}
+        anios={anios}
+        ddriss={nacional ? ddriss : null}
+        ddrissId={ddrissId}
+        vacunas={vacunas}
+        vacuna={vacuna}
+        indicadores={deLaVacuna}
+        indicador={indicador?.codigo}
+        distritos={opcionesDistrito}
+        municipios={opcionesMunicipio}
+        elegidos={elegidos}
+        irA={irA}
+      />
 
       {errorCarga ? (
         <AvisoError onReintentar={() => setIntento((n) => n + 1)}>No se pudieron cargar los indicadores: {errorCarga}</AvisoError>
@@ -376,21 +388,33 @@ export default function PaginaIndicadores({ hoy }) {
               {indicador === null ? (
                 <p className="text-muted-foreground">La corrida no tiene resultados de cobertura, avance, brecha, deserción ni proyección.</p>
               ) : (
-                <div className="flex flex-col gap-2">
-                  <p className="text-sm text-muted-foreground">
-                    <span className="font-mono">{indicador.codigo}</span> · {muestra.vacuna.nombre}
-                    {muestra.dosis ? ` · ${muestra.dosis}` : ''} · versión {muestra.indicadorVersion}
-                  </p>
-                  {indicador.tipoCalculo === 'BRECHA' ? (
-                    <TablaBrecha resultados={resultados} />
-                  ) : indicador.tipoCalculo === 'DESERCION' ? (
-                    <TablaDesercion resultados={resultados} />
-                  ) : indicador.tipoCalculo === 'PROYECCION' ? (
-                    <TablaProyeccion resultados={resultados} />
-                  ) : (
-                    <TablaResultados resultados={resultados} tipoCalculo={indicador.tipoCalculo} />
-                  )}
-                </div>
+                <>
+                  <PanelGraficas
+                    corrida={corrida}
+                    indicadores={conResultados}
+                    resultados={todos}
+                    vacuna={vacuna}
+                    vacunaNombre={vacunas.find((v) => v.codigo === vacuna)?.nombre ?? vacuna}
+                    codigoElegido={indicador.codigo}
+                    visibles={visibles}
+                    ddrissId={ddrissId}
+                  />
+                  <div className="flex flex-col gap-2">
+                    <p className="text-sm text-muted-foreground">
+                      <span className="font-mono">{indicador.codigo}</span> · {muestra.vacuna.nombre}
+                      {muestra.dosis ? ` · ${muestra.dosis}` : ''} · versión {muestra.indicadorVersion}
+                    </p>
+                    {indicador.tipoCalculo === 'BRECHA' ? (
+                      <TablaBrecha resultados={resultados} />
+                    ) : indicador.tipoCalculo === 'DESERCION' ? (
+                      <TablaDesercion resultados={resultados} />
+                    ) : indicador.tipoCalculo === 'PROYECCION' ? (
+                      <TablaProyeccion resultados={resultados} />
+                    ) : (
+                      <TablaResultados resultados={resultados} tipoCalculo={indicador.tipoCalculo} />
+                    )}
+                  </div>
+                </>
               )}
             </>
           )}
