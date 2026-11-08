@@ -368,6 +368,7 @@ describe('POST /indicadores/corridas', () => {
       calculable: true,
       color: 'rojo',
       esProyeccion: false,
+      mayorACien: false,
       metaDosis: 228,
       excedenteDosis: 0,
       sumaBrechasMunicipales: null,
@@ -441,6 +442,7 @@ describe('POST /indicadores/corridas', () => {
       calculable: true,
       color: 'verde',
       esProyeccion: false,
+      mayorACien: false,
       metaDosis: null,
       excedenteDosis: null,
       sumaBrechasMunicipales: null,
@@ -642,5 +644,47 @@ describe('errores, permisos y ámbito', () => {
     expect(res.body).toEqual({ corrida: null, resultados: [] });
     expect((await api('get', `/indicadores/resultados?anio=${ANIO}`)).status).toBe(400);
     expect((await api('get', `/indicadores/resultados?anio=${ANIO}&mes=2&indicador=cob`)).status).toBe(400);
+  });
+});
+
+describe('mayorACien (SPEC 52)', () => {
+  // Una corrida de diciembre de 2006 insertada por SQL, con las versiones 1 de la semilla: solo cobertura, avance y
+  // brecha con valor mayor a 100 se marcan; ni la deserción ni la proyección, aunque pasen de 100.
+  it('marca las filas de cobertura, avance y brecha con valor mayor a 100, también la departamental', async () => {
+    const [insercion] = await pool.query(
+      `INSERT INTO corrida_calculo (ddriss_id, anio, mes_hasta, motivo, estado, finalizada_en, vigente)
+       VALUES ((SELECT id FROM ddriss WHERE codigo = ?), ?, 12, 'MANUAL', 'COMPLETADA', NOW(), TRUE)`,
+      [ddrissUsuario, ANIO],
+    );
+    const filas = [
+      ['COB_HEXA3', MUNICIPIO_SM, 105.2, false],
+      ['COB_HEXA3', MUNICIPIO_SP, 100, false],
+      ['COB_HEXA3', null, 100.0001, false],
+      ['AVANCE_HEXA3', MUNICIPIO_SM, 102.8, false],
+      ['BRECHA_HEXA3', MUNICIPIO_SM, 101, false],
+      ['DES_HEXA1_3', MUNICIPIO_SM, 120, false],
+      ['PROY_COB_HEXA3', MUNICIPIO_SM, 130, true],
+    ];
+    await pool.query(
+      `INSERT INTO resultado_indicador
+         (corrida_id, indicador_codigo, indicador_version, municipio_id, vacuna_id, dosis_id, anio, mes, es_proyeccion,
+          numerador, denominador, valor, meta, brecha_dosis, cumple_meta)
+       VALUES ?`,
+      [filas.map(([codigo, municipio, valor, proyeccion]) => [
+        insercion.insertId, codigo, 1, municipio, vacunaId, null, ANIO, 12, proyeccion, valor, 100, valor, 95, 0, true,
+      ])],
+    );
+
+    const res = await api('get', `/indicadores/resultados?anio=${ANIO}&mes=12`);
+
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const marca = (codigo, municipioId) => deMunicipio(res.body.resultados, codigo, municipioId).mayorACien;
+    expect(marca('COB_HEXA3', MUNICIPIO_SM)).toBe(true);
+    expect(marca('COB_HEXA3', MUNICIPIO_SP)).toBe(false);
+    expect(marca('COB_HEXA3', null)).toBe(true);
+    expect(marca('AVANCE_HEXA3', MUNICIPIO_SM)).toBe(true);
+    expect(marca('BRECHA_HEXA3', MUNICIPIO_SM)).toBe(true);
+    expect(marca('DES_HEXA1_3', MUNICIPIO_SM)).toBe(false);
+    expect(marca('PROY_COB_HEXA3', MUNICIPIO_SM)).toBe(false);
   });
 });

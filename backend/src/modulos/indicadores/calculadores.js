@@ -167,6 +167,12 @@ export function metaYExcedente({ numerador, denominador, meta, brechaDosis }) {
   return { metaDosis, excedenteDosis: numerador - metaDosis + brechaDosis };
 }
 
+// Una cobertura mayor al 100 % pide revisar la población (denominador) o los registros (HU-44, SPEC 52). Compara el
+// valor guardado, con o sin prorrateo; la proyección es una estimación y no se marca.
+export const TIPOS_CON_TOPE = ['COBERTURA', 'AVANCE_META_MES', 'BRECHA'];
+export const mayorACien = ({ tipoCalculo, valor, esProyeccion }) =>
+  !esProyeccion && TIPOS_CON_TOPE.includes(tipoCalculo) && valor != null && valor > 100;
+
 // Lo que falta en los municipios de un indicador, sin que los que pasaron la meta compensen a los demás. Un
 // municipio con población 0 (brecha null) no tiene meta y no suma. null si la departamental no es calculable.
 export function sumaBrechasMunicipales(departamental, municipales) {

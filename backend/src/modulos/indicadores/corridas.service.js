@@ -5,7 +5,7 @@ import { registrarBitacora, contextoAuditoria, MODULOS, ACCIONES } from '../audi
 import { esAlcanceNacional, verificarAlcance } from '../auth/alcance.service.js';
 import { entradaInvalida, revisarCampos, revisarParametros } from '../catalogos/catalogos.service.js';
 import { indicadoresQueAplican } from '../configuracion/indicadores.service.js';
-import { colorDelValor, metaYExcedente, sumaBrechasMunicipales } from './calculadores.js';
+import { colorDelValor, mayorACien, metaYExcedente, sumaBrechasMunicipales } from './calculadores.js';
 import { calcularIndicadores, leerDatos } from './motor.service.js';
 
 // Una corrida es de una DDRISS y se calcula entera en una transacción (SPEC 44): nunca se ve EN_PROCESO. La última
@@ -388,6 +388,7 @@ async function leerResultados(corridaId, { indicador, municipioId } = {}) {
         calculable: valor !== null,
         color: colorDelValor(doc?.umbrales, valor, doc?.tipo_calculo),
         esProyeccion: Boolean(f.es_proyeccion),
+        mayorACien: mayorACien({ tipoCalculo: doc?.tipo_calculo ?? null, valor, esProyeccion: Boolean(f.es_proyeccion) }),
         ...metaYExcedente({ numerador, denominador, meta, brechaDosis }),
         sumaBrechasMunicipales: null,
         proyeccion: proyeccionDe(doc, f, { numerador, mes: f.mes }, deProyecciones),
