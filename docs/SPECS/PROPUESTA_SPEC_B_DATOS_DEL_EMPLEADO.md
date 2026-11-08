@@ -40,7 +40,7 @@ El equipo decidió:
 | Errores | Un formato mal escrito responde 400 `ENTRADA_INVALIDA` con un mensaje que nombra el campo (`INSTRUCCIONES_BACKEND.md`: 400 = datos mal formados, 422 = regla del negocio). Se mantiene esa convención. Duplicados: 409 `CORREO_DUPLICADO` y `CODIGO_EMPLEADO_DUPLICADO` |
 | `backend/src/config/entorno.js` | Lista `obligatorias` de variables de entorno; si falta una, la API no arranca |
 | Frontend | `CamposEmpleado.jsx` (compartido por el registro y la edición), `PaginaRegistrarPersonal.jsx`, `PaginaEditarUsuario.jsx` (`TEXTOS_OPCIONALES` incluye `codigoEmpleado`) y sus pruebas |
-| Otros documentos con `codigo_empleado` | `backend/openapi.yaml`, `CONTEXTO BD.md`, `specs/07-…` y `specs/08-…`. Los specs ya implementados **no se reescriben**; el spec nuevo dice qué reemplaza |
+| Otros documentos con `codigo_empleado` | `backend/openapi.yaml`, `CONTEXTO BD.md`, `specs/usuarios/07-…` y `specs/usuarios/08-…`. Los specs ya implementados **no se reescriben**; el spec nuevo dice qué reemplaza |
 
 ## 4. Bloques
 

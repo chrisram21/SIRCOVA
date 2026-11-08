@@ -1,6 +1,6 @@
 # Propuesta para el spec 30 · Publicar con vista previa y menú «Administración»
 
-> **Para qué sirve:** es la base para escribir el spec con `/spec`. Reúne lo que decidió el equipo el 2026-10-29. No es el spec: el spec se escribe en `specs/30-…md` con el formato de los anteriores y queda en Borrador hasta que el equipo lo apruebe.
+> **Para qué sirve:** es la base para escribir el spec con `/spec`. Reúne lo que decidió el equipo el 2026-10-29. No es el spec: el spec se escribe en `specs/configuracion/30-…md` con el formato de los anteriores y queda en Borrador hasta que el equipo lo apruebe.
 > **Historia:** HU-17 (publicar esquemas) y HU-18 (vista previa) para el cambio 1; HU-11 (navegación) para el cambio 2. Las tres ya están terminadas: el spec las **modifica** y lo anota en su «Avance» de `HISTORIAS_DE_USUARIO.md`.
 > **Depende de:** los SPEC 06, 20 y 21, ya en `main`.
 > **Rama sugerida:** `spec-30-publicar-con-vista-previa-y-menu`, desde `main`.

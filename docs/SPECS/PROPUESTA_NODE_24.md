@@ -1,6 +1,6 @@
 # Propuesta para el spec de Node.js 24 · Hotfix de seguridad
 
-> **Para qué sirve:** es la base para escribir el spec con `/spec`. Reúne lo que decidió el equipo el 2026-10-29. No es el spec: el spec se escribe en `specs/29-node-24.md` con el formato de los anteriores y queda en Borrador hasta que el equipo lo apruebe.
+> **Para qué sirve:** es la base para escribir el spec con `/spec`. Reúne lo que decidió el equipo el 2026-10-29. No es el spec: el spec se escribe en `specs/plataforma/29-node-24.md` con el formato de los anteriores y queda en Borrador hasta que el equipo lo apruebe.
 > **Historia:** ninguna. Es un hotfix de mantenimiento y seguridad del sprint 3; el encabezado del spec lo dice así (excepción a la regla de una HU por spec de `CLAUDE.md`).
 > **Depende de:** los SPEC 27 y 28 (sesiones), ya en `main`. No depende de ningún spec de pantalla.
 > **Rama sugerida:** `spec-29-node-24`, desde `main`.

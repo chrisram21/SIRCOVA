@@ -1,6 +1,6 @@
 # Propuesta para el spec 31 · Vacunas base y vacunas agregadas al reporte
 
-> **Para qué sirve:** es la base para escribir el spec con `/spec`. Reúne lo que decidió el equipo el 2026-10-29. No es el spec: el spec se escribe en `specs/31-…md` con el formato de los anteriores y queda en Borrador hasta que el equipo lo apruebe.
+> **Para qué sirve:** es la base para escribir el spec con `/spec`. Reúne lo que decidió el equipo el 2026-10-29. No es el spec: el spec se escribe en `specs/produccion/31-…md` con el formato de los anteriores y queda en Borrador hasta que el equipo lo apruebe.
 > **Historia:** HU-19 (crear el reporte mensual), que ya está terminada: el spec **modifica** su criterio de vacunas y lo anota en su «Avance». Toca también HU-16 (el editor de esquemas lleva la marca nueva) y HU-20 (la captura muestra las pestañas de las vacunas que se agregan o quitan).
 > **Depende de:** los SPEC 19, 20, 22, 23 y 24, ya en `main`. Conviene hacerlo después del SPEC 30.
 > **Rama sugerida:** `spec-31-vacunas-del-reporte`, desde `main`.

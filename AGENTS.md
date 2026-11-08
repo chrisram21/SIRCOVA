@@ -23,7 +23,7 @@ Proyecto de fin de carrera (Universidad Mesoamericana, Quetzaltenango, 2026). **
 | `docs/mockups/descripcion_pantallas.md` | Descripción de las pantallas, estilo general y su implementación en React |
 | `docs/mockups/pantallas/*.html` | Pantallas de referencia del frontend. `Plan.html` es el plan de gráficas, no una pantalla |
 | `docs/SPECS/HISTORIAS_DE_USUARIO.md` | Historias de usuario (HU-01 a HU-60) con sus criterios de aceptación |
-| `specs/NN-slug.md` | Specs: uno por historia de usuario; describe qué se implementa y cómo se verifica |
+| `specs/{modulo}/NN-slug.md` | Specs: uno por historia de usuario; describe qué se implementa y cómo se verifica (carpetas en la sección 7) |
 
 ## 3. Stack (no agregar nada fuera de esta lista sin autorización)
 
@@ -116,7 +116,8 @@ Reglas del frontend:
 
 ## 7. Cómo trabajar
 
-- **Specs y ramas:** cada historia de usuario se trabaja como un spec en `specs/NN-slug.md`, y cada spec en su propia rama `spec-NN-slug`, creada desde `main`. Solo se implementa un spec en estado Aprobado. La rama se integra a `main` cuando el spec cumple sus criterios de aceptación y pasa a Implementado.
+- **Dónde va cada spec:** en la subcarpeta de su módulo, `specs/{modulo}/NN-slug.md`. Las carpetas son `acceso-y-seguridad` (login, sesiones, contraseñas, permisos, bitácora), `usuarios`, `catalogos` (territorio, establecimientos, vacunas, periodos, población), `configuracion` (dimensiones, esquemas, reglas, indicadores configurables), `produccion` (reporte y captura), `revision` (envío, revisión, cierre, rectificaciones), `indicadores` (motor, Inicio, gráficas, mapa) y `plataforma` (navegación, versiones, cambios transversales). Si un spec no encaja en ninguna, se pregunta antes de crear una carpeta nueva, que se nombra como el módulo del backend (por ejemplo, `auditoria`). La numeración `NN` es **global, no por carpeta**: el siguiente número es el mayor de `specs/*/NN-*.md` más uno. `specs/.spec-config.yml` se queda en la raíz de `specs/`. Esta regla manda sobre lo que digan las skills `/spec` y `/spec-impl` (que buscan y escriben en `specs/` directamente).
+- **Specs y ramas:** cada historia de usuario se trabaja como un spec en `specs/{modulo}/NN-slug.md`, y cada spec en su propia rama `spec-NN-slug`, creada desde `main`. Solo se implementa un spec en estado Aprobado. La rama se integra a `main` cuando el spec cumple sus criterios de aceptación y pasa a Implementado.
 - **Pull requests:** cada rama se integra a `main` siempre mediante un pull request, que queda como registro del cambio. No necesita la aprobación de otro integrante: quien lo abre puede integrarlo, para no frenar a quien trabaja solo. La revisión de otro integrante es opcional.
 - **Integración:** se usa *squash and merge*, de modo que cada spec queda en `main` como un solo commit cuyo mensaje es el título del PR (por ejemplo, `SPEC 01 · HU-01 Inicio de sesión (backend)`). Al integrar, la rama se borra en GitHub y en local (`git branch -D`); el PR conserva sus commits. No se sigue trabajando en una rama ya integrada: un spec nuevo o una corrección van en una rama nueva desde `main`.
 - **Contrato primero:** si creas o cambias un endpoint, actualiza `backend/openapi.yaml` antes de programarlo.
