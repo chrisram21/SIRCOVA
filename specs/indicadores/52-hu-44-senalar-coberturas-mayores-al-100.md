@@ -1,6 +1,6 @@
 # SPEC 52 — Señalar coberturas mayores al 100 %
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-44
 > **Depende de:** SPEC 44, SPEC 45 y SPEC 50
 > **Fecha:** 2026-11-08
@@ -67,14 +67,14 @@ export const mayorACien = ({ tipoCalculo, valor, esProyeccion }) =>
 Salen de un solo archivo del frontend, `paginas/indicadores/MarcaMayorACien.jsx`:
 
 - **Texto de la marca** (en `aria-label` y `title` del ícono, y como línea del tooltip del mapa): «Mayor al 100 %: revise la población (denominador) o los registros.».
-- **Aviso sobre la tabla:** «{n} municipio(s) con cobertura mayor al 100 %: {nombres}. Revise la población (denominador) o los registros.». Si la fila marcada es la de la DDRISS, el aviso la nombra «Total de la DDRISS».
+- **Aviso sobre la tabla:** «{n} municipio(s) con cobertura mayor al 100 %: {nombres}. Revise la población (denominador) o los registros.». Si entre las filas marcadas está la de la DDRISS, el aviso empieza con «Cobertura mayor al 100 %: Total de la DDRISS, …», porque la DDRISS no es un municipio (decidido en el paso 3).
 
 ### Marca en «Indicadores»
 
 - `MarcaMayorACien.jsx` exporta:
   - `MarcaMayorACien`: el ícono `TriangleAlert` de `lucide-react` con `text-advertencia-foreground`, junto al valor (después de `InsigniaValor`), con su texto en `aria-label` y `title`;
   - `AvisoMayorACien({ resultados })`: el aviso con el estilo del de la corrida parcial (`bg-advertencia`, `text-advertencia-foreground`, `role="status"`), o nada si ninguna fila está marcada.
-- `TablaResultados` (cobertura y avance, en `PaginaIndicadores.jsx`) y `TablaBrecha.jsx` muestran la marca en la celda del valor y el aviso encima de la tabla.
+- `TablaResultados` (cobertura y avance, en `PaginaIndicadores.jsx`) muestra la marca en la celda del valor, y `TablaBrecha.jsx`, que no tiene columna de valor, junto al nombre del municipio (decidido en el paso 3). Las dos muestran el aviso encima de la tabla.
 - El aviso cuenta solo las filas visibles (los filtros de distrito y municipios del SPEC 49).
 - La deserción y la proyección no cambian.
 
@@ -113,7 +113,7 @@ docs/SPECS/HISTORIAS_DE_USUARIO.md, docs/base-de-datos/CONTEXTO BD.md, CLAUDE.md
 2. **Cálculo.** `mayorACien` y `TIPOS_CON_TOPE` en `calculadores.js`; `leerResultados` agrega `mayorACien` a cada fila. En `calculadores.test.js`, los casos:
    - `COBERTURA`, `AVANCE_META_MES` y `BRECHA` con 100.0001 se marcan, y con 100 no;
    - `DESERCION`, `PROYECCION` (y una fila con `esProyeccion`), `valor` null y `tipoCalculo` null no se marcan.
-   Se agrega `mayorACien` a las filas completas que comparan `corridas.test.js` y `proyeccion.test.js`, y en `corridas.test.js` un caso con una fila municipal de valor mayor a 100. Comprobación: los tres archivos pasan.
+   Se agrega `mayorACien` a las filas completas que comparan `corridas.test.js` y `proyeccion.test.js`, y en `corridas.test.js` un caso con una fila municipal de valor mayor a 100 (al implementar: una corrida de diciembre de 2006 insertada por SQL con las versiones de la semilla, leída por `GET /indicadores/resultados`, porque ninguna fila que calcula el motor en esa prueba pasa de 100). Comprobación: los tres archivos pasan.
 3. **Indicadores.** `MarcaMayorACien.jsx`; la marca y el aviso en `TablaResultados` y `TablaBrecha`. Pruebas:
    - en `PaginaIndicadores.test.jsx`, una fila de avance con 102.8 lleva el ícono con su texto y el aviso la nombra; con el filtro de municipios que la deja fuera, el aviso desaparece; sin filas marcadas no hay aviso; la deserción no lleva ícono aunque pase de 100;
    - en `TablaBrecha.test.jsx`, la marca y el aviso con una fila de valor mayor a 100.
@@ -131,14 +131,14 @@ docs/SPECS/HISTORIAS_DE_USUARIO.md, docs/base-de-datos/CONTEXTO BD.md, CLAUDE.md
 
 ## Criterios de aceptación
 
-- [ ] `backend/openapi.yaml` documenta `mayorACien` en `ResultadoIndicador`, y `/api/docs` carga.
-- [ ] Cada resultado trae `mayorACien`: `true` solo en `COBERTURA`, `AVANCE_META_MES` y `BRECHA` con valor mayor a 100, y `false` en la deserción, la proyección y las filas no calculables.
-- [ ] Toda cobertura mayor al 100 % aparece marcada en las tablas de cobertura, avance y brecha de «Indicadores» y en el mapa (tooltip, panel y clasificación).
-- [ ] La marca y el aviso indican que debe revisarse la población (denominador) o los registros, y el aviso nombra los municipios marcados que se ven.
-- [ ] La marca tiene un texto accesible (no es solo un ícono o un color), y ningún componente propio tiene colores escritos a mano.
-- [ ] El semáforo, la leyenda y el color de los polígonos no cambian.
-- [ ] `calculadores.test.js`, `corridas.test.js` y `proyeccion.test.js` pasan en `backend/`, y `npm test` pasa en `frontend/` sin desactivar pruebas.
-- [ ] HU-44 tiene su avance y sus criterios, HU-51 su nota, y `CONTEXTO BD.md` y `CLAUDE.md` están al día.
+- [x] `backend/openapi.yaml` documenta `mayorACien` en `ResultadoIndicador`, y `/api/docs` carga.
+- [x] Cada resultado trae `mayorACien`: `true` solo en `COBERTURA`, `AVANCE_META_MES` y `BRECHA` con valor mayor a 100, y `false` en la deserción, la proyección y las filas no calculables.
+- [x] Toda cobertura mayor al 100 % aparece marcada en las tablas de cobertura, avance y brecha de «Indicadores» y en el mapa (tooltip, panel y clasificación).
+- [x] La marca y el aviso indican que debe revisarse la población (denominador) o los registros, y el aviso nombra los municipios marcados que se ven.
+- [x] La marca tiene un texto accesible (no es solo un ícono o un color), y ningún componente propio tiene colores escritos a mano.
+- [x] El semáforo, la leyenda y el color de los polígonos no cambian.
+- [x] `calculadores.test.js`, `corridas.test.js` y `proyeccion.test.js` pasan en `backend/`, y `npm test` pasa en `frontend/` sin desactivar pruebas.
+- [x] HU-44 tiene su avance y sus criterios, HU-51 su nota, y `CONTEXTO BD.md` y `CLAUDE.md` están al día.
 
 ## Decisiones
 
@@ -150,6 +150,8 @@ docs/SPECS/HISTORIAS_DE_USUARIO.md, docs/base-de-datos/CONTEXTO BD.md, CLAUDE.md
 - **Sí:** ícono con texto accesible junto al valor y un aviso sobre la tabla con los nombres (decidido en la fase de preguntas). **No:** solo el ícono, ni una columna «Revisar».
 - **Sí:** el campo se llama `mayorACien` (decidido en la fase de preguntas). **No:** `revisarDenominador` ni una lista `advertencias`.
 - **Sí:** el ícono `TriangleAlert` con `--advertencia-foreground` y el aviso con el estilo del de la corrida parcial (decidido al escribir el spec), para no agregar colores al tema.
+- **Sí:** en la tabla de brecha, la marca junto al nombre del municipio (decidido en el paso 3). **No:** una columna «Cobertura» nueva, ni la marca junto a las dosis acumuladas.
+- **Sí:** el caso de `corridas.test.js` con una corrida insertada por SQL (decidido en el paso 2). **No:** cambiar la población y los reportes que comparten los demás casos para que el motor calcule un valor mayor a 100.
 
 ## Riesgos
 
