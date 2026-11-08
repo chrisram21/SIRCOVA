@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronsUpDown, KeyRound, LogOut, UserRound } from 'lucide-react'
+import { ChevronsUpDown, Info, KeyRound, LogOut, UserRound } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import {
   AlertDialog,
@@ -22,7 +22,7 @@ import {
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '@/components/ui/sidebar'
 import { useCambiosPendientes } from '@/componentes/ProveedorCambiosPendientes.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
-import { RUTA_CAMBIO_CONTRASENA, RUTA_PERFIL } from '@/componentes/RutaProtegida.jsx'
+import { RUTA_CAMBIO_CONTRASENA, RUTA_CREDITOS, RUTA_PERFIL } from '@/componentes/RutaProtegida.jsx'
 
 export const inicialesDe = (empleado) =>
   [empleado.nombres, empleado.apellidos]
@@ -98,6 +98,11 @@ export default function MenuUsuario() {
               <KeyRound />
               Cambiar contraseña
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => ir(RUTA_CREDITOS)}>
+              <Info />
+              Créditos
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={pedirCierre}>
               <LogOut />
               Cerrar sesión

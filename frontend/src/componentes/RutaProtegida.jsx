@@ -3,6 +3,7 @@ import { useSesion } from './ProveedorSesion.jsx'
 
 export const RUTA_CAMBIO_CONTRASENA = '/cuenta/contrasena'
 export const RUTA_PERFIL = '/cuenta/perfil'
+export const RUTA_CREDITOS = '/creditos'
 
 export default function RutaProtegida({ children }) {
   const { sesion } = useSesion()

@@ -49,12 +49,21 @@ beforeEach(() => {
   sessionStorage.clear()
 })
 
-// /mapa sigue en construcción (sin pagina en opcionesMenu.js): su página es la de «En construcción».
-test('con el permiso, /mapa muestra su página', () => {
+// /informes sigue en construcción (sin pagina en opcionesMenu.js): su página es la de «En construcción».
+test('con el permiso, /informes muestra su página', () => {
+  abrir('/informes', ['INFORME_CONSULTAR'])
+
+  expect(screen.getByRole('heading', { name: 'Informes' })).toBeTruthy()
+  expect(enConstruccion()).toBeTruthy()
+})
+
+// SPEC 50: /mapa ya tiene su pantalla. Sin INDICADOR_CONSULTAR ni REPORTE_AVANCE_CONSULTAR no pide nada.
+test('con el permiso, /mapa muestra el mapa territorial', async () => {
   abrir('/mapa', ['MAPA_CONSULTAR'])
 
-  expect(screen.getByRole('heading', { name: 'Mapa territorial' })).toBeTruthy()
-  expect(enConstruccion()).toBeTruthy()
+  expect(await screen.findByRole('heading', { name: '¿Dónde está el rezago de cobertura?' }, ESPERA_LAZY)).toBeTruthy()
+  expect(enConstruccion()).toBeNull()
+  expect(screen.getByText(/No hay datos de los municipios de/)).toBeTruthy()
 })
 
 test('sin el permiso, /mapa lleva a /inicio', () => {

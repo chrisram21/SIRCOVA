@@ -202,10 +202,17 @@ async function versionesUsadas(pares) {
   const documentos = await (await obtenerDb())
     .collection('configuracion_indicadores')
     .find({ $or: unicos.map(({ codigo, version }) => ({ codigo, version })) })
-    .project({ codigo: 1, version: 1, nombre: 1, tipo_calculo: 1, umbrales: 1, parametros: 1 })
+    .project({
+      codigo: 1, version: 1, nombre: 1, tipo_calculo: 1, umbrales: 1, umbrales_provisionales: 1, es_indicador_mapa: 1,
+      parametros: 1,
+    })
     .toArray();
   return new Map(documentos.map((d) => [`${d.codigo}:${Number(d.version)}`, d]));
 }
+
+const aUmbrales = (umbrales) => (Array.isArray(umbrales)
+  ? umbrales.map(({ color, desde = null, hasta = null }) => ({ color, desde, hasta }))
+  : []);
 
 async function detallesDeBitacora(ids) {
   if (ids.length === 0) return new Map();
@@ -261,7 +268,15 @@ async function aCorridas(filas) {
       finalizadaEn: aFechaIso(f.finalizada_en),
       indicadores: usados(f).map(({ codigo, version }) => {
         const doc = versiones.get(`${codigo}:${version}`);
-        return { codigo, version, nombre: doc?.nombre ?? null, tipoCalculo: doc?.tipo_calculo ?? null };
+        return {
+          codigo,
+          version,
+          nombre: doc?.nombre ?? null,
+          tipoCalculo: doc?.tipo_calculo ?? null,
+          esIndicadorMapa: doc?.es_indicador_mapa ?? false,
+          umbrales: aUmbrales(doc?.umbrales),
+          umbralesProvisionales: doc?.umbrales_provisionales ?? false,
+        };
       }),
       omitidos: bitacoras.get(f.id)?.omitidos ?? [],
       totalResultados: Number(f.total_resultados),
@@ -324,7 +339,7 @@ async function leerResultados(corridaId, { indicador, municipioId } = {}) {
     parametros.push(municipioId);
   }
   const [filas] = await pool.query(
-    `SELECT ri.indicador_codigo, ri.indicador_version, ri.municipio_id, m.nombre AS municipio_nombre,
+    `SELECT ri.indicador_codigo, ri.indicador_version, ri.municipio_id, m.nombre AS municipio_nombre, m.codigo_ine,
             v.codigo AS vacuna_codigo, v.nombre AS vacuna_nombre, ds.codigo AS dosis_codigo, ri.filtro_dimensiones,
             ri.anio, ri.mes, ri.es_proyeccion, ri.numerador, ri.denominador, ri.valor, ri.meta, ri.brecha_dosis,
             ri.cumple_meta
@@ -355,7 +370,9 @@ async function leerResultados(corridaId, { indicador, municipioId } = {}) {
         indicadorCodigo: f.indicador_codigo,
         indicadorVersion: Number(f.indicador_version),
         tipoCalculo: doc?.tipo_calculo ?? null,
-        municipio: f.municipio_id == null ? null : { id: f.municipio_id, nombre: f.municipio_nombre },
+        municipio: f.municipio_id == null
+          ? null
+          : { id: f.municipio_id, nombre: f.municipio_nombre, codigoIne: f.codigo_ine },
         vacuna: { codigo: f.vacuna_codigo, nombre: f.vacuna_nombre },
         dosis: f.dosis_codigo ?? null,
         filtroDimensiones: f.filtro_dimensiones,

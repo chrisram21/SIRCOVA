@@ -1224,19 +1224,27 @@ Verificado contra la API real el 2026-11-05. Como `epidemiologia`, en agosto de 
 **Cómo se hará:** Mapa con Leaflet y GeoJSON de los 30 municipios; el color sale de los resultados de indicadores; umbrales tomados de `configuracion_indicadores` (provisional: coral < 80 %, durazno 80-90 %, verde pastel ≥ 90 %, en tonos suaves en lugar de rojo, amarillo y verde intensos). Los límites salen de `frontend/public/geo/san-marcos.geojson` (adaptado del COD-AB de CONRED/OCHA publicado en HDX, licencia CC BY 3.0 IGO; detalle en `frontend/public/geo/FUENTES.md`), y cada polígono se une con los resultados por `codigo_ine`.
 
 **Criterios de aceptación:**
-- [ ] Cada municipio se colorea según su avance para la vacuna y el mes elegidos.
-- [ ] Al pasar o hacer clic sobre un municipio veo dosis, meta, avance y brecha.
-- [ ] Los umbrales del semáforo se toman de la configuración del indicador (HU-35), no están fijos en el código.
+- [x] Cada municipio se colorea según su avance para la vacuna y el mes elegidos.
+- [x] Al pasar o hacer clic sobre un municipio veo dosis, meta, avance y brecha.
+- [x] Los umbrales del semáforo se toman de la configuración del indicador (HU-35), no están fijos en el código.
 
 **Nota (2026-11-03, spec 43):** los umbrales salen de la versión que aplica a la DDRISS (tres franjas con los nombres `verde`, `amarillo` y `rojo`, que el mapa pinta con sus tonos suaves; `aCortes` en `tiposIndicador.js` los lee). Varios indicadores pueden tener `es_indicador_mapa`: el mapa decide cuál muestra primero. Solo `COBERTURA` y `AVANCE_META_MES` pueden llevar esa marca.
-- [ ] El mapa muestra siempre, en su control de atribución, el crédito de los límites con el enlace a la fuente, el enlace a la licencia CC BY 3.0 IGO y la indicación "adaptado", además del crédito de Leaflet.
-- [ ] El sistema tiene una sección de créditos con la fuente completa de los límites, los cambios hechos y la nota de que son límites de referencia, no límites legales oficiales; no usa logos de CONRED, OCHA, HDX ni de las Naciones Unidas.
+- [x] El mapa muestra siempre, en su control de atribución, el crédito de los límites con el enlace a la fuente, el enlace a la licencia CC BY 3.0 IGO y la indicación "adaptado", además del crédito de Leaflet.
+- [x] El sistema tiene una sección de créditos con la fuente completa de los límites, los cambios hechos y la nota de que son límites de referencia, no límites legales oficiales; no usa logos de CONRED, OCHA, HDX ni de las Naciones Unidas.
 
 **Nota (2026-11-05, spec 49):** los tonos suaves del semáforo ya existen como `--semaforo-verde`, `--semaforo-amarillo` y `--semaforo-rojo` en `index.css` (`COLOR_SEMAFORO` en `paginas/indicadores/TarjetaGrafica.jsx` los asocia al `color` del resultado). Para la ficha de un municipio y sus filtros, `paginas/indicadores/panelIndicadores.js` ya tiene `filaDeReferencia`, `filasDe`, `municipiosVisibles` y `vacunaElegida`, y `GET /indicadores/serie` da la evolución mensual de un indicador por municipio.
 
 **Nota (2026-11-04, spec 46):** la opción «Deserción» del selector de `Mapa.html` puede leer el `valor` y el `color` de un indicador `DESERCION` (semáforo descendente, ya calculado al leer). Sus filas no tienen `brechaDosis`, y un municipio sin primeras dosis llega con `calculable: false`.
 
-**Avance:** el GeoJSON está en `frontend/public/geo/` desde el 2026-10-20, con su `FUENTES.md`. Se tomó `gtm_admin2.geojson` del conjunto COD-AB de Guatemala (v01, CONRED/OCHA, en HDX) y se dejaron solo los 30 municipios de San Marcos con los atributos `codigo_ine` y `nombre`. Los contornos se simplificaron al 20 % con mapshaper (1676 vértices, unos 40 KB). Los metadatos de fuente, licencia y cambios van en el propio archivo y en `FUENTES.md`. Los 30 códigos coinciden con `municipio.codigo_ine` (1201 a 1230) en código y nombre, y al unir los municipios queda un solo polígono sin huecos. Falta la pantalla del mapa, la unión con los resultados de indicadores (HU-36) y el crédito en pantalla.
+**Avance:** el GeoJSON está en `frontend/public/geo/` desde el 2026-10-20, con su `FUENTES.md`. Se tomó `gtm_admin2.geojson` del conjunto COD-AB de Guatemala (v01, CONRED/OCHA, en HDX) y se dejaron solo los 30 municipios de San Marcos con los atributos `codigo_ine` y `nombre`. Los contornos se simplificaron al 20 % con mapshaper (1676 vértices, unos 40 KB). Los metadatos de fuente, licencia y cambios van en el propio archivo y en `FUENTES.md`. Los 30 códigos coinciden con `municipio.codigo_ine` (1201 a 1230) en código y nombre, y al unir los municipios queda un solo polígono sin huecos.
+
+**Avance (2026-11-07):** criterios cumplidos; queda terminada al integrar el spec 50 a `main`. Backend y frontend, en `specs/50-hu-42-mapa-territorial-con-semaforo.md`. «Mapa territorial» (`/mapa`, permiso nuevo `MAPA_CONSULTAR` para Epidemiología, la Autoridad, el Revisor y el Administrador) dibuja con Leaflet, sin teselas, los municipios de la DDRISS en cuatro modos: Cobertura (el indicador con `es_indicador_mapa`, con el semáforo y la leyenda de sus umbrales), Brecha (escala de azules por cuartiles), Deserción y Estado del reporte (el estado más atrasado de los establecimientos del municipio). Tiene un tooltip, un panel del municipio, una clasificación del más rezagado al menos y los filtros de año, mes, vacuna y DDRISS en la URL. El crédito de los límites va en el control de atribución, con «Más información», que abre la pantalla nueva «Créditos» (`/creditos`, también en el menú de la cuenta). La API agrega `codigoIne` a los resultados, `esIndicadorMapa` y los umbrales a los indicadores de la corrida, y `anio`, `mes` y `desglose=municipio` a `GET /revision/avance`. Diferencias con la historia, decididas por el equipo:
+
+- El mapa también lo ven el Revisor y el Administrador, no solo Epidemiología y la Autoridad.
+- En el panel, las dosis aplicadas, la meta en dosis y las que faltan salen del indicador que pinta el mapa (cuadran entre sí), y la brecha del indicador `BRECHA` va aparte como «Brecha a la meta anual».
+- Fuera: el desglose de atribución territorial del mockup, el interruptor «Atribuir dosis por», «Ver informe del municipio» (pasa a «Ver en Indicadores»), la marca de coberturas mayores al 100 % (HU-44), un mapa en el Inicio y las teselas de fondo.
+
+Verificado contra la API real el 2026-11-07. Como `epidemiologia`, en agosto de 2026 (corrida 291): la DDRISS da 83.6 % y Tacaná 82.1 % (646 aplicadas + 141 por aplicar = 787 de meta), como la tabla de `AVANCE_HEXA3`. El semáforo pinta 10 municipios en rojo, 9 en amarillo y 11 en verde. La brecha (Malacatán 904, Tajumulco 786…) y la deserción (Esquipulas Palo Gordo 10.8 %, la única sobre el umbral) coinciden con sus tablas. En septiembre, «Estado del reporte» coincide con la bandeja del Revisor (`estadigrafa`): 31 esperados, 11 aprobados y 9 municipios sin enviar. Como `autoridad.nacional`, el mapa pide con `ddrissId=1` y «Ver en Indicadores» lleva la DDRISS. «Más información» abre «Créditos» sin recargar. A 390 px no hay desplazamiento horizontal, y la consola queda sin errores.
 
 #### HU-43. Comparar cobertura entre periodos
 
@@ -1265,6 +1273,8 @@ Verificado contra la API real el 2026-11-05. Como `epidemiologia`, en agosto de 
 **Criterios de aceptación:**
 - [ ] Toda cobertura mayor a 100 % aparece marcada en tablas y mapa.
 - [ ] La marca indica que debe revisarse el denominador o los registros.
+
+**Nota (2026-11-07, spec 50):** el mapa (`paginas/mapa/`) pinta hoy una cobertura mayor al 100 % con la franja verde, como cualquier valor sobre el corte. La marca puede ir en el tooltip (`lineasDelTooltip` de `mapaTerritorial.js`), en el panel (`PanelMunicipio.jsx`) y en la cifra de la clasificación (`cifraDelModo`); en el mapa de agosto de 2026, San Marcos (100.9 %), El Rodeo (102.8 %) y Esquipulas Palo Gordo (106.1 %) sirven de ejemplo.
 
 ### Sprint 5 (03/11 – 12/11): Reportes, alertas y auditoría
 

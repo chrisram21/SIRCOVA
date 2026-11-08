@@ -175,6 +175,10 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
 INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('REPORTE_AVANCE_CONSULTAR',  'REVISION',                'Consultar cuántos reportes de un mes de su DDRISS hay en cada estado');
 
+-- SPEC 50 (HU-42): el mapa territorial (solo abre la pantalla; los datos piden los permisos de sus endpoints)
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('MAPA_CONSULTAR',            'INDICADORES',             'Ver el mapa territorial de los municipios de su ámbito');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -367,6 +371,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo IN ('EPIDEMIOLOGIA', 'AUTORIDAD')
    AND p.codigo = 'DISTRITO_CONSULTAR';
+
+-- SPEC 50 (HU-42): todos los roles menos el Personal del establecimiento ven el mapa territorial
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo IN ('EPIDEMIOLOGIA', 'AUTORIDAD', 'REVISOR', 'ADMINISTRADOR')
+   AND p.codigo = 'MAPA_CONSULTAR';
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

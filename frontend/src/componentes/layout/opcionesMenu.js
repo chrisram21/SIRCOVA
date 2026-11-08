@@ -48,6 +48,7 @@ const PaginaVerEsquema = lazy(() => import('@/paginas/configuracion/PaginaVerEsq
 const PaginaReglas = lazy(() => import('@/paginas/configuracion/PaginaReglas.jsx'))
 const PaginaConfigIndicadores = lazy(() => import('@/paginas/configuracion/PaginaConfigIndicadores.jsx'))
 const PaginaIndicadores = lazy(() => import('@/paginas/indicadores/PaginaIndicadores.jsx'))
+const PaginaMapa = lazy(() => import('@/paginas/mapa/PaginaMapa.jsx'))
 const PaginaEditarUsuario = lazy(() => import('@/paginas/usuarios/PaginaEditarUsuario.jsx'))
 const PaginaRegistrarPersonal = lazy(() => import('@/paginas/usuarios/PaginaRegistrarPersonal.jsx'))
 const PaginaUsuarios = lazy(() => import('@/paginas/usuarios/PaginaUsuarios.jsx'))
@@ -130,6 +131,7 @@ const opcionesMenu = [
     ruta: '/mapa',
     permiso: 'MAPA_CONSULTAR',
     icono: MapIcon,
+    pagina: PaginaMapa,
   },
   {
     titulo: 'Informes',

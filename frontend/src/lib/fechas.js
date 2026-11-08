@@ -8,6 +8,12 @@ export const nombreDelMes = (periodo) => `${MESES[periodo.mes - 1]} de ${periodo
 
 export const porFecha = (a, b) => a.anio - b.anio || a.mes - b.mes
 
+// El mes de corte por defecto de «Indicadores» y del mapa: el anterior al de hoy (en enero, diciembre del año pasado).
+export function mesAnterior(hoy = new Date()) {
+  const mes = hoy.getMonth()
+  return mes === 0 ? { anio: hoy.getFullYear() - 1, mes: 12 } : { anio: hoy.getFullYear(), mes }
+}
+
 // La API manda AAAA-MM-DD; se muestra sin pasar por Date para no correrla un día por la zona horaria.
 export const aDiaMesAnio = (fecha) => (fecha ? fecha.split('-').reverse().join('/') : '—')
 

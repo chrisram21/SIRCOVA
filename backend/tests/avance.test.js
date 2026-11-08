@@ -7,7 +7,8 @@ import { tokenDePrueba } from './sesionDePrueba.js';
 // Crean por SQL los meses de 2002: enero ABIERTO en la DDRISS 1, con reportes de establecimientos de la semilla en
 // cada estado, y febrero a junio solo en la DDRISS ficticia ZVT_OTRA48, que tiene dos establecimientos ZVT48-*. La
 // elección del mes se prueba con la Autoridad nacional sobre ZVT_OTRA48, porque la DDRISS 1 tiene los meses reales y
-// los de otras pruebas. ZVT_VACIA48 no tiene meses. Todo se borra al inicio y al final.
+// los de otras pruebas. ZVT_VACIA48 no tiene meses. Todo se borra al inicio y al final. El desglose por municipio y
+// la elección por anio + mes son del SPEC 50.
 const ANIO = 2002;
 const DDRISS_OTRA = 'ZVT_OTRA48';
 const DDRISS_VACIA = 'ZVT_VACIA48';
@@ -252,6 +253,71 @@ describe('GET /revision/avance', () => {
     expect(conDdriss.body).toMatchObject({ periodo: { id: periodoIds[2], estado: 'CERRADO' }, esperados: 2 });
     expect(deRevisor.status).toBe(400);
     expect(deRevisor.body.error.mensaje).toBe('Parámetro no permitido: ddrissId.');
+  });
+
+  it('anio y mes eligen el mismo mes que su periodoId; combinados, incompletos o sin cierre_periodo, no', async () => {
+    const [porId, porFecha, combinados, soloAnio, soloMes, fueraDeRango, sinCierre] = await Promise.all([
+      avance({ periodoId: periodoIds[1] }, estadigrafa),
+      avance({ anio: ANIO, mes: 1 }, estadigrafa),
+      avance({ periodoId: periodoIds[1], anio: ANIO, mes: 1 }, estadigrafa),
+      avance({ anio: ANIO }, estadigrafa),
+      avance({ mes: 1 }, estadigrafa),
+      avance({ anio: ANIO, mes: 13 }, estadigrafa),
+      avance({ anio: ANIO, mes: 2 }, estadigrafa),
+    ]);
+
+    expect(porFecha.status).toBe(200);
+    expect(porFecha.body).toEqual(porId.body);
+    expect(combinados.status).toBe(400);
+    expect(combinados.body.error.mensaje).toBe('Use periodoId o anio y mes, no los dos.');
+    for (const incompleto of [soloAnio, soloMes]) {
+      expect(incompleto.status).toBe(400);
+      expect(incompleto.body.error.mensaje).toBe('anio y mes van juntos.');
+    }
+    expect(fueraDeRango.status).toBe(400);
+    expect(sinCierre.status).toBe(404);
+  });
+
+  it('con desglose=municipio, cada municipio trae sus conteos y suman los de la DDRISS', async () => {
+    const res = await avance({ anio: ANIO, mes: 1, desglose: 'municipio' }, epidemiologia);
+
+    expect(res.status).toBe(200);
+    const { municipios } = res.body;
+    const nombres = municipios.map((m) => m.municipio.nombre);
+    expect(nombres).toEqual([...nombres].sort((a, b) => a.localeCompare(b, 'es')));
+    expect(municipios.every((m) => /^\d{4}$/.test(m.municipio.codigoIne) && m.esperados > 0)).toBe(true);
+    expect(municipios.reduce((suma, m) => suma + m.esperados, 0)).toBe(res.body.esperados);
+    for (const estado of Object.keys(res.body.conteos)) {
+      expect(municipios.reduce((suma, m) => suma + m.conteos[estado], 0)).toBe(res.body.conteos[estado]);
+    }
+    // CS-1201 (ENVIADO) está en San Marcos, 1201.
+    const sanMarcos = municipios.find((m) => m.municipio.codigoIne === '1201');
+    expect(sanMarcos.municipio).toMatchObject({ nombre: 'San Marcos' });
+    expect(sanMarcos.conteos.ENVIADO).toBeGreaterThanOrEqual(1);
+  });
+
+  it('el desglose solo trae municipios con establecimientos contados, y sin desglose no trae municipios', async () => {
+    const [deLaOtra, sinDesglose, vacia, invalido] = await Promise.all([
+      avance({ periodoId: periodoIds[3], ddrissId: ddriss.otra, desglose: 'municipio' }, autoridad),
+      avance({ periodoId: periodoIds[3], ddrissId: ddriss.otra }, autoridad),
+      avance({ ddrissId: ddriss.vacia, desglose: 'municipio' }, autoridad),
+      avance({ periodoId: periodoIds[1], desglose: 'establecimiento' }, estadigrafa),
+    ]);
+
+    // ZVT48-A y ZVT48-B copian el municipio de CS-1201; ZVT48-INACT, inactivo y sin reporte, no cuenta.
+    expect(deLaOtra.status).toBe(200);
+    expect(deLaOtra.body.municipios).toEqual([
+      {
+        municipio: { id: expect.any(Number), nombre: 'San Marcos', codigoIne: '1201' },
+        esperados: 2,
+        conteos: { SIN_ENVIAR: 1, ENVIADO: 0, EN_REVISION: 0, CORRECCION_SOLICITADA: 0, APROBADO: 1, CERRADO: 0 },
+      },
+    ]);
+    expect(sinDesglose.status).toBe(200);
+    expect(sinDesglose.body).not.toHaveProperty('municipios');
+    expect(vacia.body).toMatchObject({ periodo: null, municipios: [] });
+    expect(invalido.status).toBe(400);
+    expect(invalido.body.error.mensaje).toBe('desglose solo admite el valor municipio.');
   });
 
   it('el Personal de establecimiento no tiene el permiso', async () => {

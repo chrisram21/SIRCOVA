@@ -80,11 +80,16 @@ const cobertura = (version = 1, metaValor = 95) => indicador({
   denominador: { fuente: 'POBLACION_OBJETIVO', prorrateo: 'NINGUNO' },
   meta: { valor: metaValor, unidad: 'PORCENTAJE', comparador: '>', homogeneidad_municipal: true },
 });
-const avance = () => indicador({
-  codigo: AVANCE, tipo: 'AVANCE_META_MES',
-  aplica: { dosis: 'D2', clasificacion_poblacion: 'MENOR_1', filtros_dimension: { grupo_edad: ['MENOR_1'] } },
-  denominador: { fuente: 'POBLACION_OBJETIVO', prorrateo: 'MENSUAL_LINEAL' },
-  meta: { valor: 100, unidad: 'PORCENTAJE', comparador: '>=', homogeneidad_municipal: true },
+// El avance es además el indicador del mapa, con rangos provisionales (SPEC 50).
+const avance = () => ({
+  ...indicador({
+    codigo: AVANCE, tipo: 'AVANCE_META_MES',
+    aplica: { dosis: 'D2', clasificacion_poblacion: 'MENOR_1', filtros_dimension: { grupo_edad: ['MENOR_1'] } },
+    denominador: { fuente: 'POBLACION_OBJETIVO', prorrateo: 'MENSUAL_LINEAL' },
+    meta: { valor: 100, unidad: 'PORCENTAJE', comparador: '>=', homogeneidad_municipal: true },
+  }),
+  es_indicador_mapa: true,
+  umbrales_provisionales: true,
 });
 // DESERCION de D1 a D2, sin filtro y con el semáforo descendente de DES_HEXA1_3. Con corte a febrero: San Marcos
 // 20 → 19 (5 %), San Pedro sin D1 y con D2 (no calculable) y la departamental 20 → 28 (−40 %); con corte a marzo,
@@ -311,12 +316,26 @@ describe('POST /indicadores/corridas', () => {
     });
     expect(corrida.indicadores).toContainEqual({
       codigo: COB, version: 1, nombre: `vitest-hu36 ${COB} v1`, tipoCalculo: 'COBERTURA',
+      esIndicadorMapa: false, umbrales: UMBRALES, umbralesProvisionales: false,
     });
     expect(corrida.indicadores).toContainEqual({
       codigo: DES, version: 1, nombre: `vitest-hu36 ${DES} v1`, tipoCalculo: 'DESERCION',
+      esIndicadorMapa: false, umbrales: desercion().umbrales, umbralesProvisionales: false,
     });
     expect(corrida.omitidos.map((o) => o.codigo)).not.toContain(DES);
     expect(corrida.totalResultados).toBe(resultados.length);
+  });
+
+  it('da lo que necesita el mapa: el codigoIne de cada municipio y la marca y los umbrales de cada versión', () => {
+    expect(deMunicipio(resultados, COB, MUNICIPIO_SM).municipio).toEqual({
+      id: MUNICIPIO_SM, nombre: 'San Marcos', codigoIne: '1201',
+    });
+    expect(deMunicipio(resultados, COB, null).municipio).toBeNull();
+    expect(delIndicador(resultados, COB).every((r) => r.municipio === null || /^\d{4}$/.test(r.municipio.codigoIne)))
+      .toBe(true);
+    const porCodigo = Object.fromEntries(corrida.indicadores.map((i) => [i.codigo, i]));
+    expect(porCodigo[AVANCE]).toMatchObject({ esIndicadorMapa: true, umbrales: UMBRALES, umbralesProvisionales: true });
+    expect(porCodigo[BRECHA]).toMatchObject({ esIndicadorMapa: false, umbrales: [] });
   });
 
   it('atribuye por procedencia: Migrantes y otro departamento no cuentan, el hospital sí y lo aprobado no', () => {
@@ -334,7 +353,7 @@ describe('POST /indicadores/corridas', () => {
       indicadorCodigo: COB,
       indicadorVersion: 1,
       tipoCalculo: 'COBERTURA',
-      municipio: { id: MUNICIPIO_SM, nombre: 'San Marcos' },
+      municipio: { id: MUNICIPIO_SM, nombre: 'San Marcos', codigoIne: '1201' },
       vacuna: { codigo: VACUNA, nombre: 'vitest-hu36 Vacuna' },
       dosis: 'D2',
       filtroDimensiones: '',
@@ -407,7 +426,7 @@ describe('POST /indicadores/corridas', () => {
       indicadorCodigo: DES,
       indicadorVersion: 1,
       tipoCalculo: 'DESERCION',
-      municipio: { id: MUNICIPIO_SM, nombre: 'San Marcos' },
+      municipio: { id: MUNICIPIO_SM, nombre: 'San Marcos', codigoIne: '1201' },
       vacuna: { codigo: VACUNA, nombre: 'vitest-hu36 Vacuna' },
       dosis: 'D2',
       filtroDimensiones: '',
