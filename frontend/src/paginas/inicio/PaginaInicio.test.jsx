@@ -14,7 +14,12 @@ import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
 vi.mock('@/api/catalogos.js', () => ({ listarPeriodos: vi.fn(), listarDdriss: vi.fn() }))
 vi.mock('@/api/produccion.js', () => ({ listarReportes: vi.fn(), obtenerValidacionGuardada: vi.fn() }))
-vi.mock('@/api/indicadores.js', () => ({ listarCorridas: vi.fn(), listarResultados: vi.fn() }))
+vi.mock('@/api/indicadores.js', () => ({
+  listarCorridas: vi.fn(),
+  listarResultados: vi.fn(),
+  // SPEC 51: «Indicadores» la pide al abrir.
+  obtenerMesesCalculados: vi.fn(() => Promise.resolve({ anios: [] })),
+}))
 vi.mock('@/api/revision.js', () => ({ obtenerAvance: vi.fn(), obtenerBandeja: vi.fn() }))
 vi.mock('@/api/rectificaciones.js', () => ({ listarRectificaciones: vi.fn() }))
 vi.mock('@/api/usuarios.js', () => ({ listarUsuarios: vi.fn() }))

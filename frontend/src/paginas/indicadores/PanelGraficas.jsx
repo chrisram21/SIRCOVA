@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { mensajeDeError } from '@/api/cliente.js'
 import { obtenerSerie } from '@/api/indicadores.js'
 import GraficaAvanceProyeccion from './GraficaAvanceProyeccion.jsx'
@@ -6,12 +6,16 @@ import GraficaBrecha from './GraficaBrecha.jsx'
 import GraficaDesercion from './GraficaDesercion.jsx'
 import GraficaPorMunicipio from './GraficaPorMunicipio.jsx'
 import GraficaPorVacuna from './GraficaPorVacuna.jsx'
+import TarjetaComparacion from './TarjetaComparacion.jsx'
 import { filaDeReferencia, filasDe, indicadoresDelPanel, puntosDeLinea } from './panelIndicadores.js'
 
 // SPEC 49: el panel de gráficas de «Indicadores», sobre la tabla. Cada gráfica toma el indicador de su tipo de la
-// vacuna elegida; solo la línea de avance pide algo más a la API (la serie del indicador base).
+// vacuna elegida; solo la línea de avance pide algo más a la API (la serie del indicador base). SPEC 51: la tarjeta
+// «Comparar periodos» va debajo, a todo el ancho, y comparte con la línea la serie del año de la corrida.
 
-export default function PanelGraficas({ corrida, indicadores, resultados, vacuna, vacunaNombre, codigoElegido, visibles, ddrissId }) {
+export default function PanelGraficas({
+  corrida, indicadores, resultados, vacuna, vacunaNombre, codigoElegido, visibles, ddrissId, comparacion,
+}) {
   const panel = indicadoresDelPanel(indicadores, resultados, vacuna, codigoElegido)
   const unSolo = visibles.length === 1 ? visibles[0] : null
   const referencia = unSolo ? unSolo.nombre : 'Total de la DDRISS'
@@ -21,12 +25,25 @@ export default function PanelGraficas({ corrida, indicadores, resultados, vacuna
   const [error, setError] = useState(null)
   const [intento, setIntento] = useState(0)
 
+  // Una petición por serie distinta mientras no cambie la corrida; una que falla se olvida para poder reintentarla.
+  const series = useRef(new Map())
+  const pedirSerie = useCallback((consulta) => {
+    const llave = JSON.stringify([corrida.id, consulta.anio, consulta.indicador, consulta.municipioId ?? null, consulta.ddrissId ?? null])
+    if (!series.current.has(llave)) {
+      series.current.set(llave, obtenerSerie(consulta).catch((err) => {
+        series.current.delete(llave)
+        throw err
+      }))
+    }
+    return series.current.get(llave)
+  }, [corrida.id])
+
   useEffect(() => {
     if (!base) return undefined
     let vigente = true
     setSerie(null)
     setError(null)
-    obtenerSerie({ anio: corrida.anio, indicador: base, municipioId: unSolo?.id, ddrissId })
+    pedirSerie({ anio: corrida.anio, indicador: base, municipioId: unSolo?.id, ddrissId })
       .then((recibida) => vigente && setSerie(recibida))
       .catch((err) => vigente && setError(mensajeDeError(err)))
     return () => {
@@ -90,6 +107,16 @@ export default function PanelGraficas({ corrida, indicadores, resultados, vacuna
           />
         </div>
       </div>
+      <TarjetaComparacion
+        corrida={corrida}
+        base={panel.base}
+        municipioId={unSolo?.id}
+        referencia={referencia}
+        vacunaNombre={vacunaNombre}
+        ddrissId={ddrissId}
+        pedirSerie={pedirSerie}
+        {...comparacion}
+      />
     </div>
   )
 }

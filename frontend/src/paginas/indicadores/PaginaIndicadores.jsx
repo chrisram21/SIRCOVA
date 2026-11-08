@@ -9,7 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { listarDdriss, listarDistritos } from '@/api/catalogos.js'
 import { mensajeDeError } from '@/api/cliente.js'
-import { listarCorridas, listarResultados } from '@/api/indicadores.js'
+import { listarCorridas, listarResultados, obtenerMesesCalculados } from '@/api/indicadores.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
@@ -34,7 +34,8 @@ import TablaDesercion from './TablaDesercion.jsx'
 import TablaProyeccion from './TablaProyeccion.jsx'
 
 // SPEC 44: la corrida vigente de un mes, sus resultados por municipio y el historial de corridas del año. SPEC 45 a
-// 47 agregan las tablas de brecha, deserción y proyección; SPEC 49, los filtros de vacuna, distrito y municipios.
+// 47 agregan las tablas de brecha, deserción y proyección; SPEC 49, los filtros de vacuna, distrito y municipios; SPEC
+// 51, los periodos de «Comparar periodos» (comparar, anios, meses), que valida comparacionPeriodos.js.
 
 const ANIOS_HACIA_ATRAS = 6
 const MOTIVOS = {
@@ -64,6 +65,7 @@ export const mesPorDefecto = mesAnterior
 const FORMATO_CODIGO = /^[A-Z0-9_]{1,40}$/
 const codigo = (texto) => (FORMATO_CODIGO.test(texto ?? '') ? texto : undefined)
 const id = (texto) => entero(texto, 1, Number.MAX_SAFE_INTEGER)
+const lista = (texto) => (/^[\d,-]{1,80}$/.test(texto ?? '') ? texto : undefined)
 
 export function filtrosDeUrl(parametros, hoy) {
   const porDefecto = mesPorDefecto(hoy)
@@ -76,6 +78,9 @@ export function filtrosDeUrl(parametros, hoy) {
     vacuna: codigo(parametros.get('vacuna')),
     distrito: id(parametros.get('distrito')),
     municipios: [...new Set(municipios)],
+    comparar: parametros.get('comparar') === 'mes' ? 'mes' : undefined,
+    anios: lista(parametros.get('anios')),
+    meses: lista(parametros.get('meses')),
   }
 }
 
@@ -247,6 +252,9 @@ export default function PaginaIndicadores({ hoy }) {
   const [errorCarga, setErrorCarga] = useState(null)
   const [intento, setIntento] = useState(0)
   const [calculando, setCalculando] = useState(false)
+  const [calculados, setCalculados] = useState(null)
+  const [errorCalculados, setErrorCalculados] = useState(null)
+  const [intentoCalculados, setIntentoCalculados] = useState(0)
 
   const filtros = filtrosDeUrl(parametros, hoy)
   const ddrissId = nacional ? (filtros.ddriss ?? ddriss?.[0]?.id) : undefined
@@ -297,6 +305,20 @@ export default function PaginaIndicadores({ hoy }) {
     }
     // clave resume año, mes y DDRISS; intento cambia al recargar.
   }, [clave, intento, esperandoDdriss])
+
+  // Los años y meses con corrida de la DDRISS; un cálculo nuevo (intento) puede agregar uno.
+  useEffect(() => {
+    if (esperandoDdriss) return undefined
+    let vigente = true
+    setCalculados(null)
+    setErrorCalculados(null)
+    obtenerMesesCalculados({ ddrissId })
+      .then((recibidos) => vigente && setCalculados(recibidos))
+      .catch((err) => vigente && setErrorCalculados(mensajeDeError(err)))
+    return () => {
+      vigente = false
+    }
+  }, [ddrissId, esperandoDdriss, intento, intentoCalculados])
 
   function calculado(corrida) {
     setCalculando(false)
@@ -395,6 +417,13 @@ export default function PaginaIndicadores({ hoy }) {
                     codigoElegido={indicador.codigo}
                     visibles={visibles}
                     ddrissId={ddrissId}
+                    comparacion={{
+                      calculados,
+                      errorCalculados,
+                      onReintentarCalculados: () => setIntentoCalculados((n) => n + 1),
+                      filtros,
+                      irA,
+                    }}
                   />
                   <div className="flex flex-col gap-2">
                     <p className="text-sm text-muted-foreground">

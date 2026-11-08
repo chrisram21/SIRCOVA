@@ -35,3 +35,8 @@ export function listarResultados({ anio, mes, indicador, municipioId, ddrissId }
 export function obtenerSerie({ anio, indicador, municipioId, ddrissId }) {
   return solicitar(conConsulta('/indicadores/serie', { anio, indicador, municipioId, ddrissId }))
 }
+
+// SPEC 51: { anios: [{ anio, meses }] } con corrida vigente de la DDRISS, del año más reciente al más antiguo.
+export function obtenerMesesCalculados({ ddrissId } = {}) {
+  return solicitar(conConsulta('/indicadores/meses-calculados', { ddrissId }))
+}
