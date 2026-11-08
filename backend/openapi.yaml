@@ -4982,6 +4982,11 @@ paths:
 
         `parcial` sigue la regla de la corrida (algún mes de enero al corte sin cerrar al empezarla). Es una
         lectura: no deja bitácora. `ddrissId`, como en `GET /indicadores/corridas`.
+
+        `poblacionAnual` (SPEC 51) es la población del año del grupo de la versión del indicador
+        (`aplica_a[0].clasificacion_poblacion`), sin prorrateo: la de los municipios de la DDRISS sin `municipioId`,
+        o la del municipio pedido. Es `null` si el indicador no tiene grupo de población (`DESERCION`) o si el año
+        no tiene esa población. Sirve para comparar la cobertura real entre años (dosis acumuladas ÷ población anual).
       x-permiso: INDICADOR_CONSULTAR
       parameters:
         - { name: anio, in: query, required: true, schema: { type: integer, minimum: 2000, maximum: 2100, example: 2026 } }
@@ -5001,6 +5006,34 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
               example:
                 error: { codigo: ENTRADA_INVALIDA, mensaje: El indicador es obligatorio. }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+
+  /indicadores/meses-calculados:
+    get:
+      tags: [Indicadores]
+      summary: Años y meses con una corrida vigente de la DDRISS (SPEC 51)
+      description: |
+        Los años con al menos una corrida vigente `COMPLETADA` de la DDRISS, del más reciente al más antiguo, y sus
+        meses de corte en orden. No dice qué indicadores tiene cada corrida. Lo usa «Comparar periodos» de
+        «Indicadores» para ofrecer solo los años y meses que tienen cálculo. Es una lectura: no deja bitácora.
+        `ddrissId`, como en `GET /indicadores/corridas`.
+      x-permiso: INDICADOR_CONSULTAR
+      parameters:
+        - { $ref: "#/components/parameters/DdrissIdAutoridad" }
+      responses:
+        "200":
+          description: Los años con corridas vigentes y sus meses
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MesesCalculados" }
+        "400":
+          description: Un parámetro no es válido, es desconocido o está repetido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: anio." }
         "401": { $ref: "#/components/responses/NoAutenticado" }
         "403": { $ref: "#/components/responses/SinPermiso" }
 
@@ -8145,7 +8178,7 @@ components:
           description: De enero a diciembre, solo los meses con corrida vigente que tiene el indicador
           items:
             type: object
-            required: [mes, corridaId, parcial, resultado]
+            required: [mes, corridaId, parcial, poblacionAnual, resultado]
             properties:
               mes: { type: integer, minimum: 1, maximum: 12, description: Mes de corte de la corrida, example: 1 }
               corridaId: { type: integer, example: 210 }
@@ -8153,7 +8186,32 @@ components:
                 type: boolean
                 description: Como `Corrida.parcial`
                 example: false
+              poblacionAnual:
+                type: number
+                nullable: true
+                description: |
+                  Población del año del grupo del indicador, sin prorrateo (de la DDRISS o del municipio pedido).
+                  `null` sin grupo de población (`DESERCION`) o si el año no tiene esa población.
+                example: 24550
               resultado: { $ref: "#/components/schemas/ResultadoIndicador" }
+
+    MesesCalculados:
+      type: object
+      required: [anios]
+      properties:
+        anios:
+          type: array
+          description: Del año más reciente al más antiguo; vacío si la DDRISS no tiene corridas vigentes
+          items:
+            type: object
+            required: [anio, meses]
+            properties:
+              anio: { type: integer, example: 2026 }
+              meses:
+                type: array
+                description: Meses de corte con corrida vigente `COMPLETADA`, en orden
+                items: { type: integer, minimum: 1, maximum: 12 }
+                example: [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
     ResultadoIndicador:
       type: object

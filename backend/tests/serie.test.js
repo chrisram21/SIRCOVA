@@ -11,7 +11,14 @@ import { tokenDePrueba } from './sesionDePrueba.js';
 // sus corridas, así que solo abril es parcial. La DDRISS ficticia ZVT_OTRA41 tiene su propia corrida de enero, para
 // el ámbito. Todo se borra al inicio y al final (los resultados antes que las corridas, las corridas antes que los
 // meses y la DDRISS).
+//
+// SPEC 51: poblacionAnual se prueba con las versiones reales COB_HEXA3 v1 (grupo MENOR_1) y DES_HEXA1_3 v1 (sin grupo)
+// en enero de 2001, con población MENOR_1 de 2001 para todos los municipios de la DDRISS 1; marzo de 2000 tiene
+// COB_HEXA3 sin población. Para meses-calculados, ZVT_OTRA41 tiene además corridas de 2000: marzo y mayo vigentes,
+// julio no vigente y septiembre FALLIDA. La limpieza borra también 2000 y la población de los dos años.
 const ANIO = 2001;
+const ANIO_ANTERIOR = 2000;
+const MENOR_1 = 'MENOR_1';
 const CODIGO = 'ZVT_HU41_COB';
 const DDRISS_OTRA = 'ZVT_OTRA41';
 const MUNICIPIO_SM = 1;
@@ -47,23 +54,40 @@ async function tokenDe(nombreUsuario) {
 
 const serie = (consulta, cuenta = cuentas.epidemiologia) =>
   request(app).get(`/api/v1/indicadores/serie?${consulta}`).set('Authorization', `Bearer ${cuenta.token}`);
+const mesesCalculados = (consulta = '', cuenta = cuentas.epidemiologia) =>
+  request(app).get(`/api/v1/indicadores/meses-calculados${consulta}`).set('Authorization', `Bearer ${cuenta.token}`);
+const poblaciones = {};
 
 async function limpiar() {
-  const deLaPrueba = 'SELECT c.id FROM corrida_calculo c LEFT JOIN ddriss d ON d.id = c.ddriss_id WHERE c.anio = ? OR d.codigo = ?';
-  await pool.query(`DELETE FROM resultado_indicador WHERE corrida_id IN (SELECT id FROM (${deLaPrueba}) t)`, [ANIO, DDRISS_OTRA]);
-  await pool.query(`DELETE FROM corrida_calculo WHERE id IN (SELECT id FROM (${deLaPrueba}) t)`, [ANIO, DDRISS_OTRA]);
+  const anios = [ANIO, ANIO_ANTERIOR];
+  const deLaPrueba =
+    'SELECT c.id FROM corrida_calculo c LEFT JOIN ddriss d ON d.id = c.ddriss_id WHERE c.anio IN (?) OR d.codigo = ?';
+  await pool.query(`DELETE FROM resultado_indicador WHERE corrida_id IN (SELECT id FROM (${deLaPrueba}) t)`, [anios, DDRISS_OTRA]);
+  await pool.query(`DELETE FROM corrida_calculo WHERE id IN (SELECT id FROM (${deLaPrueba}) t)`, [anios, DDRISS_OTRA]);
   await pool.query('DELETE FROM ddriss WHERE codigo = ?', [DDRISS_OTRA]);
-  await pool.query('DELETE cp FROM cierre_periodo cp JOIN periodo p ON p.id = cp.periodo_id WHERE p.anio = ?', [ANIO]);
-  await pool.query('DELETE FROM periodo WHERE anio = ?', [ANIO]);
+  await pool.query('DELETE FROM poblacion_objetivo WHERE anio IN (?)', [anios]);
+  await pool.query('DELETE cp FROM cierre_periodo cp JOIN periodo p ON p.id = cp.periodo_id WHERE p.anio IN (?)', [anios]);
+  await pool.query('DELETE FROM periodo WHERE anio IN (?)', [anios]);
 }
 
-async function corrida(ddrissId, mes, vigente) {
+async function corrida(ddrissId, mes, vigente, { anio = ANIO, estado = 'COMPLETADA' } = {}) {
   const [fila] = await pool.query(
     `INSERT INTO corrida_calculo (ddriss_id, anio, mes_hasta, motivo, estado, finalizada_en, vigente)
-     VALUES (?, ?, ?, 'MANUAL', 'COMPLETADA', NOW(), ?)`,
-    [ddrissId, ANIO, mes, vigente],
+     VALUES (?, ?, ?, 'MANUAL', ?, NOW(), ?)`,
+    [ddrissId, anio, mes, estado, vigente],
   );
   return fila.insertId;
+}
+
+// Una fila de un indicador real (versión 1), para poblacionAnual.
+async function resultadoReal(corridaId, codigo, anio, mes, municipioId) {
+  await pool.query(
+    `INSERT INTO resultado_indicador
+       (corrida_id, indicador_codigo, indicador_version, municipio_id, vacuna_id, dosis_id, anio, mes,
+        numerador, denominador, valor, meta)
+     VALUES (?, ?, 1, ?, ?, NULL, ?, ?, 10, 100, 10, 95)`,
+    [corridaId, codigo, municipioId, VACUNA_ID, anio, mes],
+  );
 }
 
 // Una fila del indicador; municipioId null = departamental.
@@ -110,6 +134,31 @@ async function preparar() {
   ddrissOtraId = otra.insertId;
   const corridaOtra = await corrida(ddrissOtraId, 1, true);
   await resultado(corridaOtra, 1, null, 50);
+  const deOtroAnio = [[3, true, 'COMPLETADA'], [5, true, 'COMPLETADA'], [7, false, 'COMPLETADA'], [9, false, 'FALLIDA']];
+  for (const [mes, vigente, estado] of deOtroAnio) {
+    await corrida(ddrissOtraId, mes, vigente, { anio: ANIO_ANTERIOR, estado });
+  }
+
+  // Población MENOR_1 de 2001 para los municipios que suma el motor (activos, del departamento, sin el 9999).
+  const [municipios] = await pool.query(
+    `SELECT m.id FROM municipio m JOIN ddriss d ON d.id = 1
+      WHERE m.activo = TRUE AND m.departamento_id = d.departamento_id AND m.codigo_ine <> '9999'`,
+  );
+  const [[grupo]] = await pool.query('SELECT id FROM clasificacion_poblacion WHERE codigo = ?', [MENOR_1]);
+  for (const { id } of municipios) {
+    poblaciones[id] = 100 + id;
+    await pool.query(
+      `INSERT INTO poblacion_objetivo (municipio_id, anio, clasificacion_poblacion_id, cantidad, fuente, registrado_por)
+       VALUES (?, ?, ?, ?, 'vitest-hu43', 1)`,
+      [id, ANIO, grupo.id, poblaciones[id]],
+    );
+  }
+  for (const codigo of ['COB_HEXA3', 'DES_HEXA1_3']) {
+    await resultadoReal(corridas.enero, codigo, ANIO, 1, null);
+    await resultadoReal(corridas.enero, codigo, ANIO, 1, MUNICIPIO_SM);
+  }
+  corridas.marzoAnterior = await corrida(1, 3, true, { anio: ANIO_ANTERIOR });
+  await resultadoReal(corridas.marzoAnterior, 'COB_HEXA3', ANIO_ANTERIOR, 3, null);
 }
 
 beforeAll(async () => {
@@ -156,7 +205,7 @@ describe('GET /indicadores/serie', () => {
 
   it('devuelve puntos vacíos para un indicador o un año sin filas', async () => {
     expect((await serie(`anio=${ANIO}&indicador=ZVT_HU41_NINGUNO`)).body).toEqual({ puntos: [] });
-    expect((await serie(`anio=2000&indicador=${CODIGO}`)).body).toEqual({ puntos: [] });
+    expect((await serie(`anio=${ANIO_ANTERIOR}&indicador=${CODIGO}`)).body).toEqual({ puntos: [] });
   });
 
   it('responde 400 sin año, sin indicador, con un código inválido o un parámetro desconocido', async () => {
@@ -191,5 +240,66 @@ describe('GET /indicadores/serie', () => {
     const res = await serie(`anio=${ANIO}&indicador=${CODIGO}`, cuentas.cs1201);
 
     expect(res.status).toBe(403);
+  });
+
+  describe('poblacionAnual (SPEC 51)', () => {
+    it('sin municipioId es la población del grupo de todos los municipios de la DDRISS', async () => {
+      const res = await serie(`anio=${ANIO}&indicador=COB_HEXA3`);
+
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      const total = Object.values(poblaciones).reduce((suma, cantidad) => suma + cantidad, 0);
+      expect(res.body.puntos.map((p) => [p.mes, p.poblacionAnual])).toEqual([[1, total]]);
+    });
+
+    it('con municipioId es la del municipio', async () => {
+      const res = await serie(`anio=${ANIO}&indicador=COB_HEXA3&municipioId=${MUNICIPIO_SM}`);
+
+      expect(res.body.puntos.map((p) => [p.mes, p.poblacionAnual])).toEqual([[1, poblaciones[MUNICIPIO_SM]]]);
+    });
+
+    it('es null sin grupo de población, sin la población del año o sin la versión en MongoDB', async () => {
+      const desercion = await serie(`anio=${ANIO}&indicador=DES_HEXA1_3`);
+      expect(desercion.body.puntos.map((p) => [p.mes, p.poblacionAnual])).toEqual([[1, null]]);
+
+      const sinPoblacion = await serie(`anio=${ANIO_ANTERIOR}&indicador=COB_HEXA3`);
+      expect(sinPoblacion.body.puntos.map((p) => [p.mes, p.poblacionAnual])).toEqual([[3, null]]);
+
+      const sinVersion = await serie(`anio=${ANIO}&indicador=${CODIGO}`);
+      expect(sinVersion.body.puntos.every((p) => p.poblacionAnual === null)).toBe(true);
+    });
+  });
+});
+
+describe('GET /indicadores/meses-calculados (SPEC 51)', () => {
+  it('da los años con corridas vigentes COMPLETADA de la DDRISS, del más reciente, con sus meses en orden', async () => {
+    const res = await mesesCalculados(`?ddrissId=${ddrissOtraId}`, cuentas['autoridad.nacional']);
+
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body).toEqual({ anios: [{ anio: ANIO, meses: [1] }, { anio: ANIO_ANTERIOR, meses: [3, 5] }] });
+  });
+
+  it('sin ddrissId da la DDRISS del usuario', async () => {
+    const res = await mesesCalculados();
+
+    expect(res.status).toBe(200);
+    expect(res.body.anios.find((a) => a.anio === ANIO)).toEqual({ anio: ANIO, meses: [1, 2, 3, 4] });
+    expect(res.body.anios.find((a) => a.anio === ANIO_ANTERIOR)).toEqual({ anio: ANIO_ANTERIOR, meses: [3] });
+    const anios = res.body.anios.map((a) => a.anio);
+    expect(anios).toEqual([...anios].sort((a, b) => b - a));
+  });
+
+  it('responde 400 con un parámetro desconocido o repetido, y con ddrissId fuera del alcance nacional', async () => {
+    for (const consulta of ['?anio=2001', '?ddrissId=1']) {
+      const res = await mesesCalculados(consulta);
+      expect(res.status, consulta).toBe(400);
+      expect(res.body.error.codigo).toBe('ENTRADA_INVALIDA');
+    }
+    const nacional = cuentas['autoridad.nacional'];
+    expect((await mesesCalculados('', nacional)).status).toBe(400);
+    expect((await mesesCalculados(`?ddrissId=1&ddrissId=${ddrissOtraId}`, nacional)).status).toBe(400);
+  });
+
+  it('el Personal del establecimiento (sin INDICADOR_CONSULTAR) recibe 403', async () => {
+    expect((await mesesCalculados('', cuentas.cs1201)).status).toBe(403);
   });
 });

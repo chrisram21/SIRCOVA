@@ -13,6 +13,7 @@ import { calcularIndicadores, leerDatos } from './motor.service.js';
 
 const ENTIDAD = 'corrida_calculo';
 const FORMATO_CODIGO = /^[A-Z0-9_]{1,40}$/;
+const MIGRANTES = '9999';
 
 const errores = {
   noEncontrado: () => new ErrorApi(404, 'NO_ENCONTRADO', 'El recurso solicitado no existe.'),
@@ -484,7 +485,63 @@ export async function serieDelIndicador(usuario, query = {}) {
     const resultado = filas.find((r) => (municipioId ? r.municipio?.id === municipioId : r.municipio === null));
     return resultado ? { mes, corridaId: id, parcial: sinCerrar.length > 0, resultado } : null;
   }));
-  return { puntos: porMes.filter(Boolean) };
+  const puntos = porMes.filter(Boolean);
+  const poblaciones = await poblacionesAnuales({
+    ddrissId, anio, municipioId, codigo: query.indicador, versiones: puntos.map((p) => p.resultado.indicadorVersion),
+  });
+  return {
+    puntos: puntos.map(({ resultado, ...punto }) => ({
+      ...punto, poblacionAnual: poblaciones.get(resultado.indicadorVersion) ?? null, resultado,
+    })),
+  };
+}
+
+export async function mesesCalculados(usuario, query = {}) {
+  revisarParametros(query, ['ddrissId']);
+  const ddrissId = ddrissDeLaConsulta(usuario, query);
+  const [filas] = await pool.query(
+    `SELECT DISTINCT anio, mes_hasta FROM corrida_calculo
+      WHERE ddriss_id = ? AND vigente = TRUE AND estado = 'COMPLETADA'
+      ORDER BY anio DESC, mes_hasta`,
+    [ddrissId],
+  );
+  const porAnio = new Map();
+  for (const { anio, mes_hasta: mes } of filas) {
+    if (!porAnio.has(anio)) porAnio.set(anio, []);
+    porAnio.get(anio).push(mes);
+  }
+  return { anios: [...porAnio].map(([anio, meses]) => ({ anio, meses })) };
+}
+
+// Población del año del grupo de cada versión, sin prorrateo. La de la DDRISS suma los mismos municipios que el
+// motor y, como en el motor, es null si a alguno le falta.
+async function poblacionesAnuales({ ddrissId, anio, municipioId, codigo, versiones }) {
+  const unicas = [...new Set(versiones)];
+  if (unicas.length === 0) return new Map();
+  const documentos = await (await obtenerDb())
+    .collection('configuracion_indicadores')
+    .find({ codigo, version: { $in: unicas } })
+    .project({ version: 1, aplica_a: 1 })
+    .toArray();
+  const grupoPorVersion = new Map(documentos.map((d) => [Number(d.version), d.aplica_a?.[0]?.clasificacion_poblacion]));
+  const grupos = [...new Set([...grupoPorVersion.values()].filter(Boolean))];
+  if (grupos.length === 0) return new Map();
+  const [filas] = await pool.query(
+    `SELECT cp.codigo AS grupo, COUNT(po.municipio_id) AS con_poblacion, COUNT(*) AS municipios, SUM(po.cantidad) AS total
+       FROM municipio m
+       JOIN ddriss d ON d.id = ?
+       JOIN clasificacion_poblacion cp ON cp.codigo IN (?)
+       LEFT JOIN poblacion_objetivo po
+         ON po.municipio_id = m.id AND po.clasificacion_poblacion_id = cp.id AND po.anio = ?
+      WHERE m.departamento_id = d.departamento_id AND m.activo = TRUE AND m.codigo_ine <> ?
+        ${municipioId ? 'AND m.id = ?' : ''}
+      GROUP BY cp.codigo`,
+    [ddrissId, grupos, anio, MIGRANTES, ...(municipioId ? [municipioId] : [])],
+  );
+  const poblacionPorGrupo = new Map(filas
+    .filter((f) => Number(f.con_poblacion) > 0 && Number(f.con_poblacion) === Number(f.municipios))
+    .map((f) => [f.grupo, Number(f.total)]));
+  return new Map([...grupoPorVersion].map(([version, grupo]) => [version, poblacionPorGrupo.get(grupo) ?? null]));
 }
 
 // Los meses CERRADO de la DDRISS en el año, desde mes: los que recalcula una rectificación aplicada.
