@@ -90,7 +90,10 @@ export default function BarraFiltrosIndicadores({
           etiqueta="DDRISS"
           placeholder="Elija la DDRISS"
           valor={ddrissId ? String(ddrissId) : undefined}
-          alCambiar={(id) => irA({ ddriss: Number(id), vacuna: undefined, indicador: undefined, distrito: undefined, municipios: [] })}
+          alCambiar={(id) => irA({
+            ddriss: Number(id), vacuna: undefined, indicador: undefined, distrito: undefined, municipios: [], anios: undefined,
+            meses: undefined,
+          })}
           opciones={ddriss.map((d) => ({ valor: String(d.id), texto: d.nombre }))}
           className="sm:w-56"
         />

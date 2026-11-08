@@ -25,5 +25,11 @@ router.get(
   requierePermiso('INDICADOR_CONSULTAR'),
   indicadoresController.serieDelIndicador,
 );
+router.get(
+  '/indicadores/meses-calculados',
+  autenticar,
+  requierePermiso('INDICADOR_CONSULTAR'),
+  indicadoresController.mesesCalculados,
+);
 
 export default router;

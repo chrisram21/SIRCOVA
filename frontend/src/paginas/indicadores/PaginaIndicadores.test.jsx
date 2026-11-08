@@ -2,7 +2,9 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { listarDdriss, listarDistritos, listarPeriodos } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
-import { calcularIndicadores, listarCorridas, listarResultados, obtenerSerie } from '@/api/indicadores.js'
+import {
+  calcularIndicadores, listarCorridas, listarResultados, obtenerMesesCalculados, obtenerSerie,
+} from '@/api/indicadores.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 import PaginaIndicadores, { filtrosDeUrl, indicadorElegido, mesPorDefecto } from './PaginaIndicadores.jsx'
@@ -14,6 +16,7 @@ vi.mock('@/api/indicadores.js', () => ({
   listarCorridas: vi.fn(),
   listarResultados: vi.fn(),
   obtenerSerie: vi.fn(),
+  obtenerMesesCalculados: vi.fn(),
 }))
 
 // Hoy fijo: el mes por defecto es octubre de 2026.
@@ -171,6 +174,7 @@ beforeEach(() => {
   listarCorridas.mockResolvedValue(CORRIDAS)
   listarPeriodos.mockResolvedValue([])
   obtenerSerie.mockResolvedValue({ puntos: [] })
+  obtenerMesesCalculados.mockResolvedValue({ anios: [] })
 })
 
 test('mes por defecto, filtros de la URL e indicador elegido', () => {
@@ -178,6 +182,7 @@ test('mes por defecto, filtros de la URL e indicador elegido', () => {
   expect(mesPorDefecto(new Date(2027, 0, 15))).toEqual({ anio: 2026, mes: 12 })
   expect(filtrosDeUrl(new URLSearchParams('anio=2025&mes=13&indicador=cob'), HOY)).toEqual({
     anio: 2025, mes: 10, indicador: undefined, ddriss: undefined, vacuna: undefined, distrito: undefined, municipios: [],
+    comparar: undefined, anios: undefined, meses: undefined,
   })
   expect(filtrosDeUrl(new URLSearchParams('vacuna=HEXA&distrito=3&municipios=4,x,1,4'), HOY)).toMatchObject({
     vacuna: 'HEXA', distrito: 3, municipios: [4, 1],
@@ -390,6 +395,7 @@ describe('panel de gráficas y filtros', () => {
       'Avance por municipio',
       'Brecha a la meta · 400 dosis',
       'Tasa de deserción Hexavalente 1.ª a 3.ª dosis',
+      'Comparar periodos',
     ])
     expect(screen.getByText('Mayor: San Marcos (100.0 %). Menor: San Marcos (100.0 %).')).toBeTruthy()
     expect(screen.getByText('Total de la DDRISS: 2.1 %')).toBeTruthy()
@@ -469,5 +475,142 @@ describe('panel de gráficas y filtros', () => {
     expect(screen.getByText('Total de la DDRISS')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
     await waitFor(() => expect(obtenerSerie).toHaveBeenCalledTimes(2))
+  })
+})
+
+describe('comparar periodos (SPEC 51)', () => {
+  const CALCULADOS = { anios: [{ anio: 2026, meses: [9, 10] }, { anio: 2025, meses: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] }] }
+  const puntoSerie = (mes, numerador, { poblacionAnual = 2000, parcial = false } = {}) => ({
+    mes, corridaId: mes, parcial, poblacionAnual, resultado: resultado('COB_HEXA3', null, { mes, numerador }),
+  })
+  // 2025: 40 % en septiembre y 47.5 % en octubre (150 dosis en el mes); 2026: 45 % y 50 % (100 dosis en el mes).
+  const SERIES = {
+    2025: [puntoSerie(9, 800), puntoSerie(10, 950)],
+    2026: [puntoSerie(9, 900), puntoSerie(10, 1000, { parcial: true })],
+  }
+  const tablaComparacion = (nombre) => within(screen.getByRole('table', { name: nombre }))
+  const filaComparacion = (nombre, mes) => celdas(tablaComparacion(nombre).getByText(mes).closest('tr'))
+  const llamadasDe = (anio) => obtenerSerie.mock.calls.filter(([consulta]) => consulta.anio === anio)
+
+  beforeEach(() => {
+    obtenerMesesCalculados.mockResolvedValue(CALCULADOS)
+    obtenerSerie.mockImplementation(async ({ anio }) => ({ puntos: SERIES[anio] ?? [] }))
+  })
+
+  test('por defecto compara el año del corte con el anterior, con una serie por año', async () => {
+    await montar()
+
+    expect(await screen.findByText('A octubre: 2026 50.0 % contra 2025 47.5 % (+2.5 pp).')).toBeTruthy()
+    expect(obtenerMesesCalculados).toHaveBeenCalledWith({ ddrissId: undefined })
+    expect(llamadasDe(2025)).toEqual([[{ anio: 2025, indicador: 'COB_HEXA3', municipioId: undefined, ddrissId: undefined }]])
+    // La serie de 2026 es la misma petición de la línea de avance.
+    expect(llamadasDe(2026)).toHaveLength(1)
+    expect(filaComparacion('Cobertura real por año', 'Septiembre')).toEqual(['Septiembre', '40.0 %', '45.0 %', '▲ +5.0 pp'])
+    expect(filaComparacion('Cobertura real por año', 'Octubre')).toEqual(['Octubre', '47.5 %', '50.0 %(parcial)', '▲ +2.5 pp'])
+  })
+
+  test('«Por mes» pone comparar=mes en la URL y la tabla muestra lo vacunado en cada mes', async () => {
+    const router = await montar()
+    await screen.findByRole('table', { name: 'Cobertura real por año' })
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Por mes' }))
+    await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&comparar=mes'))
+    expect(await screen.findByRole('table', { name: 'Vacunado en cada mes' })).toBeTruthy()
+    expect(filaComparacion('Vacunado en cada mes', 'oct 2025')).toEqual(['oct 2025', '150', '7.5 %', '—'])
+    expect(filaComparacion('Vacunado en cada mes', 'oct 2026')).toEqual(['oct 2026', '100', '5.0 %(parcial)', '▼ −2.5 pp · −50 dosis'])
+    expect(screen.getByText('oct 2026: 100 dosis contra oct 2025: 150 (−50 dosis).')).toBeTruthy()
+  })
+
+  test('un mes sin el anterior o sin cálculo lo dice en lugar de dar un valor', async () => {
+    await montar({ url: '/indicadores?comparar=mes&meses=2026-09,2025-01,2025-10' })
+
+    expect(await screen.findByRole('table', { name: 'Vacunado en cada mes' })).toBeTruthy()
+    expect(filaComparacion('Vacunado en cada mes', 'sep 2026')).toEqual(['sep 2026', 'Sin dato del mes anterior'])
+    expect(filaComparacion('Vacunado en cada mes', 'ene 2025')).toEqual(['ene 2025', 'Sin cálculo de COB_HEXA3 en 2025'])
+    expect(filaComparacion('Vacunado en cada mes', 'oct 2025')).toEqual(['oct 2025', '150', '7.5 %', '—'])
+    expect(screen.getByText('Elija al menos dos periodos con cálculo para comparar.')).toBeTruthy()
+  })
+
+  test('con cinco años elegidos, el sexto queda deshabilitado', async () => {
+    obtenerMesesCalculados.mockResolvedValue({
+      anios: [2026, 2025, 2024, 2023, 2022, 2021].map((anio) => ({ anio, meses: [10] })),
+    })
+    await montar({ url: '/indicadores?anios=2022,2023,2024,2025,2026' })
+    await screen.findByRole('table', { name: 'Cobertura real por año' })
+
+    const boton = screen.getByRole('button', { name: 'Periodos a comparar' })
+    expect(boton.textContent).toBe('5 años')
+    fireEvent.keyDown(boton, { key: 'Enter' })
+    const opcion = (nombre) => screen.getByRole('menuitemcheckbox', { name: nombre })
+    expect(opcion('2021').getAttribute('data-disabled')).not.toBeNull()
+    expect(opcion('2022').getAttribute('data-disabled')).toBeNull()
+    expect(opcion('2022').getAttribute('aria-checked')).toBe('true')
+  })
+
+  test('elegir un año en el selector lo pone en la URL', async () => {
+    obtenerMesesCalculados.mockResolvedValue({ anios: [...CALCULADOS.anios, { anio: 2024, meses: [10] }] })
+    const router = await montar()
+    await screen.findByRole('table', { name: 'Cobertura real por año' })
+
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Periodos a comparar' }), { key: 'Enter' })
+    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: '2024' }))
+    await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&anios=2024%2C2025%2C2026'))
+    await waitFor(() => expect(llamadasDe(2024)).toHaveLength(1))
+  })
+
+  test('con un municipio visible, las series se piden con su municipioId', async () => {
+    await montar({ url: '/indicadores?municipios=1' })
+
+    await waitFor(() => expect(llamadasDe(2025)).toEqual([[expect.objectContaining({ municipioId: 1 })]]))
+    expect(await screen.findByText('Hexavalente · San Marcos')).toBeTruthy()
+  })
+
+  test('con un solo año calculado, aparece el aviso', async () => {
+    obtenerMesesCalculados.mockResolvedValue({ anios: [{ anio: 2026, meses: [9, 10] }] })
+    await montar()
+
+    expect(await screen.findByText('Elija al menos dos periodos con cálculo para comparar.')).toBeTruthy()
+    expect(screen.getByRole('table', { name: 'Cobertura real por año' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Periodos a comparar' }).textContent).toBe('1 año')
+  })
+
+  test('un año sin población lo dice', async () => {
+    obtenerSerie.mockImplementation(async ({ anio }) => ({
+      puntos: anio === 2025 ? [puntoSerie(10, 950, { poblacionAnual: null })] : SERIES[anio],
+    }))
+    await montar()
+
+    expect(await screen.findByText('Sin población de 2025')).toBeTruthy()
+    expect(screen.getByText('Elija al menos dos periodos con cálculo para comparar.')).toBeTruthy()
+  })
+
+  test('un error en los meses calculados muestra «Reintentar» sin ocultar el panel ni la tabla', async () => {
+    obtenerMesesCalculados.mockRejectedValueOnce(new ErrorApi(500, 'ERROR_INTERNO', 'Ocurrió un error interno. Intente de nuevo.'))
+    await montar()
+
+    expect(await screen.findByText(/No se pudieron cargar los periodos calculados/)).toBeTruthy()
+    expect(screen.getByText('Total de la DDRISS')).toBeTruthy()
+    expect(screen.getByText('Avance acumulado y proyección al cierre del año')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(await screen.findByRole('table', { name: 'Cobertura real por año' })).toBeTruthy()
+    expect(obtenerMesesCalculados).toHaveBeenCalledTimes(2)
+  })
+
+  test('un error en una serie muestra «Reintentar» en la tarjeta y vuelve a pedirla', async () => {
+    let fallar = true
+    obtenerSerie.mockImplementation(async ({ anio }) => {
+      if (anio === 2025 && fallar) {
+        fallar = false
+        throw new ErrorApi(500, 'ERROR_INTERNO', 'Ocurrió un error interno. Intente de nuevo.')
+      }
+      return { puntos: SERIES[anio] ?? [] }
+    })
+    await montar()
+
+    expect(await screen.findByText(/No se pudo cargar la comparación/)).toBeTruthy()
+    expect(screen.getByText('Total de la DDRISS')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(await screen.findByRole('table', { name: 'Cobertura real por año' })).toBeTruthy()
+    expect(llamadasDe(2025)).toHaveLength(2)
   })
 })

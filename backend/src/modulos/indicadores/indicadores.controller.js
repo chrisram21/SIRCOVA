@@ -19,3 +19,7 @@ export async function resultadosVigentes(req, res) {
 export async function serieDelIndicador(req, res) {
   res.json(await corridasService.serieDelIndicador(req.usuario, req.query));
 }
+
+export async function mesesCalculados(req, res) {
+  res.json(await corridasService.mesesCalculados(req.usuario, req.query));
+}
