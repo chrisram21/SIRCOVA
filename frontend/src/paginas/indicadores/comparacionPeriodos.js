@@ -93,10 +93,11 @@ export function coberturaReal(punto) {
 }
 
 // Una línea por año: { anio, motivo, valores: [{ mes, dosis, porcentaje, parcial }] }. series es un Map año → puntos
-// (de la serie del indicador comparado; un año sin puntos no tiene ese indicador).
-export function puntosPorAnio(series, anios) {
+// (de la serie del indicador comparado; un año sin puntos no tiene ese indicador). El año del corte llega hasta el
+// mes de corte, aunque tenga corridas de meses posteriores; los demás años van completos.
+export function puntosPorAnio(series, anios, corte = null) {
   return anios.map((anio) => {
-    const puntos = series.get(anio) ?? []
+    const puntos = (series.get(anio) ?? []).filter((p) => anio !== corte?.anio || p.mes <= corte.mes)
     if (puntos.length === 0) return { anio, motivo: MOTIVOS.SIN_CALCULO, valores: [] }
     const valores = puntos
       .map((p) => ({ mes: p.mes, dosis: p.resultado.numerador, porcentaje: coberturaReal(p), parcial: p.parcial }))
@@ -106,13 +107,15 @@ export function puntosPorAnio(series, anios) {
   })
 }
 
-// Diferencia de valor contra base, en puntos porcentuales y en dosis; positiva es mejora.
+const aUnDecimal = (numero) => Math.round(numero * 10) / 10
+
+// Diferencia de valor contra base, en puntos porcentuales y en dosis; positiva es mejora. Los pp salen de los
+// porcentajes ya redondeados a un decimal, como se muestran, para que la resta cuadre a la vista.
 export function diferencias(base, valor) {
   if (base?.porcentaje == null || valor?.porcentaje == null) return null
-  const pp = valor.porcentaje - base.porcentaje
+  const pp = aUnDecimal(aUnDecimal(valor.porcentaje) - aUnDecimal(base.porcentaje))
   const dosis = valor.dosis != null && base.dosis != null ? valor.dosis - base.dosis : null
-  const redondeado = Math.round(pp * 10) / 10
-  return { pp, dosis, sentido: redondeado > 0 ? 'sube' : redondeado < 0 ? 'baja' : 'igual' }
+  return { pp, dosis, sentido: pp > 0 ? 'sube' : pp < 0 ? 'baja' : 'igual' }
 }
 
 // Las filas de la tabla por año: una por mes con datos en algún año, con el valor de cada uno y la diferencia del

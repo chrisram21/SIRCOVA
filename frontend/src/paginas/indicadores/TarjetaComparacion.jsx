@@ -37,7 +37,7 @@ function resumenPorAnio(filas, anios) {
   if (!ultima) return null
   const presentes = anios.filter((a) => ultima.porAnio[a])
   const [primero, ultimo] = [presentes[0], presentes.at(-1)]
-  const pp = conSigno(Math.round(ultima.diferencia.pp * 10) / 10, formatoPorcentaje)
+  const pp = conSigno(ultima.diferencia.pp, formatoPorcentaje)
   return `A ${MESES[ultima.mes - 1]}: ${ultimo} ${formatoPorcentaje.format(ultima.porAnio[ultimo].porcentaje)} % contra `
     + `${primero} ${formatoPorcentaje.format(ultima.porAnio[primero].porcentaje)} % (${pp} pp).`
 }
@@ -92,7 +92,14 @@ export default function TarjetaComparacion({
   } else if (!periodos || cargadas?.clave !== clave) {
     contenido = <Skeleton className="h-64 w-full" aria-label="Cargando la comparación" />
   } else {
-    contenido = <Comparacion periodos={periodos} series={cargadas.series} codigo={codigo} />
+    contenido = (
+      <Comparacion
+        periodos={periodos}
+        series={cargadas.series}
+        codigo={codigo}
+        corte={{ anio: corrida.anio, mes: corrida.mesHasta }}
+      />
+    )
   }
 
   const controles = periodos && codigo && !errorCalculados && (
@@ -130,9 +137,9 @@ function Avisos({ textos }) {
   )
 }
 
-function Comparacion({ periodos, series, codigo }) {
+function Comparacion({ periodos, series, codigo, corte }) {
   if (periodos.modo === 'anio') {
-    const lineas = puntosPorAnio(series, periodos.anios)
+    const lineas = puntosPorAnio(series, periodos.anios, corte)
     const motivos = lineas.filter((l) => l.motivo).map((l) => textoDelMotivo(l.motivo, { codigo, anio: l.anio }))
     const validas = lineas.filter((l) => l.motivo === null)
     const avisos = conDatos(lineas) < MINIMO_PERIODOS ? [...motivos, AVISO_MINIMO] : motivos

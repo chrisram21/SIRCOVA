@@ -1,6 +1,6 @@
 # SPEC 51 — Comparar cobertura entre periodos
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-43
 > **Depende de:** SPEC 44, SPEC 47 y SPEC 49
 > **Fecha:** 2026-11-07
@@ -85,7 +85,7 @@ Ruta en `indicadores.routes.js` con `autenticar` + `requierePermiso('INDICADOR_C
 
 ### Semilla de 2025 (`backend/db/11_comparacion_2025_mysql.js`)
 
-Script de Node con `mysql2` (el pool de `src/config/mysql.js` y el `backend/.env`), que se corre con `node db/11_comparacion_2025_mysql.js` desde `backend/`. No recrea la base ni toca otros años. Es idempotente: si la DDRISS `DDRISS_SM` ya tiene corridas de 2025, termina sin escribir. Escribe, en una sola transacción:
+Script de Node con `mysql2` (el pool de `src/config/mysql.js` y el `backend/.env`), que se corre con `node --env-file=.env db/11_comparacion_2025_mysql.js` desde `backend/` (con `--simular` lo hace todo en la transacción, muestra una muestra de las filas y la deshace). No recrea la base ni toca otros años. Es idempotente: si la DDRISS `DDRISS_SM` ya tiene corridas de 2025, termina sin escribir. Escribe, en una sola transacción:
 
 - `periodo` de 2025 (los 12 meses que falten).
 - `cierre_periodo` de 2025 de la DDRISS, los 12 `CERRADO`, con la fecha límite el día 10 del mes siguiente, `cerrado_por` el usuario que cierra en la semilla y `cerrado_en` el día 20 del mes siguiente.
@@ -120,7 +120,7 @@ Si la corrida 1 no existe (una base recreada sin el 03), el script termina con u
 - **Municipio:** el de `filaDeReferencia`: el único municipio visible, o la DDRISS.
 - **Cobertura real del mes k de un año:** `numerador` ÷ `poblacionAnual` × 100. Sin `poblacionAnual`, ese año queda «Sin población de {año}».
 - **Producción del mes k:** `numerador(k) − numerador(k − 1)` del mismo año (en enero, `numerador(1)`), y su % contra `poblacionAnual`. Si falta la corrida de k − 1, el mes queda «Sin dato del mes anterior».
-- **Diferencia:** en puntos porcentuales (pp) y en dosis, del último periodo contra el primero (por año) o de cada mes contra el primero elegido (por mes). Una diferencia positiva es mejora.
+- **Diferencia:** en puntos porcentuales (pp) y en dosis, del último periodo contra el primero (por año) o de cada mes contra el primero elegido (por mes). Una diferencia positiva es mejora. Los pp son la resta de los porcentajes ya redondeados a un decimal, como se muestran (decidido en el paso 8).
 
 ### Tarjeta «Comparar periodos» (`TarjetaComparacion.jsx`)
 
@@ -130,7 +130,7 @@ Si la corrida 1 no existe (una base recreada sin el 03), el script termina con u
   - por año, los años de `meses-calculados`;
   - por mes, los meses de cada año agrupados con `DropdownMenuLabel`;
   - con cinco elegidos, el resto queda deshabilitado; el botón dice «{n} años» o «{n} meses».
-- **Por año** (`GraficaComparacionAnios.jsx`): una línea por año, eje X de enero a diciembre y eje Y en %. Cada línea llega hasta su último mes con corrida. Los colores son `--chart-1` (el año más reciente) a `--chart-5`. Un punto `parcial` lleva un marcador hueco y el tooltip dice «Parcial», como en el SPEC 49. Leyenda con los años.
+- **Por año** (`GraficaComparacionAnios.jsx`): una línea por año, eje X de enero a diciembre y eje Y en %. El año del corte llega hasta el mes de corte aunque tenga corridas posteriores, y los demás años llegan hasta su último mes con corrida (decidido en el paso 8). Los colores son `--chart-1` (el año más reciente), `--chart-3`, `--chart-5`, `--chart-4` y `--chart-2`, en ese orden (decidido en el paso 7: `--chart-2` es un celeste muy claro que se confunde con `--chart-1`). Un punto `parcial` lleva un marcador hueco y el tooltip dice «Parcial», como en el SPEC 49. Leyenda con los años.
 - **Por mes** (`GraficaComparacionMeses.jsx`): una barra por mes elegido, en orden cronológico, con el % del mes; el tooltip da las dosis. La etiqueta es «ago 2025».
 - **Tabla de diferencias** (`TablaComparacion.jsx`), que es también la lectura accesible de la gráfica:
   - por año: una fila por mes con datos en algún año, una columna por año (%) y «Diferencia» (último − primero, en pp, con ▲ o ▼);
@@ -157,8 +157,10 @@ backend/
 └── tests/serie.test.js                            ← casos nuevos (años 2000 y 2001)
 frontend/src/
 ├── api/indicadores.js                             ← obtenerMesesCalculados
+├── paginas/inicio/PaginaInicio.test.jsx           ← al implementar: obtenerMesesCalculados en el mock (entra a /indicadores)
 └── paginas/indicadores/
     ├── PaginaIndicadores.jsx (+ .test)             ← comparar/anios/meses en la URL, carga de meses calculados
+    ├── BarraFiltrosIndicadores.jsx                 ← al implementar: cambiar la DDRISS borra anios y meses
     ├── PanelGraficas.jsx                           ← monta la tarjeta debajo de las gráficas
     ├── comparacionPeriodos.js (+ .test)            ← nuevo: periodos por defecto, puntos por año, producción del mes, diferencias
     ├── TarjetaComparacion.jsx                      ← nuevo
@@ -197,7 +199,7 @@ docs/SPECS/HISTORIAS_DE_USUARIO.md, CLAUDE.md
 8. **Verificación manual y documentación.** Con Playwright, contra Aiven y Atlas, como `epidemiologia` con el corte en agosto de 2026:
    - por año, 2025 contra 2026: comparar los puntos con `numerador ÷ poblacionAnual` de la serie y la diferencia de la tabla;
    - con Tacaná como único municipio, la línea y la tabla cambian a ese municipio;
-   - por mes, agosto de 2025 contra julio y agosto de 2026: las dosis cuadran con las restas de la serie;
+   - por mes, agosto de 2025 contra julio y agosto de 2026: las dosis cuadran con las restas de la serie (al verificar, julio de 2026 no tenía corrida y se usó septiembre);
    - los filtros quedan en la URL y un enlace abre la misma comparación;
    - como `autoridad.nacional`, con la DDRISS elegida;
    - a 390 px no hay desplazamiento horizontal fuera de la tabla, y la consola queda sin errores.
@@ -205,18 +207,18 @@ docs/SPECS/HISTORIAS_DE_USUARIO.md, CLAUDE.md
 
 ## Criterios de aceptación
 
-- [ ] `backend/openapi.yaml` documenta `poblacionAnual` y `GET /indicadores/meses-calculados`, y `/api/docs` carga.
-- [ ] Cada punto de `GET /indicadores/serie` trae la población anual del grupo del indicador (de la DDRISS o del municipio), o `null` si no tiene.
-- [ ] `GET /indicadores/meses-calculados` da los años y meses con corrida vigente de la DDRISS del ámbito.
-- [ ] `11_comparacion_2025_mysql.js` deja 2025 cerrado, con población y 12 corridas vigentes de los cuatro indicadores; una segunda ejecución no escribe nada y no toca otros años.
-- [ ] Puedo elegir de dos a cinco años o de dos a cinco meses para comparar, y la elección queda en la URL.
-- [ ] «Por año» muestra la evolución mensual de la cobertura real (dosis acumuladas ÷ población anual) de la vacuna y el municipio de los filtros, una línea por año, sin la proyección.
-- [ ] «Por mes» muestra lo vacunado en cada mes elegido, en dosis y en % de la población anual.
-- [ ] La tabla da los valores de cada periodo y la diferencia en pp (y en dosis por mes), con la marca de sube o baja.
-- [ ] Un periodo sin cálculo, sin población o sin el mes anterior lo dice en lugar de dibujar un valor falso, y un error de la tarjeta no oculta el panel ni la tabla.
-- [ ] Las gráficas usan el componente Chart de shadcn, y ningún componente propio tiene colores escritos a mano ni llama a `fetch`.
-- [ ] `serie.test.js` y `proyeccion.test.js` pasan en `backend/`, `npm test` pasa en `frontend/` sin desactivar pruebas, y no quedan datos de prueba de los años 2000 y 2001.
-- [ ] HU-43 tiene su avance y sus criterios, y `CLAUDE.md` está al día.
+- [x] `backend/openapi.yaml` documenta `poblacionAnual` y `GET /indicadores/meses-calculados`, y `/api/docs` carga.
+- [x] Cada punto de `GET /indicadores/serie` trae la población anual del grupo del indicador (de la DDRISS o del municipio), o `null` si no tiene.
+- [x] `GET /indicadores/meses-calculados` da los años y meses con corrida vigente de la DDRISS del ámbito.
+- [x] `11_comparacion_2025_mysql.js` deja 2025 cerrado, con población y 12 corridas vigentes de los cuatro indicadores; una segunda ejecución no escribe nada y no toca otros años.
+- [x] Puedo elegir de dos a cinco años o de dos a cinco meses para comparar, y la elección queda en la URL.
+- [x] «Por año» muestra la evolución mensual de la cobertura real (dosis acumuladas ÷ población anual) de la vacuna y el municipio de los filtros, una línea por año, sin la proyección.
+- [x] «Por mes» muestra lo vacunado en cada mes elegido, en dosis y en % de la población anual.
+- [x] La tabla da los valores de cada periodo y la diferencia en pp (y en dosis por mes), con la marca de sube o baja.
+- [x] Un periodo sin cálculo, sin población o sin el mes anterior lo dice en lugar de dibujar un valor falso, y un error de la tarjeta no oculta el panel ni la tabla.
+- [x] Las gráficas usan el componente Chart de shadcn, y ningún componente propio tiene colores escritos a mano ni llama a `fetch`.
+- [x] `serie.test.js` y `proyeccion.test.js` pasan en `backend/`, `npm test` pasa en `frontend/` sin desactivar pruebas, y no quedan datos de prueba de los años 2000 y 2001.
+- [x] HU-43 tiene su avance y sus criterios, y `CLAUDE.md` está al día.
 
 ## Decisiones
 
@@ -230,6 +232,11 @@ docs/SPECS/HISTORIAS_DE_USUARIO.md, CLAUDE.md
 - **Sí:** una tabla de diferencias bajo la gráfica, que también es la lectura accesible (decidido en la fase de preguntas). **No:** la diferencia solo en el tooltip o en el título.
 - **Sí:** un 2025 ficticio con un script de Node que calcula con `CALCULADORES` (decidido en la fase de preguntas), con los cuatro indicadores de la base y sin reportes. **No:** SQL con las fórmulas repetidas a mano, ni reportes y producción de 2025.
 - **Sí:** el script no escribe en la bitácora, como el 03 y el 04 (decidido al escribir el spec): son datos de prueba, no una acción de un usuario.
+- **Sí:** el script se corre con `--env-file=.env`, como `npm run crear-usuario`, y tiene `--simular` (decidido en el paso 5) para revisar las cifras sin dejar nada escrito.
+- **Sí:** el año del corte llega hasta el mes de corte en «Por año» (decidido en el paso 8). **No:** hasta su último mes con corrida: con el corte en agosto de 2026, las corridas parciales de septiembre y octubre (sin producción nueva) hacían decir al resumen «A octubre: −11.5 pp» cuando en agosto 2026 iba +1.9 pp.
+- **Sí:** los pp de la diferencia salen de los porcentajes ya redondeados (decidido en el paso 8), para que 55.7 % − 53.8 % muestre +1.9 pp y no +2.0.
+- **Sí:** si la URL no deja ningún periodo válido, se usan los de por defecto (decidido en el paso 6), en lugar de dejar la tarjeta vacía.
+- **Sí:** «Por mes» sin ningún mes con datos muestra solo el aviso; con alguno, cada mes sin dato dice su motivo en la tabla (decidido en el paso 7).
 
 ## Riesgos
 

@@ -1257,8 +1257,16 @@ Verificado contra la API real el 2026-11-07. Como `epidemiologia`, en agosto de 
 **Cómo se hará:** Gráfica de líneas de Recharts (componente Chart de shadcn/ui) en la pantalla de indicadores, con series por periodo.
 
 **Criterios de aceptación:**
-- [ ] Puedo elegir dos o más periodos para comparar.
-- [ ] La gráfica muestra la evolución mensual de la cobertura real de una vacuna y municipio (no la proyección, que es HU-39).
+- [x] Puedo elegir dos o más periodos para comparar.
+- [x] La gráfica muestra la evolución mensual de la cobertura real de una vacuna y municipio (no la proyección, que es HU-39).
+
+**Avance (2026-11-07):** criterios cumplidos; queda terminada al integrar el spec 51 a `main`. Backend y frontend, en `specs/indicadores/51-hu-43-comparar-cobertura-entre-periodos.md`. «Indicadores» tiene, debajo del panel de gráficas, la tarjeta «Comparar periodos», con la vacuna y el municipio de los filtros (el único visible, o la DDRISS) y el indicador de cobertura del panel. Tiene dos modos: «Por año» (una línea por año con la cobertura real, dosis acumuladas ÷ población anual) y «Por mes» (barras con lo vacunado en cada mes elegido, el acumulado menos el del mes anterior). Se eligen de 2 a 5 periodos, que van en la URL (`comparar`, `anios`, `meses`), y una tabla da la diferencia en pp (y en dosis por mes) con ▲ o ▼. La API agrega `poblacionAnual` a cada punto de `GET /indicadores/serie` y el endpoint `GET /indicadores/meses-calculados` (los años y meses con corrida vigente). El script `backend/db/11_comparacion_2025_mysql.js` deja un 2025 ficticio de la DDRISS San Marcos (calendario cerrado, población de 2026 × 0.98 y 12 corridas de los cuatro indicadores de la corrida 1, sin reportes). Diferencias con la historia, decididas por el equipo:
+
+- Además de comparar años, se comparan meses sueltos, con lo vacunado en cada uno.
+- El año del corte llega hasta el mes de corte; los demás años, hasta su último mes con corrida.
+- Fuera: comparar brecha, deserción o proyección, la comparación en el mapa o en el Inicio, la exportación y los reportes de 2025.
+
+Verificado contra la API real el 2026-11-07, con el build servido por `vite preview`. Como `epidemiologia`, con el corte en agosto de 2026: 2025 contra 2026 da 53.8 % (12,935 de 24,058) contra 55.7 % (13,680 de 24,550), ▲ +1.9 pp, y Tacaná 53.1 % contra 54.7 %, +1.6 pp. «Por mes» da 1,621 dosis en agosto de 2025 (12,935 − 11,314), «Sin dato del mes anterior» en agosto de 2026 (julio no tiene corrida) y 0 dosis en septiembre de 2026; la misma URL abre la misma comparación. Como `autoridad.nacional`, las peticiones llevan `ddrissId=1` y la serie de 2026 se pide una sola vez (la comparte con la línea de avance). A 390 px no hay desplazamiento horizontal fuera de la tabla, y la consola queda sin errores.
 
 #### HU-44. Señalar coberturas mayores al 100 %
 

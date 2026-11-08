@@ -97,6 +97,16 @@ describe('puntosPorAnio', () => {
     expect(coberturaReal(punto(3, 50, { poblacionAnual: 200 }))).toBe(25)
   })
 
+  it('el año del corte llega hasta el mes de corte; los demás años van completos', () => {
+    const series = new Map([
+      [2025, [punto(8, 100), punto(9, 200), punto(10, 300)]],
+      [2026, [punto(8, 150), punto(9, 150, { parcial: true }), punto(10, 150, { parcial: true })]],
+    ])
+    const lineas = puntosPorAnio(series, [2025, 2026], AGOSTO_2026)
+    expect(lineas.map((l) => [l.anio, l.valores.map((v) => v.mes)])).toEqual([[2025, [8, 9, 10]], [2026, [8]]])
+    expect(filasPorAnio(lineas).filter((f) => f.diferencia).map((f) => f.mes)).toEqual([8])
+  })
+
   it('marca el año sin cálculo del indicador y el año sin población', () => {
     const series = new Map([[2025, [punto(1, 100, { poblacionAnual: null })]], [2024, []]])
     expect(puntosPorAnio(series, [2023, 2024, 2025]).map((l) => l.motivo)).toEqual([
@@ -148,6 +158,14 @@ describe('diferencias', () => {
     })
     expect(diferencias({ porcentaje: 12, dosis: 120 }, { porcentaje: 12.01, dosis: 120 }).sentido).toBe('igual')
     expect(diferencias(null, { porcentaje: 12 })).toBeNull()
+  })
+
+  it('resta los porcentajes ya redondeados a un decimal, como se muestran', () => {
+    // 55.72 − 53.77 = 1.95, pero se muestran 55.7 % y 53.8 %: la diferencia es 1.9.
+    expect(diferencias({ porcentaje: 53.766, dosis: 12935 }, { porcentaje: 55.723, dosis: 13680 })).toEqual({
+      pp: 1.9, dosis: 745, sentido: 'sube',
+    })
+    expect(diferencias({ porcentaje: 12.04 }, { porcentaje: 11.96 }).sentido).toBe('igual')
   })
 
   it('por mes compara cada mes contra el primero con datos', () => {

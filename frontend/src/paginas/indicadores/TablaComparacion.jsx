@@ -18,7 +18,7 @@ function Diferencia({ diferencia, conDosis = false }) {
   return (
     <span className={cn('whitespace-nowrap font-mono', CLASES[sentido])}>
       <span aria-hidden="true">{MARCAS[sentido]} </span>
-      {conSigno(Math.round(pp * 10) / 10, formatoPorcentaje)} pp
+      {conSigno(pp, formatoPorcentaje)} pp
       {conDosis && dosis != null ? ` · ${conSigno(dosis, formatoEntero)} dosis` : ''}
     </span>
   )
