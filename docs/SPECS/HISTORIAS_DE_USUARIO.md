@@ -1279,10 +1279,18 @@ Verificado contra la API real el 2026-11-07, con el build servido por `vite prev
 **Cómo se hará:** Regla en el cálculo de indicadores que marca el resultado y genera una advertencia.
 
 **Criterios de aceptación:**
-- [ ] Toda cobertura mayor a 100 % aparece marcada en tablas y mapa.
-- [ ] La marca indica que debe revisarse el denominador o los registros.
+- [x] Toda cobertura mayor a 100 % aparece marcada en tablas y mapa.
+- [x] La marca indica que debe revisarse el denominador o los registros.
 
 **Nota (2026-11-07, spec 50):** el mapa (`paginas/mapa/`) pinta hoy una cobertura mayor al 100 % con la franja verde, como cualquier valor sobre el corte. La marca puede ir en el tooltip (`lineasDelTooltip` de `mapaTerritorial.js`), en el panel (`PanelMunicipio.jsx`) y en la cifra de la clasificación (`cifraDelModo`); en el mapa de agosto de 2026, San Marcos (100.9 %), El Rodeo (102.8 %) y Esquipulas Palo Gordo (106.1 %) sirven de ejemplo.
+
+**Avance (2026-11-08):** criterios cumplidos; queda terminada al integrar el spec 52 a `main`. Backend y frontend, en `specs/indicadores/52-hu-44-senalar-coberturas-mayores-al-100.md`. Cada `ResultadoIndicador` trae `mayorACien`, calculado al leer con `mayorACien` de `calculadores.js` (sin cambiar la base): `true` en `COBERTURA`, `AVANCE_META_MES` y `BRECHA` con valor mayor a 100, y `false` en la deserción, la proyección y las filas no calculables. En «Indicadores», las tablas de cobertura y avance llevan un ícono de alerta con texto accesible junto al valor y la de brecha junto al nombre, y un aviso sobre la tabla nombra los municipios marcados que se ven. En el mapa, los modos Cobertura y Brecha agregan «Revisar» al tooltip y el ícono a la clasificación, y el panel muestra la marca (en cualquier modo, si la cobertura del municipio está marcada); el semáforo y los polígonos no cambian. Diferencias con la historia, decididas por el equipo:
+
+- La «advertencia» es la marca y el aviso en pantalla; la fila en `alerta` la crea HU-51.
+- Se marca el valor tal como se calcula, con o sin prorrateo: con `MENSUAL_LINEAL`, pasar el 100 % de la meta del mes no siempre es un error, y el texto pide revisar sin afirmarlo.
+- Fuera: la marca en las gráficas, «Comparar periodos», el Inicio y los informes, y marcar la proyección o la deserción.
+
+Verificado contra la API real el 2026-11-08, con el build servido por `vite preview`. Como `epidemiologia`, en agosto de 2026 (corrida 291): `AVANCE_HEXA3` y `COB_HEXA3` marcan San Marcos (100.9 %), El Rodeo (102.8 %) y Esquipulas Palo Gordo (106.1 %), y el aviso dice «3 municipios con cobertura mayor al 100 %: El Rodeo, Esquipulas Palo Gordo, San Marcos.»; con el filtro de municipios, solo nombra los que se ven. La brecha no tiene filas sobre 100, y la proyección (El Rodeo 101.9 %, Esquipulas 106.0 %, San Marcos 102.7 %) y la deserción no llevan marca. En el mapa, los tooltips de San Marcos y El Rodeo terminan en «Revisar», la clasificación marca los tres y el panel de El Rodeo muestra el ícono y el texto (también en Deserción, sin el ícono). A 390 px no hay desplazamiento horizontal, y la consola queda sin errores.
 
 ### Sprint 5 (03/11 – 12/11): Reportes, alertas y auditoría
 
@@ -1394,6 +1402,8 @@ Verificado contra la API real el 2026-11-07, con el build servido por `vite prev
 **Nota (2026-11-04, spec 44):** las corridas se guardan en `guardarCorrida` (`modulos/indicadores/corridas.service.js`), en una transacción por DDRISS, año y mes: las alertas pueden escribirse ahí con los resultados recién calculados (`resultado_indicador_id`). La configuración trae `alerta: { generar, tipo, rol_destino }`, que el motor todavía no usa. Una corrida `FALLIDA` no tiene resultados.
 
 **Nota (2026-11-05, spec 48):** el Inicio ya tiene las tarjetas de alertas («Alertas activas» de Epidemiología y «Alertas de calidad y de proceso» del Revisor), en «Sin datos todavía». Para llenarlas, agregar su `Datos` y sus `permisos` en `paginas/inicio/roles/` (`TarjetasDelInicio`); la columna «Alertas que requieren acción» de `Main.html` iría junto a «Avance del cierre» (`AvanceCierre.jsx`).
+
+**Nota (2026-11-08, spec 52):** cada resultado ya trae `mayorACien` (calculado al leer con `mayorACien` y `TIPOS_CON_TOPE` de `modulos/indicadores/calculadores.js`): la alerta «la cobertura supera el 100 %» puede crearse con esa misma función sobre las filas recién calculadas en `guardarCorrida`. Las pantallas ya muestran la marca (`paginas/indicadores/MarcaMayorACien.jsx`).
 
 **Criterios de aceptación:**
 - [ ] Se crea una alerta cuando el avance de un municipio queda en el rango más bajo del semáforo (menos de 80 %, provisional).

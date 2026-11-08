@@ -57,3 +57,31 @@ test('sin suma municipal (la DDRISS no es calculable) no muestra la línea', () 
   expect(screen.queryByText(/Suma de lo que falta/)).toBeNull()
   expect(screen.getAllByText('Sin población')).toHaveLength(2)
 })
+
+test('marca junto al nombre los municipios y la DDRISS con cobertura mayor al 100 %, y el aviso los nombra (SPEC 52)', () => {
+  const texto = 'Mayor al 100 %: revise la población (denominador) o los registros.'
+  render(
+    <TablaBrecha
+      resultados={[
+        fila(null, { mayorACien: true }),
+        fila(municipio(1, 'Tacaná')),
+        fila(municipio(2, 'El Rodeo'), { brechaDosis: 0, excedenteDosis: 30, mayorACien: true }),
+      ]}
+    />,
+  )
+
+  const tabla = within(screen.getByRole('table'))
+  const marcas = (nombre) => within(tabla.getByText(nombre).closest('td')).queryAllByRole('img', { name: texto })
+  expect(marcas('El Rodeo')).toHaveLength(1)
+  expect(marcas('Total de la DDRISS')).toHaveLength(1)
+  expect(marcas('Tacaná')).toHaveLength(0)
+  expect(screen.getByText(
+    'Cobertura mayor al 100 %: Total de la DDRISS, El Rodeo. Revise la población (denominador) o los registros.',
+  )).toBeTruthy()
+})
+
+test('sin filas marcadas, la tabla de brecha no tiene aviso', () => {
+  render(<TablaBrecha resultados={[fila(null), fila(municipio(1, 'Tacaná'))]} />)
+
+  expect(screen.queryByText(/mayor al 100 %/)).toBeNull()
+})

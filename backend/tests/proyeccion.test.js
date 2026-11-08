@@ -267,6 +267,7 @@ describe('PROYECCION con corte a abril', () => {
       anio: ANIO,
       mes: 4,
       esProyeccion: true,
+      mayorACien: false,
       numerador: 340,
       denominador: POBLACION_SM,
       valor: 85,

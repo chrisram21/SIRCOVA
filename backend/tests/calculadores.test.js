@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   CALCULADORES, calcularContraMeta, calcularDesercion, calcularProyeccion, colorDelValor, filtroCanonico,
-  metaYExcedente, sumaBrechasMunicipales,
+  mayorACien, metaYExcedente, sumaBrechasMunicipales,
 } from '../src/modulos/indicadores/calculadores.js';
 
 // Las fórmulas son puras: cada caso arma la versión, los numeradores y las poblaciones en memoria, sin base.
@@ -380,5 +380,22 @@ describe('colorDelValor', () => {
     expect(colorDelValor(ascendente, null, 'COBERTURA')).toBeNull();
     expect(colorDelValor([], 50, 'COBERTURA')).toBeNull();
     expect(colorDelValor(undefined, 50, 'COBERTURA')).toBeNull();
+  });
+});
+
+describe('mayorACien (SPEC 52)', () => {
+  it('marca COBERTURA, AVANCE_META_MES y BRECHA con valor mayor a 100, y no con 100', () => {
+    for (const tipoCalculo of ['COBERTURA', 'AVANCE_META_MES', 'BRECHA']) {
+      expect(mayorACien({ tipoCalculo, valor: 100.0001, esProyeccion: false }), tipoCalculo).toBe(true);
+      expect(mayorACien({ tipoCalculo, valor: 100, esProyeccion: false }), tipoCalculo).toBe(false);
+    }
+  });
+
+  it('no marca la deserción, la proyección, una fila sin valor ni una sin tipo', () => {
+    expect(mayorACien({ tipoCalculo: 'DESERCION', valor: 120, esProyeccion: false })).toBe(false);
+    expect(mayorACien({ tipoCalculo: 'PROYECCION', valor: 130, esProyeccion: true })).toBe(false);
+    expect(mayorACien({ tipoCalculo: 'COBERTURA', valor: 130, esProyeccion: true })).toBe(false);
+    expect(mayorACien({ tipoCalculo: 'COBERTURA', valor: null, esProyeccion: false })).toBe(false);
+    expect(mayorACien({ tipoCalculo: null, valor: 130, esProyeccion: false })).toBe(false);
   });
 });

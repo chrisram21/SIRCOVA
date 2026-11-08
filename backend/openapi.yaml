@@ -8215,7 +8215,7 @@ components:
 
     ResultadoIndicador:
       type: object
-      required: [indicadorCodigo, indicadorVersion, tipoCalculo, municipio, vacuna, dosis, filtroDimensiones, anio, mes, numerador, denominador, valor, meta, brechaDosis, cumpleMeta, calculable, color, esProyeccion, metaDosis, excedenteDosis, sumaBrechasMunicipales, proyeccion]
+      required: [indicadorCodigo, indicadorVersion, tipoCalculo, municipio, vacuna, dosis, filtroDimensiones, anio, mes, numerador, denominador, valor, meta, brechaDosis, cumpleMeta, calculable, color, esProyeccion, mayorACien, metaDosis, excedenteDosis, sumaBrechasMunicipales, proyeccion]
       properties:
         indicadorCodigo: { type: string, example: AVANCE_HEXA3 }
         indicadorVersion: { type: integer, description: Versión de `configuracion_indicadores` usada, example: 1 }
@@ -8266,6 +8266,14 @@ components:
           description: Franja del semáforo de la versión usada; `null` sin umbrales o sin valor
           example: verde
         esProyeccion: { type: boolean, description: "`true` en `PROYECCION`: es una estimación, no un dato registrado", example: false }
+        mayorACien:
+          type: boolean
+          description: |
+            `true` si el tipo es `COBERTURA`, `AVANCE_META_MES` o `BRECHA`, la fila no es una proyección y `valor` es
+            mayor a 100 (SPEC 52): pide revisar la población (denominador) o los registros. Compara el `valor`
+            guardado, así que 100.0001 se marca aunque se muestre como 100.0 %. `false` en la deserción, la
+            proyección, las filas no calculables y si la versión ya no está en MongoDB. Se calcula al leer.
+          example: false
         metaDosis:
           type: integer
           nullable: true
