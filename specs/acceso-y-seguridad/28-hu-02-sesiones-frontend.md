@@ -205,7 +205,7 @@ El equipo decidió que **la sesión se mantiene**. Si se dejara como hoy (volver
 | `frontend/src/paginas/usuarios/PaginaUsuarios.test.jsx`, `PaginaRegistrarPersonal.test.jsx` | Un caso más: la contraseña generada no está en la sesión en memoria |
 | `docs/SPECS/HISTORIAS_DE_USUARIO.md`, `CLAUDE.md` | Avance de HU-02 y notas |
 | Solo si falla el paso 6: `backend/src/config/entorno.js`, `backend/.env.example` | La variable de desarrollo que quita `Secure` (no hizo falta) |
-| `backend/src/modulos/auth/cookieRefresh.js`, `backend/openapi.yaml`, `backend/tests/sesiones.test.js`, `specs/27-hu-02-sesiones-backend.md` | La cookie dura la jornada más 1 h (agregado en el paso 7) |
+| `backend/src/modulos/auth/cookieRefresh.js`, `backend/openapi.yaml`, `backend/tests/sesiones.test.js`, `specs/acceso-y-seguridad/27-hu-02-sesiones-backend.md` | La cookie dura la jornada más 1 h (agregado en el paso 7) |
 | `frontend/src/componentes/RutaConPermiso.test.jsx` | Un caso sin sesión espera el login con `findBy` (la pantalla de carga va antes) |
 
 `RutaProtegida.jsx` no cambia: `App` no la monta mientras `cargando`.

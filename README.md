@@ -102,7 +102,7 @@ Resumen de esas reglas:
 │   ├── backend/           ← INSTRUCCIONES_BACKEND.md
 │   ├── mockups/           ← descripción de pantallas y pantallas de referencia (pantallas/*.html)
 │   └── SPECS/             ← HISTORIAS_DE_USUARIO.md
-├── specs/                 ← un spec por historia de usuario (NN-slug.md)
+├── specs/                 ← un spec por historia de usuario, por módulo ({modulo}/NN-slug.md)
 ├── backend/
 │   ├── openapi.yaml
 │   ├── .env.example       ← variables sin valores reales
