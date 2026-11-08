@@ -2,6 +2,7 @@
 // y los límites. Funciones puras: las cuentas se prueban aquí y el mapa, el panel y la clasificación solo las dibujan.
 import { DESCENDENTE, TIPOS_INDICADOR } from '@/paginas/configuracion/tiposIndicador.js'
 import { indicadoresDeLaVacuna, vacunaDe } from '@/paginas/indicadores/panelIndicadores.js'
+import { TEXTO_MAYOR_A_CIEN } from '@/paginas/indicadores/MarcaMayorACien.jsx'
 import { dosisFinales } from '@/paginas/indicadores/TablaDesercion.jsx'
 import { COLOR_SEMAFORO, formatoEntero, porcentaje } from '@/paginas/indicadores/TarjetaGrafica.jsx'
 
@@ -246,6 +247,10 @@ export function rotulosDeLeyenda(modo, { indicador = null, clases = [], mesNombr
 
 const dosis = (n) => (n === null || n === undefined ? '—' : formatoEntero.format(n))
 
+// SPEC 52: en Cobertura y Brecha, la fila que pinta el modo puede pedir revisar una cobertura mayor al 100 %.
+export const marcadaEnModo = (modo, fila) =>
+  (modo === 'cobertura' || modo === 'brecha') && !fila.sinDatos && Boolean(fila.resultado?.mayorACien)
+
 // Lo que dice el tooltip de un municipio: [etiqueta, valor] por línea, o el motivo si no tiene datos.
 export function lineasDelTooltip(modo, fila, indicador = null) {
   if (fila.sinDatos) return [[fila.sinDatos, '']]
@@ -268,12 +273,14 @@ export function lineasDelTooltip(modo, fila, indicador = null) {
     ['Dosis aplicadas', dosis(r.numerador)],
     ['Meta en dosis', dosis(r.metaDosis)],
   ]
-  if (modo === 'brecha') return [['Dosis por aplicar', dosis(r.brechaDosis)], ...contraMeta]
+  const revisar = marcadaEnModo(modo, fila) ? [['Revisar', TEXTO_MAYOR_A_CIEN]] : []
+  if (modo === 'brecha') return [['Dosis por aplicar', dosis(r.brechaDosis)], ...contraMeta, ...revisar]
   return [
     [indicador?.tipoCalculo === 'AVANCE_META_MES' ? 'Avance' : 'Cobertura', r.valor === null ? '—' : porcentaje(r.valor)],
     ...contraMeta,
     ['Meta', r.meta === null ? '—' : porcentaje(r.meta)],
     ['Dosis por aplicar', dosis(r.brechaDosis)],
+    ...revisar,
   ]
 }
 

@@ -19,6 +19,7 @@ import { TIPOS_INDICADOR } from '../configuracion/tiposIndicador.js'
 import BarraFiltrosIndicadores from './BarraFiltrosIndicadores.jsx'
 import DialogoCalcularIndicadores, { avisoDeMesesSinCerrar } from './DialogoCalcularIndicadores.jsx'
 import InsigniaValor from './InsigniaValor.jsx'
+import { AvisoMayorACien, MarcaMayorACien } from './MarcaMayorACien.jsx'
 import PanelGraficas from './PanelGraficas.jsx'
 import {
   filasDe,
@@ -114,40 +115,46 @@ export function textoDosisQueFaltan({ brechaDosis, excedenteDosis }) {
 function TablaResultados({ resultados, tipoCalculo }) {
   const etiquetaValor = tipoCalculo === 'COBERTURA' ? 'Cobertura' : 'Avance'
   return (
-    <div className="overflow-x-auto rounded-lg border bg-card">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Municipio</TableHead>
-            <TableHead className="text-right">Dosis acumuladas</TableHead>
-            <TableHead className="text-right">{tipoCalculo === 'COBERTURA' ? 'Población' : 'Meta del mes'}</TableHead>
-            <TableHead className="text-right">{etiquetaValor}</TableHead>
-            <TableHead className="text-right">Meta</TableHead>
-            <TableHead className="text-right">Dosis que faltan</TableHead>
-            <TableHead>Cumple</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {resultados.map((r) => {
-            const departamental = r.municipio === null
-            return (
-              <TableRow key={r.municipio?.id ?? 'ddriss'} className={cn(departamental && 'bg-muted/50 font-semibold')}>
-                <TableCell>{departamental ? 'Total de la DDRISS' : r.municipio.nombre}</TableCell>
-                <TableCell className="text-right font-mono">{formatoEntero.format(r.numerador ?? 0)}</TableCell>
-                <TableCell className="text-right font-mono">
-                  {r.denominador === null ? '—' : formatoDecimal.format(r.denominador)}
-                </TableCell>
-                <TableCell className="text-right">
-                  <InsigniaValor resultado={r} />
-                </TableCell>
-                <TableCell className="text-right font-mono">{r.meta === null ? '—' : `${formatoDecimal.format(r.meta)} %`}</TableCell>
-                <TableCell className="text-right font-mono">{textoDosisQueFaltan(r)}</TableCell>
-                <TableCell>{textoCumple(r.cumpleMeta)}</TableCell>
-              </TableRow>
-            )
-          })}
-        </TableBody>
-      </Table>
+    <div className="flex flex-col gap-2">
+      <AvisoMayorACien resultados={resultados} />
+      <div className="overflow-x-auto rounded-lg border bg-card">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Municipio</TableHead>
+              <TableHead className="text-right">Dosis acumuladas</TableHead>
+              <TableHead className="text-right">{tipoCalculo === 'COBERTURA' ? 'Población' : 'Meta del mes'}</TableHead>
+              <TableHead className="text-right">{etiquetaValor}</TableHead>
+              <TableHead className="text-right">Meta</TableHead>
+              <TableHead className="text-right">Dosis que faltan</TableHead>
+              <TableHead>Cumple</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {resultados.map((r) => {
+              const departamental = r.municipio === null
+              return (
+                <TableRow key={r.municipio?.id ?? 'ddriss'} className={cn(departamental && 'bg-muted/50 font-semibold')}>
+                  <TableCell>{departamental ? 'Total de la DDRISS' : r.municipio.nombre}</TableCell>
+                  <TableCell className="text-right font-mono">{formatoEntero.format(r.numerador ?? 0)}</TableCell>
+                  <TableCell className="text-right font-mono">
+                    {r.denominador === null ? '—' : formatoDecimal.format(r.denominador)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <span className="inline-flex items-center justify-end gap-1.5">
+                      <InsigniaValor resultado={r} />
+                      {r.mayorACien && <MarcaMayorACien />}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right font-mono">{r.meta === null ? '—' : `${formatoDecimal.format(r.meta)} %`}</TableCell>
+                  <TableCell className="text-right font-mono">{textoDosisQueFaltan(r)}</TableCell>
+                  <TableCell>{textoCumple(r.cumpleMeta)}</TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   )
 }

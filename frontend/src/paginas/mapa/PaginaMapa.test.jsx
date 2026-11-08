@@ -318,3 +318,32 @@ test('la Autoridad nacional elige la DDRISS, que va en la URL y en lo que se pid
   await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&ddriss=2'))
   await waitFor(() => expect(listarResultados).toHaveBeenLastCalledWith({ anio: 2026, mes: 10, ddrissId: 2 }))
 })
+
+test('la cobertura mayor al 100 % lleva la marca en la clasificación y el aviso en el panel (SPEC 52)', async () => {
+  const texto = 'Mayor al 100 %: revise la población (denominador) o los registros.'
+  listarResultados.mockResolvedValue({
+    corrida: CORRIDA,
+    resultados: RESULTADOS.map((r) => (r.indicadorCodigo === 'AVANCE_HEXA3' && r.municipio?.id === SIBINAL.id
+      ? { ...r, valor: 102.8, color: 'verde', brechaDosis: 0, mayorACien: true }
+      : r)),
+  })
+  const router = montar()
+  await poligono('San Marcos')
+  pestana('Clasificación')
+
+  const fila = (nombre) => clasificacion().getByRole('button', { name: new RegExp(nombre) })
+  expect(within(fila('Sibinal')).queryAllByRole('img', { name: texto })).toHaveLength(1)
+  expect(within(fila('Tacaná')).queryAllByRole('img', { name: texto })).toHaveLength(0)
+
+  fireEvent.click(fila('Sibinal'))
+  await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&municipio=8'))
+  const panel = within(screen.getByRole('tabpanel'))
+  expect(panel.getByRole('img', { name: texto })).toBeTruthy()
+  expect(panel.getByText(texto, { selector: 'p' })).toBeTruthy()
+
+  // En Deserción la clasificación no lleva la marca, pero el panel la sigue diciendo (muestra los datos de cobertura).
+  pestana('Deserción')
+  await waitFor(() => expect(router.state.location.search).toContain('modo=desercion'))
+  pestana('Municipio')
+  expect(within(screen.getByRole('tabpanel')).getByText(texto, { selector: 'p' })).toBeTruthy()
+})

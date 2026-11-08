@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils'
-import { cifraDelModo, ordenDeClasificacion } from './mapaTerritorial.js'
+import { MarcaMayorACien } from '@/paginas/indicadores/MarcaMayorACien.jsx'
+import { cifraDelModo, marcadaEnModo, ordenDeClasificacion } from './mapaTerritorial.js'
 
 // SPEC 50: los municipios del más rezagado al menos según el modo. Cada fila es un botón, así se elige un municipio
 // con el teclado (los polígonos del mapa no reciben el foco).
@@ -34,6 +35,7 @@ export default function ClasificacionMunicipios({ filas, modo, seleccionado, onE
                 style={{ backgroundColor: fila.color }}
               />
               <span className="min-w-0 flex-1 truncate">{fila.nombre}</span>
+              {marcadaEnModo(modo, fila) && <MarcaMayorACien />}
               <span className={cn('shrink-0 font-mono text-xs', fila.sinDatos ? 'text-muted-foreground' : 'font-medium')}>
                 {cifraDelModo(modo, fila)}
               </span>

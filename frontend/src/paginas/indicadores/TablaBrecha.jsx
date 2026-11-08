@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
+import { AvisoMayorACien, MarcaMayorACien } from './MarcaMayorACien.jsx'
 
 // SPEC 45: los resultados de un indicador BRECHA, con lo que falta o el excedente por municipio. La fila de la
 // DDRISS compara el total del departamento; la suma municipal, debajo, no deja que los excedentes compensen.
@@ -35,6 +36,7 @@ export default function TablaBrecha({ resultados }) {
   const suma = filas.find((r) => r.municipio === null)?.sumaBrechasMunicipales ?? null
   return (
     <div className="flex flex-col gap-2">
+      <AvisoMayorACien resultados={filas} />
       <div className="overflow-x-auto rounded-lg border bg-card">
         <Table>
           <TableHeader>
@@ -52,7 +54,10 @@ export default function TablaBrecha({ resultados }) {
               const departamental = r.municipio === null
               return (
                 <TableRow key={r.municipio?.id ?? 'ddriss'} className={cn(departamental && 'bg-muted/50 font-semibold')}>
-                  <TableCell>{departamental ? 'Total de la DDRISS' : r.municipio.nombre}</TableCell>
+                  <TableCell>
+                    {departamental ? 'Total de la DDRISS' : r.municipio.nombre}
+                    {r.mayorACien && <MarcaMayorACien className="ml-1.5" />}
+                  </TableCell>
                   <TableCell className="text-right font-mono">{formatoEntero.format(r.numerador ?? 0)}</TableCell>
                   <TableCell className="text-right font-mono">
                     {r.calculable ? formatoEntero.format(r.metaDosis) : <span className="font-sans text-muted-foreground">Sin población</span>}

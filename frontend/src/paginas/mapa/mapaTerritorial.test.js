@@ -301,6 +301,15 @@ describe('lineasDelTooltip', () => {
     ])
   })
 
+  test('con mayorACien, Cobertura y Brecha agregan «Revisar»; Deserción no (SPEC 52)', () => {
+    const revisar = ['Revisar', 'Mayor al 100 %: revise la población (denominador) o los registros.']
+    const marcada = { ...conResultado, resultado: { ...resultado, valor: 102.8, mayorACien: true } }
+    expect(lineasDelTooltip('cobertura', marcada, indicador('A', 'AVANCE_META_MES')).at(-1)).toEqual(revisar)
+    expect(lineasDelTooltip('brecha', marcada).at(-1)).toEqual(revisar)
+    expect(lineasDelTooltip('desercion', marcada)).not.toContainEqual(revisar)
+    expect(lineasDelTooltip('cobertura', conResultado)).not.toContainEqual(revisar)
+  })
+
   test('Estado da los esperados y solo los estados con reportes; sin datos, el motivo', () => {
     const fila = { sinDatos: null, avance: { esperados: 4, conteos: conteos({ SIN_ENVIAR: 1, APROBADO: 3 }) } }
     expect(lineasDelTooltip('estado', fila)).toEqual([

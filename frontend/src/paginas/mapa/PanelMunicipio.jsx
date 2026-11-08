@@ -1,8 +1,9 @@
 import { ArrowRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import { MarcaMayorACien, TEXTO_MAYOR_A_CIEN } from '@/paginas/indicadores/MarcaMayorACien.jsx'
 import { formatoEntero, porcentaje } from '@/paginas/indicadores/TarjetaGrafica.jsx'
-import { COLOR_ESTADO, TITULO_ESTADO, cifraDelModo, estadoMasAtrasado } from './mapaTerritorial.js'
+import { COLOR_ESTADO, TITULO_ESTADO, cifraDelModo, estadoMasAtrasado, marcadaEnModo } from './mapaTerritorial.js'
 
 const dosis = (n) => (n === null || n === undefined ? '—' : formatoEntero.format(n))
 
@@ -68,6 +69,9 @@ export default function PanelMunicipio({
   const atrasado = estadoMasAtrasado(avance?.conteos)
   const conBarra = modo === 'cobertura' && !fila.sinDatos && fila.resultado?.valor !== null
   const cifraEnNumeros = !fila.sinDatos && modo !== 'estado'
+  const marcada = marcadaEnModo(modo, fila)
+  // El panel muestra siempre los datos de cobertura: su marca vale en cualquier modo.
+  const revisar = marcada || Boolean(cobertura?.mayorACien)
 
   return (
     <div className="flex flex-col gap-4">
@@ -92,9 +96,11 @@ export default function PanelMunicipio({
           >
             {cifraDelModo(modo, fila)}
           </span>
+          {marcada && <MarcaMayorACien className="size-5 self-center" />}
           {cifraEnNumeros && franja && <Muestra color={fila.color}>{franja}</Muestra>}
         </div>
         {conBarra && <BarraDeAvance valor={fila.resultado.valor} meta={fila.resultado.meta} color={fila.color} />}
+        {revisar && <p className="text-sm text-advertencia-foreground">{TEXTO_MAYOR_A_CIEN}</p>}
       </div>
 
       <dl className="flex flex-col">

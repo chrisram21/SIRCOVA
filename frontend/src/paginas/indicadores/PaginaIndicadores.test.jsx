@@ -614,3 +614,53 @@ describe('comparar periodos (SPEC 51)', () => {
     expect(llamadasDe(2025)).toHaveLength(2)
   })
 })
+
+describe('coberturas mayores al 100 % (SPEC 52)', () => {
+  const TEXTO = 'Mayor al 100 %: revise la población (denominador) o los registros.'
+  const EL_RODEO = { id: 12, nombre: 'El Rodeo' }
+  const conMarcas = (cambiosDes = {}) => listarResultados.mockResolvedValue({
+    corrida: corrida(),
+    resultados: [
+      ...RESULTADOS.filter((r) => !(r.indicadorCodigo === 'DES_HEXA1_3' && r.municipio?.id === SAN_MARCOS.id)),
+      resultado('AVANCE_HEXA3', EL_RODEO, { numerador: 514, denominador: 500, valor: 102.8, brechaDosis: 0, color: 'verde', mayorACien: true }),
+      resultado('DES_HEXA1_3', SAN_MARCOS, { ...DES_FILA, numerador: 60, denominador: 50, valor: 120, color: 'rojo', mayorACien: false, ...cambiosDes }),
+    ],
+  })
+  const marcas = (fila) => within(fila).queryAllByRole('img', { name: TEXTO })
+
+  test('marca el valor mayor al 100 % y el aviso nombra al municipio', async () => {
+    conMarcas()
+    await montar()
+    await screen.findByText('Total de la DDRISS')
+
+    expect(marcas(filaDe('El Rodeo'))).toHaveLength(1)
+    expect(marcas(filaDe('San Marcos'))).toHaveLength(0)
+    expect(screen.getByText('1 municipio con cobertura mayor al 100 %: El Rodeo. Revise la población (denominador) o los registros.')).toBeTruthy()
+  })
+
+  test('el aviso solo cuenta los municipios visibles', async () => {
+    conMarcas()
+    await montar({ url: '/indicadores?municipios=1' })
+    await screen.findByText('Total de la DDRISS')
+
+    expect(screen.queryByText(/con cobertura mayor al 100 %/)).toBeNull()
+  })
+
+  test('sin filas marcadas no hay aviso', async () => {
+    await montar()
+    await screen.findByText('Total de la DDRISS')
+
+    expect(screen.queryByText(/con cobertura mayor al 100 %/)).toBeNull()
+    expect(screen.queryAllByRole('img', { name: TEXTO })).toHaveLength(0)
+  })
+
+  test('la deserción no lleva la marca aunque pase de 100', async () => {
+    conMarcas()
+    await montar({ url: '/indicadores?indicador=DES_HEXA1_3' })
+    await screen.findByText('Total de la DDRISS')
+
+    expect(filaDe('San Marcos').textContent).toContain('120.0 %')
+    expect(screen.queryAllByRole('img', { name: TEXTO })).toHaveLength(0)
+    expect(screen.queryByText(/con cobertura mayor al 100 %/)).toBeNull()
+  })
+})
