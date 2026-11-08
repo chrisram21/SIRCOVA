@@ -3,7 +3,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import PantallaCargaSesion from '@/componentes/PantallaCargaSesion.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import RutaConPermiso from '@/componentes/RutaConPermiso.jsx'
-import RutaProtegida, { RUTA_CAMBIO_CONTRASENA, RUTA_PERFIL } from '@/componentes/RutaProtegida.jsx'
+import RutaProtegida, { RUTA_CAMBIO_CONTRASENA, RUTA_CREDITOS, RUTA_PERFIL } from '@/componentes/RutaProtegida.jsx'
 import Layout from '@/componentes/layout/Layout.jsx'
 import RedireccionRutaVieja, { RUTAS_VIEJAS } from '@/componentes/layout/RedireccionRutaVieja.jsx'
 import { rutasDelMenu } from '@/componentes/layout/opcionesMenu.js'
@@ -13,6 +13,7 @@ import PaginaEnConstruccion from '@/paginas/en-construccion/PaginaEnConstruccion
 import PaginaLogin from '@/paginas/login/PaginaLogin.jsx'
 
 const PaginaMiPerfil = lazy(() => import('@/paginas/cuenta/PaginaMiPerfil.jsx'))
+const PaginaCreditos = lazy(() => import('@/paginas/creditos/PaginaCreditos.jsx'))
 
 // Un hijo de un padre del menú pide todos sus `permisos`; una opción o una subruta, su `permiso`.
 function elementoDe({ titulo, permiso, permisos = permiso ? [permiso] : [], pagina: Pagina = PaginaEnConstruccion }) {
@@ -61,6 +62,7 @@ export default function App() {
       >
         {!debeCambiar && <Route path={RUTA_CAMBIO_CONTRASENA} element={<PaginaCambiarContrasena />} />}
         <Route path={RUTA_PERFIL} element={<PaginaMiPerfil />} />
+        <Route path={RUTA_CREDITOS} element={<PaginaCreditos />} />
         {rutasDelMenu().map((ruta) => (
           <Route key={ruta.ruta} path={ruta.ruta} element={elementoDe(ruta)} />
         ))}

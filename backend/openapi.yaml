@@ -4233,11 +4233,21 @@ paths:
         `EN_CIERRE`; si no hay, el más antiguo `ABIERTO`; si no hay, el último `CERRADO`. Si la DDRISS no tiene
         ninguno, responde 200 con `periodo: null`, `esperados: 0` y los conteos en 0.
 
-        Con `periodoId`, ese mes; si no tiene `cierre_periodo` de la DDRISS, 404. Un parámetro inválido,
-        desconocido o repetido responde 400 `ENTRADA_INVALIDA`. `ddrissId`, como en `GET /indicadores/resultados`.
+        Con `periodoId`, ese mes; si no tiene `cierre_periodo` de la DDRISS, 404. Con `anio` y `mes` (SPEC 50),
+        el mes del calendario con ese año y número, con la misma regla del 404: van juntos y no se combinan con
+        `periodoId`, y existen porque la Autoridad no tiene `PERIODO_CONSULTAR` para traducir el mes a su id. Un
+        parámetro inválido, desconocido o repetido responde 400 `ENTRADA_INVALIDA`. `ddrissId`, como en
+        `GET /indicadores/resultados`.
+
+        Con `desglose=municipio` (SPEC 50, el mapa territorial), la respuesta agrega `municipios`: los mismos
+        conteos por el municipio del establecimiento (el lugar donde se reporta, no la procedencia de las dosis).
+        Sin `desglose` no se hace esa consulta y la respuesta no trae `municipios`.
       x-permiso: REPORTE_AVANCE_CONSULTAR
       parameters:
         - { name: periodoId, in: query, schema: { type: integer, minimum: 1, example: 32 } }
+        - { name: anio, in: query, description: Con `mes`; no se combina con `periodoId`, schema: { type: integer, minimum: 2000, maximum: 2100, example: 2026 } }
+        - { name: mes, in: query, description: Con `anio`; no se combina con `periodoId`, schema: { type: integer, minimum: 1, maximum: 12, example: 9 } }
+        - { name: desglose, in: query, description: Agrega los conteos por municipio, schema: { type: string, enum: [municipio] } }
         - { $ref: "#/components/parameters/DdrissIdAutoridad" }
       responses:
         "200":
@@ -4257,6 +4267,15 @@ paths:
                 desconocido:
                   value:
                     error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: grupo." }
+                combinado:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Use periodoId o anio y mes, no los dos." }
+                incompleto:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "anio y mes van juntos." }
+                desglose:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "desglose solo admite el valor municipio." }
         "401": { $ref: "#/components/responses/NoAutenticado" }
         "403": { $ref: "#/components/responses/SinPermiso" }
         "404":
@@ -7408,17 +7427,37 @@ components:
             estado: { $ref: "#/components/schemas/EstadoPeriodo" }
             fechaLimiteEnvio: { type: string, format: date, example: "2026-09-10" }
         esperados: { type: integer, minimum: 0, description: El conteo de «Todos» de la bandeja, example: 30 }
-        conteos:
-          type: object
-          required: [SIN_ENVIAR, ENVIADO, EN_REVISION, CORRECCION_SOLICITADA, APROBADO, CERRADO]
-          additionalProperties: false
-          properties:
-            SIN_ENVIAR: { type: integer, minimum: 0, description: Sin reporte del mes o en `BORRADOR`, example: 2 }
-            ENVIADO: { type: integer, minimum: 0, example: 2 }
-            EN_REVISION: { type: integer, minimum: 0, example: 4 }
-            CORRECCION_SOLICITADA: { type: integer, minimum: 0, example: 3 }
-            APROBADO: { type: integer, minimum: 0, example: 5 }
-            CERRADO: { type: integer, minimum: 0, description: "`CERRADO` y `RECTIFICACION`", example: 14 }
+        conteos: { $ref: "#/components/schemas/ConteosAvance" }
+        municipios:
+          type: array
+          description: |
+            Solo con `desglose=municipio`. Un elemento por municipio con al menos un establecimiento contado, por
+            nombre; la suma de sus `esperados` y `conteos` es la de la DDRISS. Vacío con `periodo: null`.
+          items:
+            type: object
+            required: [municipio, esperados, conteos]
+            properties:
+              municipio:
+                type: object
+                required: [id, nombre, codigoIne]
+                properties:
+                  id: { type: integer, example: 3 }
+                  nombre: { type: string, example: Tacaná }
+                  codigoIne: { type: string, description: La llave del GeoJSON del mapa, example: "1203" }
+              esperados: { type: integer, minimum: 0, example: 4 }
+              conteos: { $ref: "#/components/schemas/ConteosAvance" }
+
+    ConteosAvance:
+      type: object
+      required: [SIN_ENVIAR, ENVIADO, EN_REVISION, CORRECCION_SOLICITADA, APROBADO, CERRADO]
+      additionalProperties: false
+      properties:
+        SIN_ENVIAR: { type: integer, minimum: 0, description: Sin reporte del mes o en `BORRADOR`, example: 2 }
+        ENVIADO: { type: integer, minimum: 0, example: 2 }
+        EN_REVISION: { type: integer, minimum: 0, example: 4 }
+        CORRECCION_SOLICITADA: { type: integer, minimum: 0, example: 3 }
+        APROBADO: { type: integer, minimum: 0, example: 5 }
+        CERRADO: { type: integer, minimum: 0, description: "`CERRADO` y `RECTIFICACION`", example: 14 }
 
     PeriodoCerrado:
       description: El mes ya cerrado (el mismo objeto de `GET /periodos`) y cuántos reportes pasaron a Cerrado
@@ -8034,12 +8073,24 @@ components:
           description: Los indicadores calculados con la versión usada (en la corrida de la semilla, sin bitácora, salen de sus resultados)
           items:
             type: object
-            required: [codigo, version, nombre, tipoCalculo]
+            required: [codigo, version, nombre, tipoCalculo, esIndicadorMapa, umbrales, umbralesProvisionales]
             properties:
               codigo: { type: string, example: COB_HEXA3 }
               version: { type: integer, example: 1 }
               nombre: { type: string, nullable: true, description: "`null` si la versión ya no está en MongoDB", example: Cobertura de Hexavalente 3.ª dosis }
               tipoCalculo: { type: string, nullable: true, example: COBERTURA }
+              esIndicadorMapa:
+                type: boolean
+                description: De la versión usada (SPEC 50); `false` si no lo tiene o si la versión ya no está en MongoDB
+                example: false
+              umbrales:
+                type: array
+                description: Las franjas del semáforo de la versión usada (la leyenda del mapa); vacío si no tiene
+                items: { $ref: "#/components/schemas/UmbralIndicador" }
+              umbralesProvisionales:
+                type: boolean
+                description: De la versión usada; `false` si no lo tiene
+                example: true
         omitidos:
           type: array
           description: Los indicadores que aplicaban y no se calcularon, con el motivo
@@ -8115,10 +8166,11 @@ components:
           type: object
           nullable: true
           description: "`null` en la fila departamental (toda la DDRISS)"
-          required: [id, nombre]
+          required: [id, nombre, codigoIne]
           properties:
             id: { type: integer, example: 1 }
             nombre: { type: string, example: San Marcos }
+            codigoIne: { type: string, description: La llave del GeoJSON del mapa (SPEC 50), example: "1201" }
         vacuna:
           type: object
           required: [codigo, nombre]

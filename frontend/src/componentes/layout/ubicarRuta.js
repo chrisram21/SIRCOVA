@@ -1,5 +1,5 @@
 import { matchPath } from 'react-router-dom'
-import { RUTA_CAMBIO_CONTRASENA, RUTA_PERFIL } from '@/componentes/RutaProtegida.jsx'
+import { RUTA_CAMBIO_CONTRASENA, RUTA_CREDITOS, RUTA_PERFIL } from '@/componentes/RutaProtegida.jsx'
 import opcionesMenu from './opcionesMenu.js'
 
 // Pantallas que no están en el menú.
@@ -7,6 +7,7 @@ const FUERA_DEL_MENU = {
   '/login': 'Iniciar sesión',
   [RUTA_CAMBIO_CONTRASENA]: 'Cambiar contraseña',
   [RUTA_PERFIL]: 'Mi perfil',
+  [RUTA_CREDITOS]: 'Créditos',
 }
 
 // La opción del menú, el hijo (si la opción es un padre) y la subruta de la ruta actual; hijo y subruta son null

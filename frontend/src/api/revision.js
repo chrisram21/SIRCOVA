@@ -24,9 +24,10 @@ export function listarRevisores() {
 
 // SPEC 48: cuántos reportes del mes hay en cada estado; sin periodoId, el mes que se está cerrando. Responde
 // { periodo, esperados, conteos }; ddrissId solo lo manda la Autoridad nacional.
-export function obtenerAvance({ periodoId, ddrissId } = {}) {
+// El mes va por periodoId o por anio + mes; desglose: 'municipio' agrega los conteos por municipio (SPEC 50).
+export function obtenerAvance({ periodoId, anio, mes, desglose, ddrissId } = {}) {
   const consulta = new URLSearchParams()
-  for (const [nombre, valor] of Object.entries({ periodoId, ddrissId })) {
+  for (const [nombre, valor] of Object.entries({ periodoId, anio, mes, desglose, ddrissId })) {
     if (valor !== undefined && valor !== null && valor !== '') consulta.set(nombre, String(valor))
   }
   const texto = consulta.toString()

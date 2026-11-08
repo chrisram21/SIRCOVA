@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils'
 
 const TODOS = 'todos'
 
-function Selector({ nombre, etiqueta, valor, alCambiar, opciones, className, placeholder }) {
+export function Selector({ nombre, etiqueta, valor, alCambiar, opciones, className, placeholder }) {
   return (
     <Select name={nombre} value={valor} onValueChange={alCambiar}>
       <SelectTrigger aria-label={etiqueta} className={cn('w-full bg-card', className)}>

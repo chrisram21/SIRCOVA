@@ -13,7 +13,7 @@ import { listarCorridas, listarResultados } from '@/api/indicadores.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
-import { MESES } from '@/lib/fechas.js'
+import { MESES, mesAnterior } from '@/lib/fechas.js'
 import { cn } from '@/lib/utils'
 import { TIPOS_INDICADOR } from '../configuracion/tiposIndicador.js'
 import BarraFiltrosIndicadores from './BarraFiltrosIndicadores.jsx'
@@ -59,10 +59,7 @@ const entero = (texto, minimo, maximo) =>
   /^\d+$/.test(texto ?? '') && Number(texto) >= minimo && Number(texto) <= maximo ? Number(texto) : undefined
 
 // Por defecto, el mes anterior al actual: el último que puede estar cerrado.
-export function mesPorDefecto(hoy = new Date()) {
-  const mes = hoy.getMonth() // 0 = enero → diciembre del año anterior
-  return mes === 0 ? { anio: hoy.getFullYear() - 1, mes: 12 } : { anio: hoy.getFullYear(), mes }
-}
+export const mesPorDefecto = mesAnterior
 
 const FORMATO_CODIGO = /^[A-Z0-9_]{1,40}$/
 const codigo = (texto) => (FORMATO_CODIGO.test(texto ?? '') ? texto : undefined)

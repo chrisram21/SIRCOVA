@@ -107,6 +107,14 @@
     --semaforo-verde: #8cc7a0;
     --semaforo-amarillo: #eeb48c;
     --semaforo-rojo: #e0998d;
+    /* Mapa territorial (SPEC 50): la brecha en una escala del azul de la marca, de la más clara (meta alcanzada) a la
+       más intensa, y «Sin enviar» en coral, porque --estado-borrador es casi blanco y se leería como «Sin datos». */
+    --mapa-brecha-1: #e8f1f9;
+    --mapa-brecha-2: #b5d4ee;
+    --mapa-brecha-3: #7fb2dc;
+    --mapa-brecha-4: #4683bb;
+    --mapa-brecha-5: #2f5f8a;
+    --mapa-sin-enviar: var(--semaforo-rojo);
     --radius: 0.5rem;
     --sidebar: #edf3f9;
     --sidebar-foreground: #34506b;
@@ -319,6 +327,61 @@
     scale: 0.98;
     }
 }
+
+/* Leaflet en el mapa territorial (SPEC 50), con los colores del tema. Van con .mapa-territorial delante para ganarle a
+   leaflet/dist/leaflet.css, que se carga después con la pantalla. */
+.mapa-territorial.leaflet-container {
+  background: var(--background);
+  font-family: var(--font-sans);
+  outline-offset: 2px;
+  }
+.mapa-territorial path.leaflet-interactive {
+  transition: fill 0.3s ease, stroke 0.15s ease, stroke-width 0.15s ease;
+  }
+.mapa-territorial path.leaflet-interactive:focus {
+  outline: none;
+  }
+.mapa-territorial .leaflet-bar {
+  border: 1px solid var(--border);
+  box-shadow: var(--sombra-tarjeta);
+  }
+.mapa-territorial .leaflet-bar a {
+  background-color: var(--card);
+  color: var(--foreground);
+  border-bottom-color: var(--border);
+  }
+.mapa-territorial .leaflet-bar a:hover,
+.mapa-territorial .leaflet-bar a:focus-visible {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+  }
+.mapa-territorial .leaflet-bar a.leaflet-disabled {
+  background-color: var(--muted);
+  color: var(--muted-foreground);
+  }
+.mapa-territorial .leaflet-control-attribution {
+  background: color-mix(in oklab, var(--card) 88%, transparent);
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.5;
+  border-top-left-radius: calc(var(--radius) - 2px);
+  }
+.mapa-territorial .leaflet-control-attribution a {
+  color: var(--enlace);
+  }
+.mapa-territorial .leaflet-tooltip.tooltip-municipio {
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--sombra-elevada);
+  padding: 8px 10px;
+  font-family: var(--font-sans);
+  white-space: nowrap;
+  }
+.mapa-territorial .leaflet-tooltip-top.tooltip-municipio::before {
+  border-top-color: var(--border);
+  }
 
 @media (prefers-reduced-motion: reduce) {
   *,
