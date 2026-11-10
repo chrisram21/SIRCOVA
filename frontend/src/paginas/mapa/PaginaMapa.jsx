@@ -234,12 +234,12 @@ export default function PaginaMapa({ hoy }) {
               {/* En el teléfono, dos filas de dos a todo el ancho: las cuatro en una no caben en 390 px. */}
               <TabsList
                 aria-label="Qué colorea el mapa"
-                className="grid h-auto! w-full grid-cols-2 sm:inline-flex sm:h-8! sm:w-fit"
+                className="grid h-auto! w-full grid-cols-2 bg-pestanas-mapa sm:inline-flex sm:h-8! sm:w-fit"
               >
                 {Object.entries(MODOS)
                   .filter(([codigo]) => codigo !== 'estado' || veAvance)
                   .map(([codigo, { etiqueta }]) => (
-                    <TabsTrigger key={codigo} value={codigo} className="px-3">
+                    <TabsTrigger key={codigo} value={codigo} className="px-3 aria-selected:bg-card aria-selected:shadow-sm">
                       {etiqueta}
                     </TabsTrigger>
                   ))}

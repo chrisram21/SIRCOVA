@@ -31,6 +31,7 @@
     --color-cambio-pendiente: var(--cambio-pendiente);
     --color-pestana-activa: var(--pestana-activa);
     --color-pestana-activa-foreground: var(--pestana-activa-foreground);
+    --color-pestanas-mapa: var(--pestanas-mapa);
     --color-marca-preliminar: var(--marca-preliminar);
     --color-semaforo-verde: var(--semaforo-verde);
     --color-semaforo-amarillo: var(--semaforo-amarillo);
@@ -77,7 +78,7 @@
 
 /* Colores del MSPAS: docs/mockups/descripcion_pantallas.md, "Estilo general" e "Implementación en React". */
 :root {
-    --background: #f5f8fb;
+    --background: #e8f0f7;
     --foreground: #1f3247;
     --card: #ffffff;
     --card-foreground: #1f3247;
@@ -88,7 +89,7 @@
     --secondary: #f0f4f8;
     --secondary-foreground: #1f3247;
     --muted: #f0f4f8;
-    --muted-foreground: #5f6e7d;
+    --muted-foreground: #526172;
     --accent: #dbeaf6;
     --accent-foreground: #1d4a72;
     --destructive: #b73a3a;
@@ -108,6 +109,9 @@
        (4.56:1). */
     --pestana-activa: #0f7bbf;
     --pestana-activa-foreground: #ffffff;
+    /* Fondo de las pestañas «Qué colorea el mapa»: más oscuro que --background para que se distingan, con la elegida
+       en blanco; --muted-foreground se lee encima (4.70:1). */
+    --pestanas-mapa: #cfe0ef;
     /* Marca de agua «PRELIMINAR» de las gráficas y del mapa: el azul de --accent-foreground, con opacidad baja. */
     --marca-preliminar: #1d4a72;
     --chart-1: #4683bb;
