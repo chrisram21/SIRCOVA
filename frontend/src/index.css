@@ -31,6 +31,7 @@
     --color-cambio-pendiente: var(--cambio-pendiente);
     --color-pestana-activa: var(--pestana-activa);
     --color-pestana-activa-foreground: var(--pestana-activa-foreground);
+    --color-marca-preliminar: var(--marca-preliminar);
     --color-semaforo-verde: var(--semaforo-verde);
     --color-semaforo-amarillo: var(--semaforo-amarillo);
     --color-semaforo-rojo: var(--semaforo-rojo);
@@ -107,6 +108,8 @@
        (4.56:1). */
     --pestana-activa: #0f7bbf;
     --pestana-activa-foreground: #ffffff;
+    /* Marca de agua «PRELIMINAR» de las gráficas y del mapa: el azul de --accent-foreground, con opacidad baja. */
+    --marca-preliminar: #1d4a72;
     --chart-1: #4683bb;
     --chart-2: #b5d4ee;
     --chart-3: #eeb48c;
@@ -307,6 +310,24 @@
     background-clip: text;
     color: transparent;
     animation: degradado 7s linear infinite;
+}
+
+/* Copias de la marca «PRELIMINAR» (SPEC 55). La capa es un contenedor de tamaño y el texto rotado ocupa de alto
+   unas 0.6 veces el ancho de la capa: cada copia extra aparece cuando la capa es lo bastante alta para ella. */
+.marca-copia {
+    display: none;
+}
+@container (max-aspect-ratio: 4/5) {
+    .marca-copia[data-copia="2"] { display: block; }
+}
+@container (max-aspect-ratio: 1/2) {
+    .marca-copia[data-copia="3"] { display: block; }
+}
+@container (max-aspect-ratio: 3/8) {
+    .marca-copia[data-copia="4"] { display: block; }
+}
+@container (max-aspect-ratio: 3/10) {
+    .marca-copia[data-copia="5"] { display: block; }
 }
 
 @layer base {

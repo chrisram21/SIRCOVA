@@ -1,5 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
+import MarcaPreliminar from './MarcaPreliminar.jsx'
 
 // SPEC 49: lo común de las gráficas del panel de «Indicadores».
 
@@ -15,7 +16,8 @@ export const formatoEntero = new Intl.NumberFormat('es-GT', { maximumFractionDig
 export const porcentaje = (valor) => `${formatoPorcentaje.format(valor)} %`
 
 // La tarjeta de una gráfica: título, subtítulo y, para leerla sin la imagen, un resumen con el dato principal.
-export default function TarjetaGrafica({ titulo, subtitulo, resumen, children, className }) {
+// SPEC 55: con preliminar, la marca cubre solo la gráfica (children), no el título ni el resumen.
+export default function TarjetaGrafica({ titulo, subtitulo, resumen, preliminar = false, children, className }) {
   return (
     <Card className={cn('min-w-0', className)}>
       <CardHeader>
@@ -24,7 +26,7 @@ export default function TarjetaGrafica({ titulo, subtitulo, resumen, children, c
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {resumen && <p className="text-sm">{resumen}</p>}
-        {children}
+        <MarcaPreliminar activa={preliminar}>{children}</MarcaPreliminar>
       </CardContent>
     </Card>
   )

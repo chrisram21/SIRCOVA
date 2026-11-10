@@ -183,6 +183,29 @@ test('por defecto colorea el indicador del mapa, lo nombra y pide los datos del 
   expect(screen.getByRole('heading', { level: 2, name: 'Total de la DDRISS' })).toBeTruthy()
 })
 
+test('con una corrida parcial, el mapa lleva la marca en los modos de indicador y no en el estado', async () => {
+  listarResultados.mockResolvedValue({ corrida: { ...CORRIDA, parcial: true }, resultados: RESULTADOS })
+  montar()
+  const marca = () => screen.getByTestId('mapa').parentElement.querySelector('[data-marca="preliminar"]')
+  await poligono('San Marcos')
+  expect(marca()).not.toBeNull()
+
+  for (const modo of ['Brecha', 'Deserción']) {
+    pestana(modo)
+    await waitFor(() => expect(screen.getByRole('tab', { name: modo }).getAttribute('aria-selected')).toBe('true'))
+    expect(marca()).not.toBeNull()
+  }
+  pestana('Estado del reporte')
+  await screen.findByRole('heading', { level: 1, name: '¿Dónde faltan reportes del mes?' })
+  expect(marca()).toBeNull()
+})
+
+test('con una corrida completa, el mapa no lleva la marca', async () => {
+  montar()
+  await poligono('San Marcos')
+  expect(document.querySelector('[data-marca="preliminar"]')).toBeNull()
+})
+
 test('cambiar el modo cambia la URL, el título, la leyenda y el orden de la clasificación', async () => {
   const router = montar()
   await poligono('San Marcos')

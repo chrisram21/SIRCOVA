@@ -73,10 +73,17 @@ export default function PanelGraficas({
   const filasCobertura = panel.cobertura ? filasDe(resultados, panel.cobertura.codigo) : []
 
   if (!hayIndicador) return null
+  const preliminar = corrida.parcial === true
 
   const porMunicipioYVacuna = (
     <div className="grid gap-4 lg:grid-cols-2">
-      <GraficaPorMunicipio indicador={panel.cobertura} filas={filasCobertura} visibles={visibles} vacuna={vacunaNombre} />
+      <GraficaPorMunicipio
+        indicador={panel.cobertura}
+        filas={filasCobertura}
+        visibles={visibles}
+        vacuna={vacunaNombre}
+        preliminar={preliminar}
+      />
       <GraficaPorVacuna
         tipo={panel.cobertura?.tipoCalculo ?? null}
         indicadores={indicadores}
@@ -84,6 +91,7 @@ export default function PanelGraficas({
         visibles={visibles}
         vacuna={vacuna}
         referencia={referencia}
+        preliminar={preliminar}
       />
     </div>
   )
@@ -112,6 +120,7 @@ export default function PanelGraficas({
           filas={panel.brecha ? filasDe(resultados, panel.brecha.codigo) : []}
           visibles={visibles}
           vacuna={vacunaNombre}
+          preliminar={preliminar}
         />
       )}
       {vista === 'desercion' && (
@@ -121,6 +130,7 @@ export default function PanelGraficas({
           visibles={visibles}
           vacuna={vacunaNombre}
           referencia={referencia}
+          preliminar={preliminar}
         />
       )}
       {vista === 'proyeccion' && (
@@ -133,6 +143,7 @@ export default function PanelGraficas({
           cargando={Boolean(baseDeLinea) && serie === null && error === null}
           error={error}
           onReintentar={() => setIntento((n) => n + 1)}
+          preliminar={preliminar}
         />
       )}
     </div>

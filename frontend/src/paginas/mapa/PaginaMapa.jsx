@@ -14,6 +14,7 @@ import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import { MESES, mesAnterior } from '@/lib/fechas.js'
 import { TIPOS_INDICADOR } from '@/paginas/configuracion/tiposIndicador.js'
+import MarcaPreliminar from '@/paginas/indicadores/MarcaPreliminar.jsx'
 import { filasDe, vacunasDeLaCorrida, vistaDeTipo } from '@/paginas/indicadores/panelIndicadores.js'
 import BarraFiltrosMapa from './BarraFiltrosMapa.jsx'
 import ClasificacionMunicipios from './ClasificacionMunicipios.jsx'
@@ -291,15 +292,18 @@ export default function PaginaMapa({ hoy }) {
               <div className="relative isolate">
                 {limites.datos && !cargando ? (
                   <Suspense fallback={<Skeleton className="h-[420px] w-full sm:h-[560px]" />}>
-                    <MapaMunicipios
-                      limites={limites.datos}
-                      filas={filas}
-                      modo={modo}
-                      indicador={indicador}
-                      seleccionado={seleccionada?.codigoIne ?? null}
-                      onElegir={elegir}
-                      className="h-[420px] sm:h-[560px]"
-                    />
+                    {/* SPEC 55: «Estado del reporte» no sale de una corrida, así que no lleva la marca. */}
+                    <MarcaPreliminar activa={modo !== 'estado' && corrida?.parcial === true}>
+                      <MapaMunicipios
+                        limites={limites.datos}
+                        filas={filas}
+                        modo={modo}
+                        indicador={indicador}
+                        seleccionado={seleccionada?.codigoIne ?? null}
+                        onElegir={elegir}
+                        className="h-[420px] sm:h-[560px]"
+                      />
+                    </MarcaPreliminar>
                   </Suspense>
                 ) : (
                   <Skeleton aria-label="Cargando el mapa" className="h-[420px] w-full sm:h-[560px]" />

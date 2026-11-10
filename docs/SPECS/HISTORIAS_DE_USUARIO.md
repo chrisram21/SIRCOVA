@@ -1339,6 +1339,8 @@ Verificado contra la API real el 2026-11-08, con el build servido por `vite prev
 
 **Nota (2026-11-05, spec 49):** el «Exportar Excel» de `Indicadores.html` quedó fuera del SPEC 49. Si esta historia lo agrega, los filtros de esa pantalla ya están en la URL (`anio`, `mes`, `ddriss`, `vacuna`, `indicador`, `distrito`, `municipios`) y pueden pasar tal cual al endpoint que genere el archivo.
 
+**Nota (2026-11-09, spec 55):** si los datos del informe salen de una corrida parcial (`Corrida.parcial`), el archivo lleva la leyenda «PRELIMINAR», como la marca de agua de las gráficas y del mapa.
+
 **Criterios de aceptación:**
 - [ ] El archivo respeta los filtros y la agrupación elegidos.
 - [ ] Incluye encabezado con título, periodo y fecha de generación.
@@ -1353,6 +1355,8 @@ Verificado contra la API real el 2026-11-08, con el build servido por `vite prev
 | Epidemiología / Autoridad | 3 | S5 | Christian Ramírez |
 
 **Cómo se hará:** Generación de PDF en el backend con pdfmake, con la fuente IBM Plex Sans para que se vea como la aplicación.
+
+**Nota (2026-11-09, spec 55):** si los datos del informe salen de una corrida parcial (`Corrida.parcial`), el archivo lleva la leyenda «PRELIMINAR», como la marca de agua de las gráficas y del mapa.
 
 **Criterios de aceptación:**
 - [ ] El PDF incluye título, filtros usados, tabla y fecha de generación.
