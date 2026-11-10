@@ -242,10 +242,20 @@ test('elegir un polígono también lo elige, y el municipio de la URL se conserv
   expect(screen.getByRole('heading', { level: 2, name: 'Sibinal' })).toBeTruthy()
 })
 
-test('«Ver en Indicadores» lleva el mes, la vacuna y el municipio; sin INDICADOR_CONSULTAR no aparece', async () => {
+test('«Ver en Indicadores» lleva el mes, la vacuna, la pestaña del indicador del mapa y el municipio', async () => {
   montar({ url: '/mapa?municipio=7' })
   const enlace = await screen.findByRole('link', { name: /Ver en Indicadores/ })
-  expect(enlace.getAttribute('href')).toBe('/indicadores?anio=2026&mes=10&vacuna=HEXA&municipios=7')
+  // En «Cobertura» el mapa colorea con un avance: abre la pestaña Avance.
+  expect(enlace.getAttribute('href')).toBe('/indicadores?anio=2026&mes=10&vacuna=HEXA&vista=avance&indicador=AVANCE_HEXA3&municipios=7')
+
+  pestana('Brecha')
+  await waitFor(() => expect(screen.getByRole('link', { name: /Ver en Indicadores/ }).getAttribute('href'))
+    .toBe('/indicadores?anio=2026&mes=10&vacuna=HEXA&vista=brecha&indicador=BRECHA_HEXA3&municipios=7'))
+
+  // «Estado del reporte» no colorea con un indicador: no lleva pestaña.
+  pestana('Estado del reporte')
+  await waitFor(() => expect(screen.getByRole('link', { name: /Ver en Indicadores/ }).getAttribute('href'))
+    .toBe('/indicadores?anio=2026&mes=10&vacuna=HEXA&municipios=7'))
 })
 
 test('sin INDICADOR_CONSULTAR no pide resultados ni muestra «Ver en Indicadores», y el estado sigue', async () => {

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ChevronDown, TriangleAlert } from 'lucide-react'
+import { ChevronDown, Info, TriangleAlert } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { listarDdriss, listarDistritos } from '@/api/catalogos.js'
 import { mensajeDeError } from '@/api/cliente.js'
@@ -15,8 +16,7 @@ import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import { MESES, mesAnterior } from '@/lib/fechas.js'
 import { cn } from '@/lib/utils'
-import { TIPOS_INDICADOR } from '../configuracion/tiposIndicador.js'
-import BarraFiltrosIndicadores from './BarraFiltrosIndicadores.jsx'
+import BarraFiltrosIndicadores, { Selector } from './BarraFiltrosIndicadores.jsx'
 import DialogoCalcularIndicadores, { avisoDeMesesSinCerrar } from './DialogoCalcularIndicadores.jsx'
 import InsigniaCumple from './InsigniaCumple.jsx'
 import InsigniaValor from './InsigniaValor.jsx'
@@ -26,10 +26,15 @@ import {
   filasDe,
   filasVisibles,
   indicadoresDeLaVacuna,
+  indicadoresDeLaVista,
   municipiosDeLaCorrida,
   municipiosVisibles,
   vacunaElegida,
   vacunasDeLaCorrida,
+  VISTAS,
+  vistaDeTipo,
+  vistaElegida,
+  vistaPorDefecto,
 } from './panelIndicadores.js'
 import TablaBrecha from './TablaBrecha.jsx'
 import TablaDesercion from './TablaDesercion.jsx'
@@ -37,7 +42,8 @@ import TablaProyeccion from './TablaProyeccion.jsx'
 
 // SPEC 44: la corrida vigente de un mes, sus resultados por municipio y el historial de corridas del año. SPEC 45 a
 // 47 agregan las tablas de brecha, deserción y proyección; SPEC 49, los filtros de vacuna, distrito y municipios; SPEC
-// 51, los periodos de «Comparar periodos» (comparar, anios, meses), que valida comparacionPeriodos.js.
+// 51, los periodos de «Comparar periodos» (comparar, anios, meses), que valida comparacionPeriodos.js. SPEC 54, la
+// pestaña (vista), que elige qué tipo de indicador se mira.
 
 const ANIOS_HACIA_ATRAS = 6
 const MOTIVOS = {
@@ -76,6 +82,7 @@ export function filtrosDeUrl(parametros, hoy) {
     anio: entero(parametros.get('anio'), 2000, 2100) ?? porDefecto.anio,
     mes: entero(parametros.get('mes'), 1, 12) ?? porDefecto.mes,
     indicador: codigo(parametros.get('indicador')),
+    vista: Object.hasOwn(VISTAS, parametros.get('vista') ?? '') ? parametros.get('vista') : undefined,
     ddriss: id(parametros.get('ddriss')),
     vacuna: codigo(parametros.get('vacuna')),
     distrito: id(parametros.get('distrito')),
@@ -95,14 +102,9 @@ function consultaDe(filtros) {
   return consulta
 }
 
-// El indicador que se ve: el de la URL si la corrida lo calculó; si no, el primer avance; si no, el primero.
-export function indicadorElegido(indicadores, codigo) {
-  return (
-    indicadores.find((i) => i.codigo === codigo)
-    ?? indicadores.find((i) => i.tipoCalculo === 'AVANCE_META_MES')
-    ?? indicadores[0]
-    ?? null
-  )
+// El indicador que se ve, entre los de la pestaña: el de la URL si es de ella; si no, el primero.
+export function indicadorElegido(deLaVista, codigo) {
+  return deLaVista.find((i) => i.codigo === codigo) ?? deLaVista[0] ?? null
 }
 
 
@@ -156,6 +158,38 @@ function TablaResultados({ resultados, tipoCalculo }) {
         </Table>
       </div>
     </div>
+  )
+}
+
+function Aviso({ children }) {
+  return (
+    <p className="flex items-start gap-2 rounded-lg bg-muted/60 px-3 py-2.5 text-sm text-muted-foreground">
+      <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <span>{children}</span>
+    </p>
+  )
+}
+
+function PestanasIndicadores({ vista, alCambiar }) {
+  return (
+    <Tabs value={vista} onValueChange={alCambiar} className="max-sm:w-full">
+      {/* En el teléfono, tres arriba y dos abajo a todo el ancho: las cinco en una fila no caben en 390 px. */}
+      <TabsList
+        aria-label="Tipo de indicador"
+        className="grid h-auto! w-full grid-cols-3 bg-accent sm:inline-flex sm:h-8! sm:w-fit"
+      >
+        {Object.entries(VISTAS).map(([codigo, { etiqueta }]) => (
+          <TabsTrigger
+            key={codigo}
+            value={codigo}
+            // aria-selected: las variantes data-active de shadcn tienen especificidad 0.
+            className="px-3 text-accent-foreground hover:text-accent-foreground aria-selected:bg-pestana-activa aria-selected:text-pestana-activa-foreground"
+          >
+            {etiqueta}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
   )
 }
 
@@ -268,10 +302,6 @@ export default function PaginaIndicadores({ hoy }) {
   const esperandoDdriss = nacional && ddrissId === undefined
   const clave = `${filtros.anio}-${filtros.mes}-${ddrissId ?? ''}`
 
-  function irA(cambios) {
-    setParametros(consultaDe({ ...filtros, ...cambios }))
-  }
-
   useEffect(() => {
     if (!nacional) return undefined
     let vigente = true
@@ -344,8 +374,23 @@ export default function PaginaIndicadores({ hoy }) {
   const conResultados = corrida ? corrida.indicadores.filter((i) => todos.some((r) => r.indicadorCodigo === i.codigo)) : []
   const vacunas = vacunasDeLaCorrida(todos)
   const vacuna = vacunaElegida(conResultados, todos, filtros)
+  const vacunaNombre = vacunas.find((v) => v.codigo === vacuna)?.nombre ?? vacuna
   const deLaVacuna = indicadoresDeLaVacuna(conResultados, todos, vacuna)
-  const indicador = indicadorElegido(deLaVacuna, filtros.indicador)
+  const vista = vistaElegida(deLaVacuna, filtros)
+  const deLaVista = indicadoresDeLaVista(deLaVacuna, vista)
+  const indicador = indicadorElegido(deLaVista, filtros.indicador)
+
+  // La pestaña se conserva al cambiar otros filtros; elegir un indicador lleva a la de su tipo. En la URL se omite la
+  // pestaña por defecto de la vacuna de destino.
+  function irA(cambios) {
+    const destino = { ...filtros, vista, ...cambios }
+    if (cambios.indicador && !Object.hasOwn(cambios, 'vista')) {
+      destino.vista = vistaDeTipo(conResultados.find((i) => i.codigo === cambios.indicador)?.tipoCalculo) ?? vista
+    }
+    const deLaVacunaDestino = indicadoresDeLaVacuna(conResultados, todos, vacunaElegida(conResultados, todos, destino))
+    if (destino.vista === vistaPorDefecto(deLaVacunaDestino)) destino.vista = undefined
+    setParametros(consultaDe(destino))
+  }
 
   // Solo los distritos cuyo municipio está en la corrida: así quedan los de la DDRISS.
   const municipiosCorrida = municipiosDeLaCorrida(todos)
@@ -358,15 +403,16 @@ export default function PaginaIndicadores({ hoy }) {
 
   const resultados = indicador ? filasVisibles(filasDe(todos, indicador.codigo), visibles) : []
   const muestra = resultados[0]
-  const titulo = TIPOS_INDICADOR[indicador?.tipoCalculo]?.etiqueta ?? 'Indicadores por municipio'
+  const titulo = corrida && vacuna ? `${VISTAS[vista].etiqueta} de ${vacunaNombre}` : 'Indicadores'
 
   return (
-    <section className="flex flex-col gap-6 p-6">
+    // contain-inline-size: una tabla ancha (la de proyección) se desplaza en su recuadro y no ensancha la página.
+    <section className="flex flex-col gap-6 p-6 contain-inline-size">
       <EncabezadoPagina
         antetitulo="Indicadores"
         titulo={titulo}
         descripcion={`Dosis acumuladas de enero a ${MESES[filtros.mes - 1]} de ${filtros.anio}, por municipio de residencia.`}
-        acciones={puedeCalcular && !nacional && <Button onClick={() => setCalculando(true)}>Calcular</Button>}
+        acciones={puedeCalcular && !nacional && <Button onClick={() => setCalculando(true)}>Calcular indicadores</Button>}
       />
 
       {errorDdriss && (
@@ -386,8 +432,6 @@ export default function PaginaIndicadores({ hoy }) {
         ddrissId={ddrissId}
         vacunas={vacunas}
         vacuna={vacuna}
-        indicadores={deLaVacuna}
-        indicador={indicador?.codigo}
         distritos={opcionesDistrito}
         municipios={opcionesMunicipio}
         elegidos={elegidos}
@@ -411,17 +455,42 @@ export default function PaginaIndicadores({ hoy }) {
           ) : (
             <>
               <TarjetaCorrida corrida={corrida} />
-              {indicador === null ? (
+              {conResultados.length === 0 ? (
                 <p className="text-muted-foreground">La corrida no tiene resultados de cobertura, avance, brecha, deserción ni proyección.</p>
               ) : (
                 <>
+                  <PestanasIndicadores vista={vista} alCambiar={(nueva) => irA({ vista: nueva, indicador: undefined })} />
+                  {indicador === null ? (
+                    <Aviso>La corrida no tiene un indicador de {VISTAS[vista].nombreDelTipo} de {vacunaNombre}.</Aviso>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-3">
+                      {deLaVista.length > 1 && (
+                        // Dentro de un form, Radix agrega el <select> nativo del Select.
+                        <form onSubmit={(evento) => evento.preventDefault()} className="w-full sm:w-80">
+                          <Selector
+                            nombre="indicador"
+                            etiqueta="Indicador"
+                            valor={indicador.codigo}
+                            alCambiar={(codigo) => irA({ indicador: codigo })}
+                            opciones={deLaVista.map((i) => ({ valor: i.codigo, texto: i.nombre ?? i.codigo }))}
+                          />
+                        </form>
+                      )}
+                      <p className="text-sm text-muted-foreground">
+                        <span className="font-mono">{indicador.codigo}</span> · {muestra.vacuna.nombre}
+                        {muestra.dosis ? ` · ${muestra.dosis}` : ''} · versión {muestra.indicadorVersion}
+                      </p>
+                    </div>
+                  )}
+                  {/* Siempre en el mismo lugar, para que no se desmonte al pasar por una pestaña sin indicador. */}
                   <PanelGraficas
                     corrida={corrida}
                     indicadores={conResultados}
                     resultados={todos}
                     vacuna={vacuna}
-                    vacunaNombre={vacunas.find((v) => v.codigo === vacuna)?.nombre ?? vacuna}
-                    codigoElegido={indicador.codigo}
+                    vacunaNombre={vacunaNombre}
+                    vista={vista}
+                    codigoElegido={indicador?.codigo}
                     visibles={visibles}
                     ddrissId={ddrissId}
                     comparacion={{
@@ -432,21 +501,15 @@ export default function PaginaIndicadores({ hoy }) {
                       irA,
                     }}
                   />
-                  <div className="flex flex-col gap-2">
-                    <p className="text-sm text-muted-foreground">
-                      <span className="font-mono">{indicador.codigo}</span> · {muestra.vacuna.nombre}
-                      {muestra.dosis ? ` · ${muestra.dosis}` : ''} · versión {muestra.indicadorVersion}
-                    </p>
-                    {indicador.tipoCalculo === 'BRECHA' ? (
-                      <TablaBrecha resultados={resultados} />
-                    ) : indicador.tipoCalculo === 'DESERCION' ? (
-                      <TablaDesercion resultados={resultados} />
-                    ) : indicador.tipoCalculo === 'PROYECCION' ? (
-                      <TablaProyeccion resultados={resultados} />
-                    ) : (
-                      <TablaResultados resultados={resultados} tipoCalculo={indicador.tipoCalculo} />
-                    )}
-                  </div>
+                  {indicador?.tipoCalculo === 'BRECHA' ? (
+                    <TablaBrecha resultados={resultados} />
+                  ) : indicador?.tipoCalculo === 'DESERCION' ? (
+                    <TablaDesercion resultados={resultados} />
+                  ) : indicador?.tipoCalculo === 'PROYECCION' ? (
+                    <TablaProyeccion resultados={resultados} />
+                  ) : indicador ? (
+                    <TablaResultados resultados={resultados} tipoCalculo={indicador.tipoCalculo} />
+                  ) : null}
                 </>
               )}
             </>

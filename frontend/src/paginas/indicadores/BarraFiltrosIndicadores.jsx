@@ -74,8 +74,6 @@ export default function BarraFiltrosIndicadores({
   ddrissId,
   vacunas,
   vacuna,
-  indicadores,
-  indicador,
   distritos,
   municipios,
   elegidos,
@@ -122,16 +120,6 @@ export default function BarraFiltrosIndicadores({
           alCambiar={(codigo) => irA({ vacuna: codigo, indicador: undefined })}
           opciones={vacunas.map((v) => ({ valor: v.codigo, texto: v.nombre }))}
           className="sm:w-48"
-        />
-      )}
-      {indicadores.length > 0 && (
-        <Selector
-          nombre="indicador"
-          etiqueta="Indicador"
-          valor={indicador}
-          alCambiar={(codigo) => irA({ indicador: codigo })}
-          opciones={indicadores.map((i) => ({ valor: i.codigo, texto: i.nombre ?? i.codigo }))}
-          className="sm:w-80"
         />
       )}
       {distritos && distritos.length > 0 && (

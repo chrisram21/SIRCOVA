@@ -14,7 +14,7 @@ import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import { MESES, mesAnterior } from '@/lib/fechas.js'
 import { TIPOS_INDICADOR } from '@/paginas/configuracion/tiposIndicador.js'
-import { filasDe, vacunasDeLaCorrida } from '@/paginas/indicadores/panelIndicadores.js'
+import { filasDe, vacunasDeLaCorrida, vistaDeTipo } from '@/paginas/indicadores/panelIndicadores.js'
 import BarraFiltrosMapa from './BarraFiltrosMapa.jsx'
 import ClasificacionMunicipios from './ClasificacionMunicipios.jsx'
 import LeyendaMapa from './LeyendaMapa.jsx'
@@ -95,10 +95,17 @@ function Aviso({ icono: Icono = Info, children }) {
   )
 }
 
-function enlaceAIndicadores({ anio, mes, vacuna, municipioId, ddrissId }) {
+// SPEC 54: con el indicador que colorea el mapa (en «Estado del reporte» no hay), abre la pestaña de su tipo; en
+// «Cobertura» puede ser un avance.
+function enlaceAIndicadores({ anio, mes, vacuna, indicador, municipioId, ddrissId }) {
   const consulta = new URLSearchParams({ anio: String(anio), mes: String(mes) })
   if (ddrissId) consulta.set('ddriss', String(ddrissId))
   if (vacuna) consulta.set('vacuna', vacuna)
+  const vista = indicador ? vistaDeTipo(indicador.tipoCalculo) : null
+  if (vista) {
+    consulta.set('vista', vista)
+    consulta.set('indicador', indicador.codigo)
+  }
   if (municipioId) consulta.set('municipios', String(municipioId))
   return `/indicadores?${consulta}`
 }
@@ -334,7 +341,7 @@ export default function PaginaMapa({ hoy }) {
                     mesNombre={mesNombre}
                     enlaceIndicadores={
                       veIndicadores && corrida
-                        ? enlaceAIndicadores({ anio: filtros.anio, mes: filtros.mes, vacuna, municipioId, ddrissId })
+                        ? enlaceAIndicadores({ anio: filtros.anio, mes: filtros.mes, vacuna, indicador, municipioId, ddrissId })
                         : null
                     }
                   />
