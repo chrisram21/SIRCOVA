@@ -2,6 +2,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import { TIPOS_INDICADOR } from '../configuracion/tiposIndicador.js'
+import InsigniaCumple from './InsigniaCumple.jsx'
 import InsigniaValor from './InsigniaValor.jsx'
 
 // SPEC 46: los resultados de un indicador DESERCION. El numerador guardado es la pérdida (iniciales − finales) y el
@@ -9,7 +10,6 @@ import InsigniaValor from './InsigniaValor.jsx'
 
 const formatoEntero = new Intl.NumberFormat('es-GT', { maximumFractionDigits: 0 })
 const formatoDecimal = new Intl.NumberFormat('es-GT', { maximumFractionDigits: 2 })
-const textoCumple = (cumple) => (cumple === null ? '—' : cumple ? 'Sí' : 'No')
 const SIMBOLOS = { '<=': '≤', '<': '<', '>=': '≥', '>': '>' }
 const SIMBOLO_META = SIMBOLOS[TIPOS_INDICADOR.DESERCION.meta.comparador]
 
@@ -40,8 +40,8 @@ export default function TablaDesercion({ resultados }) {
               <TableHead className="text-right">Dosis iniciales</TableHead>
               <TableHead className="text-right">Dosis finales</TableHead>
               <TableHead className="text-right">Pérdida</TableHead>
-              <TableHead className="text-right">Deserción</TableHead>
               <TableHead className="text-right">Meta</TableHead>
+              <TableHead className="text-right">Deserción</TableHead>
               <TableHead>Cumple</TableHead>
             </TableRow>
           </TableHeader>
@@ -54,6 +54,9 @@ export default function TablaDesercion({ resultados }) {
                   <TableCell className="text-right font-mono">{formatoEntero.format(r.denominador ?? 0)}</TableCell>
                   <TableCell className="text-right font-mono">{formatoEntero.format(dosisFinales(r))}</TableCell>
                   <TableCell className="text-right font-mono">{formatoEntero.format(r.numerador ?? 0)}</TableCell>
+                  <TableCell className="text-right font-mono">
+                    {r.meta === null ? '—' : `${SIMBOLO_META} ${formatoDecimal.format(r.meta)} %`}
+                  </TableCell>
                   <TableCell className="text-right">
                     {r.calculable ? (
                       <div className="flex flex-wrap items-center justify-end gap-1">
@@ -64,10 +67,7 @@ export default function TablaDesercion({ resultados }) {
                       <span className="text-muted-foreground">Sin primeras dosis</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-right font-mono">
-                    {r.meta === null ? '—' : `${SIMBOLO_META} ${formatoDecimal.format(r.meta)} %`}
-                  </TableCell>
-                  <TableCell>{textoCumple(r.cumpleMeta)}</TableCell>
+                  <TableCell><InsigniaCumple cumple={r.cumpleMeta} /></TableCell>
                 </TableRow>
               )
             })}

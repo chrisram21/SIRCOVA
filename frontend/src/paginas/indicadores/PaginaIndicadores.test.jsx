@@ -205,10 +205,24 @@ test('pide la corrida vigente del mes por defecto y muestra el avance con la fil
 
   const filas = tabla().getAllByRole('row').slice(1)
   expect(filas.map((f) => f.querySelector('td').textContent)).toEqual(['Total de la DDRISS', 'San Marcos', 'Tajumulco'])
-  expect(celdas(filaDe('San Marcos'))).toEqual(['San Marcos', '1,000', '1,000', '100.0 %', '100 %', '0', 'Sí'])
-  expect(celdas(filaDe('Tajumulco'))).toEqual(['Tajumulco', '300', '—', 'Sin población', '—', '—', '—'])
+  expect(tabla().getAllByRole('columnheader').map((c) => c.textContent)).toEqual([
+    'Municipio', 'Dosis acumuladas', 'Meta del mes', 'Dosis que faltan', 'Meta', 'Avance', 'Cumple',
+  ])
+  expect(celdas(filaDe('San Marcos'))).toEqual(['San Marcos', '1,000', '1,000', '0', '100 %', '100.0 %', 'Sí'])
+  expect(celdas(filaDe('Tajumulco'))).toEqual(['Tajumulco', '300', '—', '—', '—', 'Sin población', '—'])
   expect(within(filaDe('Total de la DDRISS')).getByText('65.0 %').className).toContain('text-destructive')
   expect(within(filaDe('San Marcos')).getByText('100.0 %').className).toContain('bg-exito')
+})
+
+test('la población y la meta del mes se muestran sin decimales y el porcentaje no cambia', async () => {
+  listarResultados.mockResolvedValue({
+    corrida: corrida(),
+    resultados: [resultado('AVANCE_HEXA3', SAN_MARCOS, { numerador: 1000, denominador: 1234.56, valor: 81.0006, cumpleMeta: false })],
+  })
+  await montar()
+
+  await screen.findAllByRole('table')
+  expect(celdas(filaDe('San Marcos'))).toEqual(['San Marcos', '1,000', '1,235', '234', '100 %', '81.0 %', 'No'])
 })
 
 test('lista los indicadores omitidos y avisa cuando la corrida es parcial', async () => {
@@ -252,11 +266,11 @@ test('con un indicador BRECHA muestra «Brecha de dosis», lo que falta de mayor
 
   expect(await screen.findByRole('heading', { name: 'Brecha de dosis' })).toBeTruthy()
   const encabezados = tabla().getAllByRole('columnheader').map((c) => c.textContent)
-  expect(encabezados).toEqual(['Municipio', 'Dosis acumuladas', 'Dosis para la meta', 'Dosis que faltan', 'Excedente', 'Cumple'])
+  expect(encabezados).toEqual(['Municipio', 'Dosis acumuladas', 'Dosis para la meta', 'Excedente', 'Dosis que faltan', 'Cumple'])
   const filas = tabla().getAllByRole('row').slice(1)
   expect(filas.map((f) => f.querySelector('td').textContent)).toEqual(['Total de la DDRISS', 'Comitancillo', 'San Marcos', 'Tajumulco'])
-  expect(celdas(filaDe('Comitancillo'))).toEqual(['Comitancillo', '100', '500', '400', '0', 'No'])
-  expect(celdas(filaDe('San Marcos'))).toEqual(['San Marcos', '1,000', '950', '0', '50', 'Sí'])
+  expect(celdas(filaDe('Comitancillo'))).toEqual(['Comitancillo', '100', '500', '0', '400', 'No'])
+  expect(celdas(filaDe('San Marcos'))).toEqual(['San Marcos', '1,000', '950', '50', '0', 'Sí'])
   expect(celdas(filaDe('Tajumulco'))).toEqual(['Tajumulco', '300', 'Sin población', '—', '—', '—'])
   expect(screen.getByText(/Suma de lo que falta en los municipios:/).textContent).toContain('400 dosis')
 })
@@ -266,12 +280,12 @@ test('con un indicador DESERCION muestra «Deserción entre dosis», de mayor a 
 
   expect(await screen.findByRole('heading', { name: 'Deserción entre dosis' })).toBeTruthy()
   const encabezados = tabla().getAllByRole('columnheader').map((c) => c.textContent)
-  expect(encabezados).toEqual(['Municipio', 'Dosis iniciales', 'Dosis finales', 'Pérdida', 'Deserción', 'Meta', 'Cumple'])
+  expect(encabezados).toEqual(['Municipio', 'Dosis iniciales', 'Dosis finales', 'Pérdida', 'Meta', 'Deserción', 'Cumple'])
   const filas = tabla().getAllByRole('row').slice(1)
   expect(filas.map((f) => f.querySelector('td').textContent)).toEqual(['Total de la DDRISS', 'Comitancillo', 'San Marcos', 'Tajumulco'])
-  expect(celdas(filaDe('Comitancillo'))).toEqual(['Comitancillo', '100', '85', '15', '15.0 %', '≤ 10 %', 'No'])
-  expect(celdas(filaDe('San Marcos'))).toEqual(['San Marcos', '40', '45', '-5', '-12.5 %Deserción negativa', '≤ 10 %', 'Sí'])
-  expect(celdas(filaDe('Tajumulco'))).toEqual(['Tajumulco', '0', '7', '-7', 'Sin primeras dosis', '—', '—'])
+  expect(celdas(filaDe('Comitancillo'))).toEqual(['Comitancillo', '100', '85', '15', '≤ 10 %', '15.0 %', 'No'])
+  expect(celdas(filaDe('San Marcos'))).toEqual(['San Marcos', '40', '45', '-5', '≤ 10 %', '-12.5 %Deserción negativa', 'Sí'])
+  expect(celdas(filaDe('Tajumulco'))).toEqual(['Tajumulco', '0', '7', '-7', '—', 'Sin primeras dosis', '—'])
   expect(screen.getByText(/Una deserción negativa indica/)).toBeTruthy()
 })
 
@@ -282,14 +296,14 @@ test('con un indicador PROYECCION muestra la estimación de menor a mayor cobert
   expect(screen.getByText('Estimación')).toBeTruthy()
   const encabezados = tabla().getAllByRole('columnheader').map((c) => c.textContent)
   expect(encabezados).toEqual([
-    'Municipio', 'Dosis acumuladas', 'Ritmo mensual', 'Dosis proyectadas a diciembre', 'Población', 'Cobertura proyectada', 'Meta',
-    '¿Llega a la meta?', 'Dosis que faltarían',
+    'Municipio', 'Dosis acumuladas', 'Ritmo mensual', 'Dosis proyectadas a diciembre', 'Población',
+    'Dosis que faltarían', 'Meta', 'Cobertura proyectada', '¿Llega a la meta?',
   ])
   const filas = tabla().getAllByRole('row').slice(1)
   expect(filas.map((f) => f.querySelector('td').textContent)).toEqual(['Total de la DDRISS', 'Comitancillo', 'San Marcos', 'Tajumulco'])
-  expect(celdas(filaDe('Comitancillo'))).toEqual(['Comitancillo', '300', '50', '400', '1,000', '40.0 %', '> 95 %', 'No', '550'])
-  expect(celdas(filaDe('San Marcos'))).toEqual(['San Marcos', '1,000', '150', '1,300', '1,000', '130.0 %', '> 95 %', 'Sí', '0'])
-  expect(celdas(filaDe('Tajumulco'))).toEqual(['Tajumulco', '200', '50', '300', '—', 'Sin población', '—', '—', '—'])
+  expect(celdas(filaDe('Comitancillo'))).toEqual(['Comitancillo', '300', '50', '400', '1,000', '550', '> 95 %', '40.0 %', 'No'])
+  expect(celdas(filaDe('San Marcos'))).toEqual(['San Marcos', '1,000', '150', '1,300', '1,000', '0', '> 95 %', '130.0 %', 'Sí'])
+  expect(celdas(filaDe('Tajumulco'))).toEqual(['Tajumulco', '200', '50', '300', '—', '—', '—', 'Sin población', '—'])
   // Las dosis acumuladas son dato real; las proyectadas, estimación sobre fondo gris.
   const [, acumuladas, , proyectadas] = filaDe('San Marcos').querySelectorAll('td')
   expect(acumuladas.className).not.toContain('bg-muted')
@@ -304,8 +318,8 @@ test('en la cobertura, una fila sin brecha muestra el excedente', async () => {
   await montar({ url: '/indicadores?indicador=COB_HEXA3' })
   await screen.findByText('Total de la DDRISS')
 
-  expect(celdas(filaDe('San Marcos'))[5]).toBe('0 (+8 de excedente)')
-  expect(celdas(filaDe('Tajumulco'))[5]).toBe('234')
+  expect(celdas(filaDe('San Marcos'))[3]).toBe('0 (+8 de excedente)')
+  expect(celdas(filaDe('Tajumulco'))[3]).toBe('234')
 })
 
 test('«Calcular» solo aparece con INDICADOR_CALCULAR y, al terminar, recarga el mes', async () => {

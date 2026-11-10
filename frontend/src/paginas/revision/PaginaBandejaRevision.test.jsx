@@ -217,6 +217,60 @@ test('los reportes enviados enlazan a su revisión con la búsqueda de la bandej
   expect(router.state.location.state).toEqual({ volverA: '?periodo=9&grupo=TODOS' })
 })
 
+describe('«Revisar» y fila clicable (SPEC 53)', () => {
+  test('«Revisar» solo en los reportes en revisión asignados al usuario, también sin REPORTE_ASIGNAR', async () => {
+    const router = await montar({ url: '/revision?periodo=9', permisos: ['REPORTE_REVISAR'] })
+    await waitFor(() => expect(screen.getByRole('table')).toBeTruthy())
+
+    expect(within(filaDe('Centro de Salud 1')).queryByRole('link', { name: 'Revisar' })).toBeNull()
+    expect(within(filaDe('Centro de Salud 3')).queryByRole('link', { name: 'Revisar' })).toBeNull()
+    expect(within(filaDe('Centro de Salud 4')).queryByRole('link', { name: 'Revisar' })).toBeNull()
+
+    const revisar = within(filaDe('Centro de Salud 2')).getByRole('link', { name: 'Revisar' })
+    expect(revisar.getAttribute('href')).toBe('/revision/reportes/502')
+    fireEvent.click(revisar)
+    await waitFor(() => expect(router.state.location.pathname).toBe('/revision/reportes/502'))
+    expect(router.state.location.state).toEqual({ volverA: '?periodo=9' })
+  })
+
+  test('clic en la fila de un reporte enviado lo abre con la búsqueda de la bandeja', async () => {
+    const router = await montar({ url: '/revision?periodo=9&grupo=TODOS' })
+    await waitFor(() => expect(screen.getByRole('table')).toBeTruthy())
+
+    expect(filaDe('Centro de Salud 1').className).toContain('cursor-pointer')
+    fireEvent.click(within(filaDe('Centro de Salud 1')).getByText('1,184'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/revision/reportes/501'))
+    expect(router.state.location.state).toEqual({ volverA: '?periodo=9&grupo=TODOS' })
+  })
+
+  test('clic en la fila de un borrador o de un establecimiento sin reporte no hace nada', async () => {
+    obtenerBandeja.mockResolvedValue(bandeja([...FILAS, fila(5, 'BORRADOR')]))
+    const router = await montar()
+    await waitFor(() => expect(screen.getByRole('table')).toBeTruthy())
+
+    for (const nombre of ['Centro de Salud 4', 'Centro de Salud 5']) {
+      expect(filaDe(nombre).className).not.toContain('cursor-pointer')
+      fireEvent.click(filaDe(nombre))
+    }
+    expect(router.state.location.pathname).toBe('/revision')
+  })
+
+  test('«Asignar» y «Reasignar» abren su diálogo sin abrir el reporte', async () => {
+    const router = await montar()
+    await waitFor(() => expect(screen.getByRole('table')).toBeTruthy())
+
+    fireEvent.click(within(filaDe('Centro de Salud 1')).getByRole('button', { name: 'Asignar' }))
+    expect(await screen.findByRole('alertdialog')).toBeTruthy()
+    expect(router.state.location.pathname).toBe('/revision')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    fireEvent.click(within(filaDe('Centro de Salud 2')).getByRole('button', { name: 'Reasignar' }))
+    expect(await screen.findByRole('alertdialog')).toBeTruthy()
+    expect(router.state.location.pathname).toBe('/revision')
+  })
+})
+
 test('un grupo vacío lo dice', async () => {
   obtenerBandeja.mockResolvedValue(bandeja([]))
   await montar()

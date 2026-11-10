@@ -1,13 +1,13 @@
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
+import InsigniaCumple from './InsigniaCumple.jsx'
 import { AvisoMayorACien, MarcaMayorACien } from './MarcaMayorACien.jsx'
 
 // SPEC 45: los resultados de un indicador BRECHA, con lo que falta o el excedente por municipio. La fila de la
 // DDRISS compara el total del departamento; la suma municipal, debajo, no deja que los excedentes compensen.
 
 const formatoEntero = new Intl.NumberFormat('es-GT', { maximumFractionDigits: 0 })
-const textoCumple = (cumple) => (cumple === null ? '—' : cumple ? 'Sí' : 'No')
 
 // La DDRISS primero; luego los municipios de mayor a menor brecha (por nombre si empatan) y al final los que no se
 // pudieron calcular.
@@ -44,8 +44,8 @@ export default function TablaBrecha({ resultados }) {
               <TableHead>Municipio</TableHead>
               <TableHead className="text-right">Dosis acumuladas</TableHead>
               <TableHead className="text-right">Dosis para la meta</TableHead>
-              <TableHead className="text-right">Dosis que faltan</TableHead>
               <TableHead className="text-right">Excedente</TableHead>
+              <TableHead className="text-right">Dosis que faltan</TableHead>
               <TableHead>Cumple</TableHead>
             </TableRow>
           </TableHeader>
@@ -63,12 +63,12 @@ export default function TablaBrecha({ resultados }) {
                     {r.calculable ? formatoEntero.format(r.metaDosis) : <span className="font-sans text-muted-foreground">Sin población</span>}
                   </TableCell>
                   <TableCell className="text-right font-mono">
-                    <Cantidad valor={r.calculable ? r.brechaDosis : null} clase="bg-advertencia text-advertencia-foreground" />
-                  </TableCell>
-                  <TableCell className="text-right font-mono">
                     <Cantidad valor={r.calculable ? r.excedenteDosis : null} clase="bg-exito text-exito-foreground" />
                   </TableCell>
-                  <TableCell>{textoCumple(r.cumpleMeta)}</TableCell>
+                  <TableCell className="text-right font-mono">
+                    <Cantidad valor={r.calculable ? r.brechaDosis : null} clase="bg-advertencia text-advertencia-foreground" />
+                  </TableCell>
+                  <TableCell><InsigniaCumple cumple={r.cumpleMeta} /></TableCell>
                 </TableRow>
               )
             })}

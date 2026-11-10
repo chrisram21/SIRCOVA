@@ -73,6 +73,12 @@ test('la nota del método dice qué meses se usaron, si fueron menos que la vent
   )
 })
 
+test('la población se muestra sin decimales', () => {
+  render(<TablaProyeccion resultados={[fila(municipio(1, 'Tacaná'), { denominador: 1234.56 })]} />)
+
+  expect(celdas('Tacaná')[4]).toBe('1,235')
+})
+
 test('muestra la insignia «Estimación», las columnas y los motivos de las filas no calculables', () => {
   render(
     <TablaProyeccion
@@ -88,10 +94,28 @@ test('muestra la insignia «Estimación», las columnas y los motivos de las fil
   expect(screen.getByText('Estimación')).toBeTruthy()
   expect(screen.getByRole('heading', { name: 'Cobertura estimada a diciembre' })).toBeTruthy()
   expect(celdas('Total de la DDRISS')).toEqual([
-    'Total de la DDRISS', '100', '30', '1,501', '2,000', '75.0 %', '> 95 %', 'No', '400',
+    'Total de la DDRISS', '100', '30', '1,501', '2,000', '400', '> 95 %', '75.0 %', 'No',
   ])
-  expect(celdas('Tacaná')).toEqual(['Tacaná', '100', '13', '220', '400', '55.0 %', '> 95 %', 'No', '160'])
-  expect(celdas('Ayutla')).toEqual(['Ayutla', '100', '30', '220', '—', 'Sin población', '—', '—', '—'])
-  expect(celdas('Ocós')).toEqual(['Ocós', '100', '—', '—', '300', 'Sin meses cerrados', '—', '—', '—'])
+  expect(celdas('Tacaná')).toEqual(['Tacaná', '100', '13', '220', '400', '160', '> 95 %', '55.0 %', 'No'])
+  expect(celdas('Ayutla')).toEqual(['Ayutla', '100', '30', '220', '—', '—', '—', 'Sin población', '—'])
+  expect(celdas('Ocós')).toEqual(['Ocós', '100', '—', '—', '300', '—', '—', 'Sin meses cerrados', '—'])
   expect(screen.getByText(/La proyección suma/)).toBeTruthy()
+})
+
+test('«¿Llega a la meta?» va en insignia y conserva el fondo de dato estimado', () => {
+  render(<TablaProyeccion resultados={[fila(municipio(1, 'Tacaná'), { valor: 97, cumpleMeta: true, brechaDosis: 0 })]} />)
+
+  const celda = [...screen.getByText('Tacaná').closest('tr').querySelectorAll('td')][8]
+  expect(celda.className).toContain('bg-muted')
+  expect(celda.querySelector('[data-slot="badge"]').textContent).toBe('Sí')
+  expect(celda.querySelector('[data-slot="badge"]').className).toContain('bg-exito')
+})
+
+test('la meta va justo antes de la cobertura proyectada, y esta justo antes de «¿Llega a la meta?»', () => {
+  render(<TablaProyeccion resultados={[fila(municipio(1, 'Tacaná'))]} />)
+
+  expect(screen.getAllByRole('columnheader').map((c) => c.textContent)).toEqual([
+    'Municipio', 'Dosis acumuladas', 'Ritmo mensual', 'Dosis proyectadas a diciembre', 'Población',
+    'Dosis que faltarían', 'Meta', 'Cobertura proyectada', '¿Llega a la meta?',
+  ])
 })

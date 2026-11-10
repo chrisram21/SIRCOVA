@@ -134,7 +134,7 @@ export function CampoSeleccion({ id, etiqueta, obligatorio, valor, alCambiar, de
 }
 
 // Campos del empleado que comparten el registro y la edición. Los valores son texto; los Select usan NINGUNO.
-// Con establecimiento, el municipio se muestra como texto porque el backend lo toma del establecimiento.
+// El municipio es solo texto: el backend lo toma del establecimiento. Sin establecimiento se ve el guardado, si lo hay.
 // `errores` viene de erroresDeEmpleado; el mensaje de un campo aparece cuando la persona sale de él por primera vez,
 // o en todos a la vez con `mostrarErrores` (después de intentar enviar).
 // El CUI guardado nunca se muestra: con `cuiRegistrado` se ve "Registrado" y el campo solo aparece para reemplazarlo.
@@ -145,6 +145,12 @@ export default function CamposEmpleado({
 }) {
   const [tocados, setTocados] = useState({})
   const establecimiento = establecimientos.find((e) => String(e.id) === empleado.establecimientoId)
+  const municipioGuardado = municipios.find((m) => String(m.id) === empleado.municipioId)
+  // Sin establecimiento el municipio queda vacío: si no, el backend conservaría el del establecimiento anterior.
+  const cambiarEstablecimiento = (valor) => {
+    alCambiar('establecimientoId')(valor)
+    if (valor === NINGUNO) alCambiar('municipioId')(NINGUNO)
+  }
 
   const texto = (campo) => ({
     valor: empleado[campo],
@@ -202,7 +208,7 @@ export default function CamposEmpleado({
         id="establecimiento"
         etiqueta="Establecimiento"
         valor={empleado.establecimientoId}
-        alCambiar={alCambiar('establecimientoId')}
+        alCambiar={cambiarEstablecimiento}
         deshabilitado={deshabilitado}
         opciones={[
           { valor: NINGUNO, texto: 'Sin establecimiento (personal de la DDRISS)' },
@@ -210,26 +216,12 @@ export default function CamposEmpleado({
         ]}
       />
 
-      {establecimiento ? (
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-semibold">Municipio</span>
-          <span data-testid="municipio-establecimiento" className="py-1.5 text-sm">
-            {establecimiento.municipioNombre}
-          </span>
-        </div>
-      ) : (
-        <CampoSeleccion
-          id="municipio"
-          etiqueta="Municipio"
-          valor={empleado.municipioId}
-          alCambiar={alCambiar('municipioId')}
-          deshabilitado={deshabilitado}
-          opciones={[
-            { valor: NINGUNO, texto: 'Sin municipio' },
-            ...municipios.map((m) => ({ valor: String(m.id), texto: m.nombre })),
-          ]}
-        />
-      )}
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm font-semibold">Municipio</span>
+        <span data-testid="municipio-empleado" className="py-1.5 text-sm">
+          {establecimiento ? establecimiento.municipioNombre : (municipioGuardado?.nombre ?? '—')}
+        </span>
+      </div>
     </div>
   )
 }

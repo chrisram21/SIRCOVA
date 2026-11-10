@@ -52,11 +52,11 @@ test('muestra iniciales, finales, pérdida, la deserción con su semáforo y la 
   )
 
   const encabezados = screen.getAllByRole('columnheader').map((c) => c.textContent)
-  expect(encabezados).toEqual(['Municipio', 'Dosis iniciales', 'Dosis finales', 'Pérdida', 'Deserción', 'Meta', 'Cumple'])
-  expect(celdas('Total de la DDRISS')).toEqual(['Total de la DDRISS', '1,051', '975', '76', '7.2 %', '≤ 10 %', 'Sí'])
-  expect(celdas('Tacaná')).toEqual(['Tacaná', '100', '85', '15', '15.0 %', '≤ 10 %', 'No'])
+  expect(encabezados).toEqual(['Municipio', 'Dosis iniciales', 'Dosis finales', 'Pérdida', 'Meta', 'Deserción', 'Cumple'])
+  expect(celdas('Total de la DDRISS')).toEqual(['Total de la DDRISS', '1,051', '975', '76', '≤ 10 %', '7.2 %', 'Sí'])
+  expect(celdas('Tacaná')).toEqual(['Tacaná', '100', '85', '15', '≤ 10 %', '15.0 %', 'No'])
   expect(within(screen.getByText('Tacaná').closest('tr')).getByText('15.0 %').className).toContain('text-destructive')
-  expect(celdas('Ayutla')).toEqual(['Ayutla', '0', '3', '-3', 'Sin primeras dosis', '—', '—'])
+  expect(celdas('Ayutla')).toEqual(['Ayutla', '0', '3', '-3', '—', 'Sin primeras dosis', '—'])
   expect(screen.queryByText('Deserción negativa')).toBeNull()
   expect(screen.queryByText(/Una deserción negativa/)).toBeNull()
 })
@@ -69,10 +69,31 @@ test('una deserción negativa lleva su marca y la línea que la explica', () => 
   )
 
   expect(celdas('San Pedro Sacatepéquez')).toEqual([
-    'San Pedro Sacatepéquez', '4', '9', '-5', '-125.0 %Deserción negativa', '≤ 10 %', 'Sí',
+    'San Pedro Sacatepéquez', '4', '9', '-5', '≤ 10 %', '-125.0 %Deserción negativa', 'Sí',
   ])
   expect(screen.getByText(/Una deserción negativa/).textContent).toBe(
     'Una deserción negativa indica que en el año se aplicaron más dosis finales que iniciales: esquemas empezados el '
       + 'año anterior o niños que llegaron de otro municipio. Conviene revisar el registro.',
   )
+})
+
+test('«Cumple» va en insignia verde (Sí) o roja (No), con su texto, y «—» en gris sin insignia', () => {
+  render(
+    <TablaDesercion
+      resultados={[
+        fila(municipio(1, 'Tacaná')),
+        fila(municipio(2, 'Ocós'), { valor: 15, cumpleMeta: false, color: 'rojo' }),
+        fila(municipio(3, 'Ayutla'), SIN_PRIMERAS),
+      ]}
+    />,
+  )
+
+  const cumple = (nombre) => [...screen.getByText(nombre).closest('tr').querySelectorAll('td')].at(-1)
+  expect(cumple('Tacaná').querySelector('[data-slot="badge"]').textContent).toBe('Sí')
+  expect(cumple('Tacaná').querySelector('[data-slot="badge"]').className).toContain('bg-exito')
+  expect(cumple('Ocós').querySelector('[data-slot="badge"]').textContent).toBe('No')
+  expect(cumple('Ocós').querySelector('[data-slot="badge"]').className).toContain('bg-destructive/10')
+  expect(cumple('Ayutla').querySelector('[data-slot="badge"]')).toBeNull()
+  expect(cumple('Ayutla').textContent).toBe('—')
+  expect(cumple('Ayutla').firstElementChild.className).toContain('text-muted-foreground')
 })
