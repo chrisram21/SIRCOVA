@@ -11,6 +11,7 @@ import { listarResultados } from '@/api/indicadores.js'
 import { obtenerAvance } from '@/api/revision.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
+import PantallaCargaSesion, { usePrimeraCarga } from '@/componentes/PantallaCargaSesion.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import { MESES, mesAnterior } from '@/lib/fechas.js'
 import { TIPOS_INDICADOR } from '@/paginas/configuracion/tiposIndicador.js'
@@ -215,153 +216,161 @@ export default function PaginaMapa({ hoy }) {
 
   const enlaceDelMes = enlaceAIndicadores({ anio: filtros.anio, mes: filtros.mes, ddrissId })
   const cargando = listo && ((veIndicadores && !indicadores.datos && !indicadores.error) || (veAvance && !avance.datos && !avance.error))
+  // La primera visita espera las DDRISS, los datos y los límites; después, cada cambio usa sus esqueletos. Sin
+  // DDRISS (error o lista vacía) no se pide nada más.
+  const limitesListos = archivo === null || limites.datos || limites.error
+  const sinDdriss = ddriss.error || ddriss.datos?.length === 0
+  const primeraCarga = usePrimeraCarga(Boolean(sinDdriss || (listo && datosListos && limitesListos)))
 
   return (
-    <section className="flex flex-col gap-5 p-4 sm:p-6">
-      <EncabezadoPagina
-        antetitulo={antetitulo}
-        titulo={MODOS[modo].pregunta}
-        acciones={
-          <Tabs value={modo} onValueChange={(nuevo) => irA({ modo: nuevo })} className="max-sm:w-full">
-            {/* En el teléfono, dos filas de dos a todo el ancho: las cuatro en una no caben en 390 px. */}
-            <TabsList
-              aria-label="Qué colorea el mapa"
-              className="grid h-auto! w-full grid-cols-2 sm:inline-flex sm:h-8! sm:w-fit"
-            >
-              {Object.entries(MODOS)
-                .filter(([codigo]) => codigo !== 'estado' || veAvance)
-                .map(([codigo, { etiqueta }]) => (
-                  <TabsTrigger key={codigo} value={codigo} className="px-3">
-                    {etiqueta}
-                  </TabsTrigger>
-                ))}
-            </TabsList>
-          </Tabs>
-        }
-      />
-
-      {ddriss.error && (
-        <AvisoError onReintentar={ddriss.reintentar}>No se pudieron cargar las DDRISS: {mensajeDeError(ddriss.error)}</AvisoError>
-      )}
-
-      <BarraFiltrosMapa
-        filtros={filtros}
-        anios={anios}
-        ddriss={nacional ? ddriss.datos : null}
-        ddrissId={ddrissId}
-        vacunas={vacunas}
-        vacuna={vacuna}
-        irA={irA}
-      />
-
-      {indicadores.error && (
-        <AvisoError onReintentar={indicadores.reintentar}>
-          No se pudieron cargar los indicadores: {mensajeDeError(indicadores.error)}
-        </AvisoError>
-      )}
-      {avance.error && (
-        <AvisoError onReintentar={avance.reintentar}>
-          No se pudo cargar el estado de los reportes: {mensajeDeError(avance.error)}
-        </AvisoError>
-      )}
-      {avisoDelModo === 'sin-corrida' ? (
-        <Aviso>
-          No hay un cálculo vigente de {mesNombre}.{' '}
-          <Link to={enlaceDelMes} className="font-medium text-enlace underline-offset-4 hover:underline">
-            Ir a Indicadores
-          </Link>
-        </Aviso>
-      ) : (
-        avisoDelModo && <Aviso>{avisoDelModo}</Aviso>
-      )}
-
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <Card className="gap-3 py-4">
-          <CardContent className="flex flex-col gap-3 px-4">
-            <p className="text-sm text-muted-foreground">Toque o haga clic en un municipio para ver su detalle.</p>
-            {limites.error ? (
-              <AvisoError onReintentar={limites.reintentar}>
-                No se pudieron cargar los límites de los municipios: {mensajeDeError(limites.error)}
-              </AvisoError>
-            ) : sinLimites ? (
-              <Aviso icono={MapPinOff}>No hay límites cargados para los municipios de esta DDRISS.</Aviso>
-            ) : sinMunicipios ? (
-              <Aviso icono={MapPinOff}>No hay datos de los municipios de {mesNombre}.</Aviso>
-            ) : (
-              // isolate: los z-index de Leaflet (hasta 1000) y de la leyenda quedan dentro del mapa y no tapan los menús.
-              <div className="relative isolate">
-                {limites.datos && !cargando ? (
-                  <Suspense fallback={<Skeleton className="h-[420px] w-full sm:h-[560px]" />}>
-                    {/* SPEC 55: «Estado del reporte» no sale de una corrida, así que no lleva la marca. */}
-                    <MarcaPreliminar activa={modo !== 'estado' && corrida?.parcial === true}>
-                      <MapaMunicipios
-                        limites={limites.datos}
-                        filas={filas}
-                        modo={modo}
-                        indicador={indicador}
-                        seleccionado={seleccionada?.codigoIne ?? null}
-                        onElegir={elegir}
-                        className="h-[420px] sm:h-[560px]"
-                      />
-                    </MarcaPreliminar>
-                  </Suspense>
-                ) : (
-                  <Skeleton aria-label="Cargando el mapa" className="h-[420px] w-full sm:h-[560px]" />
-                )}
-                <LeyendaMapa
-                  {...leyenda}
-                  className="mt-3 sm:pointer-events-auto sm:absolute sm:bottom-3 sm:left-3 sm:z-[1000] sm:mt-0 sm:max-w-60"
-                />
-              </div>
-            )}
-            {sinLimites && <LeyendaMapa {...leyenda} className="self-start" />}
-          </CardContent>
-        </Card>
-
-        <Card className="py-4">
-          <CardContent className="px-4">
-            <Tabs value={pestana} onValueChange={setPestana} className="gap-4">
-              <TabsList className="w-full">
-                <TabsTrigger value="municipio">Municipio</TabsTrigger>
-                <TabsTrigger value="clasificacion">Clasificación</TabsTrigger>
+    <>
+      {primeraCarga && <PantallaCargaSesion etiqueta="Cargando el mapa" />}
+      <section hidden={primeraCarga} className="flex flex-col gap-5 p-4 sm:p-6">
+        <EncabezadoPagina
+          antetitulo={antetitulo}
+          titulo={MODOS[modo].pregunta}
+          acciones={
+            <Tabs value={modo} onValueChange={(nuevo) => irA({ modo: nuevo })} className="max-sm:w-full">
+              {/* En el teléfono, dos filas de dos a todo el ancho: las cuatro en una no caben en 390 px. */}
+              <TabsList
+                aria-label="Qué colorea el mapa"
+                className="grid h-auto! w-full grid-cols-2 sm:inline-flex sm:h-8! sm:w-fit"
+              >
+                {Object.entries(MODOS)
+                  .filter(([codigo]) => codigo !== 'estado' || veAvance)
+                  .map(([codigo, { etiqueta }]) => (
+                    <TabsTrigger key={codigo} value={codigo} className="px-3">
+                      {etiqueta}
+                    </TabsTrigger>
+                  ))}
               </TabsList>
-              <TabsContent value="municipio">
-                {cargando ? (
-                  <div className="flex flex-col gap-3" aria-label="Cargando el municipio">
-                    {[1, 2, 3, 4].map((n) => (
-                      <Skeleton key={n} className="h-8 w-full" />
-                    ))}
-                  </div>
-                ) : (
-                  <PanelMunicipio
-                    fila={filaPanel}
-                    esDdriss={seleccionada === null}
-                    modo={modo}
-                    franja={franja}
-                    cobertura={filaDe(indicadorCobertura)}
-                    brecha={filaDe(indicadorBrecha)}
-                    nombreBrecha={indicadorBrecha?.nombre ?? null}
-                    desercion={filaDe(indicadorDesercion)}
-                    mesNombre={mesNombre}
-                    enlaceIndicadores={
-                      veIndicadores && corrida
-                        ? enlaceAIndicadores({ anio: filtros.anio, mes: filtros.mes, vacuna, indicador, municipioId, ddrissId })
-                        : null
-                    }
-                  />
-                )}
-              </TabsContent>
-              <TabsContent value="clasificacion" className="lg:max-h-[600px] lg:overflow-y-auto">
-                {cargando ? (
-                  <Skeleton className="h-40 w-full" />
-                ) : (
-                  <ClasificacionMunicipios filas={filas} modo={modo} seleccionado={municipioId} onElegir={elegir} />
-                )}
-              </TabsContent>
             </Tabs>
-          </CardContent>
-        </Card>
-      </div>
-    </section>
+          }
+        />
+
+        {ddriss.error && (
+          <AvisoError onReintentar={ddriss.reintentar}>No se pudieron cargar las DDRISS: {mensajeDeError(ddriss.error)}</AvisoError>
+        )}
+
+        <BarraFiltrosMapa
+          filtros={filtros}
+          anios={anios}
+          ddriss={nacional ? ddriss.datos : null}
+          ddrissId={ddrissId}
+          vacunas={vacunas}
+          vacuna={vacuna}
+          irA={irA}
+        />
+
+        {indicadores.error && (
+          <AvisoError onReintentar={indicadores.reintentar}>
+            No se pudieron cargar los indicadores: {mensajeDeError(indicadores.error)}
+          </AvisoError>
+        )}
+        {avance.error && (
+          <AvisoError onReintentar={avance.reintentar}>
+            No se pudo cargar el estado de los reportes: {mensajeDeError(avance.error)}
+          </AvisoError>
+        )}
+        {avisoDelModo === 'sin-corrida' ? (
+          <Aviso>
+            No hay un cálculo vigente de {mesNombre}.{' '}
+            <Link to={enlaceDelMes} className="font-medium text-enlace underline-offset-4 hover:underline">
+              Ir a Indicadores
+            </Link>
+          </Aviso>
+        ) : (
+          avisoDelModo && <Aviso>{avisoDelModo}</Aviso>
+        )}
+
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <Card className="gap-3 py-4">
+            <CardContent className="flex flex-col gap-3 px-4">
+              <p className="text-sm text-muted-foreground">Toque o haga clic en un municipio para ver su detalle.</p>
+              {limites.error ? (
+                <AvisoError onReintentar={limites.reintentar}>
+                  No se pudieron cargar los límites de los municipios: {mensajeDeError(limites.error)}
+                </AvisoError>
+              ) : sinLimites ? (
+                <Aviso icono={MapPinOff}>No hay límites cargados para los municipios de esta DDRISS.</Aviso>
+              ) : sinMunicipios ? (
+                <Aviso icono={MapPinOff}>No hay datos de los municipios de {mesNombre}.</Aviso>
+              ) : (
+                // isolate: los z-index de Leaflet (hasta 1000) y de la leyenda quedan dentro del mapa y no tapan los menús.
+                <div className="relative isolate">
+                  {limites.datos && !cargando ? (
+                    <Suspense fallback={<Skeleton className="h-[420px] w-full sm:h-[560px]" />}>
+                      {/* SPEC 55: «Estado del reporte» no sale de una corrida, así que no lleva la marca. */}
+                      <MarcaPreliminar activa={modo !== 'estado' && corrida?.parcial === true}>
+                        <MapaMunicipios
+                          limites={limites.datos}
+                          filas={filas}
+                          modo={modo}
+                          indicador={indicador}
+                          seleccionado={seleccionada?.codigoIne ?? null}
+                          onElegir={elegir}
+                          className="h-[420px] sm:h-[560px]"
+                        />
+                      </MarcaPreliminar>
+                    </Suspense>
+                  ) : (
+                    <Skeleton aria-label="Cargando el mapa" className="h-[420px] w-full sm:h-[560px]" />
+                  )}
+                  <LeyendaMapa
+                    {...leyenda}
+                    className="mt-3 sm:pointer-events-auto sm:absolute sm:bottom-3 sm:left-3 sm:z-[1000] sm:mt-0 sm:max-w-60"
+                  />
+                </div>
+              )}
+              {sinLimites && <LeyendaMapa {...leyenda} className="self-start" />}
+            </CardContent>
+          </Card>
+
+          <Card className="py-4">
+            <CardContent className="px-4">
+              <Tabs value={pestana} onValueChange={setPestana} className="gap-4">
+                <TabsList className="w-full">
+                  <TabsTrigger value="municipio">Municipio</TabsTrigger>
+                  <TabsTrigger value="clasificacion">Clasificación</TabsTrigger>
+                </TabsList>
+                <TabsContent value="municipio">
+                  {cargando ? (
+                    <div className="flex flex-col gap-3" aria-label="Cargando el municipio">
+                      {[1, 2, 3, 4].map((n) => (
+                        <Skeleton key={n} className="h-8 w-full" />
+                      ))}
+                    </div>
+                  ) : (
+                    <PanelMunicipio
+                      fila={filaPanel}
+                      esDdriss={seleccionada === null}
+                      modo={modo}
+                      franja={franja}
+                      cobertura={filaDe(indicadorCobertura)}
+                      brecha={filaDe(indicadorBrecha)}
+                      nombreBrecha={indicadorBrecha?.nombre ?? null}
+                      desercion={filaDe(indicadorDesercion)}
+                      mesNombre={mesNombre}
+                      enlaceIndicadores={
+                        veIndicadores && corrida
+                          ? enlaceAIndicadores({ anio: filtros.anio, mes: filtros.mes, vacuna, indicador, municipioId, ddrissId })
+                          : null
+                      }
+                    />
+                  )}
+                </TabsContent>
+                <TabsContent value="clasificacion" className="lg:max-h-[600px] lg:overflow-y-auto">
+                  {cargando ? (
+                    <Skeleton className="h-40 w-full" />
+                  ) : (
+                    <ClasificacionMunicipios filas={filas} modo={modo} seleccionado={municipioId} onElegir={elegir} />
+                  )}
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+    </>
   )
 }

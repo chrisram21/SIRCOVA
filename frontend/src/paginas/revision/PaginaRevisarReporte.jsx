@@ -20,6 +20,7 @@ import {
 import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina, { destinoDeVolver } from '@/componentes/EncabezadoPagina.jsx'
+import PantallaCargaSesion, { usePrimeraCarga } from '@/componentes/PantallaCargaSesion.jsx'
 import HistorialEstadosReporte from '@/componentes/HistorialEstadosReporte.jsx'
 import InsigniaEstadoReporte, { ESTADOS_REPORTE } from '@/componentes/InsigniaEstadoReporte.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
@@ -236,6 +237,8 @@ export default function PaginaRevisarReporte() {
   const [devuelto, setDevuelto] = useState(false)
   const [aprobando, setAprobando] = useState(false)
   const campoGeneral = useRef(null)
+  // «Recargar» conserva los datos a la vista; solo la primera carga (o un reintento tras un error) no tiene datos.
+  const primeraCarga = usePrimeraCarga(Boolean(datos || errorCarga))
 
   useEffect(() => {
     let vigente = true
@@ -293,6 +296,7 @@ export default function PaginaRevisarReporte() {
     )
   }
   if (!datos) {
+    if (primeraCarga) return <PantallaCargaSesion etiqueta="Cargando reporte" />
     return (
       <section className="flex flex-col gap-6 p-6">
         {encabezado}

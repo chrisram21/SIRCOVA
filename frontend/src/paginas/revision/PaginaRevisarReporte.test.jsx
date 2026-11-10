@@ -11,6 +11,7 @@ import {
 } from '@/api/produccion.js'
 import { aprobarReporte, solicitarCorreccion } from '@/api/revision.js'
 import { guardarSesion } from '@/api/sesion.js'
+import { RETRASO_MS } from '@/componentes/PantallaCargaSesion.jsx'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 import PaginaRevisarReporte from './PaginaRevisarReporte.jsx'
 
@@ -482,5 +483,60 @@ describe('aprobar (SPEC 38)', () => {
     expect(botonAprobar()).toBeNull()
     expect(screen.queryByRole('button', { name: 'Solicitar corrección' })).toBeNull()
     expect(screen.queryByLabelText('Observación general')).toBeNull()
+  })
+})
+
+describe('pantalla de carga (SPEC 56)', () => {
+  const pendiente = () => {
+    let resolver
+    const promesa = new Promise((r) => {
+      resolver = r
+    })
+    return { promesa, resolver }
+  }
+  const pasaElRetraso = () => new Promise((r) => setTimeout(r, RETRASO_MS + 100))
+  const cargaDelReporte = () => screen.queryByRole('status', { name: 'Cargando reporte' })
+
+  function renderizar() {
+    guardarSesion(crearSesion(PERMISOS))
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/revision/reportes/:id',
+          element: (
+            <ProveedorSesion>
+              <PaginaRevisarReporte />
+            </ProveedorSesion>
+          ),
+        },
+      ],
+      { initialEntries: ['/revision/reportes/524'] },
+    )
+    render(<RouterProvider router={router} />)
+  }
+
+  test('en la primera carga tapa la pantalla, con el encabezado, hasta que llega el reporte', async () => {
+    const detalle = pendiente()
+    obtenerReporte.mockReturnValue(detalle.promesa)
+    renderizar()
+
+    expect(await screen.findByRole('status', { name: 'Cargando reporte' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull()
+
+    detalle.resolver(reporte())
+    expect(await screen.findByRole('heading', { name: 'Reporte de octubre de 2026' })).toBeTruthy()
+    expect(cargaDelReporte()).toBeNull()
+  })
+
+  test('el reintento después de un error usa el esqueleto, no la pantalla de carga', async () => {
+    // La primera llamada falla y el reintento queda sin respuesta.
+    obtenerReporte.mockReturnValue(pendiente().promesa)
+    obtenerReporte.mockRejectedValueOnce(new ErrorApi(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.'))
+    renderizar()
+    fireEvent.click(await screen.findByRole('button', { name: 'Reintentar' }))
+    await pasaElRetraso()
+
+    expect(cargaDelReporte()).toBeNull()
+    expect(screen.getByLabelText('Cargando reporte')).toBeTruthy()
   })
 })
