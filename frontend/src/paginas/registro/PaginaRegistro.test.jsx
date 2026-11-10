@@ -3,6 +3,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { listarPeriodos } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
 import { crearReporte, listarReportes, obtenerFormulario, obtenerReporte } from '@/api/produccion.js'
+import { RETRASO_MS } from '@/componentes/PantallaCargaSesion.jsx'
 import PaginaRegistro from './PaginaRegistro.jsx'
 
 vi.mock('@/api/catalogos.js', () => ({ listarPeriodos: vi.fn() }))
@@ -108,6 +109,8 @@ function montar(ruta = '/registro') {
 async function abrir(ruta) {
   montar(ruta)
   await waitFor(() => expect(screen.queryByLabelText('Cargando registro')).toBeNull())
+  // La pantalla queda oculta hasta que termina la primera carga (SPEC 56).
+  await screen.findByRole('heading', { level: 1 })
 }
 
 const titulo = () => screen.getByRole('heading', { level: 1 }).textContent
@@ -368,5 +371,72 @@ describe('cambiar de mes con cambios sin guardar', () => {
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Salir sin guardar' }))
     await waitFor(() => expect(titulo()).toBe('Reporte mensual de octubre de 2026'))
     expect(screen.getByRole('button', { name: 'Crear reporte de octubre de 2026' })).toBeTruthy()
+  })
+})
+
+describe('pantalla de carga (SPEC 56)', () => {
+  const pendiente = () => {
+    let resolver
+    const promesa = new Promise((r) => {
+      resolver = r
+    })
+    return { promesa, resolver }
+  }
+  const pasaElRetraso = () => new Promise((r) => setTimeout(r, RETRASO_MS + 100))
+  const cargaDelRegistro = () => screen.queryByRole('status', { name: 'Cargando registro' })
+
+  test('con reporte del mes, sigue hasta que el formulario está listo aunque ya llegaron los meses y el detalle', async () => {
+    // Solo octubre, que tiene reporte: si no, se elige septiembre, que no lo tiene.
+    prepararApi({ periodos: [OCTUBRE], reportesPorMes: { 10: resumen(8, OCTUBRE) } })
+    const formulario = pendiente()
+    obtenerFormulario.mockReturnValue(formulario.promesa)
+    montar()
+
+    expect(await screen.findByRole('status', { name: 'Cargando registro' })).toBeTruthy()
+    await waitFor(() => expect(obtenerReporte).toHaveBeenCalledWith(8))
+    await pasaElRetraso()
+    expect(cargaDelRegistro()).toBeTruthy()
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull()
+
+    formulario.resolver(formularioDe(8))
+    await waitFor(() => expect(cargaDelRegistro()).toBeNull())
+    expect(titulo()).toBe('Reporte mensual de octubre de 2026')
+  })
+
+  test('un mes sin reporte la quita al llegar los meses', async () => {
+    prepararApi()
+    const periodos = pendiente()
+    listarPeriodos.mockReturnValue(periodos.promesa)
+    montar()
+
+    expect(await screen.findByRole('status', { name: 'Cargando registro' })).toBeTruthy()
+    periodos.resolver([SEPTIEMBRE, OCTUBRE])
+    expect(await screen.findByRole('button', { name: 'Crear reporte de septiembre de 2026' })).toBeTruthy()
+    expect(cargaDelRegistro()).toBeNull()
+  })
+
+  test('si el formulario falla, la quita y muestra el error con «Reintentar»', async () => {
+    // Solo octubre, que tiene reporte: si no, se elige septiembre, que no lo tiene.
+    prepararApi({ periodos: [OCTUBRE], reportesPorMes: { 10: resumen(8, OCTUBRE) } })
+    obtenerFormulario.mockRejectedValue(new ErrorApi(500, 'ERROR_INTERNO', 'Ocurrió un error interno. Intente de nuevo.'))
+    montar()
+
+    expect(await screen.findByRole('button', { name: 'Reintentar' })).toBeTruthy()
+    expect(screen.getByText(/No se pudo cargar el formulario/)).toBeTruthy()
+    expect(cargaDelRegistro()).toBeNull()
+  })
+
+  test('después de la primera carga, cambiar de mes usa los esqueletos', async () => {
+    prepararApi({ reportesPorMes: { 9: resumen(7, SEPTIEMBRE), 10: resumen(8, OCTUBRE) } })
+    await abrir('/registro?periodo=9')
+    await waitFor(() => expect(screen.queryByLabelText('Cargando formulario')).toBeNull())
+
+    obtenerReporte.mockReturnValue(pendiente().promesa)
+    fireEvent.change(document.querySelector('select[name="periodo"]'), { target: { value: '10' } })
+    await pasaElRetraso()
+
+    expect(cargaDelRegistro()).toBeNull()
+    expect(screen.getByLabelText('Cargando reporte')).toBeTruthy()
+    expect(titulo()).toBe('Reporte mensual de octubre de 2026')
   })
 })

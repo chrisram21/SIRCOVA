@@ -141,8 +141,8 @@ test('con INDICADOR_CONSULTAR aparece un acceso a Indicadores que lleva a /indic
 
   fireEvent.click(enlaces[0])
 
-  // La pantalla se carga al entrar (lazy).
-  expect(await screen.findByRole('heading', { level: 1, name: 'Indicadores' }, { timeout: 5000 })).toBeTruthy()
+  // La pantalla se carga al entrar (lazy); sin respuesta de la API, se queda en su primera carga (SPEC 56).
+  expect(await screen.findByRole('status', { name: 'Cargando indicadores' }, { timeout: 5000 })).toBeTruthy()
 })
 
 const titulosDeAccesos = () =>

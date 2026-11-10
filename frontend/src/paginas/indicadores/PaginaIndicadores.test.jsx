@@ -6,6 +6,7 @@ import {
   calcularIndicadores, listarCorridas, listarResultados, obtenerMesesCalculados, obtenerSerie,
 } from '@/api/indicadores.js'
 import { guardarSesion } from '@/api/sesion.js'
+import { RETRASO_MS } from '@/componentes/PantallaCargaSesion.jsx'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 import PaginaIndicadores, { filtrosDeUrl, indicadorElegido, mesPorDefecto } from './PaginaIndicadores.jsx'
 
@@ -879,5 +880,52 @@ describe('coberturas mayores al 100 % (SPEC 52)', () => {
     expect(filaDe('San Marcos').textContent).toContain('120.0 %')
     expect(screen.queryAllByRole('img', { name: TEXTO })).toHaveLength(0)
     expect(screen.queryByText(/con cobertura mayor al 100 %/)).toBeNull()
+  })
+})
+
+describe('pantalla de carga (SPEC 56)', () => {
+  const pendiente = () => {
+    let resolver
+    const promesa = new Promise((r) => {
+      resolver = r
+    })
+    return { promesa, resolver }
+  }
+  const pasaElRetraso = () => new Promise((r) => setTimeout(r, RETRASO_MS + 100))
+  const cargaDeIndicadores = () => screen.queryByRole('status', { name: 'Cargando indicadores' })
+
+  test('en la primera carga tapa la pantalla, con los filtros, hasta que llegan los resultados', async () => {
+    const resultados = pendiente()
+    listarResultados.mockReturnValue(resultados.promesa)
+    await montar()
+
+    expect(await screen.findByRole('status', { name: 'Cargando indicadores' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull()
+
+    resultados.resolver({ corrida: corrida(), resultados: RESULTADOS })
+    await waitFor(() => expect(cargaDeIndicadores()).toBeNull())
+    expect(titulo()).toBe('Avance de Hexavalente')
+  })
+
+  test('después de la primera carga, cambiar el mes usa los esqueletos', async () => {
+    await montar()
+    await waitFor(() => expect(titulo()).toBe('Avance de Hexavalente'))
+
+    listarResultados.mockReturnValue(pendiente().promesa)
+    fireEvent.change(document.querySelector('select[name="mes"]'), { target: { value: '9' } })
+    await pasaElRetraso()
+
+    expect(cargaDeIndicadores()).toBeNull()
+    expect(screen.getByLabelText('Cargando indicadores')).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1 })).toBeTruthy()
+  })
+
+  test('si la primera carga falla, muestra el error con «Reintentar»', async () => {
+    listarResultados.mockRejectedValue(new ErrorApi(500, 'ERROR_INTERNO', 'Ocurrió un error interno. Intente de nuevo.'))
+    await montar()
+
+    expect(await screen.findByRole('button', { name: 'Reintentar' })).toBeTruthy()
+    expect(screen.getByText(/No se pudieron cargar los indicadores/)).toBeTruthy()
+    expect(cargaDeIndicadores()).toBeNull()
   })
 })

@@ -92,10 +92,11 @@ describe('al recargar (sin sesión en memoria)', () => {
     vi.unstubAllGlobals()
   })
 
-  test('mientras recupera la sesión muestra la pantalla de carga y no redirige', () => {
+  test('mientras recupera la sesión muestra la pantalla de carga y no redirige', async () => {
     abrirSinSesion('/administracion/usuarios?estado=ACTIVA')
 
-    expect(screen.getByRole('status', { name: 'Recuperando la sesión' })).toBeTruthy()
+    // Aparece pasados 300 ms (RETRASO_MS), para no parpadear en las recuperaciones rápidas.
+    expect(await screen.findByRole('status', { name: 'Recuperando la sesión' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Iniciar sesión' })).toBeNull()
     expect(screen.getByTestId('ubicacion').textContent).toBe('/administracion/usuarios?estado=ACTIVA')
   })

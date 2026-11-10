@@ -6,6 +6,7 @@ import { cargarLimites } from '@/api/geo.js'
 import { listarResultados } from '@/api/indicadores.js'
 import { obtenerAvance } from '@/api/revision.js'
 import { guardarSesion } from '@/api/sesion.js'
+import { RETRASO_MS } from '@/componentes/PantallaCargaSesion.jsx'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 import PaginaMapa, { filtrosDelMapa } from './PaginaMapa.jsx'
 
@@ -294,7 +295,8 @@ test('sin corrida vigente lo avisa con el enlace a Indicadores, y «Estado del r
   const router = montar()
 
   expect(await screen.findByText(/No hay un cálculo vigente de octubre de 2026\./)).toBeTruthy()
-  expect(screen.getByRole('link', { name: 'Ir a Indicadores' }).getAttribute('href')).toBe('/indicadores?anio=2026&mes=10')
+  // El texto ya existe en la pantalla oculta por la primera carga; el enlace se busca cuando se ve.
+  expect((await screen.findByRole('link', { name: 'Ir a Indicadores' })).getAttribute('href')).toBe('/indicadores?anio=2026&mes=10')
   expect((await poligono('San Marcos')).dataset.color).toBe('var(--muted)')
 
   pestana('Estado del reporte')
@@ -379,4 +381,62 @@ test('la cobertura mayor al 100 % lleva la marca en la clasificación y el aviso
   await waitFor(() => expect(router.state.location.search).toContain('modo=desercion'))
   pestana('Municipio')
   expect(within(screen.getByRole('tabpanel')).getByText(texto, { selector: 'p' })).toBeTruthy()
+})
+
+describe('pantalla de carga (SPEC 56)', () => {
+  const pendiente = () => {
+    let resolver
+    const promesa = new Promise((r) => {
+      resolver = r
+    })
+    return { promesa, resolver }
+  }
+  const pasaElRetraso = () => new Promise((r) => setTimeout(r, RETRASO_MS + 100))
+  const cargaDelMapa = () => screen.queryByRole('status', { name: 'Cargando el mapa' })
+
+  test('en la primera carga tapa la pantalla hasta que llegan los datos', async () => {
+    const resultados = pendiente()
+    listarResultados.mockReturnValue(resultados.promesa)
+    montar()
+
+    expect(await screen.findByRole('status', { name: 'Cargando el mapa' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull()
+
+    resultados.resolver({ corrida: CORRIDA, resultados: RESULTADOS })
+    expect((await poligono('San Marcos')).dataset.color).toBe('var(--semaforo-verde)')
+    expect(cargaDelMapa()).toBeNull()
+    expect(screen.getByRole('heading', { level: 1, name: '¿Dónde está el rezago de cobertura?' })).toBeTruthy()
+  })
+
+  test('también espera los límites', async () => {
+    const limites = pendiente()
+    cargarLimites.mockReturnValue(limites.promesa)
+    montar()
+
+    expect(await screen.findByRole('status', { name: 'Cargando el mapa' })).toBeTruthy()
+    limites.resolver(LIMITES)
+    await waitFor(() => expect(cargaDelMapa()).toBeNull())
+  })
+
+  test('después de la primera carga, cambiar el mes usa los esqueletos', async () => {
+    montar()
+    await poligono('San Marcos')
+
+    listarResultados.mockReturnValue(pendiente().promesa)
+    fireEvent.change(document.querySelector('select[name="mes"]'), { target: { value: '9' } })
+    await pasaElRetraso()
+
+    expect(cargaDelMapa()).toBeNull()
+    expect(screen.getByLabelText('Cargando el mapa')).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1 })).toBeTruthy()
+  })
+
+  test('si la primera carga falla, muestra el error con «Reintentar»', async () => {
+    listarResultados.mockRejectedValue(new ErrorApi(500, 'ERROR_INTERNO', 'Ocurrió un error interno. Intente de nuevo.'))
+    montar()
+
+    expect((await screen.findAllByRole('button', { name: 'Reintentar' })).length).toBeGreaterThan(0)
+    expect(screen.getByText(/No se pudieron cargar los indicadores/)).toBeTruthy()
+    expect(cargaDelMapa()).toBeNull()
+  })
 })

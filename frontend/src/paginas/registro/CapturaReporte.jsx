@@ -415,7 +415,7 @@ function HistorialPlegable({ reporteId, estado }) {
 }
 
 // alEnviar: avisa a la página el reporte ya enviado o corregido, para que muestre su estado nuevo.
-export default function CapturaReporte({ reporte, formularioPedido = null, alEnviar }) {
+export default function CapturaReporte({ reporte, formularioPedido = null, alEnviar, alListo }) {
   // formulario: GET /reportes/{id}/formulario; cantidades, otras, datos y firmas van por vacunaId. otras es la
   // tarjeta B: { filas, cantidades }.
   const [formulario, setFormulario] = useState(null)
@@ -608,6 +608,14 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
       observacionesActual.current += 1
     }
   }, [reporte.id])
+
+  // Una sola vez, cuando el formulario llega o falla: PaginaRegistro cierra con esto su primera carga.
+  const avisadoListo = useRef(false)
+  useEffect(() => {
+    if (avisadoListo.current || !(formulario || errorCarga)) return
+    avisadoListo.current = true
+    alListo?.()
+  }, [formulario, errorCarga])
 
   if (errorCarga) {
     return <AvisoError onReintentar={cargar}>No se pudo cargar el formulario: {errorCarga}</AvisoError>

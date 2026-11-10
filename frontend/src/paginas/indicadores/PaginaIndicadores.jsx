@@ -13,6 +13,7 @@ import { mensajeDeError } from '@/api/cliente.js'
 import { listarCorridas, listarResultados, obtenerMesesCalculados } from '@/api/indicadores.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
+import PantallaCargaSesion, { usePrimeraCarga } from '@/componentes/PantallaCargaSesion.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import { MESES, mesAnterior } from '@/lib/fechas.js'
 import { cn } from '@/lib/utils'
@@ -301,6 +302,10 @@ export default function PaginaIndicadores({ hoy }) {
   const ddrissId = nacional ? (filtros.ddriss ?? ddriss?.[0]?.id) : undefined
   const esperandoDdriss = nacional && ddrissId === undefined
   const clave = `${filtros.anio}-${filtros.mes}-${ddrissId ?? ''}`
+  // La primera visita espera las DDRISS y los resultados; después, cada cambio usa sus esqueletos. Sin DDRISS (error
+  // o lista vacía) no se pide nada más.
+  const sinDdriss = errorDdriss || ddriss?.length === 0
+  const primeraCarga = usePrimeraCarga(Boolean(sinDdriss || (!esperandoDdriss && (datos || errorCarga))))
 
   useEffect(() => {
     if (!nacional) return undefined
@@ -406,126 +411,129 @@ export default function PaginaIndicadores({ hoy }) {
   const titulo = corrida && vacuna ? `${VISTAS[vista].etiqueta} de ${vacunaNombre}` : 'Indicadores'
 
   return (
-    // contain-inline-size: una tabla ancha (la de proyección) se desplaza en su recuadro y no ensancha la página.
-    <section className="flex flex-col gap-6 p-6 contain-inline-size">
-      <EncabezadoPagina
-        antetitulo="Indicadores"
-        titulo={titulo}
-        descripcion={`Dosis acumuladas de enero a ${MESES[filtros.mes - 1]} de ${filtros.anio}, por municipio de residencia.`}
-        acciones={puedeCalcular && !nacional && <Button onClick={() => setCalculando(true)}>Calcular indicadores</Button>}
-      />
-
-      {errorDdriss && (
-        <AvisoError onReintentar={() => setIntentoDdriss((n) => n + 1)}>No se pudieron cargar las DDRISS: {errorDdriss}</AvisoError>
-      )}
-
-      {errorDistritos && (
-        <AvisoError onReintentar={() => setIntentoDistritos((n) => n + 1)}>
-          No se pudieron cargar los distritos: {errorDistritos}
-        </AvisoError>
-      )}
-
-      <BarraFiltrosIndicadores
-        filtros={filtros}
-        anios={anios}
-        ddriss={nacional ? ddriss : null}
-        ddrissId={ddrissId}
-        vacunas={vacunas}
-        vacuna={vacuna}
-        distritos={opcionesDistrito}
-        municipios={opcionesMunicipio}
-        elegidos={elegidos}
-        irA={irA}
-      />
-
-      {errorCarga ? (
-        <AvisoError onReintentar={() => setIntento((n) => n + 1)}>No se pudieron cargar los indicadores: {errorCarga}</AvisoError>
-      ) : datos === null ? (
-        !esperandoDdriss && (
-          <div className="flex flex-col gap-2" aria-label="Cargando indicadores">
-            {[1, 2, 3].map((n) => (
-              <Skeleton key={n} className="h-10 w-full" />
-            ))}
-          </div>
-        )
-      ) : (
-        <>
-          {corrida === null ? (
-            <p className="text-muted-foreground">Este mes todavía no tiene indicadores calculados.</p>
-          ) : (
-            <>
-              <TarjetaCorrida corrida={corrida} />
-              {conResultados.length === 0 ? (
-                <p className="text-muted-foreground">La corrida no tiene resultados de cobertura, avance, brecha, deserción ni proyección.</p>
-              ) : (
-                <>
-                  <PestanasIndicadores vista={vista} alCambiar={(nueva) => irA({ vista: nueva, indicador: undefined })} />
-                  {indicador === null ? (
-                    <Aviso>La corrida no tiene un indicador de {VISTAS[vista].nombreDelTipo} de {vacunaNombre}.</Aviso>
-                  ) : (
-                    <div className="flex flex-wrap items-center gap-3">
-                      {deLaVista.length > 1 && (
-                        // Dentro de un form, Radix agrega el <select> nativo del Select.
-                        <form onSubmit={(evento) => evento.preventDefault()} className="w-full sm:w-80">
-                          <Selector
-                            nombre="indicador"
-                            etiqueta="Indicador"
-                            valor={indicador.codigo}
-                            alCambiar={(codigo) => irA({ indicador: codigo })}
-                            opciones={deLaVista.map((i) => ({ valor: i.codigo, texto: i.nombre ?? i.codigo }))}
-                          />
-                        </form>
-                      )}
-                      <p className="text-sm text-muted-foreground">
-                        <span className="font-mono">{indicador.codigo}</span> · {muestra.vacuna.nombre}
-                        {muestra.dosis ? ` · ${muestra.dosis}` : ''} · versión {muestra.indicadorVersion}
-                      </p>
-                    </div>
-                  )}
-                  {/* Siempre en el mismo lugar, para que no se desmonte al pasar por una pestaña sin indicador. */}
-                  <PanelGraficas
-                    corrida={corrida}
-                    indicadores={conResultados}
-                    resultados={todos}
-                    vacuna={vacuna}
-                    vacunaNombre={vacunaNombre}
-                    vista={vista}
-                    codigoElegido={indicador?.codigo}
-                    visibles={visibles}
-                    ddrissId={ddrissId}
-                    comparacion={{
-                      calculados,
-                      errorCalculados,
-                      onReintentarCalculados: () => setIntentoCalculados((n) => n + 1),
-                      filtros,
-                      irA,
-                    }}
-                  />
-                  {indicador?.tipoCalculo === 'BRECHA' ? (
-                    <TablaBrecha resultados={resultados} />
-                  ) : indicador?.tipoCalculo === 'DESERCION' ? (
-                    <TablaDesercion resultados={resultados} />
-                  ) : indicador?.tipoCalculo === 'PROYECCION' ? (
-                    <TablaProyeccion resultados={resultados} />
-                  ) : indicador ? (
-                    <TablaResultados resultados={resultados} tipoCalculo={indicador.tipoCalculo} />
-                  ) : null}
-                </>
-              )}
-            </>
-          )}
-          <HistorialCorridas corridas={datos.corridas} />
-        </>
-      )}
-
-      {calculando && (
-        <DialogoCalcularIndicadores
-          anio={filtros.anio}
-          mes={filtros.mes}
-          alHecho={calculado}
-          alCerrar={() => setCalculando(false)}
+    <>
+      {primeraCarga && <PantallaCargaSesion etiqueta="Cargando indicadores" />}
+      {/* contain-inline-size: una tabla ancha (la de proyección) se desplaza en su recuadro y no ensancha la página. */}
+      <section hidden={primeraCarga} className="flex flex-col gap-6 p-6 contain-inline-size">
+        <EncabezadoPagina
+          antetitulo="Indicadores"
+          titulo={titulo}
+          descripcion={`Dosis acumuladas de enero a ${MESES[filtros.mes - 1]} de ${filtros.anio}, por municipio de residencia.`}
+          acciones={puedeCalcular && !nacional && <Button onClick={() => setCalculando(true)}>Calcular indicadores</Button>}
         />
-      )}
-    </section>
+
+        {errorDdriss && (
+          <AvisoError onReintentar={() => setIntentoDdriss((n) => n + 1)}>No se pudieron cargar las DDRISS: {errorDdriss}</AvisoError>
+        )}
+
+        {errorDistritos && (
+          <AvisoError onReintentar={() => setIntentoDistritos((n) => n + 1)}>
+            No se pudieron cargar los distritos: {errorDistritos}
+          </AvisoError>
+        )}
+
+        <BarraFiltrosIndicadores
+          filtros={filtros}
+          anios={anios}
+          ddriss={nacional ? ddriss : null}
+          ddrissId={ddrissId}
+          vacunas={vacunas}
+          vacuna={vacuna}
+          distritos={opcionesDistrito}
+          municipios={opcionesMunicipio}
+          elegidos={elegidos}
+          irA={irA}
+        />
+
+        {errorCarga ? (
+          <AvisoError onReintentar={() => setIntento((n) => n + 1)}>No se pudieron cargar los indicadores: {errorCarga}</AvisoError>
+        ) : datos === null ? (
+          !esperandoDdriss && (
+            <div className="flex flex-col gap-2" aria-label="Cargando indicadores">
+              {[1, 2, 3].map((n) => (
+                <Skeleton key={n} className="h-10 w-full" />
+              ))}
+            </div>
+          )
+        ) : (
+          <>
+            {corrida === null ? (
+              <p className="text-muted-foreground">Este mes todavía no tiene indicadores calculados.</p>
+            ) : (
+              <>
+                <TarjetaCorrida corrida={corrida} />
+                {conResultados.length === 0 ? (
+                  <p className="text-muted-foreground">La corrida no tiene resultados de cobertura, avance, brecha, deserción ni proyección.</p>
+                ) : (
+                  <>
+                    <PestanasIndicadores vista={vista} alCambiar={(nueva) => irA({ vista: nueva, indicador: undefined })} />
+                    {indicador === null ? (
+                      <Aviso>La corrida no tiene un indicador de {VISTAS[vista].nombreDelTipo} de {vacunaNombre}.</Aviso>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-3">
+                        {deLaVista.length > 1 && (
+                          // Dentro de un form, Radix agrega el <select> nativo del Select.
+                          <form onSubmit={(evento) => evento.preventDefault()} className="w-full sm:w-80">
+                            <Selector
+                              nombre="indicador"
+                              etiqueta="Indicador"
+                              valor={indicador.codigo}
+                              alCambiar={(codigo) => irA({ indicador: codigo })}
+                              opciones={deLaVista.map((i) => ({ valor: i.codigo, texto: i.nombre ?? i.codigo }))}
+                            />
+                          </form>
+                        )}
+                        <p className="text-sm text-muted-foreground">
+                          <span className="font-mono">{indicador.codigo}</span> · {muestra.vacuna.nombre}
+                          {muestra.dosis ? ` · ${muestra.dosis}` : ''} · versión {muestra.indicadorVersion}
+                        </p>
+                      </div>
+                    )}
+                    {/* Siempre en el mismo lugar, para que no se desmonte al pasar por una pestaña sin indicador. */}
+                    <PanelGraficas
+                      corrida={corrida}
+                      indicadores={conResultados}
+                      resultados={todos}
+                      vacuna={vacuna}
+                      vacunaNombre={vacunaNombre}
+                      vista={vista}
+                      codigoElegido={indicador?.codigo}
+                      visibles={visibles}
+                      ddrissId={ddrissId}
+                      comparacion={{
+                        calculados,
+                        errorCalculados,
+                        onReintentarCalculados: () => setIntentoCalculados((n) => n + 1),
+                        filtros,
+                        irA,
+                      }}
+                    />
+                    {indicador?.tipoCalculo === 'BRECHA' ? (
+                      <TablaBrecha resultados={resultados} />
+                    ) : indicador?.tipoCalculo === 'DESERCION' ? (
+                      <TablaDesercion resultados={resultados} />
+                    ) : indicador?.tipoCalculo === 'PROYECCION' ? (
+                      <TablaProyeccion resultados={resultados} />
+                    ) : indicador ? (
+                      <TablaResultados resultados={resultados} tipoCalculo={indicador.tipoCalculo} />
+                    ) : null}
+                  </>
+                )}
+              </>
+            )}
+            <HistorialCorridas corridas={datos.corridas} />
+          </>
+        )}
+
+        {calculando && (
+          <DialogoCalcularIndicadores
+            anio={filtros.anio}
+            mes={filtros.mes}
+            alHecho={calculado}
+            alCerrar={() => setCalculando(false)}
+          />
+        )}
+      </section>
+    </>
   )
 }

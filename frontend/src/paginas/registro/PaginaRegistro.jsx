@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
+import PantallaCargaSesion, { usePrimeraCarga } from '@/componentes/PantallaCargaSesion.jsx'
 import { aDiaMesAnio, diasHasta, nombreDelMes, textoPlazo } from '@/lib/fechas.js'
 import { cn } from '@/lib/utils'
 import { mensajeDeError } from '@/api/cliente.js'
@@ -80,6 +81,7 @@ export default function PaginaRegistro() {
   // Cada carga tiene su número; una respuesta que llega después de otra carga se descarta.
   const cargaActual = useRef(0)
   const [intentoDetalle, setIntentoDetalle] = useState(0)
+  const [capturaLista, setCapturaLista] = useState(false)
 
   function cargar() {
     const carga = ++cargaActual.current
@@ -104,6 +106,10 @@ export default function PaginaRegistro() {
   const pedido = Number(parametros.get('periodo'))
   const periodo = datos && (datos.periodos.find((p) => p.id === pedido) ?? mesPendiente(datos.periodos, datos.reportes))
   const resumen = periodo ? datos.reportes.get(periodo.id) : null
+  // La primera visita espera los meses y, si el mes tiene reporte, su detalle y el formulario de la captura; después,
+  // cambiar de mes usa los esqueletos.
+  const capturaCargada = !resumen || errorAccion || (detalle && capturaLista)
+  const primeraCarga = usePrimeraCarga(Boolean(errorCarga || (datos && capturaCargada)))
 
   useEffect(() => {
     // Recién creado, el detalle ya llegó con la respuesta del POST.
@@ -162,94 +168,98 @@ export default function PaginaRegistro() {
   const vencido = periodo?.fechaLimiteEnvio && pendiente && diasHasta(periodo.fechaLimiteEnvio) < 0
 
   return (
-    <section className="flex flex-col gap-6 p-6">
-      <EncabezadoPagina
-        antetitulo={antetitulo}
-        titulo={titulo}
-        acciones={detalle && <PasosDeEstado estado={detalle.estado} />}
-      />
+    <>
+      {primeraCarga && <PantallaCargaSesion etiqueta="Cargando registro" />}
+      <section hidden={primeraCarga} className="flex flex-col gap-6 p-6">
+        <EncabezadoPagina
+          antetitulo={antetitulo}
+          titulo={titulo}
+          acciones={detalle && <PasosDeEstado estado={detalle.estado} />}
+        />
 
-      {errorCarga && (
-        <AvisoError onReintentar={cargar}>No se pudieron cargar los meses abiertos: {errorCarga}</AvisoError>
-      )}
+        {errorCarga && (
+          <AvisoError onReintentar={cargar}>No se pudieron cargar los meses abiertos: {errorCarga}</AvisoError>
+        )}
 
-      {!errorCarga && datos === null && (
-        <div aria-label="Cargando registro" className="flex flex-col gap-2">
-          {[1, 2, 3].map((n) => (
-            <Skeleton key={n} className="h-8 w-full" />
-          ))}
-        </div>
-      )}
-
-      {datos && datos.periodos.length === 0 && (
-        <p className="text-muted-foreground">No hay meses abiertos para reportar. La DDRISS abre cada mes en Configuración.</p>
-      )}
-
-      {periodo && (
-        <>
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-            {/* Dentro de un form, Radix agrega el <select> nativo del Select. */}
-            <form onSubmit={(evento) => evento.preventDefault()}>
-              <Select name="periodo" value={String(periodo.id)} onValueChange={elegirPeriodo}>
-                <SelectTrigger aria-label="Mes" className="w-full bg-card sm:w-56">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {datos.periodos.map((p) => (
-                    <SelectItem key={p.id} value={String(p.id)}>
-                      {nombreDelMes(p)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </form>
-            <p className={cn('flex items-center gap-1.5 text-sm', vencido ? 'text-destructive' : 'text-muted-foreground')}>
-              <CalendarClock className="size-4" aria-hidden="true" />
-              Fecha límite de envío:{' '}
-              <span className={cn('font-semibold', vencido ? 'text-destructive' : 'text-foreground')}>
-                {aDiaMesAnio(periodo.fechaLimiteEnvio)}
-              </span>
-              {periodo.fechaLimiteEnvio && pendiente && <span> ({textoPlazo(periodo.fechaLimiteEnvio)})</span>}
-            </p>
+        {!errorCarga && datos === null && (
+          <div aria-label="Cargando registro" className="flex flex-col gap-2">
+            {[1, 2, 3].map((n) => (
+              <Skeleton key={n} className="h-8 w-full" />
+            ))}
           </div>
+        )}
 
-          {errorAccion && (
-            <AvisoError onReintentar={resumen && !detalle ? () => setIntentoDetalle((n) => n + 1) : undefined}>
-              {errorAccion}
-            </AvisoError>
-          )}
+        {datos && datos.periodos.length === 0 && (
+          <p className="text-muted-foreground">No hay meses abiertos para reportar. La DDRISS abre cada mes en Configuración.</p>
+        )}
 
-          {!resumen && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Todavía no hay reporte de {nombreDelMes(periodo)}</CardTitle>
-                <CardDescription>
-                  Al crearlo, el reporte queda en Borrador con las vacunas y las versiones de formulario vigentes para este mes.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button onClick={crear} disabled={creando}>
-                  <FilePlus />
-                  {creando ? 'Creando…' : `Crear reporte de ${nombreDelMes(periodo)}`}
-                </Button>
-              </CardContent>
-            </Card>
-          )}
+        {periodo && (
+          <>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+              {/* Dentro de un form, Radix agrega el <select> nativo del Select. */}
+              <form onSubmit={(evento) => evento.preventDefault()}>
+                <Select name="periodo" value={String(periodo.id)} onValueChange={elegirPeriodo}>
+                  <SelectTrigger aria-label="Mes" className="w-full bg-card sm:w-56">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {datos.periodos.map((p) => (
+                      <SelectItem key={p.id} value={String(p.id)}>
+                        {nombreDelMes(p)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </form>
+              <p className={cn('flex items-center gap-1.5 text-sm', vencido ? 'text-destructive' : 'text-muted-foreground')}>
+                <CalendarClock className="size-4" aria-hidden="true" />
+                Fecha límite de envío:{' '}
+                <span className={cn('font-semibold', vencido ? 'text-destructive' : 'text-foreground')}>
+                  {aDiaMesAnio(periodo.fechaLimiteEnvio)}
+                </span>
+                {periodo.fechaLimiteEnvio && pendiente && <span> ({textoPlazo(periodo.fechaLimiteEnvio)})</span>}
+              </p>
+            </div>
 
-          {resumen && !detalle && !errorAccion && <Skeleton aria-label="Cargando reporte" className="h-40 w-full" />}
-          {detalle && (
-            <CapturaReporte
-              key={detalle.id}
-              reporte={detalle}
-              formularioPedido={formularioPedido?.reporteId === detalle.id ? formularioPedido.promesa : null}
-              alEnviar={(enviado) => {
-                anotarReporte(periodo.id, enviado)
-                setDetalle(enviado)
-              }}
-            />
-          )}
-        </>
-      )}
-    </section>
+            {errorAccion && (
+              <AvisoError onReintentar={resumen && !detalle ? () => setIntentoDetalle((n) => n + 1) : undefined}>
+                {errorAccion}
+              </AvisoError>
+            )}
+
+            {!resumen && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Todavía no hay reporte de {nombreDelMes(periodo)}</CardTitle>
+                  <CardDescription>
+                    Al crearlo, el reporte queda en Borrador con las vacunas y las versiones de formulario vigentes para este mes.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button onClick={crear} disabled={creando}>
+                    <FilePlus />
+                    {creando ? 'Creando…' : `Crear reporte de ${nombreDelMes(periodo)}`}
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {resumen && !detalle && !errorAccion && <Skeleton aria-label="Cargando reporte" className="h-40 w-full" />}
+            {detalle && (
+              <CapturaReporte
+                key={detalle.id}
+                reporte={detalle}
+                formularioPedido={formularioPedido?.reporteId === detalle.id ? formularioPedido.promesa : null}
+                alListo={() => setCapturaLista(true)}
+                alEnviar={(enviado) => {
+                  anotarReporte(periodo.id, enviado)
+                  setDetalle(enviado)
+                }}
+              />
+            )}
+          </>
+        )}
+      </section>
+    </>
   )
 }
