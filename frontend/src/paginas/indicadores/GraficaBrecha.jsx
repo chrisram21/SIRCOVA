@@ -5,7 +5,7 @@ import TarjetaGrafica, { formatoEntero, SinDatos } from './TarjetaGrafica.jsx'
 
 // SPEC 49: los 8 municipios visibles con más dosis por aplicar para la meta.
 
-export default function GraficaBrecha({ indicador, filas, visibles, vacuna, className }) {
+export default function GraficaBrecha({ indicador, filas, visibles, vacuna, preliminar, className }) {
   if (!indicador) {
     return (
       <TarjetaGrafica titulo="Brecha a la meta" className={className}>
@@ -19,6 +19,7 @@ export default function GraficaBrecha({ indicador, filas, visibles, vacuna, clas
     <TarjetaGrafica
       titulo={titulo}
       subtitulo={`${indicador.nombre ?? indicador.codigo} · los municipios con más dosis por aplicar`}
+      preliminar={preliminar && barras.length > 0}
       className={className}
     >
       {barras.length === 0 ? (

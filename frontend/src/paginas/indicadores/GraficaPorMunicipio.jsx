@@ -7,7 +7,7 @@ import TarjetaGrafica, { colorDeBarra, COLOR_SEMAFORO, NombresSinPoblacion, porc
 
 const FRANJAS = [['verde', 'Verde'], ['amarillo', 'Amarillo'], ['rojo', 'Rojo']]
 
-export default function GraficaPorMunicipio({ indicador, filas, visibles, vacuna, className }) {
+export default function GraficaPorMunicipio({ indicador, filas, visibles, vacuna, preliminar, className }) {
   const nombreTipo = indicador?.tipoCalculo === 'COBERTURA' ? 'Cobertura' : 'Avance'
   const titulo = `${indicador ? nombreTipo : 'Cobertura'} por municipio`
   if (!indicador) {
@@ -23,7 +23,13 @@ export default function GraficaPorMunicipio({ indicador, filas, visibles, vacuna
     ? `Mayor: ${barras[0].municipio.nombre} (${porcentaje(barras[0].valor)}). Menor: ${barras.at(-1).municipio.nombre} (${porcentaje(barras.at(-1).valor)}).`
     : null
   return (
-    <TarjetaGrafica titulo={titulo} subtitulo={indicador.nombre ?? indicador.codigo} resumen={resumen} className={className}>
+    <TarjetaGrafica
+      titulo={titulo}
+      subtitulo={indicador.nombre ?? indicador.codigo}
+      resumen={resumen}
+      preliminar={preliminar && barras.length > 0}
+      className={className}
+    >
       <ul className="flex flex-wrap gap-3 text-xs text-muted-foreground" aria-label="Franjas del semáforo">
         {FRANJAS.map(([color, nombre]) => (
           <li key={color} className="flex items-center gap-1.5">

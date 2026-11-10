@@ -551,6 +551,63 @@ describe('panel de gráficas y filtros', () => {
     expect(obtenerSerie).toHaveBeenCalledTimes(1)
   })
 
+  // SPEC 55: título de cada tarjeta de gráfica → si lleva la marca «PRELIMINAR».
+  const marcas = () => Object.fromEntries(
+    [...document.querySelectorAll('[data-slot="card-title"]')].map((t) => [
+      t.textContent,
+      t.closest('[data-slot="card"]').querySelector('[data-marca="preliminar"]') !== null,
+    ]),
+  )
+  const CORRIDA_PARCIAL = corrida({ parcial: true, mesesSinCerrar: [10] })
+  const SERIE_CON_PUNTO = {
+    puntos: [{ mes: 10, corridaId: 7, parcial: false, resultado: resultado('COB_HEXA3', null, { meta: 95 }) }],
+  }
+
+  test('con una corrida parcial, cada gráfica de las cinco pestañas lleva la marca «PRELIMINAR»', async () => {
+    listarResultados.mockResolvedValue({ corrida: CORRIDA_PARCIAL, resultados: RESULTADOS })
+    obtenerSerie.mockResolvedValue(SERIE_CON_PUNTO)
+    await montar()
+    await screen.findByText('Total de la DDRISS')
+    expect(marcas()).toEqual({ 'Avance por municipio': true, 'Avance por vacuna': true })
+
+    pestana('Brecha')
+    await waitFor(() => expect(marcas()).toEqual({ 'Brecha a la meta · 400 dosis': true }))
+    pestana('Cobertura')
+    // «Comparar periodos» sigue sus propios periodos (paso 3); aquí su serie no tiene puntos parciales.
+    await waitFor(() => expect(marcas()).toEqual({
+      'Cobertura por municipio': true, 'Cobertura por vacuna': true, 'Comparar periodos': false,
+    }))
+    pestana('Deserción')
+    await waitFor(() => expect(marcas()).toEqual({ 'Tasa de deserción Hexavalente 1.ª a 3.ª dosis': true }))
+    pestana('Proyección')
+    await screen.findByText('Real a octubre: 80.7 %.')
+    expect(marcas()).toEqual({ 'Avance acumulado y proyección al cierre del año': true })
+  })
+
+  test('con una corrida completa, ninguna gráfica lleva la marca', async () => {
+    obtenerSerie.mockResolvedValue(SERIE_CON_PUNTO)
+    await montar()
+    await screen.findByText('Total de la DDRISS')
+    expect(Object.values(marcas())).toEqual([false, false])
+
+    pestana('Proyección')
+    await screen.findByText('Real a octubre: 80.7 %.')
+    expect(document.querySelector('[data-marca="preliminar"]')).toBeNull()
+  })
+
+  test('con una corrida parcial, una tarjeta sin gráfica (sin datos o cargando) no lleva la marca', async () => {
+    listarResultados.mockResolvedValue({ corrida: CORRIDA_PARCIAL, resultados: RESULTADOS })
+    let responder
+    obtenerSerie.mockReturnValue(new Promise((r) => { responder = r }))
+    await montar({ url: '/indicadores?vista=proyeccion' })
+    expect(await screen.findByLabelText('Cargando la serie')).toBeTruthy()
+    expect(marcas()).toEqual({ 'Avance acumulado y proyección al cierre del año': false })
+
+    responder({ puntos: [] })
+    expect(await screen.findByText('La corrida no tiene un indicador de cobertura de Hexavalente.')).toBeTruthy()
+    expect(marcas()).toEqual({ 'Avance acumulado y proyección al cierre del año': false })
+  })
+
   test('cambiar la vacuna conserva la pestaña y borra el indicador de la URL', async () => {
     conSpr()
     const router = await montar({ url: '/indicadores?indicador=COB_HEXA3' })
@@ -656,6 +713,29 @@ describe('comparar periodos (SPEC 51)', () => {
     expect(filaComparacion('Vacunado en cada mes', 'oct 2025')).toEqual(['oct 2025', '150', '7.5 %', '—'])
     expect(filaComparacion('Vacunado en cada mes', 'oct 2026')).toEqual(['oct 2026', '100', '5.0 %(parcial)', '▼ −2.5 pp · −50 dosis'])
     expect(screen.getByText('oct 2026: 100 dosis contra oct 2025: 150 (−50 dosis).')).toBeTruthy()
+  })
+
+  // SPEC 55: la marca de la tarjeta «Comparar periodos», o null.
+  const marcaDeComparacion = () => screen.getByText('Comparar periodos', { selector: '[data-slot="card-title"]' })
+    .closest('[data-slot="card"]').querySelector('[data-marca="preliminar"]')
+
+  test('con un valor parcial, la gráfica de comparación lleva la marca y su tabla no', async () => {
+    await montar({ url: '/indicadores?vista=cobertura' })
+    const tablaPorAnio = await screen.findByRole('table', { name: 'Cobertura real por año' })
+
+    const marca = marcaDeComparacion()
+    expect(marca).not.toBeNull()
+    expect(marca.parentElement.contains(tablaPorAnio)).toBe(false)
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Por mes' }))
+    const tablaPorMes = await screen.findByRole('table', { name: 'Vacunado en cada mes' })
+    expect(marcaDeComparacion().parentElement.contains(tablaPorMes)).toBe(false)
+  })
+
+  test('sin valores parciales en lo comparado, la gráfica de comparación no lleva la marca', async () => {
+    await montar({ url: '/indicadores?vista=cobertura&comparar=mes&meses=2025-10,2025-09' })
+    await screen.findByRole('table', { name: 'Vacunado en cada mes' })
+    expect(marcaDeComparacion()).toBeNull()
   })
 
   test('un mes sin el anterior o sin cálculo lo dice en lugar de dar un valor', async () => {

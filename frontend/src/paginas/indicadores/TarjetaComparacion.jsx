@@ -12,6 +12,7 @@ import {
   etiquetaDelMes,
   filasPorAnio,
   filasPorMes,
+  hayParcial,
   leerPeriodos,
   puntosPorAnio,
   textoDeAnios,
@@ -20,6 +21,7 @@ import {
 } from './comparacionPeriodos.js'
 import GraficaComparacionAnios from './GraficaComparacionAnios.jsx'
 import GraficaComparacionMeses from './GraficaComparacionMeses.jsx'
+import MarcaPreliminar from './MarcaPreliminar.jsx'
 import SelectorPeriodos from './SelectorPeriodos.jsx'
 import { TablaPorAnio, TablaPorMes } from './TablaComparacion.jsx'
 import TarjetaGrafica, { SinDatos, formatoEntero, formatoPorcentaje } from './TarjetaGrafica.jsx'
@@ -151,7 +153,9 @@ function Comparacion({ periodos, series, codigo, corte }) {
       <>
         {resumen && <p className="text-sm">{resumen}</p>}
         <Avisos textos={avisos} />
-        <GraficaComparacionAnios lineas={validas} titulo="Cobertura real acumulada por año" />
+        <MarcaPreliminar activa={hayParcial(validas)}>
+          <GraficaComparacionAnios lineas={validas} titulo="Cobertura real acumulada por año" />
+        </MarcaPreliminar>
         <TablaPorAnio filas={filas} anios={anios} />
       </>
     )
@@ -164,7 +168,9 @@ function Comparacion({ periodos, series, codigo, corte }) {
     <>
       {resumen && <p className="text-sm">{resumen}</p>}
       <Avisos textos={avisos} />
-      <GraficaComparacionMeses filas={filas} titulo="Vacunado en cada mes" />
+      <MarcaPreliminar activa={hayParcial(filas)}>
+        <GraficaComparacionMeses filas={filas} titulo="Vacunado en cada mes" />
+      </MarcaPreliminar>
       <TablaPorMes filas={filas} codigo={codigo} />
     </>
   )

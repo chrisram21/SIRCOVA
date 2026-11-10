@@ -30,17 +30,21 @@ function PuntoReal({ cx, cy, payload }) {
   )
 }
 
-export default function GraficaAvanceProyeccion({ linea, mesCorte, meta, referencia, vacuna, cargando, error, onReintentar, className }) {
+export default function GraficaAvanceProyeccion({
+  linea, mesCorte, meta, referencia, vacuna, cargando, error, onReintentar, preliminar, className,
+}) {
   const titulo = 'Avance acumulado y proyección al cierre del año'
   const subtitulo = `${meta == null ? '' : `¿Llegaremos al ${porcentaje(meta)} en diciembre? · `}${referencia}`
   const reales = linea?.filter((p) => p.real !== null) ?? []
   const diciembre = linea?.[11]?.proyeccion ?? null
 
   let contenido
+  let dibuja = false
   if (cargando) contenido = <Skeleton className="h-64 w-full" aria-label="Cargando la serie" />
   else if (error) contenido = <AvisoError onReintentar={onReintentar}>No se pudo cargar la serie: {error}</AvisoError>
   else if (!linea || reales.length === 0) contenido = <SinDatos>La corrida no tiene un indicador de cobertura de {vacuna}.</SinDatos>
   else {
+    dibuja = true
     const datos = linea.map((p) => ({ ...p, nombre: corto(p.mes) }))
     const mayor = Math.max(100, ...linea.flatMap((p) => [p.real, p.proyeccion, p.meta]).filter((v) => v != null))
     contenido = (
@@ -83,7 +87,13 @@ export default function GraficaAvanceProyeccion({ linea, mesCorte, meta, referen
     ? `Real a ${MESES[ultimo.mes - 1]}: ${porcentaje(ultimo.real)}.${diciembre === null ? '' : ` Proyección a diciembre: ${porcentaje(diciembre)}.`}`
     : null
   return (
-    <TarjetaGrafica titulo={titulo} subtitulo={subtitulo} resumen={resumen} className={className}>
+    <TarjetaGrafica
+      titulo={titulo}
+      subtitulo={subtitulo}
+      resumen={resumen}
+      preliminar={preliminar && dibuja}
+      className={className}
+    >
       {contenido}
     </TarjetaGrafica>
   )

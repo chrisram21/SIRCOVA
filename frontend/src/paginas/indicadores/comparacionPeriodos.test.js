@@ -6,6 +6,7 @@ import {
   etiquetaDelMes,
   filasPorAnio,
   filasPorMes,
+  hayParcial,
   leerPeriodos,
   periodosPorDefecto,
   produccionDelMes,
@@ -145,6 +146,32 @@ describe('produccionDelMes', () => {
     expect(produccionDelMes(series, { anio: 2025, mes: 1 }).motivo).toBe(MOTIVOS.SIN_CALCULO)
     const sinPoblacion = new Map([[2026, [punto(1, 120, { poblacionAnual: null })]]])
     expect(produccionDelMes(sinPoblacion, { anio: 2026, mes: 1 }).motivo).toBe(MOTIVOS.SIN_POBLACION)
+  })
+})
+
+describe('hayParcial', () => {
+  it('por año: sí con un valor parcial dibujado; no si el parcial queda después del corte', () => {
+    const series = new Map([
+      [2025, [punto(8, 100), punto(9, 200)]],
+      [2026, [punto(8, 150), punto(9, 150, { parcial: true })]],
+    ])
+    expect(hayParcial(puntosPorAnio(series, [2025, 2026]))).toBe(true)
+    expect(hayParcial(puntosPorAnio(series, [2025, 2026], AGOSTO_2026))).toBe(false)
+    expect(hayParcial(puntosPorAnio(series, [2025]))).toBe(false)
+  })
+
+  it('por año: un año sin población no cuenta aunque su punto sea parcial', () => {
+    const series = new Map([[2026, [punto(1, 100, { poblacionAnual: null, parcial: true })]]])
+    expect(hayParcial(puntosPorAnio(series, [2026]))).toBe(false)
+  })
+
+  it('por mes: sí con una fila parcial con datos; no si la parcial no tiene datos', () => {
+    const parcial = { parcial: true }
+    const series = new Map([[2026, [punto(1, 120), punto(2, 200, parcial), punto(4, 520, parcial)]]])
+    expect(hayParcial(filasPorMes(series, [{ anio: 2026, mes: 1 }, { anio: 2026, mes: 2 }]))).toBe(true)
+    expect(hayParcial(filasPorMes(series, [{ anio: 2026, mes: 1 }]))).toBe(false)
+    // Abril no tiene marzo para restar: no se dibuja.
+    expect(hayParcial(filasPorMes(series, [{ anio: 2026, mes: 1 }, { anio: 2026, mes: 4 }]))).toBe(false)
   })
 })
 

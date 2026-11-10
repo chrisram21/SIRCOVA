@@ -152,3 +152,9 @@ export function filasPorMes(series, meses) {
 }
 
 export const conDatos = (periodos) => periodos.filter((p) => p.motivo === null).length
+
+// SPEC 55: si algún valor comparado sale de una corrida parcial. Recibe las líneas de puntosPorAnio (con valores) o
+// las filas de filasPorMes (con parcial); los periodos con motivo no se dibujan y no cuentan.
+export const hayParcial = (periodos) => periodos.some(
+  (p) => p.motivo === null && (p.valores ? p.valores.some((v) => v.parcial === true) : p.parcial === true),
+)

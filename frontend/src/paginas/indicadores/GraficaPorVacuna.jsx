@@ -13,7 +13,9 @@ const CONFIG = {
 const LARGO_ETIQUETA = 14
 const recortar = (texto) => (texto.length > LARGO_ETIQUETA ? `${texto.slice(0, LARGO_ETIQUETA - 1)}…` : texto)
 
-export default function GraficaPorVacuna({ tipo, indicadores, resultados, visibles, vacuna, referencia, className }) {
+export default function GraficaPorVacuna({
+  tipo, indicadores, resultados, visibles, vacuna, referencia, preliminar, className,
+}) {
   const titulo = tipo === 'COBERTURA' ? 'Cobertura por vacuna' : 'Avance por vacuna'
   if (!tipo) {
     return (
@@ -28,6 +30,7 @@ export default function GraficaPorVacuna({ tipo, indicadores, resultados, visibl
     <TarjetaGrafica
       titulo={titulo}
       subtitulo={`${referencia}${metaComun == null ? '' : ` · meta ${porcentaje(metaComun)}`}`}
+      preliminar={preliminar && datos.length > 0}
       className={className}
     >
       {datos.length === 0 ? (
