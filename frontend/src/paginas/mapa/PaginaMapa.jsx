@@ -224,7 +224,7 @@ export default function PaginaMapa({ hoy }) {
 
   return (
     <>
-      {primeraCarga && <PantallaCargaSesion etiqueta="Cargando el mapa" inmediata />}
+      {primeraCarga && <PantallaCargaSesion etiqueta="Cargando el mapa" inmediata fondo="borroso" />}
       <section hidden={primeraCarga} className="flex flex-col gap-5 p-4 sm:p-6">
         <EncabezadoPagina
           antetitulo={antetitulo}

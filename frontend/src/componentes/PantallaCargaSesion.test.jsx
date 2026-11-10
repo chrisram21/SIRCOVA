@@ -89,6 +89,15 @@ test('se pinta en el body, fija sobre toda la pantalla y con el fondo de la marc
   expect(pantalla.querySelector('.bg-primary')).toBeTruthy()
 })
 
+test('con fondo borroso desenfoca lo de atrás y no pinta el fondo de la marca', () => {
+  render(<PantallaCargaSesion etiqueta="Cargando el mapa" inmediata fondo="borroso" />)
+  const pantalla = estado('Cargando el mapa')
+
+  expect(pantalla.className).toContain('backdrop-blur-sm')
+  expect(pantalla.className).not.toContain('text-primary-foreground')
+  expect(pantalla.querySelector('.bg-primary')).toBe(pantalla.querySelector('.animate-barra-carga'))
+})
+
 test('con movimiento reducido cambia la barra por el texto «Cargando…»', () => {
   render(<PantallaCargaSesion />)
   act(() => vi.advanceTimersByTime(RETRASO_MS))

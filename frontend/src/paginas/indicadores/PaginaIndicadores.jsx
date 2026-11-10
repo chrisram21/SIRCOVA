@@ -412,7 +412,7 @@ export default function PaginaIndicadores({ hoy }) {
 
   return (
     <>
-      {primeraCarga && <PantallaCargaSesion etiqueta="Cargando indicadores" inmediata />}
+      {primeraCarga && <PantallaCargaSesion etiqueta="Cargando indicadores" inmediata fondo="borroso" />}
       {/* contain-inline-size: una tabla ancha (la de proyección) se desplaza en su recuadro y no ensancha la página. */}
       <section hidden={primeraCarga} className="flex flex-col gap-6 p-6 contain-inline-size">
         <EncabezadoPagina

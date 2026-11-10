@@ -11,7 +11,7 @@ export const RETRASO_MS = 300
 export const CONTINUIDAD_MS = 150
 // Una carga inmediata queda al menos esto, para que no se vea como un parpadeo si los datos llegan rápido. Es un
 // objeto para que preparar-pruebas.js lo ponga en 0 y las pruebas no esperen un segundo cada una.
-export const VISIBLE_MINIMO = { ms: 1000 }
+export const VISIBLE_MINIMO = { ms: 500 }
 
 let visibles = 0
 let ultimaVisibleHasta = -Infinity
@@ -21,8 +21,10 @@ const aparecerYa = () => visibles > 0 || Date.now() - ultimaVisibleHasta < CONTI
 // A pantalla completa mientras se recupera la sesión con la cookie (en vez de mandar al login un instante y perder la
 // dirección pedida), mientras llega el código de una pantalla y en la primera carga de las que tardan.
 // `inmediata` la muestra sin el retraso: al entrar desde el menú, la página ya está oculta y esperar dejaría un tramo
-// en blanco.
-export default function PantallaCargaSesion({ etiqueta = 'Recuperando la sesión', inmediata = false }) {
+// en blanco. `fondo="borroso"` desenfoca lo que hay detrás (el Layout), como el fondo de un diálogo; sin nada dibujado
+// detrás (la sesión al recargar), conviene el de la marca.
+export default function PantallaCargaSesion({ etiqueta = 'Recuperando la sesión', inmediata = false, fondo = 'marca' }) {
+  const borroso = fondo === 'borroso'
   const [visible, setVisible] = useState(() => inmediata || aparecerYa())
 
   useEffect(() => {
@@ -49,17 +51,25 @@ export default function PantallaCargaSesion({ etiqueta = 'Recuperando la sesión
       aria-label={etiqueta}
       className={cn(
         'fixed inset-0 isolate z-50 flex min-h-svh flex-col items-center justify-center gap-6 overflow-hidden',
-        'text-primary-foreground',
+        borroso
+          ? 'bg-background/40 text-foreground supports-backdrop-filter:backdrop-blur-sm'
+          : 'text-primary-foreground',
       )}
     >
-      <FondoMarca />
+      {!borroso && <FondoMarca />}
       <div aria-hidden="true" className="flex animate-aparecer items-center gap-3">
         <MarcaSircova animada className="size-12" />
-        <span className="text-2xl font-bold tracking-wide">SIRCOVA</span>
+        <span className={cn('text-2xl font-bold tracking-wide', borroso && 'text-primary')}>SIRCOVA</span>
       </div>
       {/* Con movimiento reducido, la barra quedaría quieta y parecería colgada: se cambia por el texto. */}
-      <div aria-hidden="true" className="h-0.5 w-48 overflow-hidden rounded-full bg-primary-foreground/20 motion-reduce:hidden">
-        <div className="h-full w-1/3 animate-barra-carga bg-ring" />
+      <div
+        aria-hidden="true"
+        className={cn(
+          'h-0.5 w-48 overflow-hidden rounded-full motion-reduce:hidden',
+          borroso ? 'bg-primary/15' : 'bg-primary-foreground/20',
+        )}
+      >
+        <div className={cn('h-full w-1/3 animate-barra-carga', borroso ? 'bg-primary' : 'bg-ring')} />
       </div>
       <p className="hidden text-sm motion-reduce:block">Cargando…</p>
     </div>,
