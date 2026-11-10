@@ -305,7 +305,7 @@ export default function PaginaIndicadores({ hoy }) {
   // La primera visita espera las DDRISS y los resultados; después, cada cambio usa sus esqueletos. Sin DDRISS (error
   // o lista vacía) no se pide nada más.
   const sinDdriss = errorDdriss || ddriss?.length === 0
-  const primeraCarga = usePrimeraCarga(Boolean(sinDdriss || (!esperandoDdriss && (datos || errorCarga))))
+  const primeraCarga = usePrimeraCarga(Boolean(sinDdriss || (!esperandoDdriss && (datos || errorCarga))), { conMinimo: true })
 
   useEffect(() => {
     if (!nacional) return undefined
@@ -412,7 +412,7 @@ export default function PaginaIndicadores({ hoy }) {
 
   return (
     <>
-      {primeraCarga && <PantallaCargaSesion etiqueta="Cargando indicadores" />}
+      {primeraCarga && <PantallaCargaSesion etiqueta="Cargando indicadores" inmediata />}
       {/* contain-inline-size: una tabla ancha (la de proyección) se desplaza en su recuadro y no ensancha la página. */}
       <section hidden={primeraCarga} className="flex flex-col gap-6 p-6 contain-inline-size">
         <EncabezadoPagina

@@ -9,6 +9,9 @@ export const RETRASO_MS = 300
 // Si otra pantalla de carga se veía hace menos que esto, la nueva sale de inmediato: así Suspense → datos de la
 // pantalla se ve como una sola carga, sin un tramo en blanco en medio.
 export const CONTINUIDAD_MS = 150
+// Una carga inmediata queda al menos esto, para que no se vea como un parpadeo si los datos llegan rápido. Es un
+// objeto para que preparar-pruebas.js lo ponga en 0 y las pruebas no esperen un segundo cada una.
+export const VISIBLE_MINIMO = { ms: 1000 }
 
 let visibles = 0
 let ultimaVisibleHasta = -Infinity
@@ -17,8 +20,10 @@ const aparecerYa = () => visibles > 0 || Date.now() - ultimaVisibleHasta < CONTI
 
 // A pantalla completa mientras se recupera la sesión con la cookie (en vez de mandar al login un instante y perder la
 // dirección pedida), mientras llega el código de una pantalla y en la primera carga de las que tardan.
-export default function PantallaCargaSesion({ etiqueta = 'Recuperando la sesión' }) {
-  const [visible, setVisible] = useState(aparecerYa)
+// `inmediata` la muestra sin el retraso: al entrar desde el menú, la página ya está oculta y esperar dejaría un tramo
+// en blanco.
+export default function PantallaCargaSesion({ etiqueta = 'Recuperando la sesión', inmediata = false }) {
+  const [visible, setVisible] = useState(() => inmediata || aparecerYa())
 
   useEffect(() => {
     if (visible) return undefined
@@ -63,8 +68,18 @@ export default function PantallaCargaSesion({ etiqueta = 'Recuperando la sesión
 }
 
 // true hasta la primera vez que `lista` es true; después, siempre false (los cambios de filtro usan sus esqueletos).
-export function usePrimeraCarga(lista) {
+// Con `conMinimo`, además dura al menos VISIBLE_MINIMO.ms desde el montaje (para la pantalla `inmediata`).
+export function usePrimeraCarga(lista, { conMinimo = false } = {}) {
   const [primera, setPrimera] = useState(!lista)
-  if (primera && lista) setPrimera(false)
-  return primera && !lista
+  const [minimoCumplido, setMinimoCumplido] = useState(() => !conMinimo || lista || VISIBLE_MINIMO.ms <= 0)
+
+  useEffect(() => {
+    if (minimoCumplido) return undefined
+    const espera = setTimeout(() => setMinimoCumplido(true), VISIBLE_MINIMO.ms)
+    return () => clearTimeout(espera)
+  }, [minimoCumplido])
+
+  const terminada = lista && minimoCumplido
+  if (primera && terminada) setPrimera(false)
+  return primera && !terminada
 }

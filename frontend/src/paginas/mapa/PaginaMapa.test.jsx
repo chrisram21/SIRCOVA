@@ -399,7 +399,7 @@ describe('pantalla de carga (SPEC 56)', () => {
     listarResultados.mockReturnValue(resultados.promesa)
     montar()
 
-    expect(await screen.findByRole('status', { name: 'Cargando el mapa' })).toBeTruthy()
+    expect(screen.getByRole('status', { name: 'Cargando el mapa' })).toBeTruthy()
     expect(screen.queryByRole('heading', { level: 1 })).toBeNull()
 
     resultados.resolver({ corrida: CORRIDA, resultados: RESULTADOS })

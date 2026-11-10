@@ -899,7 +899,7 @@ describe('pantalla de carga (SPEC 56)', () => {
     listarResultados.mockReturnValue(resultados.promesa)
     await montar()
 
-    expect(await screen.findByRole('status', { name: 'Cargando indicadores' })).toBeTruthy()
+    expect(screen.getByRole('status', { name: 'Cargando indicadores' })).toBeTruthy()
     expect(screen.queryByRole('heading', { level: 1 })).toBeNull()
 
     resultados.resolver({ corrida: corrida(), resultados: RESULTADOS })

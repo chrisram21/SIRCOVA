@@ -1,5 +1,5 @@
 import { act, render, renderHook, screen } from '@testing-library/react'
-import PantallaCargaSesion, { CONTINUIDAD_MS, RETRASO_MS, usePrimeraCarga } from './PantallaCargaSesion.jsx'
+import PantallaCargaSesion, { CONTINUIDAD_MS, RETRASO_MS, usePrimeraCarga, VISIBLE_MINIMO } from './PantallaCargaSesion.jsx'
 
 // El reloj solo avanza entre pruebas: así ninguna pantalla de carga de la prueba anterior cuenta como recién vista.
 let reloj = Date.UTC(2030, 0, 1)
@@ -65,6 +65,12 @@ test('una que nunca se vio no adelanta a la siguiente', () => {
   expect(estado('Cargando indicadores')).toBeNull()
 })
 
+test('inmediata se ve desde el primer momento, sin esperar el retraso', () => {
+  render(<PantallaCargaSesion etiqueta="Cargando indicadores" inmediata />)
+
+  expect(estado('Cargando indicadores')).toBeTruthy()
+})
+
 test('se pinta en el body, fija sobre toda la pantalla y con el fondo de la marca', () => {
   const { container } = render(
     <main style={{ transform: 'translateY(4px)' }}>
@@ -108,4 +114,49 @@ test('usePrimeraCarga queda en false desde la primera vez que está lista', () =
 test('usePrimeraCarga ya lista desde el inicio no muestra la carga', () => {
   const { result } = renderHook(() => usePrimeraCarga(true))
   expect(result.current).toBe(false)
+})
+
+describe('usePrimeraCarga con el mínimo visible', () => {
+  beforeEach(() => {
+    VISIBLE_MINIMO.ms = 1000
+  })
+
+  afterEach(() => {
+    VISIBLE_MINIMO.ms = 0
+  })
+
+  test('si los datos llegan antes, sigue en true hasta cumplir el mínimo', () => {
+    const { result, rerender } = renderHook(({ lista }) => usePrimeraCarga(lista, { conMinimo: true }), {
+      initialProps: { lista: false },
+    })
+
+    act(() => vi.advanceTimersByTime(200))
+    rerender({ lista: true })
+    expect(result.current).toBe(true)
+
+    act(() => vi.advanceTimersByTime(799))
+    expect(result.current).toBe(true)
+
+    act(() => vi.advanceTimersByTime(1))
+    expect(result.current).toBe(false)
+  })
+
+  test('si los datos tardan más que el mínimo, termina al llegar', () => {
+    const { result, rerender } = renderHook(({ lista }) => usePrimeraCarga(lista, { conMinimo: true }), {
+      initialProps: { lista: false },
+    })
+
+    act(() => vi.advanceTimersByTime(1500))
+    expect(result.current).toBe(true)
+
+    rerender({ lista: true })
+    expect(result.current).toBe(false)
+  })
+
+  test('sin conMinimo termina en cuanto llegan los datos', () => {
+    const { result, rerender } = renderHook(({ lista }) => usePrimeraCarga(lista), { initialProps: { lista: false } })
+
+    rerender({ lista: true })
+    expect(result.current).toBe(false)
+  })
 })

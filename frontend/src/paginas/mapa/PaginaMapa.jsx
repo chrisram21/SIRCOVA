@@ -220,11 +220,11 @@ export default function PaginaMapa({ hoy }) {
   // DDRISS (error o lista vacía) no se pide nada más.
   const limitesListos = archivo === null || limites.datos || limites.error
   const sinDdriss = ddriss.error || ddriss.datos?.length === 0
-  const primeraCarga = usePrimeraCarga(Boolean(sinDdriss || (listo && datosListos && limitesListos)))
+  const primeraCarga = usePrimeraCarga(Boolean(sinDdriss || (listo && datosListos && limitesListos)), { conMinimo: true })
 
   return (
     <>
-      {primeraCarga && <PantallaCargaSesion etiqueta="Cargando el mapa" />}
+      {primeraCarga && <PantallaCargaSesion etiqueta="Cargando el mapa" inmediata />}
       <section hidden={primeraCarga} className="flex flex-col gap-5 p-4 sm:p-6">
         <EncabezadoPagina
           antetitulo={antetitulo}

@@ -1,6 +1,10 @@
 import { toast } from 'sonner'
 import { vaciarCache } from '@/api/almacenCache.js'
 import { borrarSesion } from '@/api/sesion.js'
+import { VISIBLE_MINIMO } from '@/componentes/PantallaCargaSesion.jsx'
+
+// Sin el segundo mínimo de la pantalla de carga inmediata; PantallaCargaSesion.test.jsx lo prueba con su valor.
+VISIBLE_MINIMO.ms = 0
 
 // Los toasts no se dibujan en las pruebas: se comprueba la llamada, p. ej. expect(toast.success).toHaveBeenCalledWith(…).
 vi.mock('sonner', () => {
