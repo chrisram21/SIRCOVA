@@ -47,6 +47,47 @@ const errores = {
 export const mensajePendiente = 'El reporte ya tiene una solicitud de rectificación pendiente.';
 
 const aFechaIso = (segundos) => (segundos == null ? null : new Date(Number(segundos) * 1000).toISOString());
+
+export const UMBRAL_RECTIFICACIONES_MES = 5;
+export const RELOJ = { ahora: () => new Date() };
+const DESFASE_GUATEMALA_HORAS = 6; // UTC−6, sin horario de verano
+
+export function mesGuatemala(fecha) {
+  const local = new Date(fecha.getTime() - DESFASE_GUATEMALA_HORAS * 3600 * 1000);
+  return { anio: local.getUTCFullYear(), mes: local.getUTCMonth() + 1 };
+}
+
+// Límites del mes de Guatemala en segundos UTC, para FROM_UNIXTIME.
+function limitesDelMes({ anio, mes }) {
+  const inicio = Date.UTC(anio, mes - 1, 1, DESFASE_GUATEMALA_HORAS) / 1000;
+  const fin = Date.UTC(anio, mes, 1, DESFASE_GUATEMALA_HORAS) / 1000;
+  return [inicio, fin];
+}
+
+export async function contarSolicitudesDelMes(ejecutor, establecimientoId, mes) {
+  const [[{ cantidad }]] = await ejecutor.query(
+    `SELECT COUNT(*) AS cantidad
+       FROM solicitud_rectificacion s
+       JOIN reporte_produccion r ON r.id = s.reporte_id
+      WHERE r.establecimiento_id = ?
+        AND s.solicitado_en >= FROM_UNIXTIME(?) AND s.solicitado_en < FROM_UNIXTIME(?)`,
+    [establecimientoId, ...limitesDelMes(mes)],
+  );
+  return Number(cantidad);
+}
+
+export async function conteoDelMes(id, usuario) {
+  if (!/^\d+$/.test(String(id)) || Number(id) <= 0) throw entradaInvalida('id debe ser un número entero positivo.');
+  const reporte = await leerReporte(pool, id, usuario);
+  const [[{ establecimiento_id: establecimientoId }]] = await pool.query(
+    'SELECT establecimiento_id FROM reporte_produccion WHERE id = ?',
+    [reporte.id],
+  );
+  const mes = mesGuatemala(RELOJ.ahora());
+  const cantidad = await contarSolicitudesDelMes(pool, establecimientoId, mes);
+  return { ...mes, cantidad, umbral: UMBRAL_RECTIFICACIONES_MES };
+}
+
 const esObjeto = (valor) => valor !== null && typeof valor === 'object' && !Array.isArray(valor);
 
 function leerCambio(cambio) {

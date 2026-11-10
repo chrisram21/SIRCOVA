@@ -25,6 +25,12 @@ router.post(
   revisionController.solicitarRectificacion,
 );
 router.get(
+  '/reportes/:id/rectificaciones/conteo-del-mes',
+  autenticar,
+  requierePermiso('RECTIFICACION_SOLICITAR'),
+  revisionController.conteoRectificacionesDelMes,
+);
+router.get(
   '/rectificaciones',
   autenticar,
   requierePermiso('RECTIFICACION_CONSULTAR'),
