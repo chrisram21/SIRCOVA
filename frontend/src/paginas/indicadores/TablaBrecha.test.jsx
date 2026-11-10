@@ -85,3 +85,11 @@ test('sin filas marcadas, la tabla de brecha no tiene aviso', () => {
 
   expect(screen.queryByText(/mayor al 100 %/)).toBeNull()
 })
+
+test('las columnas van en orden: Excedente antes de Dosis que faltan, y Cumple al final', () => {
+  render(<TablaBrecha resultados={[fila(municipio(1, 'Tacaná'))]} />)
+
+  expect(screen.getAllByRole('columnheader').map((c) => c.textContent)).toEqual([
+    'Municipio', 'Dosis acumuladas', 'Dosis para la meta', 'Excedente', 'Dosis que faltan', 'Cumple',
+  ])
+})

@@ -536,6 +536,21 @@ describe('cambios sin guardar', () => {
     expect(marcada('Hexavalente')).toBe(false)
   })
 
+  test('el punto de cambios sin guardar es amarillo y desaparece al guardar', async () => {
+    await montar()
+    guardarVacuna.mockResolvedValueOnce({ versionFila: 4, vacuna: capturaHexa({ celdas: [celda('D1', { grupo_edad: 'MENOR_1' }, 80)] }) })
+    const punto = () => screen.getByRole('tab', { name: 'Hexavalente' }).querySelector('.bg-cambio-pendiente')
+
+    escribir('1.ª dosis · < 1 año', '80')
+    expect(punto().getAttribute('aria-hidden')).toBe('true')
+    expect(punto().className).toContain('ring-card')
+    expect(screen.getByRole('tab', { name: 'Hexavalente' }).querySelector('.bg-destructive')).toBeNull()
+
+    fireEvent.click(botonGuardar())
+    await borradorGuardado()
+    expect(punto()).toBeNull()
+  })
+
   test('si falla la segunda vacuna, la primera pierde la marca y la segunda la conserva', async () => {
     await montar()
     guardarVacuna

@@ -6,6 +6,7 @@ import { ErrorApi } from '@/api/cliente.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { cambiarRol, editarEmpleado, listarRoles, obtenerUsuario } from '@/api/usuarios.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
+import { NINGUNO } from './CamposEmpleado.jsx'
 import PaginaEditarUsuario from './PaginaEditarUsuario.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
@@ -318,6 +319,47 @@ test('vaciar un campo opcional lo envía como null', async () => {
   fireEvent.click(botonGuardar())
 
   await waitFor(() => expect(editarEmpleado).toHaveBeenCalledWith(108, { cargo: null }))
+})
+
+describe('municipio como texto (SPEC 53)', () => {
+  test('no hay Select de municipio y un empleado sin establecimiento muestra su municipio guardado', async () => {
+    obtenerUsuario.mockResolvedValue(cuenta({ empleado: { ...EMPLEADO, municipioId: 1, municipioNombre: 'San Marcos' } }))
+    await abrir()
+    await esperarFormulario()
+
+    expect(document.querySelector('select[name="municipio"]')).toBeNull()
+    expect(screen.getByTestId('municipio-empleado').textContent).toBe('San Marcos')
+
+    escribir(/^Cargo/, 'Epidemióloga')
+    fireEvent.click(botonGuardar())
+    await waitFor(() => expect(editarEmpleado).toHaveBeenCalledWith(108, { cargo: 'Epidemióloga' }))
+  })
+
+  test('al elegir un establecimiento se ve su municipio y no se manda municipioId', async () => {
+    await abrir()
+    await esperarFormulario()
+
+    elegir('establecimiento', 7)
+    expect(screen.getByTestId('municipio-empleado').textContent).toBe('Tacaná')
+    fireEvent.click(botonGuardar())
+
+    await waitFor(() => expect(editarEmpleado).toHaveBeenCalledWith(108, { establecimientoId: 7 }))
+  })
+
+  test('pasar a «Sin establecimiento» deja el municipio en «—» y lo manda como null', async () => {
+    obtenerUsuario.mockResolvedValue(cuenta({
+      empleado: { ...EMPLEADO, establecimientoId: 7, establecimientoNombre: 'Centro de Salud Tacaná', municipioId: 7, municipioNombre: 'Tacaná' },
+    }))
+    await abrir()
+    await esperarFormulario()
+    expect(screen.getByTestId('municipio-empleado').textContent).toBe('Tacaná')
+
+    elegir('establecimiento', NINGUNO)
+    expect(screen.getByTestId('municipio-empleado').textContent).toBe('—')
+    fireEvent.click(botonGuardar())
+
+    await waitFor(() => expect(editarEmpleado).toHaveBeenCalledWith(108, { establecimientoId: null, municipioId: null }))
+  })
 })
 
 test('cambiar solo el rol llama solo a cambiarRol', async () => {

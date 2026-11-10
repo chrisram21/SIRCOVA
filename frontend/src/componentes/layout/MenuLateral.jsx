@@ -92,8 +92,8 @@ export default function MenuLateral() {
         <NavLink to="/inicio" className="group/marca flex items-center gap-2.5 rounded-md" onClick={alElegir}>
           <MarcaSircova className="size-9 transition-transform duration-300 ease-salida group-hover/marca:-rotate-6 group-hover/marca:scale-105" />
           <span className="flex flex-col leading-tight">
-            <span className="text-[17px] font-bold tracking-wide text-primary">SIRCOVA</span>
-            <span className="text-[11px] font-medium text-muted-foreground">Registro de vacunación</span>
+            <span className="text-[17px] font-bold tracking-wide text-sidebar-accent-foreground">SIRCOVA</span>
+            <span className="text-[11px] font-medium text-sidebar-foreground">Registro de vacunación</span>
           </span>
         </NavLink>
       </SidebarHeader>

@@ -910,7 +910,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
                   )}
                   {idsConCambios.has(vacuna.id) && (
                     <>
-                      <span aria-hidden="true" className="size-2 rounded-full bg-advertencia-foreground ring-2 ring-advertencia" />
+                      <span aria-hidden="true" className="size-2 rounded-full bg-cambio-pendiente ring-2 ring-card" />
                       <span id={`cambios-${vacuna.id}`} hidden>
                         (cambios sin guardar)
                       </span>

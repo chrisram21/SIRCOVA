@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -92,6 +92,7 @@ function textoValidacion(fila) {
 
 export default function PaginaBandejaRevision() {
   const { pathname, search } = useLocation()
+  const navegar = useNavigate()
   const [parametros, setParametros] = useSearchParams()
   const sesion = useSesion()
   const usuarioId = sesion?.sesion?.usuario?.id ?? null
@@ -108,6 +109,11 @@ export default function PaginaBandejaRevision() {
   const [intento, setIntento] = useState(0)
   // { modo: 'asignar' | 'reasignar', fila } mientras el diálogo está abierto.
   const [dialogo, setDialogo] = useState(null)
+  // Los botones de la fila no deben abrir el reporte además del diálogo.
+  const abrirDialogo = (evento, modo, fila) => {
+    evento.stopPropagation()
+    setDialogo({ modo, fila })
+  }
   const [cerrandoPeriodo, setCerrandoPeriodo] = useState(false)
 
   const deUrl = filtrosDeUrl(parametros)
@@ -348,15 +354,24 @@ export default function PaginaBandejaRevision() {
                       const esMio = fila.revisor?.id === usuarioId
                       const asignar = puedeAsignar && fila.estado === 'ENVIADO'
                       const reasignar = puedeAsignar && fila.estado === 'EN_REVISION' && esMio
+                      const revisar = fila.estado === 'EN_REVISION' && esMio
+                      // Solo lo enviado se revisa: un borrador o un establecimiento sin reporte no abren nada.
+                      const abrible = Boolean(fila.reporteId) && fila.estado !== 'BORRADOR'
+                      const rutaReporte = `/revision/reportes/${fila.reporteId}`
+                      // La fila abre el reporte con el ratón; el enlace del nombre queda para el teclado y otra pestaña.
                       return (
-                        <TableRow key={fila.establecimiento.id}>
+                        <TableRow
+                          key={fila.establecimiento.id}
+                          onClick={abrible ? () => navegar(rutaReporte, { state: { volverA: search } }) : undefined}
+                          className={cn(abrible && 'cursor-pointer')}
+                        >
                           <TableCell>
                             <div className="font-medium">{fila.municipio.nombre}</div>
-                            {/* Solo lo enviado se revisa: un borrador o un establecimiento sin reporte no abren nada. */}
-                            {fila.reporteId && fila.estado !== 'BORRADOR' ? (
+                            {abrible ? (
                               <Link
-                                to={`/revision/reportes/${fila.reporteId}`}
+                                to={rutaReporte}
                                 state={{ volverA: search }}
+                                onClick={(evento) => evento.stopPropagation()}
                                 className="text-sm text-enlace underline-offset-4 hover:underline"
                               >
                                 {fila.establecimiento.nombre}
@@ -383,16 +398,25 @@ export default function PaginaBandejaRevision() {
                           </TableCell>
                           <TableCell>{fila.revisor ? `${fila.revisor.nombre}${esMio ? ' (usted)' : ''}` : '—'}</TableCell>
                           <TableCell className="text-right">
-                            {asignar && (
-                              <Button size="sm" onClick={() => setDialogo({ modo: 'asignar', fila })}>
-                                Asignar
-                              </Button>
-                            )}
-                            {reasignar && (
-                              <Button size="sm" variant="outline" onClick={() => setDialogo({ modo: 'reasignar', fila })}>
-                                Reasignar
-                              </Button>
-                            )}
+                            <div className="flex justify-end gap-2">
+                              {revisar && (
+                                <Button size="sm" asChild>
+                                  <Link to={rutaReporte} state={{ volverA: search }} onClick={(evento) => evento.stopPropagation()}>
+                                    Revisar
+                                  </Link>
+                                </Button>
+                              )}
+                              {asignar && (
+                                <Button size="sm" onClick={(evento) => abrirDialogo(evento, 'asignar', fila)}>
+                                  Asignar
+                                </Button>
+                              )}
+                              {reasignar && (
+                                <Button size="sm" variant="outline" onClick={(evento) => abrirDialogo(evento, 'reasignar', fila)}>
+                                  Reasignar
+                                </Button>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       )

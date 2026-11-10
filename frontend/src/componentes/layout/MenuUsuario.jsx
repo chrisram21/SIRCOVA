@@ -73,7 +73,7 @@ export default function MenuUsuario() {
                 {inicialesDe(empleado)}
               </span>
               <span className="grid flex-1 text-left leading-tight">
-                <span className="truncate font-semibold text-foreground">{nombre}</span>
+                <span className="truncate font-semibold text-sidebar-accent-foreground">{nombre}</span>
                 <span className="truncate text-xs">{rolNombre ?? rol}</span>
               </span>
               <ChevronsUpDown className="ml-auto" />

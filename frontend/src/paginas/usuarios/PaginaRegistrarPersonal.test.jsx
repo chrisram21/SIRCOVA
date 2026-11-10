@@ -3,6 +3,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { listarDdriss, listarEstablecimientos, listarMunicipios } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
 import { crearCuenta, listarRoles, registrarEmpleado } from '@/api/usuarios.js'
+import { NINGUNO } from './CamposEmpleado.jsx'
 import PaginaRegistrarPersonal from './PaginaRegistrarPersonal.jsx'
 
 vi.mock('@/api/usuarios.js', () => ({ registrarEmpleado: vi.fn(), crearCuenta: vi.fn(), listarRoles: vi.fn() }))
@@ -86,8 +87,8 @@ test('muestra la DDRISS y las opciones de los Select, y pide solo establecimient
   expect(listarEstablecimientos).toHaveBeenCalledWith({ activo: true })
   const establecimientos = [...document.querySelectorAll('select[name="establecimiento"] option')].map((o) => o.textContent)
   expect(establecimientos).toEqual(expect.arrayContaining(['Sin establecimiento (personal de la DDRISS)', 'Centro de Salud Tacaná']))
-  const municipios = [...document.querySelectorAll('select[name="municipio"] option')].map((o) => o.textContent)
-  expect(municipios).toEqual(expect.arrayContaining(['Sin municipio', 'San Marcos']))
+  expect(document.querySelector('select[name="municipio"]')).toBeNull()
+  expect(screen.getByTestId('municipio-empleado').textContent).toBe('—')
 
   fireEvent.click(screen.getByRole('checkbox', { name: 'Crear cuenta de acceso' }))
   const roles = [...document.querySelectorAll('select[name="rol"] option')].map((o) => o.textContent)
@@ -264,25 +265,27 @@ test('el rol de personal del establecimiento sin establecimiento muestra el avis
   await waitFor(() => expect(registrarEmpleado).toHaveBeenCalledTimes(1))
 })
 
-test('con establecimiento no aparece el Select de municipio y se muestra el del establecimiento', async () => {
+test('no hay Select de municipio: al elegir establecimiento se ve su municipio, y sin él, «—»', async () => {
   await abrir()
   elegir('establecimiento', 7)
 
   expect(document.querySelector('select[name="municipio"]')).toBeNull()
-  expect(screen.getByTestId('municipio-establecimiento').textContent).toBe('Tacaná')
+  expect(screen.getByTestId('municipio-empleado').textContent).toBe('Tacaná')
+
+  elegir('establecimiento', NINGUNO)
+  expect(screen.getByTestId('municipio-empleado').textContent).toBe('—')
 })
 
 test('sin cuenta, solo registra al empleado y muestra el éxito', async () => {
   await abrir()
   llenarEmpleado()
   escribir(/^Cargo/, '  Enfermera  ')
-  elegir('municipio', 1)
 
   fireEvent.click(botonRegistrar())
 
   expect(await screen.findByText('Se registró a Ana López.')).toBeTruthy()
   expect(registrarEmpleado).toHaveBeenCalledWith({
-    nombres: 'Ana', apellidos: 'López', cui: CUI, cargo: 'Enfermera', correo: 'ana.lopez@gmail.com', municipioId: 1,
+    nombres: 'Ana', apellidos: 'López', cui: CUI, cargo: 'Enfermera', correo: 'ana.lopez@gmail.com',
   })
   expect(crearCuenta).not.toHaveBeenCalled()
   expect(screen.queryByText(/Se creó la cuenta/)).toBeNull()

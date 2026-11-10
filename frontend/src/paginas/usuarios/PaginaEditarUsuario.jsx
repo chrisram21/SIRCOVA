@@ -22,8 +22,7 @@ const TEXTOS_OPCIONALES = ['cargo', 'correo', 'telefono']
 
 const aOpcion = (id) => (id == null ? NINGUNO : String(id))
 
-// El formulario trabaja con texto. Con establecimiento se guarda también su municipio, para que al quitarlo
-// el Select muestre el que conserva el backend.
+// El formulario trabaja con texto. Con establecimiento se guarda también su municipio, para comparar con lo guardado.
 function aFormulario(empleado) {
   return {
     nombres: empleado.nombres,
@@ -49,7 +48,8 @@ function cambiosDe(base, actual) {
   if (actual.establecimientoId !== base.establecimientoId) {
     cambios.establecimientoId = actual.establecimientoId === NINGUNO ? null : Number(actual.establecimientoId)
   }
-  // Con establecimiento, el backend toma el municipio de él.
+  // Con establecimiento, el backend toma el municipio de él. Al pasar a "Sin establecimiento", CamposEmpleado vacía
+  // el municipio y aquí se manda null, porque el backend conserva el anterior si no lo recibe.
   if (actual.establecimientoId === NINGUNO && actual.municipioId !== base.municipioId) {
     cambios.municipioId = actual.municipioId === NINGUNO ? null : Number(actual.municipioId)
   }

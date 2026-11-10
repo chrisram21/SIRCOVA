@@ -3,6 +3,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { MESES } from '@/lib/fechas.js'
 import { cn } from '@/lib/utils'
 import { TIPOS_INDICADOR } from '../configuracion/tiposIndicador.js'
+import InsigniaCumple from './InsigniaCumple.jsx'
 
 // SPEC 47: los resultados de un indicador PROYECCION. El numerador guardado son las dosis proyectadas a diciembre; las
 // acumuladas y el ritmo vienen en proyeccion. Las columnas estimadas van sobre fondo gris, como pide el estilo general.
@@ -15,7 +16,6 @@ const SIMBOLO_META = SIMBOLOS[TIPOS_INDICADOR.PROYECCION.meta.comparador]
 const ESTIMADA = 'bg-muted'
 
 const dosis = (valor) => (valor === null || valor === undefined ? '—' : formatoEntero.format(valor))
-const textoLlega = (cumple) => (cumple === null ? '—' : cumple ? 'Sí' : 'No')
 
 // Sin población o sin meses cerrados en la ventana; null si la fila es calculable.
 export function motivoNoCalculable(resultado) {
@@ -76,10 +76,10 @@ export default function TablaProyeccion({ resultados }) {
               <TableHead className={cn('text-right', ESTIMADA)}>Ritmo mensual</TableHead>
               <TableHead className={cn('text-right', ESTIMADA)}>Dosis proyectadas a diciembre</TableHead>
               <TableHead className="text-right">Población</TableHead>
-              <TableHead className={cn('text-right', ESTIMADA)}>Cobertura proyectada</TableHead>
-              <TableHead className="text-right">Meta</TableHead>
-              <TableHead className={ESTIMADA}>¿Llega a la meta?</TableHead>
               <TableHead className={cn('text-right', ESTIMADA)}>Dosis que faltarían</TableHead>
+              <TableHead className="text-right">Meta</TableHead>
+              <TableHead className={cn('text-right', ESTIMADA)}>Cobertura proyectada</TableHead>
+              <TableHead className={ESTIMADA}>¿Llega a la meta?</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -93,7 +93,11 @@ export default function TablaProyeccion({ resultados }) {
                   <TableCell className={cn('text-right font-mono', ESTIMADA)}>{dosis(r.proyeccion?.ritmoMensual)}</TableCell>
                   <TableCell className={cn('text-right font-mono', ESTIMADA)}>{dosis(r.numerador)}</TableCell>
                   <TableCell className="text-right font-mono">
-                    {r.denominador === null ? '—' : formatoDecimal.format(r.denominador)}
+                    {r.denominador === null ? '—' : formatoEntero.format(r.denominador)}
+                  </TableCell>
+                  <TableCell className={cn('text-right font-mono', ESTIMADA)}>{dosis(r.brechaDosis)}</TableCell>
+                  <TableCell className="text-right font-mono">
+                    {r.meta === null ? '—' : `${SIMBOLO_META} ${formatoDecimal.format(r.meta)} %`}
                   </TableCell>
                   <TableCell className={cn('text-right', ESTIMADA)}>
                     {motivo ? (
@@ -102,11 +106,7 @@ export default function TablaProyeccion({ resultados }) {
                       <span className="font-mono">{formatoPorcentaje.format(r.valor)} %</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-right font-mono">
-                    {r.meta === null ? '—' : `${SIMBOLO_META} ${formatoDecimal.format(r.meta)} %`}
-                  </TableCell>
-                  <TableCell className={ESTIMADA}>{textoLlega(r.cumpleMeta)}</TableCell>
-                  <TableCell className={cn('text-right font-mono', ESTIMADA)}>{dosis(r.brechaDosis)}</TableCell>
+                  <TableCell className={ESTIMADA}><InsigniaCumple cumple={r.cumpleMeta} /></TableCell>
                 </TableRow>
               )
             })}

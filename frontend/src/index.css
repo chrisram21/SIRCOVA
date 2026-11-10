@@ -28,6 +28,7 @@
     --color-advertencia-foreground: var(--advertencia-foreground);
     --color-exito: var(--exito);
     --color-exito-foreground: var(--exito-foreground);
+    --color-cambio-pendiente: var(--cambio-pendiente);
     --color-semaforo-verde: var(--semaforo-verde);
     --color-semaforo-amarillo: var(--semaforo-amarillo);
     --color-semaforo-rojo: var(--semaforo-rojo);
@@ -98,6 +99,8 @@
     /* Éxito en verde, solo para mensajes que deben resaltar (AvisoExito tono="verde"); el éxito común es celeste. */
     --exito: #e3f3e8;
     --exito-foreground: #1e5b34;
+    /* Punto de cambios sin guardar en las pestañas de la captura; no debe confundirse con el rojo de errores. */
+    --cambio-pendiente: #f2c14e;
     --chart-1: #4683bb;
     --chart-2: #b5d4ee;
     --chart-3: #eeb48c;
@@ -116,14 +119,14 @@
     --mapa-brecha-5: #2f5f8a;
     --mapa-sin-enviar: var(--semaforo-rojo);
     --radius: 0.5rem;
-    --sidebar: #edf3f9;
-    --sidebar-foreground: #34506b;
+    --sidebar: #2f5f8a;
+    --sidebar-foreground: #e8f1f9;
     --sidebar-primary: #2c4660;
     --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #dbeaf6;
-    --sidebar-accent-foreground: #1d4a72;
-    --sidebar-border: #e0e7ef;
-    --sidebar-ring: #5aa0d0;
+    --sidebar-accent: #1d4a72;
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: #3f6f99;
+    --sidebar-ring: #b5d4ee;
     /* Azul marino más oscuro, solo para los degradados de la marca (banner del Inicio, panel del login). */
     --marca-profundo: #172a3d;
     /* Estados del reporte: "Estilo general" de descripcion_pantallas.md, con texto oscuro donde el fondo es claro. */

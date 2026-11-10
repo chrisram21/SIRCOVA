@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 import { TIPOS_INDICADOR } from '../configuracion/tiposIndicador.js'
 import BarraFiltrosIndicadores from './BarraFiltrosIndicadores.jsx'
 import DialogoCalcularIndicadores, { avisoDeMesesSinCerrar } from './DialogoCalcularIndicadores.jsx'
+import InsigniaCumple from './InsigniaCumple.jsx'
 import InsigniaValor from './InsigniaValor.jsx'
 import { AvisoMayorACien, MarcaMayorACien } from './MarcaMayorACien.jsx'
 import PanelGraficas from './PanelGraficas.jsx'
@@ -104,7 +105,6 @@ export function indicadorElegido(indicadores, codigo) {
   )
 }
 
-const textoCumple = (cumple) => (cumple === null ? '—' : cumple ? 'Sí' : 'No')
 
 export function textoDosisQueFaltan({ brechaDosis, excedenteDosis }) {
   if (brechaDosis === null) return '—'
@@ -124,9 +124,9 @@ function TablaResultados({ resultados, tipoCalculo }) {
               <TableHead>Municipio</TableHead>
               <TableHead className="text-right">Dosis acumuladas</TableHead>
               <TableHead className="text-right">{tipoCalculo === 'COBERTURA' ? 'Población' : 'Meta del mes'}</TableHead>
-              <TableHead className="text-right">{etiquetaValor}</TableHead>
-              <TableHead className="text-right">Meta</TableHead>
               <TableHead className="text-right">Dosis que faltan</TableHead>
+              <TableHead className="text-right">Meta</TableHead>
+              <TableHead className="text-right">{etiquetaValor}</TableHead>
               <TableHead>Cumple</TableHead>
             </TableRow>
           </TableHeader>
@@ -138,17 +138,17 @@ function TablaResultados({ resultados, tipoCalculo }) {
                   <TableCell>{departamental ? 'Total de la DDRISS' : r.municipio.nombre}</TableCell>
                   <TableCell className="text-right font-mono">{formatoEntero.format(r.numerador ?? 0)}</TableCell>
                   <TableCell className="text-right font-mono">
-                    {r.denominador === null ? '—' : formatoDecimal.format(r.denominador)}
+                    {r.denominador === null ? '—' : formatoEntero.format(r.denominador)}
                   </TableCell>
+                  <TableCell className="text-right font-mono">{textoDosisQueFaltan(r)}</TableCell>
+                  <TableCell className="text-right font-mono">{r.meta === null ? '—' : `${formatoDecimal.format(r.meta)} %`}</TableCell>
                   <TableCell className="text-right">
                     <span className="inline-flex items-center justify-end gap-1.5">
                       <InsigniaValor resultado={r} />
                       {r.mayorACien && <MarcaMayorACien />}
                     </span>
                   </TableCell>
-                  <TableCell className="text-right font-mono">{r.meta === null ? '—' : `${formatoDecimal.format(r.meta)} %`}</TableCell>
-                  <TableCell className="text-right font-mono">{textoDosisQueFaltan(r)}</TableCell>
-                  <TableCell>{textoCumple(r.cumpleMeta)}</TableCell>
+                  <TableCell><InsigniaCumple cumple={r.cumpleMeta} /></TableCell>
                 </TableRow>
               )
             })}

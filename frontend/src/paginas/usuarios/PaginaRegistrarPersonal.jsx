@@ -29,7 +29,6 @@ const EMPLEADO_VACIO = {
   correo: '',
   telefono: '',
   establecimientoId: NINGUNO,
-  municipioId: NINGUNO,
 }
 const CUENTA_VACIA = { crear: false, nombreUsuario: '', rolId: '' }
 
@@ -39,9 +38,8 @@ function armarEmpleado(datos) {
     const valor = datos[campo].trim()
     if (valor) cuerpo[campo] = valor
   }
-  // Con establecimiento, el backend toma el municipio de él.
+  // El municipio no se manda: el backend lo toma del establecimiento.
   if (datos.establecimientoId !== NINGUNO) cuerpo.establecimientoId = Number(datos.establecimientoId)
-  else if (datos.municipioId !== NINGUNO) cuerpo.municipioId = Number(datos.municipioId)
   return cuerpo
 }
 
