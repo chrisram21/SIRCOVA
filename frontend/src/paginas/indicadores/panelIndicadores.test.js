@@ -5,12 +5,18 @@ import {
   barrasPorVacuna,
   filaDeReferencia,
   filasVisibles,
+  indicadoresDeLaVacuna,
+  indicadoresDeLaVista,
   indicadoresDelPanel,
   municipiosDeLaCorrida,
   municipiosVisibles,
   puntosDeLinea,
   vacunaElegida,
   vacunasDeLaCorrida,
+  VISTAS,
+  vistaDeTipo,
+  vistaElegida,
+  vistaPorDefecto,
 } from './panelIndicadores.js'
 
 const HEXA = { codigo: 'HEXA', nombre: 'Hexavalente' }
@@ -51,6 +57,56 @@ const RESULTADOS = [
   fila('AVANCE_SPR1', SAN_MARCOS, { vacuna: SPR }),
 ]
 
+describe('pestañas por tipo', () => {
+  const HEXA_INDICADORES = indicadoresDeLaVacuna(INDICADORES, RESULTADOS, 'HEXA')
+  const COB_HEXA1 = { codigo: 'COB_HEXA1', nombre: 'Cobertura Hexa 1', tipoCalculo: 'COBERTURA' }
+  const SOLO_COBERTURA = [{ codigo: 'COB_BCG', nombre: 'Cobertura BCG', tipoCalculo: 'COBERTURA' }]
+
+  test('las cinco pestañas van en orden y cada tipo tiene la suya', () => {
+    expect(Object.keys(VISTAS)).toEqual(['avance', 'brecha', 'cobertura', 'desercion', 'proyeccion'])
+    expect(vistaDeTipo('AVANCE_META_MES')).toBe('avance')
+    expect(vistaDeTipo('PROYECCION')).toBe('proyeccion')
+    expect(vistaDeTipo('OTRO')).toBeNull()
+    expect(vistaDeTipo(undefined)).toBeNull()
+  })
+
+  test('la vista de la URL manda si es válida', () => {
+    expect(vistaElegida(HEXA_INDICADORES, { vista: 'brecha' })).toBe('brecha')
+    expect(vistaElegida(HEXA_INDICADORES, { vista: 'brecha', indicador: 'COB_HEXA3' })).toBe('brecha')
+    // Aunque la vacuna no tenga indicador de ese tipo: la pestaña muestra el aviso.
+    expect(vistaElegida(SOLO_COBERTURA, { vista: 'desercion' })).toBe('desercion')
+  })
+
+  test('una vista inválida se ignora', () => {
+    expect(vistaElegida(HEXA_INDICADORES, { vista: 'mapa' })).toBe('avance')
+    expect(vistaElegida(HEXA_INDICADORES, { vista: 'toString' })).toBe('avance')
+  })
+
+  test('sin vista, una URL vieja con indicador abre la pestaña de su tipo', () => {
+    expect(vistaElegida(HEXA_INDICADORES, { indicador: 'DES_HEXA1_3' })).toBe('desercion')
+    expect(vistaElegida(HEXA_INDICADORES, { indicador: 'PROY_COB_HEXA3' })).toBe('proyeccion')
+    // Un indicador de otra vacuna o que no está en la corrida no cuenta.
+    expect(vistaElegida(HEXA_INDICADORES, { indicador: 'AVANCE_SPR1' })).toBe('avance')
+    expect(vistaElegida(HEXA_INDICADORES, { indicador: 'NO_EXISTE' })).toBe('avance')
+  })
+
+  test('por defecto, la primera pestaña con indicador de la vacuna', () => {
+    expect(vistaPorDefecto(HEXA_INDICADORES)).toBe('avance')
+    expect(vistaPorDefecto(SOLO_COBERTURA)).toBe('cobertura')
+    expect(vistaElegida(SOLO_COBERTURA, {})).toBe('cobertura')
+    expect(vistaPorDefecto([])).toBe('avance')
+    expect(vistaElegida([], {})).toBe('avance')
+  })
+
+  test('los indicadores de una vista son los de su tipo, en el orden de la corrida', () => {
+    const conDos = [COB_HEXA1, ...HEXA_INDICADORES]
+    expect(indicadoresDeLaVista(conDos, 'cobertura').map((i) => i.codigo)).toEqual(['COB_HEXA1', 'COB_HEXA3'])
+    expect(indicadoresDeLaVista(conDos, 'brecha').map((i) => i.codigo)).toEqual(['BRECHA_HEXA3'])
+    expect(indicadoresDeLaVista(SOLO_COBERTURA, 'desercion')).toEqual([])
+    expect(indicadoresDeLaVista(conDos, 'otra')).toEqual([])
+  })
+})
+
 describe('vacuna e indicadores del panel', () => {
   test('las vacunas de la corrida van por nombre y sin repetir', () => {
     expect(vacunasDeLaCorrida(RESULTADOS)).toEqual([HEXA, SPR])
@@ -75,6 +131,33 @@ describe('vacuna e indicadores del panel', () => {
     expect(indicadoresDelPanel(INDICADORES, RESULTADOS, 'HEXA', 'BRECHA_HEXA3').cobertura.codigo).toBe('AVANCE_HEXA3')
     // La vacuna manda: un indicador elegido de otra vacuna no entra.
     expect(indicadoresDelPanel(INDICADORES, RESULTADOS, 'HEXA', 'AVANCE_SPR1').cobertura.codigo).toBe('AVANCE_HEXA3')
+  })
+
+  test('con varios del mismo tipo, la gráfica de ese tipo usa el elegido', () => {
+    const otros = [
+      { codigo: 'BRECHA_HEXA1', nombre: 'Brecha Hexa 1', tipoCalculo: 'BRECHA' },
+      { codigo: 'DES_HEXA1_2', nombre: 'Deserción Hexa 1 a 2', tipoCalculo: 'DESERCION' },
+      { codigo: 'PROY_COB_HEXA1', nombre: 'Proyección Hexa 1', tipoCalculo: 'PROYECCION' },
+      { codigo: 'COB_HEXA1', nombre: 'Cobertura Hexa 1', tipoCalculo: 'COBERTURA' },
+    ]
+    const indicadores = [...INDICADORES, ...otros]
+    const resultados = [
+      ...RESULTADOS,
+      fila('BRECHA_HEXA1', null),
+      fila('DES_HEXA1_2', null),
+      fila('PROY_COB_HEXA1', null, { proyeccion: { indicadorBase: 'COB_HEXA1' } }),
+      fila('COB_HEXA1', null),
+    ]
+    const panel = (codigo) => indicadoresDelPanel(indicadores, resultados, 'HEXA', codigo)
+    expect(panel('BRECHA_HEXA1').brecha.codigo).toBe('BRECHA_HEXA1')
+    expect(panel('DES_HEXA1_2').desercion.codigo).toBe('DES_HEXA1_2')
+    expect(panel('COB_HEXA1').cobertura.codigo).toBe('COB_HEXA1')
+    // La proyección elegida trae su propia base para la línea.
+    expect(panel('PROY_COB_HEXA1').proyeccion.codigo).toBe('PROY_COB_HEXA1')
+    expect(panel('PROY_COB_HEXA1').base.codigo).toBe('COB_HEXA1')
+    // Las de otro tipo siguen con la primera.
+    expect(panel('BRECHA_HEXA1').desercion.codigo).toBe('DES_HEXA1_3')
+    expect(panel('BRECHA_HEXA1').proyeccion.codigo).toBe('PROY_COB_HEXA3')
   })
 
   test('sin proyección, la base es la primera cobertura; sin indicadores del tipo, null', () => {

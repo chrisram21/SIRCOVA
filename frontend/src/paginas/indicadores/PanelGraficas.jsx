@@ -7,19 +7,25 @@ import GraficaDesercion from './GraficaDesercion.jsx'
 import GraficaPorMunicipio from './GraficaPorMunicipio.jsx'
 import GraficaPorVacuna from './GraficaPorVacuna.jsx'
 import TarjetaComparacion from './TarjetaComparacion.jsx'
-import { filaDeReferencia, filasDe, indicadoresDelPanel, puntosDeLinea } from './panelIndicadores.js'
+import {
+  filaDeReferencia, filasDe, indicadoresDeLaVacuna, indicadoresDeLaVista, indicadoresDelPanel, puntosDeLinea,
+} from './panelIndicadores.js'
 
 // SPEC 49: el panel de gráficas de «Indicadores», sobre la tabla. Cada gráfica toma el indicador de su tipo de la
 // vacuna elegida; solo la línea de avance pide algo más a la API (la serie del indicador base). SPEC 51: la tarjeta
-// «Comparar periodos» va debajo, a todo el ancho, y comparte con la línea la serie del año de la corrida.
+// «Comparar periodos» comparte con la línea la serie del año de la corrida. SPEC 54: solo se dibujan las gráficas de
+// la pestaña (vista); el panel sigue montado aunque la pestaña no tenga indicador, para conservar las series pedidas.
 
 export default function PanelGraficas({
-  corrida, indicadores, resultados, vacuna, vacunaNombre, codigoElegido, visibles, ddrissId, comparacion,
+  corrida, indicadores, resultados, vacuna, vacunaNombre, vista, codigoElegido, visibles, ddrissId, comparacion,
 }) {
   const panel = indicadoresDelPanel(indicadores, resultados, vacuna, codigoElegido)
+  const hayIndicador = indicadoresDeLaVista(indicadoresDeLaVacuna(indicadores, resultados, vacuna), vista).length > 0
   const unSolo = visibles.length === 1 ? visibles[0] : null
   const referencia = unSolo ? unSolo.nombre : 'Total de la DDRISS'
   const base = panel.base?.codigo ?? null
+  // La serie de la línea solo hace falta en «Proyección»; «Comparar periodos» pide las suyas.
+  const baseDeLinea = vista === 'proyeccion' && hayIndicador ? base : null
 
   const [serie, setSerie] = useState(null)
   const [error, setError] = useState(null)
@@ -39,18 +45,18 @@ export default function PanelGraficas({
   }, [corrida.id])
 
   useEffect(() => {
-    if (!base) return undefined
+    if (!baseDeLinea) return undefined
     let vigente = true
     setSerie(null)
     setError(null)
-    pedirSerie({ anio: corrida.anio, indicador: base, municipioId: unSolo?.id, ddrissId })
+    pedirSerie({ anio: corrida.anio, indicador: baseDeLinea, municipioId: unSolo?.id, ddrissId })
       .then((recibida) => vigente && setSerie(recibida))
       .catch((err) => vigente && setError(mensajeDeError(err)))
     return () => {
       vigente = false
     }
     // La corrida cambia al calcular de nuevo; el municipio, al elegir uno solo.
-  }, [corrida.id, corrida.anio, base, unSolo?.id, ddrissId, intento])
+  }, [corrida.id, corrida.anio, baseDeLinea, unSolo?.id, ddrissId, intento])
 
   const filaBase = base ? filaDeReferencia(filasDe(resultados, base), visibles) : null
   const filaProyeccion = panel.proyeccion ? filaDeReferencia(filasDe(resultados, panel.proyeccion.codigo), visibles) : null
@@ -66,57 +72,69 @@ export default function PanelGraficas({
   const metaDeLaLinea = linea?.[11]?.proyeccion != null ? filaProyeccion.meta : filaBase?.meta ?? null
   const filasCobertura = panel.cobertura ? filasDe(resultados, panel.cobertura.codigo) : []
 
+  if (!hayIndicador) return null
+
+  const porMunicipioYVacuna = (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <GraficaPorMunicipio indicador={panel.cobertura} filas={filasCobertura} visibles={visibles} vacuna={vacunaNombre} />
+      <GraficaPorVacuna
+        tipo={panel.cobertura?.tipoCalculo ?? null}
+        indicadores={indicadores}
+        resultados={resultados}
+        visibles={visibles}
+        vacuna={vacuna}
+        referencia={referencia}
+      />
+    </div>
+  )
+
   return (
     <div className="flex flex-col gap-4" aria-label="Gráficas de los indicadores">
-      <div className="grid gap-4 lg:grid-cols-3">
+      {vista === 'avance' && porMunicipioYVacuna}
+      {vista === 'cobertura' && (
+        <>
+          {porMunicipioYVacuna}
+          <TarjetaComparacion
+            corrida={corrida}
+            base={panel.base}
+            municipioId={unSolo?.id}
+            referencia={referencia}
+            vacunaNombre={vacunaNombre}
+            ddrissId={ddrissId}
+            pedirSerie={pedirSerie}
+            {...comparacion}
+          />
+        </>
+      )}
+      {vista === 'brecha' && (
+        <GraficaBrecha
+          indicador={panel.brecha}
+          filas={panel.brecha ? filasDe(resultados, panel.brecha.codigo) : []}
+          visibles={visibles}
+          vacuna={vacunaNombre}
+        />
+      )}
+      {vista === 'desercion' && (
+        <GraficaDesercion
+          indicador={panel.desercion}
+          filas={panel.desercion ? filasDe(resultados, panel.desercion.codigo) : []}
+          visibles={visibles}
+          vacuna={vacunaNombre}
+          referencia={referencia}
+        />
+      )}
+      {vista === 'proyeccion' && (
         <GraficaAvanceProyeccion
-          className="lg:col-span-2"
-          linea={base ? linea : null}
+          linea={baseDeLinea ? linea : null}
           mesCorte={corrida.mesHasta}
           meta={metaDeLaLinea}
           referencia={referencia}
           vacuna={vacunaNombre}
-          cargando={Boolean(base) && serie === null && error === null}
+          cargando={Boolean(baseDeLinea) && serie === null && error === null}
           error={error}
           onReintentar={() => setIntento((n) => n + 1)}
         />
-        <GraficaPorVacuna
-          tipo={panel.cobertura?.tipoCalculo ?? null}
-          indicadores={indicadores}
-          resultados={resultados}
-          visibles={visibles}
-          vacuna={vacuna}
-          referencia={referencia}
-        />
-      </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <GraficaPorMunicipio indicador={panel.cobertura} filas={filasCobertura} visibles={visibles} vacuna={vacunaNombre} />
-        <div className="flex min-w-0 flex-col gap-4">
-          <GraficaBrecha
-            indicador={panel.brecha}
-            filas={panel.brecha ? filasDe(resultados, panel.brecha.codigo) : []}
-            visibles={visibles}
-            vacuna={vacunaNombre}
-          />
-          <GraficaDesercion
-            indicador={panel.desercion}
-            filas={panel.desercion ? filasDe(resultados, panel.desercion.codigo) : []}
-            visibles={visibles}
-            vacuna={vacunaNombre}
-            referencia={referencia}
-          />
-        </div>
-      </div>
-      <TarjetaComparacion
-        corrida={corrida}
-        base={panel.base}
-        municipioId={unSolo?.id}
-        referencia={referencia}
-        vacunaNombre={vacunaNombre}
-        ddrissId={ddrissId}
-        pedirSerie={pedirSerie}
-        {...comparacion}
-      />
+      )}
     </div>
   )
 }

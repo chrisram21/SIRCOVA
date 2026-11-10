@@ -30,12 +30,38 @@ export function vacunaElegida(indicadores, resultados, { vacuna, indicador }) {
 export const indicadoresDeLaVacuna = (indicadores, resultados, vacuna) =>
   indicadores.filter((i) => vacunaDe(resultados, i.codigo)?.codigo === vacuna)
 
-// Un indicador por gráfica, entre los de la vacuna. La línea usa el indicador base de la proyección si la corrida lo
-// calculó; si no, la primera cobertura.
+// SPEC 54: las pestañas de «Indicadores», en su orden. nombreDelTipo completa el aviso de una pestaña sin indicador.
+export const VISTAS = {
+  avance: { tipo: 'AVANCE_META_MES', etiqueta: 'Avance', nombreDelTipo: 'avance' },
+  brecha: { tipo: 'BRECHA', etiqueta: 'Brecha', nombreDelTipo: 'brecha de dosis' },
+  cobertura: { tipo: 'COBERTURA', etiqueta: 'Cobertura', nombreDelTipo: 'cobertura' },
+  desercion: { tipo: 'DESERCION', etiqueta: 'Deserción', nombreDelTipo: 'deserción entre dosis' },
+  proyeccion: { tipo: 'PROYECCION', etiqueta: 'Proyección', nombreDelTipo: 'proyección' },
+}
+
+export const vistaDeTipo = (tipoCalculo) =>
+  Object.keys(VISTAS).find((vista) => VISTAS[vista].tipo === tipoCalculo) ?? null
+
+export const indicadoresDeLaVista = (deLaVacuna, vista) => deLaVacuna.filter((i) => i.tipoCalculo === VISTAS[vista]?.tipo)
+
+// La primera pestaña con indicador de la vacuna; sin ninguno, Avance.
+export const vistaPorDefecto = (deLaVacuna) =>
+  Object.keys(VISTAS).find((vista) => indicadoresDeLaVista(deLaVacuna, vista).length > 0) ?? 'avance'
+
+// La de la URL si es válida; si no, la del indicador de la URL si la vacuna lo tiene (enlaces anteriores al SPEC 54).
+export function vistaElegida(deLaVacuna, { vista, indicador }) {
+  if (Object.hasOwn(VISTAS, vista ?? '')) return vista
+  const delIndicador = vistaDeTipo(deLaVacuna.find((i) => i.codigo === indicador)?.tipoCalculo)
+  return delIndicador ?? vistaPorDefecto(deLaVacuna)
+}
+
+// Un indicador por gráfica, entre los de la vacuna: el elegido si es de su tipo (SPEC 54); si no, el primero. La
+// línea usa el indicador base de la proyección si la corrida lo calculó; si no, la primera cobertura.
 export function indicadoresDelPanel(indicadores, resultados, vacuna, codigoElegido) {
   const deLaVacuna = indicadoresDeLaVacuna(indicadores, resultados, vacuna)
-  const primero = (tipo) => deLaVacuna.find((i) => i.tipoCalculo === tipo) ?? null
   const elegido = deLaVacuna.find((i) => i.codigo === codigoElegido)
+  const primero = (tipo) =>
+    (elegido?.tipoCalculo === tipo ? elegido : deLaVacuna.find((i) => i.tipoCalculo === tipo) ?? null)
   const proyeccion = primero('PROYECCION')
   const codigoBase = proyeccion
     ? filasDe(resultados, proyeccion.codigo).find((r) => r.proyeccion?.indicadorBase)?.proyeccion.indicadorBase

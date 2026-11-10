@@ -165,6 +165,8 @@ async function montar({ url = '/indicadores', permisos = ['INDICADOR_CONSULTAR',
 }
 
 const tabla = () => within(screen.getAllByRole('table')[0])
+const pestana = (nombre) => fireEvent.mouseDown(screen.getByRole('tab', { name: nombre }))
+const titulo = () => screen.getByRole('heading', { level: 1 }).textContent
 const filaDe = (nombre) => tabla().getByText(nombre).closest('tr')
 const celdas = (fila) => [...fila.querySelectorAll('td')].map((c) => c.textContent)
 
@@ -181,15 +183,20 @@ test('mes por defecto, filtros de la URL e indicador elegido', () => {
   expect(mesPorDefecto(new Date(2026, 10, 3))).toEqual({ anio: 2026, mes: 10 })
   expect(mesPorDefecto(new Date(2027, 0, 15))).toEqual({ anio: 2026, mes: 12 })
   expect(filtrosDeUrl(new URLSearchParams('anio=2025&mes=13&indicador=cob'), HOY)).toEqual({
-    anio: 2025, mes: 10, indicador: undefined, ddriss: undefined, vacuna: undefined, distrito: undefined, municipios: [],
-    comparar: undefined, anios: undefined, meses: undefined,
+    anio: 2025, mes: 10, indicador: undefined, vista: undefined, ddriss: undefined, vacuna: undefined, distrito: undefined,
+    municipios: [], comparar: undefined, anios: undefined, meses: undefined,
   })
+  expect(filtrosDeUrl(new URLSearchParams('vista=brecha'), HOY).vista).toBe('brecha')
+  expect(filtrosDeUrl(new URLSearchParams('vista=mapa'), HOY).vista).toBeUndefined()
   expect(filtrosDeUrl(new URLSearchParams('vacuna=HEXA&distrito=3&municipios=4,x,1,4'), HOY)).toMatchObject({
     vacuna: 'HEXA', distrito: 3, municipios: [4, 1],
   })
-  const indicadores = corrida().indicadores
-  expect(indicadorElegido(indicadores, 'COB_HEXA3').codigo).toBe('COB_HEXA3')
-  expect(indicadorElegido(indicadores, 'OTRO').codigo).toBe('AVANCE_HEXA3')
+  const coberturas = [
+    { codigo: 'COB_HEXA1', tipoCalculo: 'COBERTURA' },
+    { codigo: 'COB_HEXA3', tipoCalculo: 'COBERTURA' },
+  ]
+  expect(indicadorElegido(coberturas, 'COB_HEXA3').codigo).toBe('COB_HEXA3')
+  expect(indicadorElegido(coberturas, 'OTRO').codigo).toBe('COB_HEXA1')
   expect(indicadorElegido([], undefined)).toBeNull()
 })
 
@@ -199,9 +206,12 @@ test('pide la corrida vigente del mes por defecto y muestra el avance con la fil
   await screen.findByText('Total de la DDRISS')
   expect(listarResultados).toHaveBeenCalledWith({ anio: 2026, mes: 10, ddrissId: undefined })
   expect(listarCorridas).toHaveBeenCalledWith({ anio: 2026, ddrissId: undefined })
-  expect(screen.getByRole('heading', { name: 'Avance contra la meta del mes' })).toBeTruthy()
+  expect(titulo()).toBe('Avance de Hexavalente')
   expect(screen.getByText(/Calculada el .* por Rosa Méndez · Cálculo manual/)).toBeTruthy()
-  expect(document.querySelector('select[name="indicador"]').value).toBe('AVANCE_HEXA3')
+  expect(screen.getByRole('tab', { name: 'Avance' }).getAttribute('aria-selected')).toBe('true')
+  // Con un solo indicador del tipo no hay selector, y la barra de filtros ya no lo tiene.
+  expect(document.querySelector('select[name="indicador"]')).toBeNull()
+  expect(screen.getByText('AVANCE_HEXA3')).toBeTruthy()
 
   const filas = tabla().getAllByRole('row').slice(1)
   expect(filas.map((f) => f.querySelector('td').textContent)).toEqual(['Total de la DDRISS', 'San Marcos', 'Tajumulco'])
@@ -246,14 +256,23 @@ test('sin corrida vigente lo dice y conserva el historial', async () => {
   expect(historial.getByText('Automático')).toBeTruthy()
 })
 
-test('el año, el mes y el indicador van en la URL y cambian lo que se pide', async () => {
+test('las cinco pestañas van en orden; la pestaña va en la URL y el año y el mes cambian lo que se pide', async () => {
   const router = await montar()
   await screen.findByText('Total de la DDRISS')
+  const pestanas = within(screen.getByRole('tablist', { name: 'Tipo de indicador' })).getAllByRole('tab')
+  expect(pestanas.map((t) => t.textContent)).toEqual(['Avance', 'Brecha', 'Cobertura', 'Deserción', 'Proyección'])
 
-  fireEvent.change(document.querySelector('select[name="indicador"]'), { target: { value: 'COB_HEXA3' } })
-  await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&indicador=COB_HEXA3'))
+  pestana('Cobertura')
+  await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&vista=cobertura'))
   expect(tabla().getByText('Población')).toBeTruthy()
-  expect(screen.getByRole('heading', { name: 'Cobertura' })).toBeTruthy()
+  expect(titulo()).toBe('Cobertura de Hexavalente')
+  expect(listarResultados).toHaveBeenCalledTimes(1)
+  expect(listarCorridas).toHaveBeenCalledTimes(1)
+
+  // La pestaña por defecto de la vacuna no se escribe.
+  pestana('Avance')
+  await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10'))
+  expect(titulo()).toBe('Avance de Hexavalente')
 
   fireEvent.change(document.querySelector('select[name="mes"]'), { target: { value: '8' } })
   await waitFor(() => expect(listarResultados).toHaveBeenLastCalledWith({ anio: 2026, mes: 8, ddrissId: undefined }))
@@ -261,10 +280,91 @@ test('el año, el mes y el indicador van en la URL y cambian lo que se pide', as
   await waitFor(() => expect(listarResultados).toHaveBeenLastCalledWith({ anio: 2025, mes: 8, ddrissId: undefined }))
 })
 
-test('con un indicador BRECHA muestra «Brecha de dosis», lo que falta de mayor a menor y la suma municipal', async () => {
+test('vista=brecha en la URL muestra la tabla de brecha', async () => {
+  await montar({ url: '/indicadores?vista=brecha' })
+
+  await screen.findByText('Total de la DDRISS')
+  expect(titulo()).toBe('Brecha de Hexavalente')
+  expect(tabla().getByText('Dosis para la meta')).toBeTruthy()
+})
+
+test('vista inválida en la URL abre la de por defecto', async () => {
+  await montar({ url: '/indicadores?vista=mapa' })
+
+  await screen.findByText('Total de la DDRISS')
+  expect(titulo()).toBe('Avance de Hexavalente')
+})
+
+test('con vista e indicador de otro tipo, manda la vista', async () => {
+  await montar({ url: '/indicadores?vista=desercion&indicador=BRECHA_HEXA3' })
+
+  await screen.findByText('Total de la DDRISS')
+  expect(titulo()).toBe('Deserción de Hexavalente')
+  expect(tabla().getByText('Dosis iniciales')).toBeTruthy()
+})
+
+test('sin vista, una vacuna sin avance abre en la primera pestaña con indicador', async () => {
+  const BCG = { codigo: 'BCG', nombre: 'BCG' }
+  listarResultados.mockResolvedValue({
+    corrida: corrida({ indicadores: [{ codigo: 'COB_BCG', version: 1, nombre: 'Cobertura de BCG', tipoCalculo: 'COBERTURA' }] }),
+    resultados: [resultado('COB_BCG', null, { vacuna: BCG, dosis: 'UNICA' })],
+  })
+  await montar()
+
+  await screen.findByText('Total de la DDRISS')
+  expect(titulo()).toBe('Cobertura de BCG')
+  expect(screen.getByRole('tab', { name: 'Cobertura' }).getAttribute('aria-selected')).toBe('true')
+})
+
+test('una pestaña sin indicador para la vacuna muestra el aviso y deja las pestañas', async () => {
+  const router = await montar({ url: '/indicadores?vista=brecha' })
+  await screen.findByText('Total de la DDRISS')
+  listarResultados.mockResolvedValue({
+    corrida: corrida(),
+    resultados: RESULTADOS.filter((r) => r.tipoCalculo !== 'DESERCION'),
+  })
+  await router.navigate('/indicadores?anio=2026&mes=9&vista=desercion')
+
+  expect(await screen.findByText('La corrida no tiene un indicador de deserción entre dosis de Hexavalente.')).toBeTruthy()
+  expect(screen.queryAllByRole('table')).toHaveLength(0)
+  expect(screen.getByRole('tab', { name: 'Deserción' }).getAttribute('aria-selected')).toBe('true')
+  expect(screen.getByRole('button', { name: /Historial de corridas del año/ })).toBeTruthy()
+})
+
+test('con dos indicadores del mismo tipo, el selector «Indicador» de la pestaña elige cuál se ve', async () => {
+  listarResultados.mockResolvedValue({
+    corrida: corrida({
+      indicadores: [
+        ...corrida().indicadores,
+        { codigo: 'COB_HEXA1', version: 1, nombre: 'Cobertura de Hexavalente 1.ª dosis', tipoCalculo: 'COBERTURA' },
+      ],
+    }),
+    resultados: [...RESULTADOS, resultado('COB_HEXA1', null, { dosis: 'D1', numerador: 1500, meta: 95 })],
+  })
+  const router = await montar({ url: '/indicadores?vista=cobertura' })
+  await screen.findByText('Total de la DDRISS')
+
+  const opcionesIndicador = [...document.querySelectorAll('select[name="indicador"] option')].map((o) => o.value).filter(Boolean)
+  expect(opcionesIndicador).toEqual(['COB_HEXA3', 'COB_HEXA1'])
+  expect(screen.getByText('COB_HEXA3')).toBeTruthy()
+
+  fireEvent.change(document.querySelector('select[name="indicador"]'), { target: { value: 'COB_HEXA1' } })
+  await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&indicador=COB_HEXA1&vista=cobertura'))
+  expect(screen.getByText('COB_HEXA1')).toBeTruthy()
+  expect(celdas(filaDe('Total de la DDRISS'))[1]).toBe('1,500')
+
+  // En una pestaña con un solo indicador no hay selector.
+  pestana('Brecha')
+  await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&vista=brecha'))
+  expect(document.querySelector('select[name="indicador"]')).toBeNull()
+})
+
+test('una URL vieja con un indicador BRECHA abre «Brecha», con lo que falta de mayor a menor y la suma municipal', async () => {
   await montar({ url: '/indicadores?indicador=BRECHA_HEXA3' })
 
-  expect(await screen.findByRole('heading', { name: 'Brecha de dosis' })).toBeTruthy()
+  await screen.findByText('Total de la DDRISS')
+  expect(titulo()).toBe('Brecha de Hexavalente')
+  expect(screen.getByRole('tab', { name: 'Brecha' }).getAttribute('aria-selected')).toBe('true')
   const encabezados = tabla().getAllByRole('columnheader').map((c) => c.textContent)
   expect(encabezados).toEqual(['Municipio', 'Dosis acumuladas', 'Dosis para la meta', 'Excedente', 'Dosis que faltan', 'Cumple'])
   const filas = tabla().getAllByRole('row').slice(1)
@@ -275,10 +375,11 @@ test('con un indicador BRECHA muestra «Brecha de dosis», lo que falta de mayor
   expect(screen.getByText(/Suma de lo que falta en los municipios:/).textContent).toContain('400 dosis')
 })
 
-test('con un indicador DESERCION muestra «Deserción entre dosis», de mayor a menor y sin primeras dosis al final', async () => {
-  await montar({ url: '/indicadores?indicador=DES_HEXA1_3' })
+test('la pestaña «Deserción» muestra la deserción de mayor a menor y sin primeras dosis al final', async () => {
+  await montar({ url: '/indicadores?vista=desercion' })
 
-  expect(await screen.findByRole('heading', { name: 'Deserción entre dosis' })).toBeTruthy()
+  await screen.findByText('Total de la DDRISS')
+  expect(titulo()).toBe('Deserción de Hexavalente')
   const encabezados = tabla().getAllByRole('columnheader').map((c) => c.textContent)
   expect(encabezados).toEqual(['Municipio', 'Dosis iniciales', 'Dosis finales', 'Pérdida', 'Meta', 'Deserción', 'Cumple'])
   const filas = tabla().getAllByRole('row').slice(1)
@@ -289,10 +390,11 @@ test('con un indicador DESERCION muestra «Deserción entre dosis», de mayor a 
   expect(screen.getByText(/Una deserción negativa indica/)).toBeTruthy()
 })
 
-test('con un indicador PROYECCION muestra la estimación de menor a mayor cobertura y la nota del método', async () => {
-  await montar({ url: '/indicadores?indicador=PROY_COB_HEXA3' })
+test('la pestaña «Proyección» muestra la estimación de menor a mayor cobertura y la nota del método', async () => {
+  await montar({ url: '/indicadores?vista=proyeccion' })
 
-  expect(await screen.findByRole('heading', { name: 'Proyección al cierre del año' })).toBeTruthy()
+  await screen.findByText('Total de la DDRISS')
+  expect(titulo()).toBe('Proyección de Hexavalente')
   expect(screen.getByText('Estimación')).toBeTruthy()
   const encabezados = tabla().getAllByRole('columnheader').map((c) => c.textContent)
   expect(encabezados).toEqual([
@@ -322,13 +424,13 @@ test('en la cobertura, una fila sin brecha muestra el excedente', async () => {
   expect(celdas(filaDe('Tajumulco'))[3]).toBe('234')
 })
 
-test('«Calcular» solo aparece con INDICADOR_CALCULAR y, al terminar, recarga el mes', async () => {
+test('«Calcular indicadores» solo aparece con INDICADOR_CALCULAR y, al terminar, recarga el mes', async () => {
   listarPeriodos.mockResolvedValue([{ id: 1, anio: 2026, mes: 10, estado: 'CERRADO' }])
   calcularIndicadores.mockResolvedValue(corrida({ id: 8 }))
   await montar()
   await screen.findByText('Total de la DDRISS')
 
-  fireEvent.click(screen.getByRole('button', { name: 'Calcular' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Calcular indicadores' }))
   const dialogo = within(screen.getByRole('alertdialog'))
   await waitFor(() => expect(document.querySelector('select[name="mes"]')?.value).toBe('10'))
   fireEvent.click(dialogo.getByRole('button', { name: 'Calcular' }))
@@ -336,11 +438,11 @@ test('«Calcular» solo aparece con INDICADOR_CALCULAR y, al terminar, recarga e
   expect(calcularIndicadores).toHaveBeenCalledWith({ anio: 2026, mesHasta: 10 })
 })
 
-test('sin INDICADOR_CALCULAR no hay «Calcular»', async () => {
+test('sin INDICADOR_CALCULAR no hay «Calcular indicadores»', async () => {
   await montar({ permisos: ['INDICADOR_CONSULTAR'], rol: 'AUTORIDAD' })
   await screen.findByText('Total de la DDRISS')
 
-  expect(screen.queryByRole('button', { name: 'Calcular' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Calcular indicadores' })).toBeNull()
 })
 
 test('la Autoridad nacional elige la DDRISS, que va en la URL y en lo que se pide', async () => {
@@ -391,60 +493,81 @@ describe('panel de gráficas y filtros', () => {
   const opciones = (nombre) => [...document.querySelectorAll(`select[name="${nombre}"] option`)].map((o) => o.value).filter(Boolean)
   const nombresEnTabla = () => tabla().getAllByRole('row').slice(1).map((f) => f.querySelector('td').textContent)
 
-  test('muestra las cinco gráficas con su dato principal y pide la serie del indicador base de la proyección', async () => {
+  const titulosDeGraficas = () => [...document.querySelectorAll('[data-slot="card-title"]')].map((t) => t.textContent)
+
+  test('«Avance» muestra el avance por municipio y por vacuna, sin pedir series', async () => {
+    await montar()
+    await screen.findByText('Total de la DDRISS')
+
+    expect(titulosDeGraficas()).toEqual(['Avance por municipio', 'Avance por vacuna'])
+    expect(screen.getByText('Mayor: San Marcos (100.0 %). Menor: San Marcos (100.0 %).')).toBeTruthy()
+    expect(screen.getAllByText('Sin población: Tajumulco.').length).toBeGreaterThan(0)
+    expect(obtenerSerie).not.toHaveBeenCalled()
+  })
+
+  test('«Cobertura» muestra la cobertura por municipio y por vacuna y «Comparar periodos»', async () => {
+    await montar({ url: '/indicadores?vista=cobertura' })
+    await screen.findByText('Total de la DDRISS')
+
+    expect(titulosDeGraficas()).toEqual(['Cobertura por municipio', 'Cobertura por vacuna', 'Comparar periodos'])
+  })
+
+  test('«Brecha» y «Deserción» muestran solo su gráfica, sin pedir series', async () => {
+    await montar({ url: '/indicadores?vista=brecha' })
+    await screen.findByText('Total de la DDRISS')
+    expect(titulosDeGraficas()).toEqual(['Brecha a la meta · 400 dosis'])
+
+    pestana('Deserción')
+    await waitFor(() => expect(titulosDeGraficas()).toEqual(['Tasa de deserción Hexavalente 1.ª a 3.ª dosis']))
+    expect(screen.getByText('Total de la DDRISS: 2.1 %')).toBeTruthy()
+    expect(obtenerSerie).not.toHaveBeenCalled()
+  })
+
+  test('«Proyección» muestra la línea y pide la serie del indicador base de la proyección', async () => {
     obtenerSerie.mockResolvedValue({
       puntos: [{ mes: 10, corridaId: 7, parcial: false, resultado: resultado('COB_HEXA3', null, { meta: 95 }) }],
     })
-    await montar()
+    await montar({ url: '/indicadores?vista=proyeccion' })
 
-    expect(await screen.findByText('Avance acumulado y proyección al cierre del año')).toBeTruthy()
-    await waitFor(() => expect(obtenerSerie).toHaveBeenCalledWith({
-      anio: 2026, indicador: 'COB_HEXA3', municipioId: undefined, ddrissId: undefined,
-    }))
     expect(await screen.findByText('Real a octubre: 80.7 %.')).toBeTruthy()
-    const titulos = [...document.querySelectorAll('[data-slot="card-title"]')].map((t) => t.textContent)
-    expect(titulos).toEqual([
-      'Avance acumulado y proyección al cierre del año',
-      'Avance por vacuna',
-      'Avance por municipio',
-      'Brecha a la meta · 400 dosis',
-      'Tasa de deserción Hexavalente 1.ª a 3.ª dosis',
-      'Comparar periodos',
-    ])
-    expect(screen.getByText('Mayor: San Marcos (100.0 %). Menor: San Marcos (100.0 %).')).toBeTruthy()
-    expect(screen.getByText('Total de la DDRISS: 2.1 %')).toBeTruthy()
-    expect(screen.getAllByText('Sin población: Tajumulco.').length).toBeGreaterThan(0)
+    expect(titulosDeGraficas()).toEqual(['Avance acumulado y proyección al cierre del año'])
+    expect(obtenerSerie).toHaveBeenCalledWith({ anio: 2026, indicador: 'COB_HEXA3', municipioId: undefined, ddrissId: undefined })
   })
 
-  test('sin indicador de un tipo para la vacuna, su tarjeta lo dice', async () => {
-    const indicadores = corrida().indicadores.filter((i) => i.tipoCalculo !== 'BRECHA')
+  test('volver a «Proyección» usa la serie ya pedida, aunque se pase por una pestaña sin indicador', async () => {
     listarResultados.mockResolvedValue({
-      corrida: corrida({ indicadores }),
-      resultados: RESULTADOS.filter((r) => r.indicadorCodigo !== 'BRECHA_HEXA3'),
+      corrida: corrida(),
+      resultados: RESULTADOS.filter((r) => r.tipoCalculo !== 'BRECHA'),
     })
-    await montar()
+    await montar({ url: '/indicadores?vista=proyeccion' })
+    await screen.findByText('Total de la DDRISS')
+    await waitFor(() => expect(obtenerSerie).toHaveBeenCalledTimes(1))
 
+    pestana('Brecha')
     expect(await screen.findByText('La corrida no tiene un indicador de brecha de dosis de Hexavalente.')).toBeTruthy()
+    expect(titulosDeGraficas()).toEqual([])
+    pestana('Proyección')
+    expect(await screen.findByText('Avance acumulado y proyección al cierre del año')).toBeTruthy()
+    expect(obtenerSerie).toHaveBeenCalledTimes(1)
   })
 
-  test('cambiar la vacuna cambia el selector «Indicador», borra el indicador de la URL y pide la serie de su base', async () => {
+  test('cambiar la vacuna conserva la pestaña y borra el indicador de la URL', async () => {
     conSpr()
     const router = await montar({ url: '/indicadores?indicador=COB_HEXA3' })
     await screen.findByText('Total de la DDRISS')
     expect(opciones('vacuna')).toEqual(['HEXA', 'SPR'])
-    expect(opciones('indicador')).not.toContain('AVANCE_SPR1')
+    expect(titulo()).toBe('Cobertura de Hexavalente')
 
     fireEvent.change(document.querySelector('select[name="vacuna"]'), { target: { value: 'SPR' } })
-    await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&vacuna=SPR'))
-    expect(opciones('indicador')).toEqual(['AVANCE_SPR1', 'COB_SPR1'])
-    expect(document.querySelector('select[name="indicador"]').value).toBe('AVANCE_SPR1')
-    await waitFor(() => expect(obtenerSerie).toHaveBeenLastCalledWith(expect.objectContaining({ indicador: 'COB_SPR1' })))
-    expect(await screen.findByText('La corrida no tiene un indicador de deserción entre dosis de SPR.')).toBeTruthy()
+    await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&vista=cobertura&vacuna=SPR'))
+    expect(titulo()).toBe('Cobertura de SPR')
+    expect(screen.getByText('COB_SPR1')).toBeTruthy()
+    expect(titulosDeGraficas()).toEqual(['Cobertura por municipio', 'Cobertura por vacuna', 'Comparar periodos'])
   })
 
   test('el distrito deja solo sus municipios en la tabla y pide la serie de ese municipio', async () => {
     listarDistritos.mockResolvedValue(DISTRITOS)
-    const router = await montar({ permisos: ['INDICADOR_CONSULTAR', 'DISTRITO_CONSULTAR'] })
+    const router = await montar({ url: '/indicadores?vista=proyeccion', permisos: ['INDICADOR_CONSULTAR', 'DISTRITO_CONSULTAR'] })
     await screen.findByText('Total de la DDRISS')
     await waitFor(() => expect(opciones('distrito')).toEqual(['todos', '31', '32']))
     expect(listarDistritos).toHaveBeenCalledWith({ activo: true })
@@ -465,7 +588,7 @@ describe('panel de gráficas y filtros', () => {
   })
 
   test('los municipios elegidos van en la URL y filtran la tabla; con varios, la serie es la de la DDRISS', async () => {
-    await montar({ url: '/indicadores?municipios=9,1' })
+    await montar({ url: '/indicadores?vista=proyeccion&municipios=9,1' })
     await screen.findByText('Total de la DDRISS')
 
     expect(screen.getByRole('button', { name: 'Municipios' }).textContent).toBe('2 municipios')
@@ -474,7 +597,7 @@ describe('panel de gráficas y filtros', () => {
   })
 
   test('con un solo municipio elegido, la serie se pide con su municipioId', async () => {
-    await montar({ url: '/indicadores?municipios=1' })
+    await montar({ url: '/indicadores?vista=proyeccion&municipios=1' })
     await screen.findByText('Total de la DDRISS')
 
     expect(nombresEnTabla()).toEqual(['Total de la DDRISS', 'San Marcos'])
@@ -483,7 +606,7 @@ describe('panel de gráficas y filtros', () => {
 
   test('un error en la serie muestra «Reintentar» sin ocultar la tabla', async () => {
     obtenerSerie.mockRejectedValueOnce(new ErrorApi(500, 'ERROR_INTERNO', 'Ocurrió un error interno. Intente de nuevo.'))
-    await montar()
+    await montar({ url: '/indicadores?vista=proyeccion' })
 
     expect(await screen.findByText(/No se pudo cargar la serie/)).toBeTruthy()
     expect(screen.getByText('Total de la DDRISS')).toBeTruthy()
@@ -512,7 +635,7 @@ describe('comparar periodos (SPEC 51)', () => {
   })
 
   test('por defecto compara el año del corte con el anterior, con una serie por año', async () => {
-    await montar()
+    await montar({ url: '/indicadores?vista=cobertura' })
 
     expect(await screen.findByText('A octubre: 2026 50.0 % contra 2025 47.5 % (+2.5 pp).')).toBeTruthy()
     expect(obtenerMesesCalculados).toHaveBeenCalledWith({ ddrissId: undefined })
@@ -524,11 +647,11 @@ describe('comparar periodos (SPEC 51)', () => {
   })
 
   test('«Por mes» pone comparar=mes en la URL y la tabla muestra lo vacunado en cada mes', async () => {
-    const router = await montar()
+    const router = await montar({ url: '/indicadores?vista=cobertura' })
     await screen.findByRole('table', { name: 'Cobertura real por año' })
 
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Por mes' }))
-    await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&comparar=mes'))
+    await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&vista=cobertura&comparar=mes'))
     expect(await screen.findByRole('table', { name: 'Vacunado en cada mes' })).toBeTruthy()
     expect(filaComparacion('Vacunado en cada mes', 'oct 2025')).toEqual(['oct 2025', '150', '7.5 %', '—'])
     expect(filaComparacion('Vacunado en cada mes', 'oct 2026')).toEqual(['oct 2026', '100', '5.0 %(parcial)', '▼ −2.5 pp · −50 dosis'])
@@ -536,7 +659,7 @@ describe('comparar periodos (SPEC 51)', () => {
   })
 
   test('un mes sin el anterior o sin cálculo lo dice en lugar de dar un valor', async () => {
-    await montar({ url: '/indicadores?comparar=mes&meses=2026-09,2025-01,2025-10' })
+    await montar({ url: '/indicadores?vista=cobertura&comparar=mes&meses=2026-09,2025-01,2025-10' })
 
     expect(await screen.findByRole('table', { name: 'Vacunado en cada mes' })).toBeTruthy()
     expect(filaComparacion('Vacunado en cada mes', 'sep 2026')).toEqual(['sep 2026', 'Sin dato del mes anterior'])
@@ -549,7 +672,7 @@ describe('comparar periodos (SPEC 51)', () => {
     obtenerMesesCalculados.mockResolvedValue({
       anios: [2026, 2025, 2024, 2023, 2022, 2021].map((anio) => ({ anio, meses: [10] })),
     })
-    await montar({ url: '/indicadores?anios=2022,2023,2024,2025,2026' })
+    await montar({ url: '/indicadores?vista=cobertura&anios=2022,2023,2024,2025,2026' })
     await screen.findByRole('table', { name: 'Cobertura real por año' })
 
     const boton = screen.getByRole('button', { name: 'Periodos a comparar' })
@@ -563,17 +686,17 @@ describe('comparar periodos (SPEC 51)', () => {
 
   test('elegir un año en el selector lo pone en la URL', async () => {
     obtenerMesesCalculados.mockResolvedValue({ anios: [...CALCULADOS.anios, { anio: 2024, meses: [10] }] })
-    const router = await montar()
+    const router = await montar({ url: '/indicadores?vista=cobertura' })
     await screen.findByRole('table', { name: 'Cobertura real por año' })
 
     fireEvent.keyDown(screen.getByRole('button', { name: 'Periodos a comparar' }), { key: 'Enter' })
     fireEvent.click(screen.getByRole('menuitemcheckbox', { name: '2024' }))
-    await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&anios=2024%2C2025%2C2026'))
+    await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&vista=cobertura&anios=2024%2C2025%2C2026'))
     await waitFor(() => expect(llamadasDe(2024)).toHaveLength(1))
   })
 
   test('con un municipio visible, las series se piden con su municipioId', async () => {
-    await montar({ url: '/indicadores?municipios=1' })
+    await montar({ url: '/indicadores?vista=cobertura&municipios=1' })
 
     await waitFor(() => expect(llamadasDe(2025)).toEqual([[expect.objectContaining({ municipioId: 1 })]]))
     expect(await screen.findByText('Hexavalente · San Marcos')).toBeTruthy()
@@ -581,7 +704,7 @@ describe('comparar periodos (SPEC 51)', () => {
 
   test('con un solo año calculado, aparece el aviso', async () => {
     obtenerMesesCalculados.mockResolvedValue({ anios: [{ anio: 2026, meses: [9, 10] }] })
-    await montar()
+    await montar({ url: '/indicadores?vista=cobertura' })
 
     expect(await screen.findByText('Elija al menos dos periodos con cálculo para comparar.')).toBeTruthy()
     expect(screen.getByRole('table', { name: 'Cobertura real por año' })).toBeTruthy()
@@ -592,7 +715,7 @@ describe('comparar periodos (SPEC 51)', () => {
     obtenerSerie.mockImplementation(async ({ anio }) => ({
       puntos: anio === 2025 ? [puntoSerie(10, 950, { poblacionAnual: null })] : SERIES[anio],
     }))
-    await montar()
+    await montar({ url: '/indicadores?vista=cobertura' })
 
     expect(await screen.findByText('Sin población de 2025')).toBeTruthy()
     expect(screen.getByText('Elija al menos dos periodos con cálculo para comparar.')).toBeTruthy()
@@ -600,11 +723,11 @@ describe('comparar periodos (SPEC 51)', () => {
 
   test('un error en los meses calculados muestra «Reintentar» sin ocultar el panel ni la tabla', async () => {
     obtenerMesesCalculados.mockRejectedValueOnce(new ErrorApi(500, 'ERROR_INTERNO', 'Ocurrió un error interno. Intente de nuevo.'))
-    await montar()
+    await montar({ url: '/indicadores?vista=cobertura' })
 
     expect(await screen.findByText(/No se pudieron cargar los periodos calculados/)).toBeTruthy()
     expect(screen.getByText('Total de la DDRISS')).toBeTruthy()
-    expect(screen.getByText('Avance acumulado y proyección al cierre del año')).toBeTruthy()
+    expect(screen.getByText('Cobertura por municipio')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
     expect(await screen.findByRole('table', { name: 'Cobertura real por año' })).toBeTruthy()
     expect(obtenerMesesCalculados).toHaveBeenCalledTimes(2)
@@ -619,7 +742,7 @@ describe('comparar periodos (SPEC 51)', () => {
       }
       return { puntos: SERIES[anio] ?? [] }
     })
-    await montar()
+    await montar({ url: '/indicadores?vista=cobertura' })
 
     expect(await screen.findByText(/No se pudo cargar la comparación/)).toBeTruthy()
     expect(screen.getByText('Total de la DDRISS')).toBeTruthy()

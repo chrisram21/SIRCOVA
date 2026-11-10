@@ -29,6 +29,8 @@
     --color-exito: var(--exito);
     --color-exito-foreground: var(--exito-foreground);
     --color-cambio-pendiente: var(--cambio-pendiente);
+    --color-pestana-activa: var(--pestana-activa);
+    --color-pestana-activa-foreground: var(--pestana-activa-foreground);
     --color-semaforo-verde: var(--semaforo-verde);
     --color-semaforo-amarillo: var(--semaforo-amarillo);
     --color-semaforo-rojo: var(--semaforo-rojo);
@@ -101,6 +103,10 @@
     --exito-foreground: #1e5b34;
     /* Punto de cambios sin guardar en las pestañas de la captura; no debe confundirse con el rojo de errores. */
     --cambio-pendiente: #f2c14e;
+    /* Pestaña elegida de «Indicadores»: el tono del celeste de --ring, más saturado para que el texto blanco se lea
+       (4.56:1). */
+    --pestana-activa: #0f7bbf;
+    --pestana-activa-foreground: #ffffff;
     --chart-1: #4683bb;
     --chart-2: #b5d4ee;
     --chart-3: #eeb48c;
