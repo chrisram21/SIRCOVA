@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
+import SelectorConBusqueda from '@/componentes/SelectorConBusqueda.jsx'
 import {
   validarApellidos,
   validarCargo,
@@ -103,27 +104,46 @@ export function CampoTexto({ id, etiqueta, obligatorio, valor, alCambiar, deshab
   )
 }
 
-export function CampoSeleccion({ id, etiqueta, obligatorio, valor, alCambiar, deshabilitado, marcador, opciones, error }) {
+// Con `conBusqueda` (catálogos largos, SPEC 58) es un SelectorConBusqueda; las opciones pueden llevar `detalle` y `fija`.
+export function CampoSeleccion({
+  id, etiqueta, obligatorio, valor, alCambiar, deshabilitado, marcador, opciones, error, conBusqueda = false, textoBuscar,
+  textoVacio,
+}) {
   const idError = `${id}-error`
   return (
     <Campo id={id} etiqueta={etiqueta} obligatorio={obligatorio}>
-      <Select value={valor} onValueChange={alCambiar} disabled={deshabilitado} name={id}>
-        <SelectTrigger
+      {conBusqueda ? (
+        <SelectorConBusqueda
           id={id}
-          className="w-full bg-card"
-          aria-invalid={error ? true : undefined}
-          aria-describedby={error ? idError : undefined}
-        >
-          <SelectValue placeholder={marcador} />
-        </SelectTrigger>
-        <SelectContent>
-          {opciones.map((opcion) => (
-            <SelectItem key={opcion.valor} value={opcion.valor}>
-              {opcion.texto}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+          valor={valor}
+          alCambiar={alCambiar}
+          opciones={opciones}
+          marcador={marcador}
+          textoBuscar={textoBuscar}
+          textoVacio={textoVacio}
+          deshabilitado={deshabilitado}
+          invalido={Boolean(error)}
+          descritoPor={error ? idError : undefined}
+        />
+      ) : (
+        <Select value={valor} onValueChange={alCambiar} disabled={deshabilitado} name={id}>
+          <SelectTrigger
+            id={id}
+            className="w-full bg-card"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? idError : undefined}
+          >
+            <SelectValue placeholder={marcador} />
+          </SelectTrigger>
+          <SelectContent>
+            {opciones.map((opcion) => (
+              <SelectItem key={opcion.valor} value={opcion.valor}>
+                {opcion.texto}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
       {error && (
         <p id={idError} className="text-sm text-destructive">
           {error}
@@ -210,9 +230,13 @@ export default function CamposEmpleado({
         valor={empleado.establecimientoId}
         alCambiar={cambiarEstablecimiento}
         deshabilitado={deshabilitado}
+        conBusqueda
+        marcador="Elija un establecimiento"
+        textoBuscar="Buscar por nombre o código…"
+        textoVacio="Ningún establecimiento coincide."
         opciones={[
-          { valor: NINGUNO, texto: 'Sin establecimiento (personal de la DDRISS)' },
-          ...establecimientos.map((e) => ({ valor: String(e.id), texto: e.nombre })),
+          { valor: NINGUNO, texto: 'Sin establecimiento (personal de la DDRISS)', fija: true },
+          ...establecimientos.map((e) => ({ valor: String(e.id), texto: e.nombre, detalle: e.codigo })),
         ]}
       />
 

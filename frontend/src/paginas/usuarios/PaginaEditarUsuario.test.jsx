@@ -6,7 +6,6 @@ import { ErrorApi } from '@/api/cliente.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { cambiarRol, editarEmpleado, listarRoles, obtenerUsuario } from '@/api/usuarios.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
-import { NINGUNO } from './CamposEmpleado.jsx'
 import PaginaEditarUsuario from './PaginaEditarUsuario.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
@@ -23,7 +22,7 @@ const ROLES = [
   { id: 2, codigo: 'REVISOR', nombre: 'Estadígrafa / revisor DDRISS' },
   { id: 3, codigo: 'EPIDEMIOLOGIA', nombre: 'Epidemiología' },
 ]
-const ESTABLECIMIENTOS = [{ id: 7, nombre: 'Centro de Salud Tacaná', municipioId: 7, municipioNombre: 'Tacaná' }]
+const ESTABLECIMIENTOS = [{ id: 7, codigo: 'CS-1214', nombre: 'Centro de Salud Tacaná', municipioId: 7, municipioNombre: 'Tacaná' }]
 const MUNICIPIOS = [{ id: 1, nombre: 'San Marcos' }]
 
 const EMPLEADO = {
@@ -109,6 +108,13 @@ const escribir = (etiqueta, valor) => fireEvent.change(screen.getByLabelText(eti
 // Radix Select deja un <select> nativo oculto dentro del formulario; cambiarlo actualiza el valor del Select.
 const elegir = (nombre, valor) =>
   fireEvent.change(document.querySelector(`select[name="${nombre}"]`), { target: { value: String(valor) } })
+// El establecimiento se elige en el combobox con búsqueda (SPEC 58): se abre, se busca si hace falta y se elige.
+function elegirEstablecimiento(texto, busqueda) {
+  fireEvent.click(screen.getByRole('combobox', { name: 'Establecimiento' }))
+  if (busqueda) fireEvent.change(screen.getByPlaceholderText('Buscar por nombre o código…'), { target: { value: busqueda } })
+  fireEvent.click(within(screen.getByRole('listbox')).getByText(texto))
+}
+const SIN_ESTABLECIMIENTO = 'Sin establecimiento (personal de la DDRISS)'
 const botonGuardar = () => screen.getByRole('button', { name: /^(Guardar cambios|Guardando…)$/ })
 const EXITO = 'Se guardaron los cambios de Ana López.'
 
@@ -339,7 +345,7 @@ describe('municipio como texto (SPEC 53)', () => {
     await abrir()
     await esperarFormulario()
 
-    elegir('establecimiento', 7)
+    elegirEstablecimiento('Centro de Salud Tacaná')
     expect(screen.getByTestId('municipio-empleado').textContent).toBe('Tacaná')
     fireEvent.click(botonGuardar())
 
@@ -352,9 +358,10 @@ describe('municipio como texto (SPEC 53)', () => {
     }))
     await abrir()
     await esperarFormulario()
+    expect(screen.getByRole('combobox', { name: 'Establecimiento' }).textContent).toBe('Centro de Salud Tacaná')
     expect(screen.getByTestId('municipio-empleado').textContent).toBe('Tacaná')
 
-    elegir('establecimiento', NINGUNO)
+    elegirEstablecimiento(SIN_ESTABLECIMIENTO)
     expect(screen.getByTestId('municipio-empleado').textContent).toBe('—')
     fireEvent.click(botonGuardar())
 

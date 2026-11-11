@@ -298,7 +298,7 @@ describe('aviso de sesión cerrada', () => {
 describe('acceso rápido (solo en desarrollo)', () => {
   // Vitest carga el .env.local de quien corre las pruebas: cada una parte sin credenciales y pone las suyas.
   beforeEach(() => {
-    for (const rol of ['ADMIN', 'ESTABLECIMIENTO']) {
+    for (const rol of ['ADMIN', 'ESTABLECIMIENTO', 'EPIDEMIOLOGIA', 'REVISOR']) {
       vi.stubEnv(`VITE_ACCESO_RAPIDO_${rol}_USUARIO`, '')
       vi.stubEnv(`VITE_ACCESO_RAPIDO_${rol}_CONTRASENA`, '')
     }
@@ -309,8 +309,9 @@ describe('acceso rápido (solo en desarrollo)', () => {
     await abrirLogin()
 
     expect(screen.getByRole('heading', { name: 'Acceso rápido · solo en desarrollo' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Administrador' }).disabled).toBe(true)
-    expect(screen.getByRole('button', { name: 'Personal del establecimiento' }).disabled).toBe(true)
+    for (const nombre of ['Administrador', 'Personal del establecimiento', 'Epidemiología', 'Revisor']) {
+      expect(screen.getByRole('button', { name: nombre }).disabled).toBe(true)
+    }
     expect(screen.getByText(/no tienen usuario o contraseña en/)).toBeTruthy()
   })
 
@@ -332,5 +333,18 @@ describe('acceso rápido (solo en desarrollo)', () => {
 
     expect(await screen.findByText('Usuarios activos')).toBeTruthy()
     expect(iniciarSesion).toHaveBeenCalledWith('admin.prueba', 'clave-de-prueba')
+  })
+
+  test('«Revisor» inicia sesión con sus credenciales configuradas', async () => {
+    vi.stubEnv('VITE_ACCESO_RAPIDO_REVISOR_USUARIO', 'revisor.prueba')
+    vi.stubEnv('VITE_ACCESO_RAPIDO_REVISOR_CONTRASENA', 'otra-clave-de-prueba')
+    iniciarSesion.mockResolvedValue(crearRespuestaLogin())
+    await abrirLogin()
+
+    expect(screen.getByRole('button', { name: 'Epidemiología' }).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Revisor' }))
+
+    expect(await screen.findByText('Usuarios activos')).toBeTruthy()
+    expect(iniciarSesion).toHaveBeenCalledWith('revisor.prueba', 'otra-clave-de-prueba')
   })
 })

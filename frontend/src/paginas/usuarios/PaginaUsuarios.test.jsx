@@ -32,8 +32,8 @@ const ROLES = [
   { id: 4, codigo: 'ADMINISTRADOR', nombre: 'Administrador' },
 ]
 const ESTABLECIMIENTOS = [
-  { id: 7, nombre: 'Centro de Salud Tacaná', activo: true },
-  { id: 9, nombre: 'Puesto de Salud Cerrado', activo: false },
+  { id: 7, codigo: 'CS-1214', nombre: 'Centro de Salud Tacaná', activo: true },
+  { id: 9, codigo: 'PS-1214-01', nombre: 'Puesto de Salud Cerrado', activo: false },
 ]
 
 const TODOS_LOS_PERMISOS = [
@@ -537,6 +537,13 @@ describe('HU-07: búsqueda y filtros', () => {
   const nativo = (nombre) => document.querySelector(`select[name="${nombre}"]`)
   const elegirFiltro = (nombre, valor) => fireEvent.change(nativo(nombre), { target: { value: String(valor) } })
   const busqueda = () => screen.getByRole('searchbox', { name: 'Buscar por nombre o usuario' })
+  // El establecimiento es un combobox con búsqueda (SPEC 58): se abre, se busca si hace falta y se elige.
+  const filtroEstablecimiento = () => screen.getByRole('combobox', { name: 'Filtrar por establecimiento' })
+  function elegirEstablecimiento(texto, buscado) {
+    fireEvent.click(filtroEstablecimiento())
+    if (buscado) fireEvent.change(screen.getByPlaceholderText('Buscar por nombre o código…'), { target: { value: buscado } })
+    fireEvent.click(within(screen.getByRole('listbox')).getByText(texto))
+  }
 
   test('la búsqueda espera 300 ms después de la última tecla y pide una sola vez, en la página 1', async () => {
     await abrir(TODOS_LOS_PERMISOS, '/administracion/usuarios?pagina=2')
@@ -561,18 +568,24 @@ describe('HU-07: búsqueda y filtros', () => {
     await abrir(TODOS_LOS_PERMISOS, '/administracion/usuarios?pagina=2')
     await waitFor(() => expect(nativo('rolId').options).toHaveLength(3))
 
-    expect([...nativo('establecimientoId').options].map((o) => o.textContent)).toEqual([
+    await waitFor(() => expect(listarEstablecimientos).toHaveBeenCalled())
+    fireEvent.click(filtroEstablecimiento())
+    const opciones = within(screen.getByRole('listbox'))
+      .getAllByRole('option')
+      .map((o) => o.querySelector('span span').textContent)
+    expect(opciones).toEqual([
       'Todos los establecimientos',
       'Sede de la DDRISS',
       'Centro de Salud Tacaná',
       'Puesto de Salud Cerrado (inactivo)',
     ])
+    fireEvent.keyDown(screen.getByPlaceholderText('Buscar por nombre o código…'), { key: 'Escape' })
 
     elegirFiltro('rolId', 2)
     await waitFor(() => expect(listarUsuarios).toHaveBeenLastCalledWith({ rolId: 2, pagina: 1, porPagina: 20 }))
     expect(ubicacion()).toBe('?rolId=2')
 
-    elegirFiltro('establecimientoId', 'ninguno')
+    elegirEstablecimiento('Sede de la DDRISS')
     await waitFor(() =>
       expect(listarUsuarios).toHaveBeenLastCalledWith({ rolId: 2, establecimientoId: 'ninguno', pagina: 1, porPagina: 20 }),
     )
@@ -591,6 +604,27 @@ describe('HU-07: búsqueda y filtros', () => {
 
     elegirFiltro('rolId', 'todos')
     await waitFor(() => expect(ubicacion()).toBe('?establecimientoId=ninguno&estado=BLOQUEADA'))
+  })
+
+  test('el establecimiento se busca por nombre o código, «Todos» y «Sede» se ven siempre, y filtra por la URL', async () => {
+    await abrir()
+    await waitFor(() => expect(listarEstablecimientos).toHaveBeenCalled())
+    fireEvent.click(filtroEstablecimiento())
+    fireEvent.change(screen.getByPlaceholderText('Buscar por nombre o código…'), { target: { value: 'ps-1214' } })
+    const lista = within(screen.getByRole('listbox'))
+    expect(lista.getByText('Puesto de Salud Cerrado (inactivo)')).toBeTruthy()
+    expect(lista.queryByText('Centro de Salud Tacaná')).toBeNull()
+    expect(lista.getByText('Todos los establecimientos')).toBeTruthy()
+    expect(lista.getByText('Sede de la DDRISS')).toBeTruthy()
+    fireEvent.keyDown(screen.getByPlaceholderText('Buscar por nombre o código…'), { key: 'Escape' })
+
+    elegirEstablecimiento('Centro de Salud Tacaná', 'tacana')
+    await waitFor(() => expect(listarUsuarios).toHaveBeenLastCalledWith({ establecimientoId: 7, pagina: 1, porPagina: 20 }))
+    expect(ubicacion()).toBe('?establecimientoId=7')
+    expect(filtroEstablecimiento().textContent).toBe('Centro de Salud Tacaná')
+
+    elegirEstablecimiento('Todos los establecimientos')
+    await waitFor(() => expect(ubicacion()).toBe(''))
   })
 
   test('con filtros en la URL, los controles los muestran y se pide con ellos', async () => {

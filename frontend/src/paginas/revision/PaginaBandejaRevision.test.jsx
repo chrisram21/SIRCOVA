@@ -6,7 +6,7 @@ import { ErrorApi } from '@/api/cliente.js'
 import { asignarRevisor, cerrarPeriodo, listarRevisores, obtenerBandeja } from '@/api/revision.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
-import PaginaBandejaRevision, { mesesDeLaDdriss, mesPorDefecto } from './PaginaBandejaRevision.jsx'
+import PaginaBandejaRevision, { aniosDeMeses, mesesDeLaDdriss, mesPorDefecto } from './PaginaBandejaRevision.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
 vi.mock('@/api/catalogos.js', () => ({ listarPeriodos: vi.fn(), listarMunicipios: vi.fn() }))
@@ -96,6 +96,7 @@ async function montar({ url = '/revision', permisos = ['REPORTE_REVISAR', 'REPOR
 
 const tabla = () => within(screen.getByRole('table'))
 const filaDe = (nombre) => tabla().getByText(nombre).closest('tr')
+const opcionesDe = (nombre) => [...document.querySelectorAll(`select[name="${nombre}"] option`)].map((o) => o.textContent)
 const chip = (nombre) => within(screen.getByRole('group', { name: 'Estado de los reportes' })).getByRole('button', { name: new RegExp(`^${nombre}`) })
 
 beforeEach(() => {
@@ -123,8 +124,8 @@ test('abre el mes por defecto en «Por atender», con los conteos en los chips',
   await waitFor(() => expect(chip('Por atender').textContent).toBe('Por atender3'))
   expect(chip('Por atender').getAttribute('aria-pressed')).toBe('true')
   expect(chip('Sin enviar').textContent).toBe('Sin enviar1')
-  const opciones = [...document.querySelectorAll('select[name="periodo"] option')].map((o) => o.textContent)
-  expect(opciones).toEqual(['octubre de 2026', 'septiembre de 2026', 'agosto de 2026 · cerrado'])
+  expect(opcionesDe('anio')).toEqual(['2026'])
+  expect(opcionesDe('periodo')).toEqual(['Octubre', 'Septiembre', 'Agosto · cerrado'])
 })
 
 test('un chip, el mes y el municipio cambian la URL y lo que se pide', async () => {
@@ -147,6 +148,53 @@ test('respeta el mes de la URL, también uno cerrado', async () => {
   await montar({ url: '/revision?periodo=8&grupo=TODOS' })
   expect(obtenerBandeja).toHaveBeenCalledWith(expect.objectContaining({ periodoId: 8, grupo: 'TODOS' }))
   expect(screen.getByText('Revisión y cierre · Periodo agosto de 2026')).toBeTruthy()
+})
+
+describe('Año + Mes (SPEC 58)', () => {
+  const delAnio = (id, anio, mes, estado) => ({ ...periodo(id, mes, estado), anio })
+  // Todo 2025 cerrado (12 meses), y en 2026 enero a marzo cerrados y abril y mayo abiertos; 2024 sin abrir.
+  const DOS_ANIOS = [
+    ...Array.from({ length: 12 }, (_, i) => delAnio(100 + i, 2025, i + 1, 'CERRADO')),
+    ...[1, 2, 3].map((mes) => delAnio(200 + mes, 2026, mes, 'CERRADO')),
+    delAnio(204, 2026, 4, 'ABIERTO'),
+    delAnio(205, 2026, 5, 'EN_CIERRE'),
+    delAnio(300, 2024, 6, null),
+  ]
+
+  beforeEach(() => {
+    listarPeriodos.mockResolvedValue(DOS_ANIOS)
+  })
+
+  test('los años son los de los meses de la DDRISS, del más reciente al más antiguo', () => {
+    expect(aniosDeMeses(mesesDeLaDdriss(DOS_ANIOS))).toEqual([2026, 2025])
+    expect(aniosDeMeses([])).toEqual([])
+  })
+
+  test('el mes muestra solo los del año elegido, con «· cerrado»; el año, solo años con meses abiertos', async () => {
+    await montar()
+    expect(obtenerBandeja).toHaveBeenCalledWith(expect.objectContaining({ periodoId: 204 }))
+    expect(opcionesDe('anio')).toEqual(['2026', '2025'])
+    expect(opcionesDe('periodo')).toEqual(['Mayo', 'Abril', 'Marzo · cerrado', 'Febrero · cerrado', 'Enero · cerrado'])
+  })
+
+  test('cambiar de año elige el mes por defecto de ese año y lo pone en periodo, sin la página', async () => {
+    const router = await montar({ url: '/revision?periodo=205&pagina=2' })
+    fireEvent.change(document.querySelector('select[name="anio"]'), { target: { value: '2025' } })
+    await waitFor(() => expect(router.state.location.search).toBe('?periodo=111'))
+    await waitFor(() => expect(obtenerBandeja).toHaveBeenLastCalledWith(expect.objectContaining({ periodoId: 111, pagina: 1 })))
+    expect(opcionesDe('periodo')).toHaveLength(12)
+    expect(opcionesDe('periodo')[0]).toBe('Diciembre · cerrado')
+    expect(screen.getByText('Revisión y cierre · Periodo diciembre de 2025')).toBeTruthy()
+  })
+
+  test('una URL con un periodo de otro año abre ese año y ese mes', async () => {
+    await montar({ url: '/revision?periodo=103' })
+    expect(obtenerBandeja).toHaveBeenCalledWith(expect.objectContaining({ periodoId: 103 }))
+    expect(document.querySelector('select[name="anio"]').value).toBe('2025')
+    expect(document.querySelector('select[name="periodo"]').value).toBe('103')
+    expect(opcionesDe('periodo')).toHaveLength(12)
+    expect(screen.getByText('Revisión y cierre · Periodo abril de 2025')).toBeTruthy()
+  })
 })
 
 test('las columnas muestran el envío, el estado, la validación, las dosis y el revisor; una fila sin reporte, guiones', async () => {
