@@ -1,6 +1,6 @@
 # SPEC 58 — Límite de opciones en los combobox que crecen
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** ninguna (correcciones del Sprint 4, documento «Spec F» de Chris, punto 11 de `CORRECCIONES_SPRINT_4.md`)
 > **Depende de:** SPEC 07, SPEC 08, SPEC 12 y SPEC 35
 > **Fecha:** 2026-11-10
