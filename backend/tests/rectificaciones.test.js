@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import { Int32, ObjectId } from 'mongodb';
 import app from '../src/app.js';
 import pool from '../src/config/mysql.js';
 import { obtenerDb } from '../src/config/mongodb.js';
+import { RELOJ } from '../src/modulos/revision/rectificaciones.service.js';
 import { tokenDePrueba } from './sesionDePrueba.js';
 
 // Crean por SQL los meses de 2009 (abiertos en la DDRISS 1) y la vacuna ZVT_HU32 (D1 y D2, desagregada por sexo,
@@ -11,6 +12,15 @@ import { tokenDePrueba } from './sesionDePrueba.js';
 // guarda cs1201 por la API, y luego el reporte y su mes pasan a CERRADO por SQL. Todo se borra al inicio y al final;
 // las filas de la bitácora quedan.
 const ANIO = 2009;
+
+// Las solicitudes se fechan en junio de ANIO (el reloj avanza con el tiempo real para conservar el orden): así no
+// cuentan en el mes real de CS-1201 (SPEC 57) ni otro archivo cuenta las de este.
+const relojDePrueba = () => {
+  const inicio = Date.now();
+  const base = Date.UTC(ANIO, 5, 15, 12);
+  return vi.spyOn(RELOJ, 'ahora').mockImplementation(() => new Date(base + (Date.now() - inicio)));
+};
+let reloj;
 const VACUNA = 'ZVT_HU32';
 const periodoIds = {};
 let vacunaId;
@@ -68,6 +78,8 @@ async function limpiar() {
       WHERE s.reporte_id IN (SELECT id FROM (${reportes}) t)`,
   );
   await pool.query(`DELETE FROM solicitud_rectificacion WHERE reporte_id IN (SELECT id FROM (${reportes}) t)`);
+  // Desde el SPEC 57, la 5.ª solicitud del mes crea una alerta que apunta a su reporte.
+  await pool.query(`DELETE FROM alerta WHERE reporte_id IN (SELECT id FROM (${reportes}) t)`);
   await pool.query(`DELETE FROM resultado_validacion WHERE reporte_id IN (SELECT id FROM (${reportes}) t)`);
   await pool.query(`DELETE FROM historial_estado_reporte WHERE reporte_id IN (SELECT id FROM (${reportes}) t)`);
   await pool.query(`DELETE FROM reporte_produccion WHERE id IN (SELECT id FROM (${reportes}) t)`);
@@ -203,6 +215,7 @@ const solicitudesDe = async (reporteId) => {
 };
 
 beforeAll(async () => {
+  reloj = relojDePrueba();
   await limpiar();
   await preparar();
   personal = await deUsuario('cs1201');
@@ -215,6 +228,7 @@ beforeAll(async () => {
 }, 60000);
 
 afterAll(async () => {
+  reloj.mockRestore();
   await limpiar();
 });
 
@@ -415,8 +429,21 @@ describe('GET /rectificaciones y GET /rectificaciones/{id}', () => {
   it('el detalle trae los cambios del ámbito del usuario', async () => {
     const propia = await consultar(`/rectificaciones/${solicitudPersonal.id}`);
     expect(propia.status, JSON.stringify(propia.body)).toBe(200);
-    expect(propia.body).toEqual(solicitudPersonal);
-    expect((await consultar(`/rectificaciones/${solicitudPersonal.id}`, administrador)).body).toEqual(solicitudPersonal);
+    // Todas las solicitudes de CS-1201 de este archivo caen en junio de ANIO: el conteo incluye las posteriores.
+    const [[{ cantidad }]] = await pool.query(
+      `SELECT COUNT(*) AS cantidad FROM solicitud_rectificacion s
+         JOIN reporte_produccion r ON r.id = s.reporte_id
+         JOIN periodo p ON p.id = r.periodo_id
+         JOIN establecimiento e ON e.id = r.establecimiento_id
+        WHERE p.anio = ? AND e.codigo = 'CS-1201'`,
+      [ANIO],
+    );
+    const esperada = {
+      ...solicitudPersonal,
+      solicitudesDelMes: { anio: ANIO, mes: 6, cantidad: Number(cantidad), umbral: 5 },
+    };
+    expect(propia.body).toEqual(esperada);
+    expect((await consultar(`/rectificaciones/${solicitudPersonal.id}`, administrador)).body).toEqual(esperada);
 
     expect(error(await consultar(`/rectificaciones/${solicitudPersonal.id}`, otroPersonal))).toEqual([404, 'NO_ENCONTRADO']);
     expect((await consultar(`/rectificaciones/${solicitudPersonal.id}`, estadigrafa)).status).toBe(200);

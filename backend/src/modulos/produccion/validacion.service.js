@@ -17,7 +17,7 @@ const ACTUALES = ['ABIERTO', 'JUSTIFICADO'];
 // Los reportes que ya salieron de BORRADOR: el historial de VARIACION_HISTORICA.
 const ENVIADOS = ['ENVIADO', 'EN_REVISION', 'CORRECCION_SOLICITADA', 'APROBADO', 'CERRADO', 'RECTIFICACION'];
 const MESES_HISTORIAL = 12; // el máximo de meses_referencia en tiposRegla.js
-const NOMBRES_MES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre',
+export const NOMBRES_MES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre',
   'octubre', 'noviembre', 'diciembre'];
 
 const errores = {
