@@ -3,7 +3,6 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { listarDdriss, listarEstablecimientos, listarMunicipios } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
 import { crearCuenta, listarRoles, registrarEmpleado } from '@/api/usuarios.js'
-import { NINGUNO } from './CamposEmpleado.jsx'
 import PaginaRegistrarPersonal from './PaginaRegistrarPersonal.jsx'
 
 vi.mock('@/api/usuarios.js', () => ({ registrarEmpleado: vi.fn(), crearCuenta: vi.fn(), listarRoles: vi.fn() }))
@@ -17,7 +16,7 @@ const ROLES = [
   { id: 1, codigo: 'ESTABLECIMIENTO', nombre: 'Personal del establecimiento' },
   { id: 2, codigo: 'REVISOR', nombre: 'Estadígrafa / revisor DDRISS' },
 ]
-const ESTABLECIMIENTOS = [{ id: 7, nombre: 'Centro de Salud Tacaná', municipioId: 7, municipioNombre: 'Tacaná' }]
+const ESTABLECIMIENTOS = [{ id: 7, codigo: 'CS-1214', nombre: 'Centro de Salud Tacaná', municipioId: 7, municipioNombre: 'Tacaná' }]
 const MUNICIPIOS = [{ id: 1, nombre: 'San Marcos' }]
 
 // Data router: el aviso de cambios sin guardar usa useBlocker. `volverA` es lo que manda la lista de Usuarios.
@@ -43,6 +42,13 @@ const escribir = (etiqueta, valor) => fireEvent.change(screen.getByLabelText(eti
 // Radix Select deja un <select> nativo oculto dentro del formulario; cambiarlo actualiza el valor del Select.
 const elegir = (nombre, valor) =>
   fireEvent.change(document.querySelector(`select[name="${nombre}"]`), { target: { value: String(valor) } })
+// El establecimiento se elige en el combobox con búsqueda (SPEC 58): se abre, se busca si hace falta y se elige.
+function elegirEstablecimiento(texto, busqueda) {
+  fireEvent.click(screen.getByRole('combobox', { name: 'Establecimiento' }))
+  if (busqueda) fireEvent.change(screen.getByPlaceholderText('Buscar por nombre o código…'), { target: { value: busqueda } })
+  fireEvent.click(within(screen.getByRole('listbox')).getByText(texto))
+}
+const SIN_ESTABLECIMIENTO = 'Sin establecimiento (personal de la DDRISS)'
 const botonRegistrar = () => screen.getByRole('button', { name: /^(Registrar|Crear cuenta|Registrando…)$/ })
 const campo = (etiqueta) => screen.getByLabelText(etiqueta)
 
@@ -85,8 +91,12 @@ test('muestra la DDRISS y las opciones de los Select, y pide solo establecimient
 
   expect(screen.getByTestId('ddriss').textContent).toBe('DDRISS San Marcos')
   expect(listarEstablecimientos).toHaveBeenCalledWith({ activo: true })
-  const establecimientos = [...document.querySelectorAll('select[name="establecimiento"] option')].map((o) => o.textContent)
-  expect(establecimientos).toEqual(expect.arrayContaining(['Sin establecimiento (personal de la DDRISS)', 'Centro de Salud Tacaná']))
+  fireEvent.click(screen.getByRole('combobox', { name: 'Establecimiento' }))
+  const establecimientos = within(screen.getByRole('listbox'))
+    .getAllByRole('option')
+    .map((o) => o.querySelector('span span').textContent)
+  expect(establecimientos).toEqual([SIN_ESTABLECIMIENTO, 'Centro de Salud Tacaná'])
+  fireEvent.keyDown(screen.getByPlaceholderText('Buscar por nombre o código…'), { key: 'Escape' })
   expect(document.querySelector('select[name="municipio"]')).toBeNull()
   expect(screen.getByTestId('municipio-empleado').textContent).toBe('—')
 
@@ -259,7 +269,7 @@ test('el rol de personal del establecimiento sin establecimiento muestra el avis
   expect(document.activeElement).toBe(document.getElementById('rol'))
   expect(registrarEmpleado).not.toHaveBeenCalled()
 
-  elegir('establecimiento', 7)
+  elegirEstablecimiento('Centro de Salud Tacaná')
   expect(screen.queryByText(/Para el rol Personal del establecimiento/)).toBeNull()
   fireEvent.click(botonRegistrar())
   await waitFor(() => expect(registrarEmpleado).toHaveBeenCalledTimes(1))
@@ -267,13 +277,28 @@ test('el rol de personal del establecimiento sin establecimiento muestra el avis
 
 test('no hay Select de municipio: al elegir establecimiento se ve su municipio, y sin él, «—»', async () => {
   await abrir()
-  elegir('establecimiento', 7)
+  elegirEstablecimiento('Centro de Salud Tacaná')
 
   expect(document.querySelector('select[name="municipio"]')).toBeNull()
   expect(screen.getByTestId('municipio-empleado').textContent).toBe('Tacaná')
 
-  elegir('establecimiento', NINGUNO)
+  elegirEstablecimiento(SIN_ESTABLECIMIENTO)
   expect(screen.getByTestId('municipio-empleado').textContent).toBe('—')
+})
+
+test('el establecimiento se busca por parte del nombre (sin tildes) o del código, y al elegirlo se ve su municipio', async () => {
+  await abrir()
+  fireEvent.click(screen.getByRole('combobox', { name: 'Establecimiento' }))
+  fireEvent.change(screen.getByPlaceholderText('Buscar por nombre o código…'), { target: { value: 'cs-1214' } })
+  expect(within(screen.getByRole('listbox')).getByText('Centro de Salud Tacaná')).toBeTruthy()
+  fireEvent.change(screen.getByPlaceholderText('Buscar por nombre o código…'), { target: { value: 'nada' } })
+  expect(screen.getByText('Ningún establecimiento coincide.')).toBeTruthy()
+  expect(within(screen.getByRole('listbox')).getByText(SIN_ESTABLECIMIENTO)).toBeTruthy()
+  fireEvent.keyDown(screen.getByPlaceholderText('Buscar por nombre o código…'), { key: 'Escape' })
+
+  elegirEstablecimiento('Centro de Salud Tacaná', 'tacana')
+  expect(screen.getByRole('combobox', { name: 'Establecimiento' }).textContent).toBe('Centro de Salud Tacaná')
+  expect(screen.getByTestId('municipio-empleado').textContent).toBe('Tacaná')
 })
 
 test('sin cuenta, solo registra al empleado y muestra el éxito', async () => {
@@ -294,7 +319,7 @@ test('sin cuenta, solo registra al empleado y muestra el éxito', async () => {
 test('con cuenta, registra al empleado, crea la cuenta con su id y muestra los dos mensajes', async () => {
   await abrir()
   llenarEmpleado()
-  elegir('establecimiento', 7)
+  elegirEstablecimiento('Centro de Salud Tacaná')
   llenarCuenta()
 
   fireEvent.click(botonRegistrar())

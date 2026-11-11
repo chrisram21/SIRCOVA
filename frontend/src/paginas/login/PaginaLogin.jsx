@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import {
+  Activity,
   ArrowRight,
   Building2,
   ChartLine,
@@ -70,6 +71,18 @@ function accesosRapidos() {
       icono: Building2,
       usuario: variables.VITE_ACCESO_RAPIDO_ESTABLECIMIENTO_USUARIO,
       contrasena: variables.VITE_ACCESO_RAPIDO_ESTABLECIMIENTO_CONTRASENA,
+    },
+    {
+      titulo: 'Epidemiología',
+      icono: Activity,
+      usuario: variables.VITE_ACCESO_RAPIDO_EPIDEMIOLOGIA_USUARIO,
+      contrasena: variables.VITE_ACCESO_RAPIDO_EPIDEMIOLOGIA_CONTRASENA,
+    },
+    {
+      titulo: 'Revisor',
+      icono: ClipboardCheck,
+      usuario: variables.VITE_ACCESO_RAPIDO_REVISOR_USUARIO,
+      contrasena: variables.VITE_ACCESO_RAPIDO_REVISOR_CONTRASENA,
     },
   ].map((acceso) => ({ ...acceso, configurado: Boolean(acceso.usuario && acceso.contrasena) }))
 }

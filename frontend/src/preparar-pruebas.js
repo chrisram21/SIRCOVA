@@ -49,6 +49,9 @@ if (!window.ResizeObserver) {
   }
 }
 
+// jsdom no implementa scrollIntoView, y cmdk (Command de shadcn) la llama al marcar una opción.
+if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {}
+
 // jsdom no implementa matchMedia, y el Sidebar de shadcn lo usa (hook use-mobile) para saber si la pantalla es angosta.
 // Las pruebas corren con movimiento reducido: las cifras animadas (componentes/efectos.js) muestran su valor final.
 if (!window.matchMedia) {

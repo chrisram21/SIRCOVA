@@ -83,6 +83,12 @@ export function mesPorDefecto(meses) {
   const abiertos = meses.filter((p) => ESTADOS_ABIERTOS.includes(p.estado))
   return abiertos.at(-1) ?? meses[0] ?? null
 }
+// Los años de esos meses, del más reciente al más antiguo: el select «Año» solo ofrece años con algún mes abierto.
+export function aniosDeMeses(meses) {
+  return [...new Set(meses.map((p) => p.anio))].sort((a, b) => b - a)
+}
+
+const conMayuscula = (texto) => texto[0].toUpperCase() + texto.slice(1)
 
 function textoValidacion(fila) {
   if (fila.estado === null || fila.estado === 'BORRADOR') return '—'
@@ -120,6 +126,7 @@ export default function PaginaBandejaRevision() {
   const periodo = meses && (meses.find((p) => p.id === deUrl.periodo) ?? mesPorDefecto(meses))
   const filtros = { ...deUrl, periodo: periodo?.id }
   const clave = consultaDe(filtros)
+  const mesesDelAnio = (anio) => meses.filter((p) => p.anio === anio)
 
   // Cualquier cambio que no sea de página vuelve a la página 1.
   function irA(cambios) {
@@ -256,14 +263,30 @@ export default function PaginaBandejaRevision() {
           <div className="flex flex-col gap-3">
             {/* Dentro de un form, Radix agrega el <select> nativo de cada Select. */}
             <form role="search" className="flex flex-wrap items-center gap-3" onSubmit={(evento) => evento.preventDefault()}>
-              <Select name="periodo" value={String(periodo.id)} onValueChange={(id) => irA({ periodo: Number(id) })}>
-                <SelectTrigger aria-label="Mes" className="w-full bg-card sm:w-56">
+              <Select
+                name="anio"
+                value={String(periodo.anio)}
+                onValueChange={(anio) => irA({ periodo: mesPorDefecto(mesesDelAnio(Number(anio))).id })}
+              >
+                <SelectTrigger aria-label="Año" className="w-full bg-card sm:w-32">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {meses.map((p) => (
+                  {aniosDeMeses(meses).map((anio) => (
+                    <SelectItem key={anio} value={String(anio)}>
+                      {anio}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select name="periodo" value={String(periodo.id)} onValueChange={(id) => irA({ periodo: Number(id) })}>
+                <SelectTrigger aria-label="Mes" className="w-full bg-card sm:w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {mesesDelAnio(periodo.anio).map((p) => (
                     <SelectItem key={p.id} value={String(p.id)}>
-                      {nombreDelMes(p)}
+                      {conMayuscula(MESES[p.mes - 1])}
                       {p.estado === 'CERRADO' ? ' · cerrado' : ''}
                     </SelectItem>
                   ))}

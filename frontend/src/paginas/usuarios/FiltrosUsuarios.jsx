@@ -7,6 +7,7 @@ import { listarEstablecimientos } from '@/api/catalogos.js'
 import { mensajeDeError } from '@/api/cliente.js'
 import { listarRoles } from '@/api/usuarios.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
+import SelectorConBusqueda from '@/componentes/SelectorConBusqueda.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 
 const ESPERA_BUSQUEDA = 300
@@ -137,18 +138,23 @@ export default function FiltrosUsuarios({ filtros, hayFiltros, alCambiar, alLimp
         )}
 
         {verEstablecimientos && (
-          <Filtro
-            nombre="establecimientoId"
+          <SelectorConBusqueda
             etiqueta="Filtrar por establecimiento"
-            valor={filtros.establecimientoId}
-            alCambiar={(id) => alCambiar({ establecimientoId: id === undefined || id === 'ninguno' ? id : Number(id) })}
+            valor={filtros.establecimientoId === undefined ? TODOS : String(filtros.establecimientoId)}
+            alCambiar={(id) =>
+              alCambiar({ establecimientoId: id === TODOS ? undefined : id === 'ninguno' ? id : Number(id) })
+            }
             deshabilitado={fallaron.establecimientos}
+            textoBuscar="Buscar por nombre o código…"
+            textoVacio="Ningún establecimiento coincide."
+            className="sm:w-56"
             opciones={[
-              { valor: TODOS, etiqueta: 'Todos los establecimientos' },
-              { valor: 'ninguno', etiqueta: 'Sede de la DDRISS' },
+              { valor: TODOS, texto: 'Todos los establecimientos', fija: true },
+              { valor: 'ninguno', texto: 'Sede de la DDRISS', fija: true },
               ...establecimientos.map((e) => ({
                 valor: String(e.id),
-                etiqueta: e.activo ? e.nombre : `${e.nombre} (inactivo)`,
+                texto: e.activo ? e.nombre : `${e.nombre} (inactivo)`,
+                detalle: e.codigo,
               })),
             ]}
           />
