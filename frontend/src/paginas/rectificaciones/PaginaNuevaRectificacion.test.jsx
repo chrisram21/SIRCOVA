@@ -4,12 +4,16 @@ import { toast } from 'sonner'
 import { listarPeriodos } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
 import { listarReportes, obtenerFormulario, obtenerReporte } from '@/api/produccion.js'
-import { listarRectificaciones, solicitarRectificacion } from '@/api/rectificaciones.js'
+import { contarRectificacionesDelMes, listarRectificaciones, solicitarRectificacion } from '@/api/rectificaciones.js'
 import PaginaNuevaRectificacion from './PaginaNuevaRectificacion.jsx'
 
 vi.mock('@/api/catalogos.js', () => ({ listarPeriodos: vi.fn() }))
 vi.mock('@/api/produccion.js', () => ({ listarReportes: vi.fn(), obtenerReporte: vi.fn(), obtenerFormulario: vi.fn() }))
-vi.mock('@/api/rectificaciones.js', () => ({ listarRectificaciones: vi.fn(), solicitarRectificacion: vi.fn() }))
+vi.mock('@/api/rectificaciones.js', () => ({
+  contarRectificacionesDelMes: vi.fn(),
+  listarRectificaciones: vi.fn(),
+  solicitarRectificacion: vi.fn(),
+}))
 
 const ESTABLECIMIENTO = { id: 9, codigo: 'CS-1209', nombre: 'Centro de Salud Tajumulco' }
 const valor = (codigo, etiqueta, orden) => ({ codigo, etiqueta, orden, activo: true })
@@ -129,6 +133,7 @@ beforeEach(() => {
   obtenerReporte.mockResolvedValue(REPORTE)
   obtenerFormulario.mockResolvedValue(FORMULARIO)
   solicitarRectificacion.mockResolvedValue(SOLICITUD)
+  contarRectificacionesDelMes.mockResolvedValue({ anio: 2026, mes: 11, cantidad: 0, umbral: 5 })
 })
 
 describe('paso 1: elegir el reporte', () => {
@@ -271,5 +276,40 @@ describe('paso 2: justificación y cantidades', () => {
     obtenerReporte.mockResolvedValue({ ...REPORTE, estado: 'APROBADO' })
     montar('/rectificaciones/nueva?reporte=412')
     expect(await screen.findByText('Este reporte no está cerrado: solo se rectifican reportes cerrados.')).toBeTruthy()
+  })
+})
+
+describe('aviso de solicitudes del mes (SPEC 57)', () => {
+  const AVISO = /solicitudes de rectificación en noviembre/
+
+  test('si la nueva será la 5.ª, avisa cuántas lleva el establecimiento', async () => {
+    contarRectificacionesDelMes.mockResolvedValue({ anio: 2026, mes: 11, cantidad: 4, umbral: 5 })
+    await abrirReporte()
+
+    expect(contarRectificacionesDelMes).toHaveBeenCalledWith(412)
+    const aviso = await screen.findByText(AVISO)
+    expect(aviso.textContent).toBe('El establecimiento lleva 4 solicitudes de rectificación en noviembre; esta será la 5.ª')
+  })
+
+  test('por debajo de la 5.ª no avisa', async () => {
+    contarRectificacionesDelMes.mockResolvedValue({ anio: 2026, mes: 11, cantidad: 3, umbral: 5 })
+    await abrirReporte()
+    await waitFor(() => expect(contarRectificacionesDelMes).toHaveBeenCalled())
+    expect(screen.queryByText(AVISO)).toBeNull()
+  })
+
+  test('si el conteo falla, no muestra aviso ni error y la solicitud se envía', async () => {
+    contarRectificacionesDelMes.mockRejectedValue(new ErrorApi(500, 'ERROR_INTERNO', 'Falló.'))
+    const router = await abrirReporte()
+    await waitFor(() => expect(contarRectificacionesDelMes).toHaveBeenCalled())
+    expect(screen.queryByText(AVISO)).toBeNull()
+    expect(screen.queryByText(/Falló/)).toBeNull()
+
+    justificar('Faltó sumar la jornada.')
+    escribir(D1, '80')
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar solicitud' }))
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Enviar' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/rectificaciones/77'))
+    expect(solicitarRectificacion).toHaveBeenCalledTimes(1)
   })
 })

@@ -4495,6 +4495,13 @@ paths:
 
         Los errores se revisan en este orden: cuerpo, reporte, estado del reporte, solicitud pendiente,
         `versionFila` y celdas.
+
+        Control por establecimiento (SPEC 57): cuentan todas las solicitudes de los reportes del establecimiento
+        cuyo `solicitadoEn` cae en el mismo mes calendario de Guatemala, en cualquier estado. Nunca bloquea: si
+        con esta solicitud llegan a exactamente 5 (`umbral`), en la misma transacción se crea una fila en `alerta`
+        (`tipo` `PROCESO`, `severidad` `ADVERTENCIA`, `rol_destino_id` del ADMINISTRADOR, con el establecimiento,
+        su DDRISS y municipio, el periodo de ese mes si existe y este reporte) con su `CREAR` (entidad `alerta`)
+        en la bitácora. La 6.ª y las siguientes del mes no crean otra.
       x-permiso: RECTIFICACION_SOLICITAR
       parameters:
         - { $ref: "#/components/parameters/Id" }
@@ -4574,6 +4581,30 @@ paths:
                 sinDiferencia:
                   value:
                     error: { codigo: CAMBIO_SIN_DIFERENCIA, mensaje: "La celda 3.ª dosis · < 1 año ya tiene esa cantidad." }
+
+  /reportes/{id}/rectificaciones/conteo-del-mes:
+    get:
+      tags: [Revisión]
+      summary: Cuántas solicitudes de rectificación lleva el establecimiento del reporte en el mes actual
+      description: |
+        Cuenta las solicitudes de todos los reportes del establecimiento cuyo `solicitadoEn` cae en el mes
+        calendario actual de Guatemala (UTC−6), en cualquier estado (también `RECHAZADA` y `APLICADA`). La
+        pantalla «Nueva rectificación» lo pide antes de enviar para avisar desde la 5.ª; solo informa.
+
+        No exige que el reporte esté `CERRADO`. Uno que no existe o está fuera del alcance responde 404.
+      x-permiso: RECTIFICACION_SOLICITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: El conteo del mes actual
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConteoRectificacionesDelMes" }
+        "400": { $ref: "#/components/responses/EntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
 
   /rectificaciones:
     get:
@@ -7988,7 +8019,7 @@ components:
 
     SolicitudRectificacion:
       type: object
-      required: [id, reporte, estado, motivo, solicitadoPor, solicitadoEn, resueltoPor, comentarioResolucion, resueltoEn, aplicadoEn, cambios]
+      required: [id, reporte, estado, motivo, solicitadoPor, solicitadoEn, resueltoPor, comentarioResolucion, resueltoEn, aplicadoEn, cambios, solicitudesDelMes]
       properties:
         id: { type: integer, example: 4 }
         reporte: { $ref: "#/components/schemas/ReporteDeRectificacion" }
@@ -8013,6 +8044,20 @@ components:
             Solo en una `PENDIENTE`: las vacunas con cambios cuyo total declarado no coincidiría con la suma de sus
             celdas después de aplicar. Vacía si todo cuadra.
           items: { $ref: "#/components/schemas/TotalRectificacion" }
+        solicitudesDelMes:
+          allOf: [{ $ref: "#/components/schemas/ConteoRectificacionesDelMes" }]
+          description: |
+            Las solicitudes del establecimiento en el mes de Guatemala del `solicitadoEn` de esta, incluida esta y
+            las posteriores de ese mes, en cualquier estado.
+
+    ConteoRectificacionesDelMes:
+      type: object
+      required: [anio, mes, cantidad, umbral]
+      properties:
+        anio: { type: integer, example: 2026 }
+        mes: { type: integer, minimum: 1, maximum: 12, example: 11 }
+        cantidad: { type: integer, minimum: 0, description: "En el conteo previo, las que ya existen (sin la que se va a crear)", example: 4 }
+        umbral: { type: integer, description: "Solicitudes al mes desde las que se avisa; la que llega a este número crea la alerta", example: 5 }
 
     SolicitudRectificacionAplicada:
       allOf:

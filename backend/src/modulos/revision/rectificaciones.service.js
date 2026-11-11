@@ -17,6 +17,7 @@ import {
 } from '../produccion/captura.service.js';
 import { claveCombinacion } from '../produccion/celdas.service.js';
 import { calcularSinFallar, mesesCerradosDesde } from '../indicadores/corridas.service.js';
+import { NOMBRES_MES } from '../produccion/validacion.service.js';
 
 const LARGO_MOTIVO = 1000; // solicitud_rectificacion.motivo
 const LARGO_COMENTARIO = 500; // solicitud_rectificacion.comentario_resolucion
@@ -47,6 +48,102 @@ const errores = {
 export const mensajePendiente = 'El reporte ya tiene una solicitud de rectificación pendiente.';
 
 const aFechaIso = (segundos) => (segundos == null ? null : new Date(Number(segundos) * 1000).toISOString());
+
+export const UMBRAL_RECTIFICACIONES_MES = 5;
+export const RELOJ = { ahora: () => new Date() };
+const DESFASE_GUATEMALA_HORAS = 6; // UTC−6, sin horario de verano
+
+export function mesGuatemala(fecha) {
+  const local = new Date(fecha.getTime() - DESFASE_GUATEMALA_HORAS * 3600 * 1000);
+  return { anio: local.getUTCFullYear(), mes: local.getUTCMonth() + 1 };
+}
+
+// Límites del mes de Guatemala en segundos UTC, para FROM_UNIXTIME.
+function limitesDelMes({ anio, mes }) {
+  const inicio = Date.UTC(anio, mes - 1, 1, DESFASE_GUATEMALA_HORAS) / 1000;
+  const fin = Date.UTC(anio, mes, 1, DESFASE_GUATEMALA_HORAS) / 1000;
+  return [inicio, fin];
+}
+
+export async function contarSolicitudesDelMes(ejecutor, establecimientoId, mes) {
+  const [[{ cantidad }]] = await ejecutor.query(
+    `SELECT COUNT(*) AS cantidad
+       FROM solicitud_rectificacion s
+       JOIN reporte_produccion r ON r.id = s.reporte_id
+      WHERE r.establecimiento_id = ?
+        AND s.solicitado_en >= FROM_UNIXTIME(?) AND s.solicitado_en < FROM_UNIXTIME(?)`,
+    [establecimientoId, ...limitesDelMes(mes)],
+  );
+  return Number(cantidad);
+}
+
+const aSegundos = (fecha) => Math.floor(fecha.getTime() / 1000);
+
+// Solo la solicitud que deja el conteo exactamente en el umbral crea la alerta: las solicitudes no se borran y el
+// bloqueo del establecimiento las ordena, así que no hace falta buscar una alerta anterior.
+async function alertarSiLlegaAlUmbral(conexion, { establecimiento, reporteId, ahora, contexto }) {
+  const mes = mesGuatemala(ahora);
+  const cantidad = await contarSolicitudesDelMes(conexion, establecimiento.id, mes);
+  if (cantidad !== UMBRAL_RECTIFICACIONES_MES) return;
+  const [[periodo]] = await conexion.query('SELECT id FROM periodo WHERE anio = ? AND mes = ?', [mes.anio, mes.mes]);
+  const [[rol]] = await conexion.query("SELECT id FROM rol WHERE codigo = 'ADMINISTRADOR'");
+  const fila = {
+    tipo: 'PROCESO',
+    severidad: 'ADVERTENCIA',
+    titulo: 'Rectificaciones frecuentes',
+    mensaje:
+      `${establecimiento.codigo} ${establecimiento.nombre} lleva ${cantidad} solicitudes de rectificación en ` +
+      `${NOMBRES_MES[mes.mes - 1]} de ${mes.anio}.`,
+    ddrissId: establecimiento.ddriss_id,
+    periodoId: periodo?.id ?? null,
+    municipioId: establecimiento.municipio_id,
+    establecimientoId: establecimiento.id,
+    reporteId,
+    rolDestinoId: rol.id,
+    generadaEn: ahora.toISOString(),
+    estado: 'ACTIVA',
+  };
+  const [alerta] = await conexion.query(
+    `INSERT INTO alerta
+       (tipo, severidad, titulo, mensaje, ddriss_id, periodo_id, municipio_id, establecimiento_id, reporte_id,
+        rol_destino_id, generada_en)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FROM_UNIXTIME(?))`,
+    [
+      fila.tipo,
+      fila.severidad,
+      fila.titulo,
+      fila.mensaje,
+      fila.ddrissId,
+      fila.periodoId,
+      fila.municipioId,
+      fila.establecimientoId,
+      fila.reporteId,
+      fila.rolDestinoId,
+      aSegundos(ahora),
+    ],
+  );
+  await registrarBitacora(conexion, {
+    ...contexto,
+    modulo: MODULOS.RECTIFICACION,
+    accion: ACCIONES.CREAR,
+    entidad: 'alerta',
+    entidadId: alerta.insertId,
+    valoresNuevos: fila,
+  });
+}
+
+export async function conteoDelMes(id, usuario) {
+  if (!/^\d+$/.test(String(id)) || Number(id) <= 0) throw entradaInvalida('id debe ser un número entero positivo.');
+  const reporte = await leerReporte(pool, id, usuario);
+  const [[{ establecimiento_id: establecimientoId }]] = await pool.query(
+    'SELECT establecimiento_id FROM reporte_produccion WHERE id = ?',
+    [reporte.id],
+  );
+  const mes = mesGuatemala(RELOJ.ahora());
+  const cantidad = await contarSolicitudesDelMes(pool, establecimientoId, mes);
+  return { ...mes, cantidad, umbral: UMBRAL_RECTIFICACIONES_MES };
+}
+
 const esObjeto = (valor) => valor !== null && typeof valor === 'object' && !Array.isArray(valor);
 
 function leerCambio(cambio) {
@@ -143,8 +240,14 @@ export async function solicitarRectificacion(id, cuerpo, req) {
   return enTransaccion(async (conexion) => {
     // Primera consulta de la transacción: dos solicitudes del mismo reporte se ordenan aquí.
     const [[bloqueado]] = await conexion.query(
-      'SELECT estado, version_fila FROM reporte_produccion WHERE id = ? FOR UPDATE',
+      'SELECT estado, version_fila, establecimiento_id FROM reporte_produccion WHERE id = ? FOR UPDATE',
       [reporte.id],
+    );
+    // Antes de cualquier lectura sin bloqueo: así dos solicitudes simultáneas del establecimiento se cuentan en orden
+    // y solo una crea la alerta.
+    const [[establecimiento]] = await conexion.query(
+      'SELECT id, codigo, nombre, ddriss_id, municipio_id FROM establecimiento WHERE id = ? FOR UPDATE',
+      [bloqueado.establecimiento_id],
     );
     if (bloqueado.estado !== 'CERRADO') throw errores.noCerrado();
     const [[pendiente]] = await conexion.query(
@@ -155,9 +258,11 @@ export async function solicitarRectificacion(id, cuerpo, req) {
     if (bloqueado.version_fila !== pedido.versionFila) throw errores.desactualizado();
 
     const filas = await revisarCambios(conexion, reporte, pedido.cambios);
+    const ahora = RELOJ.ahora();
     const [solicitud] = await conexion.query(
-      "INSERT INTO solicitud_rectificacion (reporte_id, solicitado_por, motivo, estado) VALUES (?, ?, ?, 'PENDIENTE')",
-      [reporte.id, contexto.usuarioId, pedido.motivo],
+      `INSERT INTO solicitud_rectificacion (reporte_id, solicitado_por, motivo, estado, solicitado_en)
+       VALUES (?, ?, ?, 'PENDIENTE', FROM_UNIXTIME(?))`,
+      [reporte.id, contexto.usuarioId, pedido.motivo, aSegundos(ahora)],
     );
     await conexion.query(
       `INSERT INTO rectificacion_detalle
@@ -197,6 +302,7 @@ export async function solicitarRectificacion(id, cuerpo, req) {
         })),
       },
     });
+    await alertarSiLlegaAlUmbral(conexion, { establecimiento, reporteId: reporte.id, ahora, contexto });
     return { solicitud: (await leerSolicitud(conexion, solicitud.insertId)).solicitud };
   });
 }
@@ -306,6 +412,12 @@ async function leerSolicitud(ejecutor, id) {
     [id],
   );
   const catalogo = await etiquetasDeDimensiones(cambios.map((c) => c.clave_combinacion));
+  const mes = mesGuatemala(new Date(Number(fila.solicitado_en) * 1000));
+  const solicitudesDelMes = {
+    ...mes,
+    cantidad: await contarSolicitudesDelMes(ejecutor, fila.establecimiento_id, mes),
+    umbral: UMBRAL_RECTIFICACIONES_MES,
+  };
   const solicitud = {
     id: fila.id,
     reporte: aReporte(fila),
@@ -317,6 +429,7 @@ async function leerSolicitud(ejecutor, id) {
     comentarioResolucion: fila.comentario_resolucion ?? null,
     resueltoEn: aFechaIso(fila.resuelto_en),
     aplicadoEn: aFechaIso(fila.aplicado_en),
+    solicitudesDelMes,
     cambios: cambios.map((c) => ({
       vacuna: { id: c.vacuna_id, codigo: c.vacuna_codigo, nombre: c.vacuna_nombre },
       dosis: { codigo: c.dosis_codigo, nombre: c.dosis_nombre },

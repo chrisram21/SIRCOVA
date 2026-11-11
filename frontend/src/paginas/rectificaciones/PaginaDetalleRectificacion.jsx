@@ -26,6 +26,21 @@ function Dato({ etiqueta, children }) {
   )
 }
 
+// SPEC 57: las solicitudes del establecimiento en el mes de esta, en ámbar desde el umbral.
+function ConteoDelMes({ conteo }) {
+  if (!conteo) return null
+  const texto = `Solicitudes del establecimiento en ${nombreDelMes(conteo)}: ${conteo.cantidad}`
+  if (conteo.cantidad < conteo.umbral) return <p className="text-sm text-muted-foreground">{texto}</p>
+  return (
+    <Alert className="border-advertencia-foreground/20 bg-advertencia text-advertencia-foreground">
+      <TriangleAlert />
+      <AlertDescription className="text-advertencia-foreground">
+        {texto} Llega al límite de {conteo.umbral} al mes.
+      </AlertDescription>
+    </Alert>
+  )
+}
+
 // La tabla celda por celda, con el valor anterior y el nuevo; también la usa la nueva solicitud antes de enviar.
 export function TablaCambios({ cambios, etiqueta = 'Cambios' }) {
   return (
@@ -183,6 +198,8 @@ export default function PaginaDetalleRectificacion() {
               </Dato>
             )}
           </dl>
+
+          <ConteoDelMes conteo={solicitud.solicitudesDelMes} />
 
           {solicitud.totales?.map((total) => (
             <Alert key={total.vacunaId} className="border-advertencia-foreground/20 bg-advertencia text-advertencia-foreground">

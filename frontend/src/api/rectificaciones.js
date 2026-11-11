@@ -7,6 +7,12 @@ export function solicitarRectificacion(reporteId, { motivo, versionFila, cambios
   return solicitar(`/reportes/${reporteId}/rectificaciones`, { metodo: 'POST', cuerpo: { motivo, versionFila, cambios } })
 }
 
+// SPEC 57: las solicitudes que ya lleva el establecimiento del reporte en el mes actual de Guatemala, en cualquier
+// estado: { anio, mes, cantidad, umbral }.
+export function contarRectificacionesDelMes(reporteId) {
+  return solicitar(`/reportes/${reporteId}/rectificaciones/conteo-del-mes`)
+}
+
 // Las del ámbito del usuario (su establecimiento o su DDRISS), de la más reciente a la más antigua.
 export function listarRectificaciones({ estado, pagina, porPagina } = {}) {
   const consulta = new URLSearchParams()

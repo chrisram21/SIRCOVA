@@ -54,6 +54,10 @@ export async function solicitarRectificacion(req, res) {
   res.status(201).json(solicitud);
 }
 
+export async function conteoRectificacionesDelMes(req, res) {
+  res.json(await rectificacionesService.conteoDelMes(req.params.id, req.usuario));
+}
+
 export async function listarRectificaciones(req, res) {
   res.json(await rectificacionesService.listarRectificaciones(req.usuario, req.query));
 }

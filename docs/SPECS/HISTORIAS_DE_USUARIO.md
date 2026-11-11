@@ -1388,6 +1388,8 @@ Verificado contra la API real el 2026-11-08, con el build servido por `vite prev
 
 **Nota (2026-11-05, spec 48):** el Inicio ya tiene las tarjetas de alertas («Alertas activas» de Epidemiología y «Alertas de calidad y de proceso» del Revisor), en «Sin datos todavía». Para llenarlas, agregar su `Datos` y sus `permisos` en `paginas/inicio/roles/` (`TarjetasDelInicio`); la columna «Alertas que requieren acción» de `Main.html` iría junto a «Avance del cierre» (`AvanceCierre.jsx`).
 
+**Nota (2026-11-10, spec 57):** ya existe una alerta de proceso: «Rectificaciones frecuentes» (`tipo = 'PROCESO'`, `severidad = 'ADVERTENCIA'`, `rol_destino_id` del ADMINISTRADOR), que crea `solicitarRectificacion` (`modulos/revision/rectificaciones.service.js`) en la misma transacción que la 5.ª solicitud del mes de Guatemala de un establecimiento (`UMBRAL_RECTIFICACIONES_MES`), con su bitácora `CREAR` de `alerta`. No busca alertas anteriores: la crea solo cuando el conteo da exactamente 5, y un bloqueo de la fila de `establecimiento` ordena las solicitudes simultáneas. Las alertas de esta historia pueden seguir el mismo patrón (constante en el backend, bitácora con `entidad: 'alerta'`), pero el cron no tiene usuario: su bitácora va sin `usuarioId`, como la del cierre automático.
+
 **Criterios de aceptación:**
 - [ ] Se genera una alerta cuando un establecimiento que envía el 5C no envió su reporte al vencer la fecha límite.
 - [ ] Se genera una alerta cuando un reporte lleva más de N días sin revisar; N es un valor fijo definido en el backend (pendiente de confirmar con la estadígrafa).
@@ -1425,6 +1427,8 @@ Verificado contra la API real el 2026-11-08, con el build servido por `vite prev
 **Cómo se hará:** Icono de alertas en la barra de navegación; endpoint `GET /alertas` filtrado por `rol_destino_id` y ámbito del usuario; acción para marcarlas.
 
 **Nota (2026-11-05, spec 48):** el Inicio ya tiene las tarjetas de alertas («Alertas activas» de Epidemiología y «Alertas de calidad y de proceso» del Revisor), en «Sin datos todavía». Para llenarlas, agregar su `Datos` y sus `permisos` en `paginas/inicio/roles/` (`TarjetasDelInicio`); la columna «Alertas que requieren acción» de `Main.html` iría junto a «Avance del cierre» (`AvanceCierre.jsx`).
+
+**Nota (2026-11-10, spec 57):** el Administrador ya recibe alertas «Rectificaciones frecuentes» (`tipo = 'PROCESO'`, `rol_destino_id` del ADMINISTRADOR), con `ddriss_id`, `municipio_id`, `establecimiento_id`, `periodo_id` (el mes de la solicitud, `NULL` si no está en `periodo`) y `reporte_id` de la 5.ª solicitud, que puede servir de enlace al reporte o a sus rectificaciones. Hasta esta historia solo existen en la tabla `alerta`; en pantalla, quien solicita y quien resuelve ven el conteo del mes («Nueva rectificación» y el detalle de la solicitud). En la base de prueba está la alerta 33 (CS-1206, noviembre de 2026).
 
 **Criterios de aceptación:**
 - [ ] Veo solo las alertas dirigidas a mi rol, dentro de mi establecimiento o DDRISS.
