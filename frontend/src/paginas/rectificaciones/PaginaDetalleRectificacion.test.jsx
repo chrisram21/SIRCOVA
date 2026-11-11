@@ -328,3 +328,29 @@ describe('resolver la solicitud (SPEC 41)', () => {
     expect(screen.queryByRole('link', { name: 'Ver reporte' })).toBeNull()
   })
 })
+
+describe('solicitudes del establecimiento en el mes (SPEC 57)', () => {
+  const conConteo = (cantidad) => ({ ...SOLICITUD, solicitudesDelMes: { anio: 2026, mes: 11, cantidad, umbral: 5 } })
+
+  test('por debajo del umbral muestra la línea normal, sin aviso', async () => {
+    obtenerRectificacion.mockResolvedValue(conConteo(3))
+    montar()
+    const linea = await screen.findByText('Solicitudes del establecimiento en noviembre de 2026: 3')
+    expect(linea.tagName).toBe('P')
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  test('desde el umbral es un aviso ámbar que dice que llega al límite', async () => {
+    obtenerRectificacion.mockResolvedValue(conConteo(5))
+    montar()
+    const aviso = await screen.findByRole('alert')
+    expect(aviso.textContent).toBe('Solicitudes del establecimiento en noviembre de 2026: 5 Llega al límite de 5 al mes.')
+    expect(aviso.className).toContain('bg-advertencia')
+  })
+
+  test('sin solicitudesDelMes no muestra nada', async () => {
+    montar()
+    await screen.findByRole('heading', { name: 'Rectificación de agosto de 2026' })
+    expect(screen.queryByText(/Solicitudes del establecimiento/)).toBeNull()
+  })
+})

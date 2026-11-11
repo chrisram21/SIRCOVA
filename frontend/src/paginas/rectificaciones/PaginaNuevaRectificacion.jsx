@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Info } from 'lucide-react'
+import { Info, TriangleAlert } from 'lucide-react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
@@ -12,6 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,7 +25,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { listarPeriodos } from '@/api/catalogos.js'
 import { mensajeDeError } from '@/api/cliente.js'
 import { listarReportes, obtenerFormulario, obtenerReporte } from '@/api/produccion.js'
-import { listarRectificaciones, solicitarRectificacion } from '@/api/rectificaciones.js'
+import { contarRectificacionesDelMes, listarRectificaciones, solicitarRectificacion } from '@/api/rectificaciones.js'
 import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
@@ -36,6 +37,7 @@ import TarjetaProcedencias, {
   llavesDeFila,
 } from '@/componentes/formulario/TarjetaProcedencias.jsx'
 import { cantidadesDe, formularioDe } from '@/paginas/registro/CapturaReporte.jsx'
+import { MESES } from '@/lib/fechas.js'
 import PaginacionUsuarios, { FILAS_POR_PAGINA } from '@/paginas/usuarios/PaginacionUsuarios.jsx'
 import { TablaCambios } from './PaginaDetalleRectificacion.jsx'
 import { mesDe } from './formato.js'
@@ -357,6 +359,7 @@ function SolicitudDelReporte({ reporteId }) {
   const [errorApi, setErrorApi] = useState(null)
   const [enviada, setEnviada] = useState(null)
   const [enfocar, setEnfocar] = useState(null)
+  const [conteo, setConteo] = useState(null)
   const refMotivo = useRef(null)
   const refErrores = useRef(null)
 
@@ -390,6 +393,18 @@ function SolicitudDelReporte({ reporteId }) {
         setErrores(null)
       })
       .catch((err) => vigente && setErrorCarga(mensajeDeError(err)))
+    return () => {
+      vigente = false
+    }
+  }, [reporteId, intento])
+
+  // Solo informa: si falla, no hay aviso y la solicitud se envía igual.
+  useEffect(() => {
+    let vigente = true
+    setConteo(null)
+    contarRectificacionesDelMes(reporteId)
+      .then((respuesta) => vigente && setConteo(respuesta))
+      .catch(() => {})
     return () => {
       vigente = false
     }
@@ -583,6 +598,16 @@ function SolicitudDelReporte({ reporteId }) {
                 </p>
               ))}
             </div>
+          )}
+
+          {conteo && conteo.cantidad + 1 >= conteo.umbral && (
+            <Alert className="border-advertencia-foreground/20 bg-advertencia text-advertencia-foreground">
+              <TriangleAlert />
+              <AlertDescription className="text-advertencia-foreground">
+                El establecimiento lleva {conteo.cantidad} solicitudes de rectificación en {MESES[conteo.mes - 1]}; esta
+                será la {conteo.cantidad + 1}.ª
+              </AlertDescription>
+            </Alert>
           )}
 
           <div className="flex flex-wrap justify-end gap-2">

@@ -1,6 +1,6 @@
 # SPEC 57 — Control de rectificaciones por establecimiento
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** ninguna (correcciones del Sprint 4, documento «Spec E» de Chris, punto 6 de `CORRECCIONES_SPRINT_4.md`)
 > **Depende de:** SPEC 05, SPEC 40 y SPEC 41
 > **Fecha:** 2026-11-10
