@@ -281,10 +281,11 @@ test('"Usuarios" sigue activa en su subruta /administracion/usuarios/nuevo, que 
 // Las pantallas se cargan al entrar en ellas (lazy): se esperan con findBy.
 test('/administracion/usuarios muestra "Registrar personal" solo con EMPLEADO_CREAR', async () => {
   abrir('/administracion/usuarios', { permisos: ['USUARIO_CONSULTAR', 'EMPLEADO_CREAR'] })
-  expect((await screen.findByRole('link', { name: 'Registrar personal' })).getAttribute('href')).toBe(
-    '/administracion/usuarios/nuevo',
-  )
-})
+  // Es la primera prueba que carga esta pantalla (lazy): en frío, su descarga pasa del segundo que espera findBy
+  // y a veces de los 5 s de una prueba.
+  const enlace = await screen.findByRole('link', { name: 'Registrar personal' }, { timeout: 8000 })
+  expect(enlace.getAttribute('href')).toBe('/administracion/usuarios/nuevo')
+}, 10000)
 
 test('/administracion/usuarios sin EMPLEADO_CREAR no muestra "Registrar personal"', async () => {
   abrir('/administracion/usuarios', { permisos: ['USUARIO_CONSULTAR'] })

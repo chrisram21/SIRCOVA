@@ -1,6 +1,6 @@
 # SPEC 59 — Catálogo de redes de municipios
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** ninguna (correcciones del Sprint 4, documento «Spec G» de Chris, retroalimentación del sprint review con la DDRISS del 2026-11-10)
 > **Depende de:** SPEC 04, SPEC 05, SPEC 13, SPEC 15 y SPEC 30
 > **Fecha:** 2026-11-11
@@ -108,7 +108,7 @@ Reglas que valida el backend (la base no puede expresarlas):
 ### Script `12_redes_mysql.sql`
 
 - Crea las tres tablas con `CREATE TABLE IF NOT EXISTS`.
-- Crea la Red No. 1 (`RED_01`) de `DDRISS_SM` si no existe, con Ixchiguán, Tajumulco, Sibinal, Tacaná y San José Ojetenam (buscados por nombre y departamento, no por id) y con las dosis activas `es_trazadora` como trazadoras.
+- Crea la Red No. 1 (`RED_01`) de `DDRISS_SM` si no existe, con Ixchiguán, Tajumulco, Sibinal, Tacaná y San José Ojetenam (buscados por código INE, no por id) y con las dosis activas `es_trazadora` como trazadoras.
 - No borra nada y se puede correr dos veces. Se corre con `mysql2` y `multipleStatements`, como el 05.
 
 ### Permisos (en el 05)
@@ -153,13 +153,13 @@ Reglas que valida el backend (la base no puede expresarlas):
 
 | Caso | Respuesta |
 |---|---|
-| Cuerpo o parámetro inválido, desconocido o con `codigo`; lista de municipios o de trazadoras vacía; id que no existe | 400 `ENTRADA_INVALIDA` |
+| Cuerpo o parámetro inválido, desconocido o con `codigo`; lista de municipios o de trazadoras vacía, repetida o con ids que no son enteros positivos | 400 `ENTRADA_INVALIDA` |
 | Red que no existe o de otra DDRISS | 404 `NO_ENCONTRADO` |
 | Nombre repetido en la DDRISS | 409 `RED_DUPLICADA` («Ya hay una red con ese nombre en la DDRISS.») |
 | Municipio que ya está en otra red | 409 `MUNICIPIO_EN_OTRA_RED` («Tacaná ya pertenece a la Red No. 2.», con el primero que choca) |
 | Editar una red inactiva, o reactivar una activa | 409 `RED_INACTIVA` / `RED_ACTIVA` |
-| Municipio inactivo, de otro departamento o el `9999` | 422 `MUNICIPIO_INVALIDO` (el mismo código que los distritos) |
-| Dosis nueva inactiva o de una vacuna inactiva | 422 `DOSIS_INVALIDA` |
+| Municipio que no existe, inactivo, de otro departamento o el `9999` | 422 `MUNICIPIO_INVALIDO` (el mismo código que los distritos) |
+| Dosis nueva que no existe, inactiva o de una vacuna inactiva | 422 `DOSIS_INVALIDA` |
 
 ### Bitácora
 
@@ -207,7 +207,7 @@ Todo en `enTransaccion`, con `modulo: MODULOS.CONFIGURACION` y `entidad: 'red'`:
 9. **Verificación manual** con la API real y Playwright:
    - con el acceso rápido del Administrador y de Epidemiología: crear una red de prueba, editarla, desactivarla y reactivarla;
    - comprobar el mensaje «… ya pertenece a la Red No. 1» al intentar tomar Tacaná;
-   - con el Revisor, que «Redes» no está en el menú y que la ruta muestra el acceso denegado;
+   - con el Revisor, que «Redes» no está en el menú y que la ruta lo lleva a Inicio, como cualquier ruta sin permiso;
    - a 390 px, la lista y el formulario no desbordan.
 
    Al terminar, desactivar la red de prueba.
@@ -215,24 +215,25 @@ Todo en `enTransaccion`, con `modulo: MODULOS.CONFIGURACION` y `entidad: 'red'`:
 
 ## Criterios de aceptación
 
-- [ ] El 12 crea las tres tablas y la Red No. 1 en una base existente, y correrlo otra vez no cambia nada.
-- [ ] El 01 (v0.12) y el 03 traen las tablas y la Red No. 1, y `CONTEXTO BD.md` y el DBML las describen.
-- [ ] El Administrador y Epidemiología tienen `RED_CONSULTAR`, `RED_CREAR` y `RED_EDITAR`; el Revisor y la Autoridad solo `RED_CONSULTAR`.
-- [ ] `GET /redes` devuelve solo las redes de la DDRISS del usuario; la Autoridad nacional ve todas o las de `ddrissId`.
-- [ ] Una red nueva recibe el siguiente `RED_{NN}` de su DDRISS, contando las inactivas, y dos altas simultáneas no chocan.
-- [ ] Una red nueva trae como trazadoras las dosis activas `es_trazadora` de vacunas activas, y al editarla se pueden quitar y agregar.
-- [ ] No se puede poner un municipio en dos redes: responde 409 «{Municipio} ya pertenece a {Red}.».
-- [ ] No se puede poner un municipio inactivo, de otro departamento o el `9999` (422).
-- [ ] Una red activa no queda nunca sin municipios ni sin trazadoras (400).
-- [ ] Desactivar una red libera sus municipios, que otra red puede tomar, y conserva sus trazadoras.
-- [ ] Reactivar exige al menos un municipio libre.
-- [ ] El Revisor y la Autoridad reciben 403 en `POST` y `PATCH` de redes y en `GET /redes/opciones`.
-- [ ] Cada escritura deja su fila en la bitácora, y un `PATCH` sin cambios no deja ninguna.
-- [ ] «Redes» aparece en «Administración» solo para el Administrador y Epidemiología.
-- [ ] En el formulario, los municipios de otra red se ven deshabilitados con el nombre de su red.
-- [ ] «Restablecer trazadoras por defecto» deja marcadas solo las `es_trazadora`.
-- [ ] A 390 px la lista y el formulario no tienen desborde horizontal.
-- [ ] Pasan `redes.test.js`, `campos.test.js` (los dos), las pruebas de las pantallas nuevas y la suite del frontend.
+- [x] El 12 crea las tres tablas y la Red No. 1 en una base existente, y correrlo otra vez no cambia nada.
+- [x] El 01 (v0.12) y el 03 traen las tablas y la Red No. 1, y `CONTEXTO BD.md` y el DBML las describen.
+- [x] El Administrador y Epidemiología tienen `RED_CONSULTAR`, `RED_CREAR` y `RED_EDITAR`; el Revisor y la Autoridad solo `RED_CONSULTAR`.
+- [x] `GET /redes` devuelve solo las redes de la DDRISS del usuario; la Autoridad nacional ve todas o las de `ddrissId`.
+- [x] Una red nueva recibe el siguiente `RED_{NN}` de su DDRISS, contando las inactivas, y dos altas simultáneas no chocan.
+- [x] Una red nueva trae como trazadoras las dosis activas `es_trazadora` de vacunas activas, y al editarla se pueden quitar y agregar.
+- [x] No se puede poner un municipio en dos redes: responde 409 «{Municipio} ya pertenece a {Red}.».
+- [x] No se puede poner un municipio inactivo, de otro departamento o el `9999` (422).
+- [x] Una red activa no queda nunca sin municipios ni sin trazadoras (400).
+- [x] Desactivar una red libera sus municipios, que otra red puede tomar, y conserva sus trazadoras.
+- [x] Reactivar exige al menos un municipio libre.
+- [x] El Revisor y la Autoridad reciben 403 en `POST` y `PATCH` de redes y en `GET /redes/opciones`.
+- [x] Cada escritura deja su fila en la bitácora, y un `PATCH` sin cambios no deja ninguna.
+- [x] «Redes» aparece en «Administración» solo para el Administrador y Epidemiología.
+- [x] En el formulario, los municipios de otra red se ven deshabilitados con el nombre de su red.
+- [x] «Restablecer trazadoras por defecto» deja marcadas solo las `es_trazadora`.
+- [x] A 390 px la lista y el formulario no tienen desborde horizontal.
+- [x] Pasan `redes.test.js`, `campos.test.js` (los dos), las pruebas de las pantallas nuevas y la suite del frontend.
+  La suite del frontend (2026-11-11): 1728 de 1729; fallaba por tiempo «/administracion/usuarios muestra "Registrar personal" solo con EMPLEADO_CREAR» de `Layout.test.jsx` (también en `main`): la primera carga `lazy` pasaba de 1 s. Se le dio más espera (8 s al `findBy`, 10 s a la prueba) y pasa.
 
 ## Decisiones
 
@@ -258,7 +259,7 @@ Todo en `enTransaccion`, con `modulo: MODULOS.CONFIGURACION` y `entidad: 'red'`:
 
 | Riesgo | Mitigación |
 |---|---|
-| Los nombres de los cinco municipios de la Red No. 1 no coinciden con los del catálogo (tildes, «San José Ojetenam») | El 12 los busca por nombre exacto dentro del departamento y falla con un mensaje si falta alguno. Se comprueba al correrlo en el paso 1. |
+| Los nombres de los cinco municipios de la Red No. 1 no coinciden con los del catálogo (tildes, «San José Ojetenam») | El 12 y el 03 los buscan por código INE (1207, 1208, 1209, 1223 y 1224), no por nombre, y el 12 falla con un mensaje si falta alguno. Se comprobó al correrlo en el paso 1. |
 | Las pruebas usan municipios reales de San Marcos y chocan con la Red No. 1 o con una red de la prueba manual | `redes.test.js` crea un departamento, una DDRISS (`ZVT_RED`) y municipios propios (código que empieza con `Z`), y los borra al inicio y al final con sus redes. |
 | Recrear la base con el 01 sin el 12 deja la base sin la Red No. 1 | El 03 también la trae. La nota de `CLAUDE.md` dice qué scripts correr después del 01. |
 | La caché de catálogos muestra una red vieja en la lista o en las opciones | Cada escritura de `api/catalogos.js` invalida `/redes` (incluido `/redes/opciones`). |

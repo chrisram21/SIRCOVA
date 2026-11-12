@@ -441,8 +441,11 @@ describe('PATCH /redes/{id}', () => {
     expect((await enviar('patch', `/redes/${redId}`, { nombre: 'vitest-redes Red Z' }, tokens.adminSede)).status).toBe(404);
   });
 
-  it('el Revisor recibe 403', async () => {
-    expect((await enviar('patch', `/redes/${redId}`, { nombre: 'vitest-redes Red Z' }, tokens.revisor)).status).toBe(403);
+  it('el Revisor y la Autoridad reciben 403 al editar y al crear', async () => {
+    for (const token of [tokens.revisor, tokens.nacional]) {
+      expect((await enviar('patch', `/redes/${redId}`, { nombre: 'vitest-redes Red Z' }, token)).status).toBe(403);
+      expect((await enviar('post', '/redes', { nombre: 'vitest-redes Red Z', municipioIds: ids('ZR07') }, token)).status).toBe(403);
+    }
   });
 });
 
