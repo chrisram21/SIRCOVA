@@ -76,6 +76,18 @@ INSERT INTO distrito_salud (id, ddriss_id, municipio_id, codigo, nombre) VALUES
  (29, 1, 29, 'DS-1229', 'Distrito de Salud San Lorenzo'),
  (30, 1, 30, 'DS-1230', 'Distrito de Salud La Blanca');
 
+-- Red de municipios (SPEC 59). La Red No. 1 la dio la DDRISS; las demás se
+-- piden a la DDRISS. Sus trazadoras son las dosis activas con es_trazadora.
+INSERT INTO red (id, ddriss_id, codigo, nombre) VALUES
+ (1, 1, 'RED_01', 'Red No. 1');
+
+INSERT INTO red_municipio (red_id, municipio_id)
+SELECT 1, m.id FROM municipio m WHERE m.codigo_ine IN ('1223', '1209', '1208', '1207', '1224');
+
+INSERT INTO red_trazadora (red_id, dosis_id)
+SELECT 1, d.id FROM dosis d JOIN vacuna v ON v.id = d.vacuna_id
+ WHERE d.es_trazadora AND d.activa AND v.activa;
+
 -- Establecimientos: 30 centros de salud (envían el 5C de su municipio), el
 -- Hospital de San Marcos (5C propio, solo cuenta en cobertura), el Hospital
 -- de Malacatán (lo consolida el C/S Malacatán), puestos de salud y un CAP que
