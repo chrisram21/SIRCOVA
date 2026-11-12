@@ -4,7 +4,7 @@ import { RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { crearRed, editarRed, obtenerOpcionesRed, obtenerRed, reactivarRed } from '@/api/catalogos.js'
@@ -290,22 +290,19 @@ export default function FormularioRed({ id }) {
                 ? 'Las dosis que se presentan en la cobertura de la red.'
                 : 'La red empieza con las dosis trazadoras de cada vacuna; se ajustan después, al editarla.'}
             </CardDescription>
-            {editando && (
-              <CardAction>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={deshabilitado}
-                  onClick={() => cambiar('dosisIds', porDefecto)}
-                >
-                  <RotateCcw />
-                  Restablecer trazadoras por defecto
-                </Button>
-              </CardAction>
-            )}
           </CardHeader>
           {editando && (
             <CardContent className="flex flex-col gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="self-start"
+                disabled={deshabilitado}
+                onClick={() => cambiar('dosisIds', porDefecto)}
+              >
+                <RotateCcw />
+                Restablecer trazadoras por defecto
+              </Button>
               <fieldset aria-label="Trazadoras" aria-describedby={errorTrazadoras ? 'trazadoras-error' : undefined}>
                 <div className="flex flex-col divide-y">
                   {gruposDeTrazadoras(opciones?.vacunas ?? [], red?.trazadoras ?? []).map((grupo, i) => (
