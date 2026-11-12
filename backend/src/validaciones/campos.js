@@ -2,7 +2,7 @@
 // Hay una copia con las mismas reglas en frontend/src/validaciones/campos.js: un cambio va en las dos.
 
 export const LARGOS = {
-  nombres: 100, apellidos: 100, cargo: 100, correo: 150, nombreUsuario: 50, nombreDistrito: 120,
+  nombres: 100, apellidos: 100, cargo: 100, correo: 150, nombreUsuario: 50, nombreDistrito: 120, nombreRed: 120,
   nombreEstablecimiento: 150, direccion: 255, nombreContacto: 150, codigoVacuna: 20, nombreVacuna: 120,
   descripcionVacuna: 255, nombreDosis: 60, fuentePoblacion: 150, codigoDimension: 30, codigoValorDimension: 30,
   nombreDimension: 60, descripcionDimension: 255, etiquetaValorDimension: 60,
@@ -30,6 +30,9 @@ export const MENSAJES = {
   nombreDistritoObligatorio: 'El nombre del distrito es obligatorio.',
   nombreDistrito: 'El nombre del distrito solo puede tener letras, números, espacios y los signos . - ( ).',
   nombreDistritoLargo: 'El nombre del distrito debe tener entre 3 y 120 caracteres.',
+  nombreRedObligatorio: 'El nombre de la red es obligatorio.',
+  nombreRed: 'El nombre de la red solo puede tener letras, números, espacios y los signos . - ( ).',
+  nombreRedLargo: 'El nombre de la red debe tener entre 3 y 120 caracteres.',
   nombreEstablecimientoObligatorio: 'El nombre del establecimiento es obligatorio.',
   nombreEstablecimiento:
     "El nombre del establecimiento solo puede tener letras, números, espacios y los signos . , - ( ) / '.",
@@ -176,6 +179,15 @@ export function validarNombreDistrito(valor) {
   if (texto === '') return { error: MENSAJES.nombreDistritoObligatorio };
   if (texto === null || !NOMBRE_DISTRITO.test(texto)) return { error: MENSAJES.nombreDistrito };
   if (texto.length < 3 || texto.length > LARGOS.nombreDistrito) return { error: MENSAJES.nombreDistritoLargo };
+  return { valor: texto };
+}
+
+// Mismos caracteres que el nombre del distrito (p. ej. Red No. 1).
+export function validarNombreRed(valor) {
+  const texto = limpiar(valor);
+  if (texto === '') return { error: MENSAJES.nombreRedObligatorio };
+  if (texto === null || !NOMBRE_DISTRITO.test(texto)) return { error: MENSAJES.nombreRed };
+  if (texto.length < 3 || texto.length > LARGOS.nombreRed) return { error: MENSAJES.nombreRedLargo };
   return { valor: texto };
 }
 

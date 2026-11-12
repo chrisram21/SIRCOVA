@@ -1079,6 +1079,214 @@ paths:
                 error: { codigo: MUNICIPIO_INVALIDO, mensaje: El municipio no existe, está inactivo o no es del departamento de su DDRISS. }
 
 
+  /redes:
+    get:
+      tags: [Catálogos]
+      summary: Listar las redes de municipios del ámbito del usuario
+      description: |
+        Las redes de la DDRISS del usuario, activas e inactivas salvo que se filtre por `activo`, ordenadas por
+        nombre. Sin paginar. La Autoridad nacional (sin DDRISS) ve las de todo el país, o las de `ddrissId`; a los
+        demás roles `ddrissId` les responde 400. Una red inactiva no tiene municipios.
+        Un parámetro inválido, desconocido o repetido responde 400 `ENTRADA_INVALIDA`.
+      x-permiso: RED_CONSULTAR
+      parameters:
+        - name: activo
+          in: query
+          schema: { type: boolean }
+        - name: ddrissId
+          in: query
+          description: Solo la Autoridad nacional; opcional
+          schema: { type: integer, minimum: 1, example: 1 }
+      responses:
+        "200":
+          description: Lista de redes
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Red" }
+        "400":
+          description: Un parámetro inválido, desconocido o repetido, o `ddrissId` de un rol que no es la Autoridad nacional
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                activo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: activo debe ser true o false. }
+                ddrissId:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: ddrissId." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+    post:
+      tags: [Catálogos]
+      summary: Registrar una red de municipios en la DDRISS del usuario
+      description: |
+        La DDRISS sale del token. El código lo genera el sistema: `RED_{NN}`, donde `NN` es el mayor consecutivo de
+        las redes de la DDRISS (activas e inactivas) más uno, con al menos dos dígitos; no se puede cambiar después.
+
+        Los municipios deben estar activos, ser del departamento sede de la DDRISS, no ser el `9999` y no estar en
+        otra red. Las trazadoras son las dosis activas con `esTrazadora` de las vacunas activas; se cambian después
+        con `PATCH`. El nombre no puede repetirse en la DDRISS, sin distinguir mayúsculas ni tildes.
+      x-permiso: RED_CREAR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre, municipioIds]
+              additionalProperties: false
+              properties:
+                nombre: { $ref: "#/components/schemas/TextoNombreRed" }
+                municipioIds: { $ref: "#/components/schemas/IdsMunicipiosRed" }
+      responses:
+        "201":
+          description: Red registrada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Red" }
+        "400": { $ref: "#/components/responses/RedEntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "409": { $ref: "#/components/responses/RedConflicto" }
+        "422": { $ref: "#/components/responses/RedInvalida" }
+
+  /redes/opciones:
+    get:
+      tags: [Catálogos]
+      summary: Lo que necesita el formulario de redes (municipios y dosis)
+      description: |
+        Los municipios que puede tener una red de la DDRISS del usuario (activos, del departamento sede, sin el
+        `9999`), por nombre, cada uno con la red activa en la que está o `null`; y las vacunas activas con sus dosis
+        activas, por `ordenInforme` y nombre (las dosis por `orden`). Sin parámetros (uno desconocido responde
+        400). La Autoridad no tiene `RED_EDITAR`.
+      x-permiso: RED_EDITAR
+      responses:
+        "200":
+          description: Las opciones del formulario
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OpcionesRed" }
+        "400":
+          description: Parámetro no permitido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: activo." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+
+  /redes/{id}:
+    get:
+      tags: [Catálogos]
+      summary: Consultar una red de municipios
+      x-permiso: RED_CONSULTAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: La red
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Red" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/RedNoEncontrada" }
+    patch:
+      tags: [Catálogos]
+      summary: Cambiar el nombre, los municipios o las trazadoras de una red activa
+      description: |
+        Cada lista reemplaza por completo la anterior; un campo que no viene no cambia. Las mismas reglas del alta
+        para el nombre y los municipios. Las trazadoras nuevas deben ser dosis activas de vacunas activas; una ya
+        guardada se puede conservar aunque se haya desactivado. Una red activa queda siempre con al menos un
+        municipio y una trazadora. Sin cambios responde 200 sin registrar nada en la bitácora. Una red inactiva
+        se cambia al reactivarla.
+      x-permiso: RED_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              additionalProperties: false
+              properties:
+                nombre: { $ref: "#/components/schemas/TextoNombreRed" }
+                municipioIds: { $ref: "#/components/schemas/IdsMunicipiosRed" }
+                dosisIds: { $ref: "#/components/schemas/IdsDosisRed" }
+      responses:
+        "200":
+          description: Red actualizada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Red" }
+        "400": { $ref: "#/components/responses/RedEntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/RedNoEncontrada" }
+        "409": { $ref: "#/components/responses/RedConflicto" }
+        "422": { $ref: "#/components/responses/RedInvalida" }
+
+  /redes/{id}/desactivar:
+    post:
+      tags: [Catálogos]
+      summary: Desactivar una red de municipios
+      description: |
+        Desactivación lógica: la red no se borra. Sus municipios quedan libres (se quitan de la red) y sus
+        trazadoras se conservan. Una red ya inactiva responde 200 sin registrar nada en la bitácora.
+      x-permiso: RED_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Red desactivada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Red" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/RedNoEncontrada" }
+
+  /redes/{id}/reactivar:
+    post:
+      tags: [Catálogos]
+      summary: Reactivar una red de municipios con sus municipios
+      description: |
+        Una red inactiva no tiene municipios, así que se reactiva con al menos uno, con las mismas reglas del
+        alta. En la misma operación se pueden cambiar el nombre y las trazadoras, como en `PATCH`.
+      x-permiso: RED_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [municipioIds]
+              additionalProperties: false
+              properties:
+                municipioIds: { $ref: "#/components/schemas/IdsMunicipiosRed" }
+                nombre: { $ref: "#/components/schemas/TextoNombreRed" }
+                dosisIds: { $ref: "#/components/schemas/IdsDosisRed" }
+      responses:
+        "200":
+          description: Red reactivada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Red" }
+        "400": { $ref: "#/components/responses/RedEntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/RedNoEncontrada" }
+        "409": { $ref: "#/components/responses/RedConflicto" }
+        "422": { $ref: "#/components/responses/RedInvalida" }
+
   /tipos-establecimiento:
     get:
       tags: [Catálogos]
@@ -5268,6 +5476,64 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
           example:
             error: { codigo: NO_ENCONTRADO, mensaje: El distrito de salud no existe. }
+    RedNoEncontrada:
+      description: La red no existe o es de otra DDRISS
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: NO_ENCONTRADO, mensaje: La red no existe. }
+    RedEntradaInvalida:
+      description: Nombre inválido, lista vacía, repetida o con ids que no son enteros positivos, cuerpo sin campos, o campo no permitido
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            nombre:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: El nombre de la red debe tener entre 3 y 120 caracteres. }
+            sinMunicipios:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: La red debe tener al menos un municipio. }
+            sinTrazadoras:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: La red debe tener al menos una trazadora. }
+            codigo:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: codigo no se puede cambiar. }
+            campo:
+              value:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: activo." }
+    RedConflicto:
+      description: Nombre repetido en la DDRISS, municipio que ya está en otra red, o estado de la red que no lo permite
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            duplicada:
+              value:
+                error: { codigo: RED_DUPLICADA, mensaje: Ya hay una red con ese nombre en la DDRISS. }
+            municipio:
+              value:
+                error: { codigo: MUNICIPIO_EN_OTRA_RED, mensaje: Tacaná ya pertenece a la Red No. 2. }
+            inactiva:
+              value:
+                error: { codigo: RED_INACTIVA, mensaje: La red está inactiva; reactívela con sus municipios. }
+            activa:
+              value:
+                error: { codigo: RED_ACTIVA, mensaje: La red ya está activa. }
+    RedInvalida:
+      description: Un municipio que no existe, inactivo, de otro departamento o el `9999`, o una dosis nueva que no existe o está inactiva
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          examples:
+            municipio:
+              value:
+                error: { codigo: MUNICIPIO_INVALIDO, mensaje: El municipio no existe, está inactivo o no es del departamento de su DDRISS. }
+            dosis:
+              value:
+                error: { codigo: DOSIS_INVALIDA, mensaje: La dosis no existe, está inactiva o es de una vacuna inactiva. }
     EstablecimientoNoEncontrado:
       description: El establecimiento no existe o es de otra DDRISS
       content:
@@ -5920,6 +6186,117 @@ components:
           description: Establecimientos activos ligados al distrito; mientras sea mayor que 0 no se puede desactivar
           example: 0
         activo: { type: boolean, example: true }
+
+    TextoNombreRed:
+      type: string
+      minLength: 3
+      maxLength: 120
+      description: |
+        Nombre de la red: letras (con tildes, ñ y ü), dígitos, espacios y `.`, `-`, `(`, `)`. Se quitan los
+        espacios de los extremos y se reducen los dobles; de 3 a 120 caracteres después de limpiar.
+      example: Red No. 1
+
+    IdsMunicipiosRed:
+      type: array
+      minItems: 1
+      uniqueItems: true
+      items: { type: integer, minimum: 1 }
+      example: [7, 8, 9, 23, 24]
+
+    IdsDosisRed:
+      type: array
+      minItems: 1
+      uniqueItems: true
+      items: { type: integer, minimum: 1 }
+      example: [1, 4, 13]
+
+    Red:
+      type: object
+      required: [id, codigo, nombre, activo, ddriss, municipios, trazadoras]
+      properties:
+        id: { type: integer, example: 1 }
+        codigo: { type: string, description: "Generado por el sistema; no cambia", example: RED_01 }
+        nombre: { type: string, example: Red No. 1 }
+        activo: { type: boolean, example: true }
+        ddriss:
+          type: object
+          required: [id, codigo, nombre]
+          properties:
+            id: { type: integer, example: 1 }
+            codigo: { type: string, example: DDRISS_SM }
+            nombre: { type: string, example: DDRISS San Marcos }
+        municipios:
+          type: array
+          description: Por nombre; vacía si la red está inactiva
+          items:
+            type: object
+            required: [id, codigoIne, nombre]
+            properties:
+              id: { type: integer, example: 7 }
+              codigoIne: { type: string, example: "1207" }
+              nombre: { type: string, example: Tacaná }
+        trazadoras:
+          type: array
+          description: Por `ordenInforme` de la vacuna y `orden` de la dosis
+          items: { $ref: "#/components/schemas/TrazadoraRed" }
+
+    TrazadoraRed:
+      type: object
+      required: [dosisId, codigo, nombre, activa, vacuna]
+      properties:
+        dosisId: { type: integer, example: 4 }
+        codigo: { type: string, example: D3 }
+        nombre: { type: string, example: Tercera dosis }
+        activa: { type: boolean, example: true }
+        vacuna:
+          type: object
+          required: [id, codigo, nombre, activa]
+          properties:
+            id: { type: integer, example: 2 }
+            codigo: { type: string, example: HEXA }
+            nombre: { type: string, example: Hexavalente }
+            activa: { type: boolean, example: true }
+
+    OpcionesRed:
+      type: object
+      required: [municipios, vacunas]
+      properties:
+        municipios:
+          type: array
+          items:
+            type: object
+            required: [id, codigoIne, nombre, red]
+            properties:
+              id: { type: integer, example: 7 }
+              codigoIne: { type: string, example: "1207" }
+              nombre: { type: string, example: Tacaná }
+              red:
+                description: La red activa en la que está el municipio, o `null` si está libre
+                nullable: true
+                type: object
+                required: [id, nombre]
+                properties:
+                  id: { type: integer, example: 1 }
+                  nombre: { type: string, example: Red No. 1 }
+        vacunas:
+          type: array
+          items:
+            type: object
+            required: [id, codigo, nombre, dosis]
+            properties:
+              id: { type: integer, example: 2 }
+              codigo: { type: string, example: HEXA }
+              nombre: { type: string, example: Hexavalente }
+              dosis:
+                type: array
+                items:
+                  type: object
+                  required: [id, codigo, nombre, esTrazadora]
+                  properties:
+                    id: { type: integer, example: 4 }
+                    codigo: { type: string, example: D3 }
+                    nombre: { type: string, example: Tercera dosis }
+                    esTrazadora: { type: boolean, example: true }
 
     TextoNombreEstablecimiento:
       type: string

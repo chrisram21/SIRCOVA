@@ -1,5 +1,6 @@
 // Plataforma web de producción de vacunación — DDRISS San Marcos (MSPAS)
-// Modelo relacional preliminar v0.10 (MySQL 8.0) en formato DBML para dbdiagram.io
+// Modelo relacional preliminar v0.10 (MySQL 8.0) en formato DBML para dbdiagram.io,
+// más las tablas de redes de la v0.12 (SPEC 59)
 // Generado a partir de 01_modelo_relacional_mysql.sql. Las vistas y los datos
 // semilla no se representan en DBML; están en el script SQL.
 // Los grupos de tablas siguen los cuatro grupos de MySQL de la propuesta v2.
@@ -316,6 +317,39 @@ Table "dosis" {
 
   Indexes {
     (vacuna_id, codigo) [unique, name: "uq_dosis_vacuna_codigo"]
+  }
+}
+
+Table "red" {
+  "id" SMALLINT [pk, not null, increment]
+  "ddriss_id" TINYINT [not null]
+  "codigo" VARCHAR(20) [not null, note: 'RED_{NN}, lo genera el backend por DDRISS']
+  "nombre" VARCHAR(120) [not null, note: 'P. ej. Red No. 1']
+  "activo" BOOLEAN [not null, default: TRUE]
+
+  Indexes {
+    (ddriss_id, codigo) [unique, name: "uq_red_ddriss_codigo"]
+    (ddriss_id, nombre) [unique, name: "uq_red_ddriss_nombre"]
+  }
+}
+
+Table "red_municipio" {
+  "red_id" SMALLINT [not null]
+  "municipio_id" SMALLINT [not null]
+
+  Indexes {
+    (red_id, municipio_id) [pk]
+    municipio_id [unique, name: "uq_red_municipio"]
+  }
+  Note: 'Un municipio, una sola red. Una red inactiva no tiene filas aquí.'
+}
+
+Table "red_trazadora" {
+  "red_id" SMALLINT [not null]
+  "dosis_id" SMALLINT [not null]
+
+  Indexes {
+    (red_id, dosis_id) [pk]
   }
 }
 
@@ -674,6 +708,16 @@ Ref "fk_sesion_usuario":"usuario"."id" < "sesion"."usuario_id"
 
 Ref "fk_dosis_vacuna":"vacuna"."id" < "dosis"."vacuna_id"
 
+Ref "fk_red_ddriss":"ddriss"."id" < "red"."ddriss_id"
+
+Ref "fk_redmun_red":"red"."id" < "red_municipio"."red_id"
+
+Ref "fk_redmun_municipio":"municipio"."id" < "red_municipio"."municipio_id"
+
+Ref "fk_redtraz_red":"red"."id" < "red_trazadora"."red_id"
+
+Ref "fk_redtraz_dosis":"dosis"."id" < "red_trazadora"."dosis_id"
+
 Ref "fk_pobobj_municipio":"municipio"."id" < "poblacion_objetivo"."municipio_id"
 
 Ref "fk_pobobj_clasif":"clasificacion_poblacion"."id" < "poblacion_objetivo"."clasificacion_poblacion_id"
@@ -802,6 +846,9 @@ TableGroup "Seguridad y organizacion" [color: #6C8EBF] {
 TableGroup "Catalogos sanitarios" [color: #82B366] {
   "vacuna"
   "dosis"
+  "red"
+  "red_municipio"
+  "red_trazadora"
   "clasificacion_poblacion"
   "poblacion_objetivo"
   "periodo"

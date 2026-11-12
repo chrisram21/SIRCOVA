@@ -1,7 +1,13 @@
 -- =============================================================================
 --  Plataforma web de producción de vacunación — DDRISS San Marcos (MSPAS)
 --  Modelo relacional preliminar (MySQL 8.0, InnoDB, utf8mb4)
---  Versión: 0.11   Fecha: 2026-11-03
+--  Versión: 0.12   Fecha: 2026-11-11
+--  Cambios v0.12 (redes de municipios, SPEC 59, 11/11/2026):
+--    Nuevas tablas red, red_municipio y red_trazadora: una red agrupa
+--    municipios de una DDRISS (cada municipio en una sola red, UNIQUE en
+--    red_municipio.municipio_id) y tiene sus dosis trazadoras. Una red
+--    inactiva no tiene municipios. Las bases que ya existían las agregan con
+--    12_redes_mysql.sql.
 --  Cambios v0.11 (motor de indicadores por DDRISS, SPEC 44, 03/11/2026):
 --    corrida_calculo.ddriss_id: cada corrida del motor es de una DDRISS y la
 --    vigente es una por (DDRISS, año, mes_hasta); la fila departamental de
@@ -330,6 +336,40 @@ CREATE TABLE dosis (
   PRIMARY KEY (id),
   UNIQUE KEY uq_dosis_vacuna_codigo (vacuna_id, codigo),
   CONSTRAINT fk_dosis_vacuna FOREIGN KEY (vacuna_id) REFERENCES vacuna (id)
+) ENGINE=InnoDB;
+
+-- Redes de municipios de una DDRISS (agrupan municipios; no reemplazan a los
+-- distritos). El backend valida que sus municipios sean activos, del
+-- departamento sede de la DDRISS y no el 9999.
+CREATE TABLE red (
+  id              SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  ddriss_id       TINYINT UNSIGNED  NOT NULL,
+  codigo          VARCHAR(20)       NOT NULL COMMENT 'RED_{NN}, lo genera el backend por DDRISS',
+  nombre          VARCHAR(120)      NOT NULL COMMENT 'P. ej. Red No. 1',
+  activo          BOOLEAN           NOT NULL DEFAULT TRUE,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_red_ddriss_codigo (ddriss_id, codigo),
+  UNIQUE KEY uq_red_ddriss_nombre (ddriss_id, nombre),
+  CONSTRAINT fk_red_ddriss FOREIGN KEY (ddriss_id) REFERENCES ddriss (id)
+) ENGINE=InnoDB;
+
+-- Un municipio, una sola red. Una red inactiva no tiene filas aquí.
+CREATE TABLE red_municipio (
+  red_id          SMALLINT UNSIGNED NOT NULL,
+  municipio_id    SMALLINT UNSIGNED NOT NULL,
+  PRIMARY KEY (red_id, municipio_id),
+  UNIQUE KEY uq_red_municipio (municipio_id),
+  CONSTRAINT fk_redmun_red       FOREIGN KEY (red_id)       REFERENCES red (id),
+  CONSTRAINT fk_redmun_municipio FOREIGN KEY (municipio_id) REFERENCES municipio (id)
+) ENGINE=InnoDB;
+
+-- Dosis trazadoras de la red (columnas de su tabla de cobertura).
+CREATE TABLE red_trazadora (
+  red_id          SMALLINT UNSIGNED NOT NULL,
+  dosis_id        SMALLINT UNSIGNED NOT NULL,
+  PRIMARY KEY (red_id, dosis_id),
+  CONSTRAINT fk_redtraz_red   FOREIGN KEY (red_id)   REFERENCES red (id),
+  CONSTRAINT fk_redtraz_dosis FOREIGN KEY (dosis_id) REFERENCES dosis (id)
 ) ENGINE=InnoDB;
 
 CREATE TABLE clasificacion_poblacion (

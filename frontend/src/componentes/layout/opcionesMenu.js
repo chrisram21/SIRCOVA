@@ -16,6 +16,7 @@ import {
   Layers,
   ListChecks,
   MapIcon,
+  Network,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -27,6 +28,9 @@ import PaginaInicio from '@/paginas/inicio/PaginaInicio.jsx'
 
 // Cada pantalla se descarga al entrar en ella (Layout la espera con Suspense); Inicio va incluida, porque es la primera.
 const PaginaTerritorio = lazy(() => import('@/paginas/configuracion/PaginaTerritorio.jsx'))
+const PaginaRedes = lazy(() => import('@/paginas/configuracion/PaginaRedes.jsx'))
+const PaginaRegistrarRed = lazy(() => import('@/paginas/configuracion/PaginaRegistrarRed.jsx'))
+const PaginaEditarRed = lazy(() => import('@/paginas/configuracion/PaginaEditarRed.jsx'))
 const PaginaBandejaRevision = lazy(() => import('@/paginas/revision/PaginaBandejaRevision.jsx'))
 const PaginaRevisarReporte = lazy(() => import('@/paginas/revision/PaginaRevisarReporte.jsx'))
 const PaginaEstablecimientos = lazy(() => import('@/paginas/configuracion/PaginaEstablecimientos.jsx'))
@@ -188,6 +192,29 @@ const opcionesMenu = [
         permisos: ['CONFIGURACION_CONSULTAR', 'DDRISS_CONSULTAR', 'MUNICIPIO_CONSULTAR', 'DISTRITO_CONSULTAR'],
         icono: LandPlot,
         pagina: PaginaTerritorio,
+      },
+      {
+        titulo: 'Redes',
+        descripcion: 'Las redes de municipios de la DDRISS y sus vacunas trazadoras.',
+        ruta: '/administracion/redes',
+        // RED_EDITAR deja fuera al Revisor y a la Autoridad, que solo consultan las redes en Indicadores.
+        permisos: ['CONFIGURACION_CONSULTAR', 'RED_CONSULTAR', 'RED_EDITAR'],
+        icono: Network,
+        pagina: PaginaRedes,
+        subrutas: [
+          {
+            titulo: 'Nueva red',
+            ruta: '/administracion/redes/nueva',
+            permiso: 'RED_CREAR',
+            pagina: PaginaRegistrarRed,
+          },
+          {
+            titulo: 'Editar red',
+            ruta: '/administracion/redes/:id/editar',
+            permiso: 'RED_EDITAR',
+            pagina: PaginaEditarRed,
+          },
+        ],
       },
       {
         titulo: 'Establecimientos',

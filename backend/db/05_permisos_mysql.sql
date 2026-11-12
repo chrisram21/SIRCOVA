@@ -179,6 +179,12 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
 INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('MAPA_CONSULTAR',            'INDICADORES',             'Ver el mapa territorial de los municipios de su ámbito');
 
+-- SPEC 59: redes de municipios
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('RED_CONSULTAR',             'CONFIGURACION_CATALOGOS', 'Consultar las redes de municipios de su ámbito'),
+ ('RED_CREAR',                 'CONFIGURACION_CATALOGOS', 'Registrar redes de municipios en su DDRISS'),
+ ('RED_EDITAR',                'CONFIGURACION_CATALOGOS', 'Editar, desactivar y reactivar redes de municipios de su DDRISS');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -377,6 +383,17 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo IN ('EPIDEMIOLOGIA', 'AUTORIDAD', 'REVISOR', 'ADMINISTRADOR')
    AND p.codigo = 'MAPA_CONSULTAR';
+
+-- SPEC 59: el Administrador y Epidemiología gestionan las redes; el Revisor y la Autoridad las consultan
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo IN ('ADMINISTRADOR', 'EPIDEMIOLOGIA', 'REVISOR', 'AUTORIDAD')
+   AND p.codigo = 'RED_CONSULTAR';
+
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo IN ('ADMINISTRADOR', 'EPIDEMIOLOGIA')
+   AND p.codigo IN ('RED_CREAR', 'RED_EDITAR');
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

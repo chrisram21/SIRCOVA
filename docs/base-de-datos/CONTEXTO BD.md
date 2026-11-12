@@ -2,7 +2,7 @@
 
 > **Para qué sirve este documento.** Da contexto preciso sobre la base de datos del proyecto a otros agentes de IA y a los integrantes del equipo. Resume qué se trabajó, cómo está organizada la persistencia (MySQL + MongoDB) y qué es y para qué sirve cada tabla y cada colección.
 >
-> **Estado:** modelo preliminar **v0.11** (3 de noviembre de 2026): v0.5 (preparado para varias DDRISS), los bloques A a D de la v0.6 (población por grupo de edad, dosis que cuentan para cobertura, secciones del formulario y avance contra la meta del mes) la v0.7 (Excel del 5C y semillas del Registro Único de Vacunación), la v0.8 (Hospital de San Marcos y vacuna Polio), la v0.9 (CUI del empleado como huella HMAC), la v0.10 (sesiones en el servidor) y la v0.11 (corridas de indicadores por DDRISS). Script de MongoDB **v0.8** (29 de octubre de 2026): las vacunas que entran en un reporte nuevo (`incluir_por_defecto`); la v0.7 (23 de octubre de 2026) trajo los formularios de captura por DDRISS. El modelo se sigue refinando por sprint.
+> **Estado:** modelo preliminar **v0.12** (11 de noviembre de 2026): v0.5 (preparado para varias DDRISS), los bloques A a D de la v0.6 (población por grupo de edad, dosis que cuentan para cobertura, secciones del formulario y avance contra la meta del mes) la v0.7 (Excel del 5C y semillas del Registro Único de Vacunación), la v0.8 (Hospital de San Marcos y vacuna Polio), la v0.9 (CUI del empleado como huella HMAC), la v0.10 (sesiones en el servidor), la v0.11 (corridas de indicadores por DDRISS) y la v0.12 (redes de municipios). Script de MongoDB **v0.8** (29 de octubre de 2026): las vacunas que entran en un reporte nuevo (`incluir_por_defecto`); la v0.7 (23 de octubre de 2026) trajo los formularios de captura por DDRISS. El modelo se sigue refinando por sprint.
 >
 > **Fuente de verdad:** si este resumen y los scripts difieren, mandan los scripts.
 > - `01_modelo_relacional_mysql.sql`: DDL de MySQL 8.0.
@@ -45,6 +45,7 @@
 | **v0.9** | 2026-10-22 | CUI del empleado (SPEC 11, asesoría del 2026-10-21). `empleado.codigo_empleado` pasa a `empleado.cui_hmac` `CHAR(64)` con el índice único `uq_empleado_cui`: la huella HMAC-SHA256 del CUI del DPI, para no registrar dos veces a la misma persona. El código de empleado no servía para eso: hay personas con dos códigos y el personal contratado usa otros. Se guarda la huella y no el CUI, con una clave secreta (`CUI_HMAC_CLAVE`), porque el CUI tiene pocas combinaciones y un SHA-256 simple se podría revertir. La columna es NULL en la base y la API la exige al crear. Las bases que ya existían se migran con `07_cui_empleado_mysql.sql`, que vacía los códigos anteriores. |
 | **MongoDB v0.8** | 2026-10-29 | Solo cambia el script de MongoDB; el modelo MySQL sigue en v0.10 (SPEC 31). `esquemas_captura` agrega `incluir_por_defecto` (bool, opcional): marcada, la vacuna entra en cada reporte nuevo del mes que cubre la versión; sin marcar, el establecimiento la agrega si la aplica, y solo esas se pueden quitar del reporte. Si falta (documentos anteriores), el backend la toma como `true`: no hay migración y no se tocan versiones publicadas. Las semillas no cambian. |
 | **MongoDB v0.7** | 2026-10-23 | Solo cambia el script de MongoDB; el modelo MySQL sigue en v0.9. **Decisión del equipo:** cada DDRISS puede tener su propio formulario de captura. `esquemas_captura` agrega `territorio` (el mismo subesquema de reglas e indicadores) y `basado_en` (versión nacional de la que se copió un formulario de DDRISS). El índice `uq_vigente_por_vacuna` se reemplaza por `uq_esquema_vigente_territorio` (una VIGENTE por vacuna y territorio) e `ix_vigencia` incluye `territorio.ddriss_codigo`; `uq_vacuna_version` no cambia, así que `reporte_vacuna.esquema_version` sigue sin ser ambiguo. Las dimensiones de un esquema solo pueden venir de `catalogo_dimensiones`. Las semillas del 02 son NACIONAL; en el 04, el borrador Hexavalente v3 pasa a ser el ejemplo de formulario de `DDRISS_SM`. |
+| **v0.12** | 2026-11-11 | Redes de municipios (SPEC 59, retroalimentación de la DDRISS del 2026-11-10). Nuevas tablas `red` (por DDRISS, código `RED_{NN}` que genera el backend), `red_municipio` (un municipio en una sola red, índice único `uq_red_municipio`) y `red_trazadora` (dosis trazadoras de la red). Una red agrupa municipios; no reemplaza a los distritos. Las bases que ya existían las agregan con `12_redes_mysql.sql`, que también crea la Red No. 1 de `DDRISS_SM`. |
 | **v0.11** | 2026-11-03 | Motor de indicadores por DDRISS (SPEC 44). `corrida_calculo.ddriss_id` (NOT NULL, llave a `ddriss`): cada corrida es de una DDRISS y la vigente es una por (DDRISS, año, `mes_hasta`), con el índice `ix_corrida_vigente (ddriss_id, anio, mes_hasta, vigente)`. Así la fila departamental de `resultado_indicador` (`municipio_id` NULL) es la de la DDRISS de su corrida. Las bases que ya existían la agregan con `10_corrida_ddriss_mysql.sql`, que pasa las corridas anteriores a `DDRISS_SM`. |
 | **v0.10** | 2026-10-28 | Sesiones en el servidor (SPEC 27, asesoría del 2026-10-28). Nueva tabla `sesion`: cada inicio de sesión crea una fila y el JWT lleva su id (`sid`), así que la sesión se puede cerrar antes de que venza el token. Una sola sesión abierta por usuario, garantizada por la columna generada `usuario_abierta` con el índice único `uq_sesion_una_abierta`: un inicio de sesión nuevo cierra el anterior. Guarda el SHA-256 del refresh token de la cookie, nunca el token. Las bases que ya existían la agregan con `08_sesion_mysql.sql`. |
 
@@ -52,7 +53,7 @@ Entregables generados en el hilo, todos en `/mnt/project-files/diseno-bd/`:
 
 | Archivo | Contenido |
 |---|---|
-| `01_modelo_relacional_mysql.sql` | DDL de MySQL: 33 tablas (desde la v0.10), 4 vistas y datos semilla mínimos |
+| `01_modelo_relacional_mysql.sql` | DDL de MySQL: 36 tablas (desde la v0.12), 4 vistas y datos semilla mínimos |
 | `02_colecciones_mongodb.js` | 4 colecciones con validadores `$jsonSchema`, índices y documentos de ejemplo |
 | `03_documento_diseno_bd.md` | Documento de diseño con justificación, decisiones, supuestos y preguntas abiertas |
 | `04_modelo_relacional.dbml` | Modelo MySQL para dbdiagram.io, agrupado en los 4 grupos de la propuesta v2 |
@@ -91,7 +92,7 @@ Entregables generados en el hilo, todos en `/mnt/project-files/diseno-bd/`:
 
 ---
 
-## 4. MySQL: las 33 tablas
+## 4. MySQL: las 36 tablas
 
 Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se agrupan según los cuatro grupos de MySQL de la propuesta v2. "→" indica una llave foránea.
 
@@ -154,7 +155,7 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 - **Dirección y contacto (v0.4):** `direccion` (dirección física; el municipio va aparte), `telefono`, `correo`, `nombre_contacto` (persona de contacto en texto libre).
 - Auditoría: `creado_en`, `actualizado_en`.
 
-### 4.2 Catálogos sanitarios (6 tablas)
+### 4.2 Catálogos sanitarios (9 tablas)
 
 **`vacuna`**: catálogo de vacunas, la *identidad* de cada una. Cómo se captura cada vacuna está en MongoDB.
 - Columnas: `id`, `codigo` (único; llave compartida con MongoDB, por ejemplo `HEXA`), `nombre`, `descripcion`, `orden_informe`, `activa`, `creado_en`.
@@ -164,6 +165,19 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 - Columnas: `id`, `vacuna_id` → vacuna, `codigo` (D1, D2, D3, R1, UNICA…), `nombre`, `orden`, `completa_esquema` (v0.6: la dosis que cierra el esquema; con ella la persona cuenta para la cobertura), `es_trazadora` (v0.6: dosis con "porcentaje del mes" en el 5C; puede haber varias por vacuna), `activa`.
 - Las marcas de las semillas son ejemplos hasta que la DDRISS entregue el número de dosis de cada vacuna.
 - Único (`vacuna_id`, `codigo`).
+
+**`red`** (nueva en v0.12): redes de municipios de una DDRISS, como las presenta la DDRISS (por ejemplo, Red No. 1: Ixchiguán, Tajumulco, Sibinal, Tacaná y San José Ojetenam). Agrupa municipios; no reemplaza a los distritos de salud.
+- Columnas: `id`, `ddriss_id` → ddriss, `codigo` (`RED_{NN}`, lo genera el backend con el siguiente de la DDRISS contando las inactivas; no se cambia), `nombre`, `activo`.
+- Únicos (`ddriss_id`, `codigo`) y (`ddriss_id`, `nombre`).
+- Desactivar una red borra sus filas de `red_municipio` (libera sus municipios) y conserva sus trazadoras; reactivarla exige al menos un municipio libre.
+
+**`red_municipio`** (nueva en v0.12): municipios de cada red.
+- Columnas: `red_id` → red, `municipio_id` → municipio. Llave primaria (`red_id`, `municipio_id`).
+- Único `municipio_id`: un municipio pertenece a una sola red. Una red inactiva no tiene filas.
+- El backend valida que los municipios sean activos, del departamento sede de la DDRISS de la red y no el `9999`.
+
+**`red_trazadora`** (nueva en v0.12): dosis trazadoras de cada red (columnas de su tabla de cobertura). Al crear una red se llenan con las dosis activas `es_trazadora` de vacunas activas, y después se ajustan.
+- Columnas: `red_id` → red, `dosis_id` → dosis. Llave primaria (`red_id`, `dosis_id`).
 
 **`clasificacion_poblacion`**: tipos de población que sirven de **denominador** de la cobertura.
 - Columnas: `id`, `codigo` (único), `descripcion`.
@@ -412,6 +426,7 @@ No hay llaves foráneas entre motores. Los vínculos son estos:
 - No editar ni borrar versiones VIGENTE o HISTORICO en MongoDB; crear una versión nueva.
 - Un esquema de captura solo usa dimensiones y valores activos de `catalogo_dimensiones`, sea nacional o de una DDRISS; lo valida el backend.
 - No borrar ni renombrar códigos de catálogos ni valores de dimensiones; desactivarlos.
+- Un municipio está a lo sumo en una red (`uq_red_municipio`), y solo en una de la DDRISS de su departamento; una red activa tiene al menos un municipio y una trazadora (lo valida el backend).
 - Los cambios de estado de un reporte solo se hacen si existen en `transicion_estado` para el rol del usuario.
 - Las acciones auditables apuntan a `usuario`. Los datos de la persona se consultan en `empleado`.
 - Un usuario tiene a lo sumo una fila abierta en `sesion`; las fechas de la sesión se escriben y comparan con `NOW()` de MySQL. El refresh token nunca se guarda en claro.
