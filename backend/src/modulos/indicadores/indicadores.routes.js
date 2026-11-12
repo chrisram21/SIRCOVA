@@ -31,5 +31,17 @@ router.get(
   requierePermiso('INDICADOR_CONSULTAR'),
   indicadoresController.mesesCalculados,
 );
+router.get(
+  '/indicadores/produccion/opciones',
+  autenticar,
+  requierePermiso('INDICADOR_CONSULTAR'),
+  indicadoresController.opcionesDeProduccion,
+);
+router.get(
+  '/indicadores/produccion',
+  autenticar,
+  requierePermiso('INDICADOR_CONSULTAR'),
+  indicadoresController.produccionPorFila,
+);
 
 export default router;

@@ -3,7 +3,8 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { listarDdriss, listarDistritos, listarPeriodos, listarRedes } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
 import {
-  calcularIndicadores, listarCorridas, listarResultados, obtenerMesesCalculados, obtenerSerie,
+  calcularIndicadores, listarCorridas, listarResultados, obtenerMesesCalculados, obtenerOpcionesProduccion,
+  obtenerProduccion, obtenerSerie,
 } from '@/api/indicadores.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { RETRASO_MS } from '@/componentes/PantallaCargaSesion.jsx'
@@ -20,6 +21,8 @@ vi.mock('@/api/indicadores.js', () => ({
   listarResultados: vi.fn(),
   obtenerSerie: vi.fn(),
   obtenerMesesCalculados: vi.fn(),
+  obtenerOpcionesProduccion: vi.fn(),
+  obtenerProduccion: vi.fn(),
 }))
 
 // Hoy fijo: el mes por defecto es octubre de 2026.
@@ -190,6 +193,14 @@ test('mes por defecto, filtros de la URL e indicador elegido', () => {
     distrito: undefined, municipios: [], comparar: undefined, anios: undefined, meses: undefined,
   })
   expect(filtrosDeUrl(new URLSearchParams('red=3'), HOY).red).toBe(3)
+  // SPEC 61: los filtros de «Producción» se leen para conservarlos; vacuna=todas no es un código.
+  const deProduccion = new URLSearchParams('agrupar=establecimiento&periodo=mes&establecimientos=31&vacuna=todas')
+  expect(filtrosDeUrl(deProduccion, HOY)).toMatchObject({
+    agrupar: 'establecimiento', periodo: 'mes', establecimientos: '31', vacuna: undefined,
+  })
+  expect(filtrosDeUrl(new URLSearchParams('agrupar=x&periodo=y'), HOY)).toMatchObject({
+    agrupar: undefined, periodo: undefined,
+  })
   expect(filtrosDeUrl(new URLSearchParams('red=x'), HOY).red).toBeUndefined()
   expect(filtrosDeUrl(new URLSearchParams('vista=brecha'), HOY).vista).toBe('brecha')
   expect(filtrosDeUrl(new URLSearchParams('vista=mapa'), HOY).vista).toBeUndefined()
@@ -261,11 +272,13 @@ test('sin corrida vigente lo dice y conserva el historial', async () => {
   expect(historial.getByText('Automático')).toBeTruthy()
 })
 
-test('las cinco pestañas van en orden; la pestaña va en la URL y el año y el mes cambian lo que se pide', async () => {
+test('las seis pestañas van en orden; la pestaña va en la URL y el año y el mes cambian lo pedido', async () => {
   const router = await montar()
   await screen.findByText('Total de la DDRISS')
   const pestanas = within(screen.getByRole('tablist', { name: 'Tipo de indicador' })).getAllByRole('tab')
-  expect(pestanas.map((t) => t.textContent)).toEqual(['Avance', 'Brecha', 'Cobertura', 'Deserción', 'Proyección'])
+  expect(pestanas.map((t) => t.textContent)).toEqual([
+    'Avance', 'Brecha', 'Cobertura', 'Deserción', 'Proyección', 'Producción',
+  ])
 
   pestana('Cobertura')
   await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&vista=cobertura'))
@@ -1107,5 +1120,226 @@ describe('pestaña «Redes»', () => {
     expect(screen.queryByRole('tab', { name: 'Redes' })).toBeNull()
     expect(titulo()).toBe('Avance de Hexavalente')
     expect(listarRedes).not.toHaveBeenCalled()
+  })
+})
+
+describe('pestaña «Producción» (SPEC 61)', () => {
+  const establecimiento = (id, codigo, nombre, municipioId, fueraDelConsolidado) => ({
+    id, codigo, nombre, municipioId, fueraDelConsolidado, activo: true,
+  })
+  const OPCIONES = {
+    meses: [
+      { anio: 2026, mes: 9, estado: 'EN_CIERRE' },
+      { anio: 2026, mes: 8, estado: 'CERRADO' },
+      { anio: 2025, mes: 12, estado: 'CERRADO' },
+    ],
+    vacunas: [
+      {
+        codigo: 'HEXA', nombre: 'Hexavalente', activa: true,
+        dosis: [{ id: 7, codigo: 'D1', activa: true }, { id: 8, codigo: 'D2', activa: true }],
+      },
+      { codigo: 'BCG', nombre: 'BCG', activa: false, dosis: [{ id: 1, codigo: 'UNICA', activa: true }] },
+    ],
+    distritos: [{ id: 3, nombre: 'Distrito Tajumulco', municipioId: 9 }],
+    municipios: [SAN_MARCOS, COMITANCILLO, TAJUMULCO],
+    establecimientos: [
+      establecimiento(2, 'CS-1209', 'Centro de Salud Tajumulco', 9, false),
+      establecimiento(31, 'HOSP-SM', 'Hospital de San Marcos', 1, true),
+    ],
+  }
+  const cantidades = (propia, otros) => ({
+    porDosis: [], dosisPoblacionPropia: propia, dosisOtrosMunicipios: otros, dosisTotal: propia + otros,
+  })
+  const PRODUCCION = {
+    anio: 2026,
+    mes: 9,
+    acumulado: true,
+    agrupar: 'municipio',
+    vacuna: null,
+    filas: [
+      { municipio: SAN_MARCOS, establecimiento: null, fueraDelConsolidado: false, ...cantidades(1200, 34) },
+      { municipio: TAJUMULCO, establecimiento: null, fueraDelConsolidado: false, ...cantidades(0, 0) },
+    ],
+    total: cantidades(1200, 34),
+    dosisFueraDelConsolidado: 0,
+    preliminar: false,
+    mesesSinCerrar: [],
+  }
+  const POR_ESTABLECIMIENTO = {
+    ...PRODUCCION,
+    agrupar: 'establecimiento',
+    filas: [
+      {
+        municipio: SAN_MARCOS, establecimiento: { id: 31, codigo: 'HOSP-SM', nombre: 'Hospital de San Marcos' },
+        fueraDelConsolidado: true, ...cantidades(900, 13),
+      },
+      {
+        municipio: TAJUMULCO, establecimiento: { id: 2, codigo: 'CS-1209', nombre: 'Centro de Salud Tajumulco' },
+        fueraDelConsolidado: false, ...cantidades(300, 4),
+      },
+    ],
+    total: cantidades(300, 4),
+    dosisFueraDelConsolidado: 913,
+    preliminar: true,
+    mesesSinCerrar: [{ anio: 2026, mes: 9, estado: 'EN_CIERRE' }],
+  }
+  const PEDIDO = {
+    anio: 2026, mes: 9, acumulado: true, agrupar: 'municipio', vacuna: undefined, distritoId: undefined,
+    redId: undefined, municipioIds: [], establecimientoIds: [], ddrissId: undefined,
+  }
+  const URL_PRODUCCION = '/indicadores?vista=produccion'
+  const elegir = (nombre, valor) =>
+    fireEvent.change(document.querySelector(`select[name="${nombre}"]`), { target: { value: valor } })
+  const pedidoFinal = (cambios) =>
+    waitFor(() => expect(obtenerProduccion).toHaveBeenLastCalledWith({ ...PEDIDO, ...cambios }))
+  const elegirEstablecimiento = (nombre) => {
+    fireEvent.click(screen.getByRole('combobox', { name: 'Establecimiento' }))
+    fireEvent.click(within(screen.getByRole('listbox')).getByText(nombre))
+  }
+
+  beforeEach(() => {
+    obtenerOpcionesProduccion.mockResolvedValue(OPCIONES)
+    obtenerProduccion.mockResolvedValue(PRODUCCION)
+  })
+
+  test('no depende de la corrida: pide opciones y el mes más reciente, con tabla y gráfica', async () => {
+    await montar({ url: URL_PRODUCCION })
+
+    expect(await screen.findByText('Dosis por municipio de aplicación')).toBeTruthy()
+    expect(obtenerOpcionesProduccion).toHaveBeenCalledWith({ ddrissId: undefined })
+    // Octubre (el mes anterior) no está habilitado: abre en septiembre, el más reciente.
+    expect(obtenerProduccion).toHaveBeenCalledWith(PEDIDO)
+    expect(listarResultados).not.toHaveBeenCalled()
+    expect(titulo()).toBe('Producción de todas las vacunas')
+    expect(screen.getByText(/sin importar la residencia de la persona\. Incluye Migrantes\./)).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Producción' }).getAttribute('aria-selected')).toBe('true')
+    expect(tabla().getAllByRole('columnheader').map((c) => c.textContent)).toEqual([
+      'Municipio de aplicación', 'Población propia', 'Otros municipios', 'Total',
+    ])
+    expect(celdas(filaDe('San Marcos'))).toEqual(['San Marcos', '1,200', '34', '1,234'])
+    expect(celdas(filaDe('Tajumulco'))).toEqual(['Tajumulco', '0', '0', '0'])
+    expect(document.querySelector('section').textContent).not.toContain('%')
+    expect(screen.queryByRole('button', { name: /Historial de corridas/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Calcular indicadores' })).toBeNull()
+    expect(document.querySelector('[data-marca="preliminar"]')).toBeNull()
+  })
+
+  test('sin corrida, las pestañas se ven y llevan a «Producción»', async () => {
+    listarResultados.mockResolvedValue({ corrida: null, resultados: [] })
+    const router = await montar()
+
+    expect(await screen.findByText('Este mes todavía no tiene indicadores calculados.')).toBeTruthy()
+    pestana('Producción')
+    await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&vista=produccion'))
+    expect(await screen.findByText('Dosis por municipio de aplicación')).toBeTruthy()
+  })
+
+  test('vacuna, periodo, agrupar y establecimiento van en la URL y en lo que se pide', async () => {
+    const router = await montar({ url: URL_PRODUCCION })
+    await screen.findByText('Dosis por municipio de aplicación')
+
+    elegir('vacuna', 'HEXA')
+    await pedidoFinal({ vacuna: 'HEXA' })
+    expect(router.state.location.search).toContain('vacuna=HEXA')
+    expect(titulo()).toBe('Producción de Hexavalente')
+
+    elegir('vacuna', 'todas')
+    await pedidoFinal({})
+    expect(router.state.location.search).toContain('vacuna=todas')
+
+    elegir('periodo', 'mes')
+    await pedidoFinal({ acumulado: false })
+    expect(router.state.location.search).toContain('periodo=mes')
+
+    obtenerProduccion.mockResolvedValue(POR_ESTABLECIMIENTO)
+    elegir('agrupar', 'establecimiento')
+    await pedidoFinal({ acumulado: false, agrupar: 'establecimiento' })
+    expect(router.state.location.search).toContain('agrupar=establecimiento')
+
+    await screen.findByText('Dosis por establecimiento')
+    elegirEstablecimiento('Centro de Salud Tajumulco')
+    await pedidoFinal({ acumulado: false, agrupar: 'establecimiento', establecimientoIds: [2] })
+    expect(router.state.location.search).toContain('establecimientos=2')
+  })
+
+  test('el mes ofrece los habilitados del año; un año sin el mes elegido abre en su más reciente', async () => {
+    const router = await montar({ url: URL_PRODUCCION })
+    await screen.findByText('Dosis por municipio de aplicación')
+    const valores = (nombre) =>
+      [...document.querySelectorAll(`select[name="${nombre}"] option`)].map((o) => o.value).filter(Boolean)
+    expect(valores('mes')).toEqual(['8', '9'])
+    expect(valores('anio')).toEqual(['2026', '2025'])
+
+    elegir('anio', '2025')
+    await pedidoFinal({ anio: 2025, mes: 12 })
+    expect(router.state.location.search).toContain('anio=2025&mes=12')
+  })
+
+  test('las demás pestañas no usan vacuna=todas, pero conservan agrupar', async () => {
+    const router = await montar({ url: `${URL_PRODUCCION}&vacuna=todas&agrupar=establecimiento` })
+    await screen.findByText('Dosis por municipio de aplicación')
+
+    pestana('Avance')
+    await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&agrupar=establecimiento'))
+    await screen.findByText('Total de la DDRISS')
+    expect(titulo()).toBe('Avance de Hexavalente')
+  })
+
+  test('por establecimiento: insignia, línea de lo que no suma, aviso preliminar y marca en la gráfica', async () => {
+    obtenerProduccion.mockResolvedValue(POR_ESTABLECIMIENTO)
+    await montar({ url: `${URL_PRODUCCION}&agrupar=establecimiento` })
+
+    expect(await screen.findByText('Dosis por establecimiento')).toBeTruthy()
+    expect(screen.getByRole('status').textContent).toBe(
+      'Datos preliminares: septiembre de 2026 todavía no está cerrado.',
+    )
+    expect(within(tabla().getByText('Hospital de San Marcos').closest('tr')).getByText('No suma en el consolidado'))
+      .toBeTruthy()
+    expect(screen.getByText('Además, 913 dosis de establecimientos que no suman en el consolidado.')).toBeTruthy()
+    const grafica = screen.getByText('Dosis por establecimiento').closest('[data-slot="card"]')
+    expect(grafica.querySelector('[data-marca="preliminar"]')).not.toBeNull()
+  })
+
+  test('el distrito sale de las opciones aunque no haya DISTRITO_CONSULTAR, y recorta establecimientos', async () => {
+    const router = await montar({ url: URL_PRODUCCION, permisos: ['INDICADOR_CONSULTAR'] })
+    await screen.findByText('Dosis por municipio de aplicación')
+    expect(listarDistritos).not.toHaveBeenCalled()
+
+    elegir('distrito', '3')
+    await pedidoFinal({ distritoId: 3 })
+    expect(router.state.location.search).toContain('distrito=3')
+    fireEvent.click(screen.getByRole('combobox', { name: 'Establecimiento' }))
+    const lista = within(screen.getByRole('listbox'))
+    expect(lista.getByText('Centro de Salud Tajumulco')).toBeTruthy()
+    expect(lista.queryByText('Hospital de San Marcos')).toBeNull()
+  })
+
+  test('la red recorta los municipios y se pide con redId', async () => {
+    listarRedes.mockResolvedValue([{
+      id: 3, codigo: 'RED_01', nombre: 'Red No. 1', activo: true, municipios: [TAJUMULCO, COMITANCILLO], trazadoras: [],
+    }])
+    await montar({ url: `${URL_PRODUCCION}&red=3`, permisos: ['INDICADOR_CONSULTAR', 'RED_CONSULTAR'] })
+    await screen.findByText('Dosis por municipio de aplicación')
+
+    await pedidoFinal({ redId: 3 })
+    expect(screen.getByRole('button', { name: 'Municipios' }).textContent).toBe('Todos (2)')
+  })
+
+  test('sin meses habilitados lo dice', async () => {
+    obtenerOpcionesProduccion.mockResolvedValue({ ...OPCIONES, meses: [] })
+    await montar({ url: URL_PRODUCCION })
+
+    expect(await screen.findByText('La DDRISS no tiene meses habilitados.')).toBeTruthy()
+    expect(obtenerProduccion).not.toHaveBeenCalled()
+  })
+
+  test('si falla la producción, «Reintentar» la vuelve a pedir', async () => {
+    obtenerProduccion.mockRejectedValueOnce(new ErrorApi(500, 'ERROR_INTERNO', 'Falló la consulta.'))
+    await montar({ url: URL_PRODUCCION })
+
+    expect(await screen.findByText(/No se pudo cargar la producción: Falló la consulta\./)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(await screen.findByText('Dosis por municipio de aplicación')).toBeTruthy()
+    expect(obtenerProduccion).toHaveBeenCalledTimes(2)
   })
 })

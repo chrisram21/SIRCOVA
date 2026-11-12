@@ -24,6 +24,7 @@ import InsigniaCumple from './InsigniaCumple.jsx'
 import InsigniaValor from './InsigniaValor.jsx'
 import { AvisoMayorACien, MarcaMayorACien } from './MarcaMayorACien.jsx'
 import PanelGraficas from './PanelGraficas.jsx'
+import PestanaProduccion from './PestanaProduccion.jsx'
 import {
   filasDe,
   filasVisibles,
@@ -49,7 +50,8 @@ import { columnasDeLaRed, redElegida } from './tablaRed.js'
 // 47 agregan las tablas de brecha, deserción y proyección; SPEC 49, los filtros de vacuna, distrito y municipios; SPEC
 // 51, los periodos de «Comparar periodos» (comparar, anios, meses), que valida comparacionPeriodos.js. SPEC 54, la
 // pestaña (vista), que elige qué tipo de indicador se mira. SPEC 60, la red (red), que recorta a sus municipios y
-// pide a la API la fila «Total de la red».
+// pide a la API la fila «Total de la red». SPEC 61, la pestaña «Producción» (PestanaProduccion.jsx), que no usa
+// la corrida; sus filtros propios (agrupar, periodo, establecimientos) se conservan en la URL al pasar por las demás.
 
 const ANIOS_HACIA_ATRAS = 6
 const MOTIVOS = {
@@ -97,6 +99,9 @@ export function filtrosDeUrl(parametros, hoy) {
     comparar: parametros.get('comparar') === 'mes' ? 'mes' : undefined,
     anios: lista(parametros.get('anios')),
     meses: lista(parametros.get('meses')),
+    agrupar: parametros.get('agrupar') === 'establecimiento' ? 'establecimiento' : undefined,
+    periodo: parametros.get('periodo') === 'mes' ? 'mes' : undefined,
+    establecimientos: lista(parametros.get('establecimientos')),
   }
 }
 
@@ -316,6 +321,7 @@ export default function PaginaIndicadores({ hoy }) {
   // «Redes», los resultados esperan a las redes para saber de cuál piden el total. En «Redes» la red es obligatoria (por
   // defecto la primera) y no recorta las demás pestañas; fuera de ella, solo la de la URL filtra.
   const enRedes = filtros.vista === 'redes' && puedeVerRedes
+  const enProduccion = filtros.vista === 'produccion'
   const opcionesRed = redes?.filter((r) => r.municipios.length > 0) ?? null
   const redDeLaPestana = enRedes ? redElegida(opcionesRed, filtros.red) : null
   const red = enRedes ? null : opcionesRed?.find((r) => r.id === filtros.red) ?? null
@@ -326,7 +332,11 @@ export default function PaginaIndicadores({ hoy }) {
   // La primera visita espera las DDRISS y los resultados; después, cada cambio usa sus esqueletos. Sin DDRISS (error
   // o lista vacía) no se pide nada más.
   const sinDdriss = errorDdriss || ddriss?.length === 0
-  const primeraCarga = usePrimeraCarga(Boolean(sinDdriss || (!esperando && (datos || errorCarga))), { conMinimo: true })
+  // En «Producción», la pantalla de carga es la de esa pestaña.
+  const primeraCarga = usePrimeraCarga(
+    Boolean(enProduccion || sinDdriss || (!esperando && (datos || errorCarga))),
+    { conMinimo: true },
+  )
 
   useEffect(() => {
     if (!nacional) return undefined
@@ -366,7 +376,7 @@ export default function PaginaIndicadores({ hoy }) {
   }, [puedeVerRedes, ddrissId, esperandoDdriss, intentoRedes])
 
   useEffect(() => {
-    if (esperando) return undefined
+    if (esperando || enProduccion) return undefined
     let vigente = true
     setDatos(null)
     setErrorCarga(null)
@@ -380,11 +390,11 @@ export default function PaginaIndicadores({ hoy }) {
       vigente = false
     }
     // clave resume año, mes, DDRISS y red; intento cambia al recargar.
-  }, [clave, intento, esperando])
+  }, [clave, intento, esperando, enProduccion])
 
   // Los años y meses con corrida de la DDRISS; un cálculo nuevo (intento) puede agregar uno.
   useEffect(() => {
-    if (esperandoDdriss) return undefined
+    if (esperandoDdriss || enProduccion) return undefined
     let vigente = true
     setCalculados(null)
     setErrorCalculados(null)
@@ -394,7 +404,7 @@ export default function PaginaIndicadores({ hoy }) {
     return () => {
       vigente = false
     }
-  }, [ddrissId, esperandoDdriss, intento, intentoCalculados])
+  }, [ddrissId, esperandoDdriss, intento, intentoCalculados, enProduccion])
 
   function calculado(corrida) {
     setCalculando(false)
@@ -450,6 +460,46 @@ export default function PaginaIndicadores({ hoy }) {
   let titulo = corrida && vacuna ? `${VISTAS[vista].etiqueta} de ${vacunaNombre}` : 'Indicadores'
   if (enRedes) titulo = redDeLaPestana ? `Cobertura de la ${redDeLaPestana.nombre}` : 'Redes'
 
+  const pestanas = (
+    <PestanasIndicadores
+      vista={vista}
+      conRedes={puedeVerRedes}
+      alCambiar={(nueva) => irA({ vista: nueva, indicador: undefined })}
+    />
+  )
+  const avisosCatalogos = (
+    <>
+      {errorDdriss && (
+        <AvisoError onReintentar={() => setIntentoDdriss((n) => n + 1)}>
+          No se pudieron cargar las DDRISS: {errorDdriss}
+        </AvisoError>
+      )}
+      {errorRedes && (
+        <AvisoError onReintentar={() => setIntentoRedes((n) => n + 1)}>
+          No se pudieron cargar las redes: {errorRedes}
+        </AvisoError>
+      )}
+    </>
+  )
+
+  if (enProduccion) {
+    return (
+      <PestanaProduccion
+        filtros={filtros}
+        parametros={parametros}
+        setParametros={setParametros}
+        ddriss={nacional ? ddriss : null}
+        ddrissId={ddrissId}
+        esperandoDdriss={esperandoDdriss}
+        sinDdriss={Boolean(sinDdriss)}
+        redes={opcionesRed}
+        esperandoRedes={esperandoRedes}
+        pestanas={pestanas}
+        avisos={avisosCatalogos}
+      />
+    )
+  }
+
   return (
     <>
       {primeraCarga && <PantallaCargaSesion etiqueta="Cargando indicadores" inmediata fondo="borroso" />}
@@ -462,13 +512,7 @@ export default function PaginaIndicadores({ hoy }) {
           acciones={puedeCalcular && !nacional && <Button onClick={() => setCalculando(true)}>Calcular indicadores</Button>}
         />
 
-        {errorDdriss && (
-          <AvisoError onReintentar={() => setIntentoDdriss((n) => n + 1)}>No se pudieron cargar las DDRISS: {errorDdriss}</AvisoError>
-        )}
-
-        {errorRedes && (
-          <AvisoError onReintentar={() => setIntentoRedes((n) => n + 1)}>No se pudieron cargar las redes: {errorRedes}</AvisoError>
-        )}
+        {avisosCatalogos}
 
         {errorDistritos && (
           <AvisoError onReintentar={() => setIntentoDistritos((n) => n + 1)}>
@@ -504,20 +548,17 @@ export default function PaginaIndicadores({ hoy }) {
           )
         ) : (
           <>
+            {corrida && <TarjetaCorrida corrida={corrida} />}
+            {/* Siempre, para llegar a «Producción» aunque el mes no tenga corrida (SPEC 61). */}
+            {pestanas}
             {corrida === null ? (
               <p className="text-muted-foreground">Este mes todavía no tiene indicadores calculados.</p>
             ) : (
               <>
-                <TarjetaCorrida corrida={corrida} />
                 {conResultados.length === 0 ? (
                   <p className="text-muted-foreground">La corrida no tiene resultados de cobertura, avance, brecha, deserción ni proyección.</p>
                 ) : (
                   <>
-                    <PestanasIndicadores
-                      vista={vista}
-                      conRedes={puedeVerRedes}
-                      alCambiar={(nueva) => irA({ vista: nueva, indicador: undefined })}
-                    />
                     {enRedes ? (
                       opcionesRed?.length === 0 && (
                         <Aviso>La DDRISS no tiene redes activas. Se crean en Administración · Redes.</Aviso>

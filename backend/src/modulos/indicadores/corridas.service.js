@@ -40,7 +40,7 @@ const leerId = (valor, nombre) =>
   leerEntero(valor, `${nombre} debe ser un número entero positivo.`, 1, Number.MAX_SAFE_INTEGER);
 
 // La Autoridad nacional elige la DDRISS (obligatorio); los demás roles consultan la suya y no pueden mandarla.
-function ddrissDeLaConsulta(usuario, query) {
+export function ddrissDeLaConsulta(usuario, query) {
   if (esAlcanceNacional(usuario)) {
     if (query.ddrissId === undefined) throw entradaInvalida('ddrissId es obligatorio para consultar todo el país.');
     return leerId(query.ddrissId, 'ddrissId');
@@ -447,7 +447,7 @@ async function leerResultados(corridaId, { indicador, municipioId, red } = {}) {
 }
 
 // La red activa de la DDRISS con sus municipios actuales (SPEC 60); 404 si no existe, está inactiva o es de otra.
-async function leerRedDeLaDdriss(redId, ddrissId) {
+export async function leerRedDeLaDdriss(redId, ddrissId) {
   const [[red]] = await pool.query('SELECT id, nombre FROM red WHERE id = ? AND ddriss_id = ? AND activo = TRUE', [
     redId, ddrissId,
   ]);

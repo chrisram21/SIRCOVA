@@ -1,4 +1,5 @@
 import * as corridasService from './corridas.service.js';
+import * as produccionService from './produccion.service.js';
 
 export async function crearCorrida(req, res) {
   res.status(201).json(await corridasService.crearCorrida(req.body, req));
@@ -22,4 +23,12 @@ export async function serieDelIndicador(req, res) {
 
 export async function mesesCalculados(req, res) {
   res.json(await corridasService.mesesCalculados(req.usuario, req.query));
+}
+
+export async function opcionesDeProduccion(req, res) {
+  res.json(await produccionService.opcionesDeProduccion(req.usuario, req.query));
+}
+
+export async function produccionPorFila(req, res) {
+  res.json(await produccionService.produccionPorFila(req.usuario, req.query));
 }

@@ -64,10 +64,14 @@ describe('pestañas por tipo', () => {
   const COB_HEXA1 = { codigo: 'COB_HEXA1', nombre: 'Cobertura Hexa 1', tipoCalculo: 'COBERTURA' }
   const SOLO_COBERTURA = [{ codigo: 'COB_BCG', nombre: 'Cobertura BCG', tipoCalculo: 'COBERTURA' }]
 
-  test('las seis pestañas van en orden y cada tipo tiene la suya; «Redes» no es de un tipo', () => {
-    expect(Object.keys(VISTAS)).toEqual(['avance', 'brecha', 'cobertura', 'desercion', 'proyeccion', 'redes'])
+  test('siete pestañas en orden; cada tipo tiene la suya, y «Redes» y «Producción» no son de un tipo', () => {
+    expect(Object.keys(VISTAS)).toEqual([
+      'avance', 'brecha', 'cobertura', 'desercion', 'proyeccion', 'redes', 'produccion',
+    ])
     expect(vistaDeTipo(null)).toBeNull()
     expect(indicadoresDeLaVista([{ codigo: 'X', tipoCalculo: null }], 'redes')).toEqual([])
+    expect(indicadoresDeLaVista([{ codigo: 'X', tipoCalculo: null }], 'produccion')).toEqual([])
+    expect(vistaPorDefecto([])).toBe('avance')
     expect(vistaDeTipo('AVANCE_META_MES')).toBe('avance')
     expect(vistaDeTipo('PROYECCION')).toBe('proyeccion')
     expect(vistaDeTipo('OTRO')).toBeNull()
