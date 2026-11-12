@@ -157,3 +157,8 @@ vite.config.ts.timestamp-*
 
 # Playwright (capturas y registros de las verificaciones en el navegador)
 .playwright-mcp/
+
+# Obsidian: se suben solo las exclusiones y los colores del grafo; lo demás es de cada quien
+.obsidian/*
+!.obsidian/app.json
+!.obsidian/graph.json

@@ -1,0 +1,32 @@
+{
+  "collapse-filter": false,
+  "search": "path:mapa",
+  "showTags": false,
+  "showAttachments": false,
+  "hideUnresolved": true,
+  "showOrphans": true,
+  "collapse-color-groups": false,
+  "colorGroups": [
+    { "query": "tag:#modulo/acceso-y-seguridad", "color": { "a": 1, "rgb": 15026253 } },
+    { "query": "tag:#modulo/usuarios", "color": { "a": 1, "rgb": 16214805 } },
+    { "query": "tag:#modulo/catalogos", "color": { "a": 1, "rgb": 16762173 } },
+    { "query": "tag:#modulo/configuracion", "color": { "a": 1, "rgb": 3187820 } },
+    { "query": "tag:#modulo/produccion", "color": { "a": 1, "rgb": 37119 } },
+    { "query": "tag:#modulo/revision", "color": { "a": 1, "rgb": 9326278 } },
+    { "query": "tag:#modulo/indicadores", "color": { "a": 1, "rgb": 1222036 } },
+    { "query": "tag:#modulo/plataforma", "color": { "a": 1, "rgb": 14041247 } },
+    { "query": "tag:#historia", "color": { "a": 1, "rgb": 9145752 } }
+  ],
+  "collapse-display": false,
+  "showArrow": true,
+  "textFadeMultiplier": 0,
+  "nodeSizeMultiplier": 1,
+  "lineSizeMultiplier": 1,
+  "collapse-forces": false,
+  "centerStrength": 0.5,
+  "repelStrength": 12,
+  "linkStrength": 1,
+  "linkDistance": 120,
+  "scale": 1,
+  "close": false
+}
