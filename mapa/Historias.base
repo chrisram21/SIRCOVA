@@ -1,0 +1,30 @@
+filters:
+  and:
+    - file.inFolder("mapa/historias")
+properties:
+  file.name:
+    displayName: Historia
+views:
+  - type: table
+    name: Todas
+    order:
+      - file.name
+      - titulo
+      - sprint
+      - estado
+      - specs
+    sort:
+      - property: numero
+        direction: ASC
+  - type: table
+    name: Sin spec
+    filters:
+      and:
+        - estado == "Sin spec"
+    order:
+      - file.name
+      - titulo
+      - sprint
+    sort:
+      - property: numero
+        direction: ASC

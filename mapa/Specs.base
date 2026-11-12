@@ -1,0 +1,46 @@
+filters:
+  and:
+    - file.inFolder("mapa/specs")
+properties:
+  file.name:
+    displayName: Spec
+views:
+  - type: table
+    name: Todos
+    order:
+      - file.name
+      - titulo
+      - modulo
+      - estado
+      - origen
+      - historias
+    sort:
+      - property: numero
+        direction: ASC
+  - type: table
+    name: Sin historia de usuario
+    filters:
+      and:
+        - origen != "Historia de usuario"
+    order:
+      - file.name
+      - titulo
+      - modulo
+      - origen
+      - historias
+    sort:
+      - property: numero
+        direction: ASC
+  - type: table
+    name: Pendientes
+    filters:
+      and:
+        - estado != "Implementado"
+    order:
+      - file.name
+      - titulo
+      - modulo
+      - estado
+    sort:
+      - property: numero
+        direction: ASC

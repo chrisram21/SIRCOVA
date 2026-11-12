@@ -1,0 +1,10 @@
+{
+  "userIgnoreFilters": [
+    "backend/",
+    "frontend/",
+    ".claude/",
+    ".playwright-mcp/",
+    "scripts/"
+  ],
+  "alwaysUpdateLinks": false
+}
