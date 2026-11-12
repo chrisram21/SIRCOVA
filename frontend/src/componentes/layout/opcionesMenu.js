@@ -29,6 +29,8 @@ import PaginaInicio from '@/paginas/inicio/PaginaInicio.jsx'
 // Cada pantalla se descarga al entrar en ella (Layout la espera con Suspense); Inicio va incluida, porque es la primera.
 const PaginaTerritorio = lazy(() => import('@/paginas/configuracion/PaginaTerritorio.jsx'))
 const PaginaRedes = lazy(() => import('@/paginas/configuracion/PaginaRedes.jsx'))
+const PaginaRegistrarRed = lazy(() => import('@/paginas/configuracion/PaginaRegistrarRed.jsx'))
+const PaginaEditarRed = lazy(() => import('@/paginas/configuracion/PaginaEditarRed.jsx'))
 const PaginaBandejaRevision = lazy(() => import('@/paginas/revision/PaginaBandejaRevision.jsx'))
 const PaginaRevisarReporte = lazy(() => import('@/paginas/revision/PaginaRevisarReporte.jsx'))
 const PaginaEstablecimientos = lazy(() => import('@/paginas/configuracion/PaginaEstablecimientos.jsx'))
@@ -200,8 +202,18 @@ const opcionesMenu = [
         icono: Network,
         pagina: PaginaRedes,
         subrutas: [
-          { titulo: 'Nueva red', ruta: '/administracion/redes/nueva', permiso: 'RED_CREAR' },
-          { titulo: 'Editar red', ruta: '/administracion/redes/:id/editar', permiso: 'RED_EDITAR' },
+          {
+            titulo: 'Nueva red',
+            ruta: '/administracion/redes/nueva',
+            permiso: 'RED_CREAR',
+            pagina: PaginaRegistrarRed,
+          },
+          {
+            titulo: 'Editar red',
+            ruta: '/administracion/redes/:id/editar',
+            permiso: 'RED_EDITAR',
+            pagina: PaginaEditarRed,
+          },
         ],
       },
       {
