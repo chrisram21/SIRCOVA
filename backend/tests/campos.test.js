@@ -10,6 +10,7 @@ import {
   validarCui,
   validarNombreUsuario,
   validarNombreDistrito,
+  validarNombreRed,
   validarNombreEstablecimiento,
   validarDireccion,
   validarNombreContacto,
@@ -174,6 +175,22 @@ const CASOS = {
       ['Distrito @ Norte', MENSAJES.nombreDistrito],
       ['Distrito_Norte', MENSAJES.nombreDistrito],
       ['Distrito/Norte', MENSAJES.nombreDistrito],
+    ],
+  },
+  validarNombreRed: {
+    validos: [
+      ['Red No. 1', 'Red No. 1'],
+      ['  Red   del  Altiplano ', 'Red del Altiplano'],
+      ['Red (Norte) - Tacaná.', 'Red (Norte) - Tacaná.'],
+      ['a'.repeat(120), 'a'.repeat(120)],
+    ],
+    invalidos: [
+      ['', MENSAJES.nombreRedObligatorio],
+      [null, MENSAJES.nombreRedObligatorio],
+      ['R1', MENSAJES.nombreRedLargo],
+      ['a'.repeat(121), MENSAJES.nombreRedLargo],
+      ['Red #1', MENSAJES.nombreRed],
+      ['Red/Norte', MENSAJES.nombreRed],
     ],
   },
   validarNombreEstablecimiento: {
@@ -547,7 +564,8 @@ const CASOS = {
 
 const REGLAS = {
   validarNombres, validarApellidos, validarCargo, validarTelefono, validarCorreo, validarCui, validarNombreUsuario,
-  validarNombreDistrito, validarNombreEstablecimiento, validarDireccion, validarNombreContacto, validarCodigoVacuna,
+  validarNombreDistrito, validarNombreRed, validarNombreEstablecimiento, validarDireccion, validarNombreContacto,
+  validarCodigoVacuna,
   validarNombreVacuna, validarDescripcionVacuna, validarNombreDosis, validarCantidadPoblacion, validarFuentePoblacion,
   validarCodigoDimension, validarCodigoValorDimension, validarNombreDimension, validarDescripcionDimension,
   validarEtiquetaValorDimension, validarEdadMeses, validarTituloSeccion, validarMotivoCambio, validarNombreRegla,

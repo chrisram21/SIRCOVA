@@ -3,6 +3,7 @@ import * as distritosService from './distritos.service.js';
 import * as establecimientosService from './establecimientos.service.js';
 import * as periodosService from './periodos.service.js';
 import * as poblacionService from './poblacion.service.js';
+import * as redesService from './redes.service.js';
 import * as vacunasService from './vacunas.service.js';
 import { contextoAuditoria } from '../auditoria/auditoria.service.js';
 
@@ -33,6 +34,26 @@ export async function desactivarDistrito(req, res) {
 
 export async function reactivarDistrito(req, res) {
   res.json(await distritosService.reactivarDistrito(req.params.id, req.usuario, contextoAuditoria(req)));
+}
+
+export async function listarRedes(req, res) {
+  res.json(await redesService.listarRedes(req.usuario, req.query));
+}
+
+export async function opcionesRed(req, res) {
+  res.json(await redesService.opcionesRed(req.usuario, req.query));
+}
+
+export async function obtenerRed(req, res) {
+  res.json(await redesService.obtenerRed(req.params.id, req.usuario));
+}
+
+export async function crearRed(req, res) {
+  res.status(201).json(await redesService.crearRed(req.body, req.usuario, contextoAuditoria(req)));
+}
+
+export async function editarRed(req, res) {
+  res.json(await redesService.editarRed(req.params.id, req.body, req.usuario, contextoAuditoria(req)));
 }
 
 export async function listarEstablecimientos(req, res) {

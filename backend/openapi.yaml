@@ -5484,7 +5484,7 @@ components:
           example:
             error: { codigo: NO_ENCONTRADO, mensaje: La red no existe. }
     RedEntradaInvalida:
-      description: Nombre inválido, lista vacía, repetida o con ids que no existen, o campo no permitido
+      description: Nombre inválido, lista vacía, repetida o con ids que no son enteros positivos, cuerpo sin campos, o campo no permitido
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -5523,7 +5523,7 @@ components:
               value:
                 error: { codigo: RED_ACTIVA, mensaje: La red ya está activa. }
     RedInvalida:
-      description: Un municipio inactivo, de otro departamento o el `9999`, o una dosis nueva inactiva
+      description: Un municipio que no existe, inactivo, de otro departamento o el `9999`, o una dosis nueva que no existe o está inactiva
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -5533,7 +5533,7 @@ components:
                 error: { codigo: MUNICIPIO_INVALIDO, mensaje: El municipio no existe, está inactivo o no es del departamento de su DDRISS. }
             dosis:
               value:
-                error: { codigo: DOSIS_INVALIDA, mensaje: La dosis está inactiva o es de una vacuna inactiva. }
+                error: { codigo: DOSIS_INVALIDA, mensaje: La dosis no existe, está inactiva o es de una vacuna inactiva. }
     EstablecimientoNoEncontrado:
       description: El establecimiento no existe o es de otra DDRISS
       content:
