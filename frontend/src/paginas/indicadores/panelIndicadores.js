@@ -40,6 +40,8 @@ export const VISTAS = {
   desercion: { tipo: 'DESERCION', etiqueta: 'Deserción', nombreDelTipo: 'deserción entre dosis' },
   proyeccion: { tipo: 'PROYECCION', etiqueta: 'Proyección', nombreDelTipo: 'proyección' },
   redes: { tipo: null, etiqueta: 'Redes', nombreDelTipo: null },
+  // SPEC 61: dosis aplicadas, sin corrida ni indicador.
+  produccion: { tipo: null, etiqueta: 'Producción', nombreDelTipo: null },
 }
 
 export const vistaDeTipo = (tipoCalculo) =>

@@ -41,3 +41,19 @@ export function obtenerSerie({ anio, indicador, municipioId, ddrissId }) {
 export function obtenerMesesCalculados({ ddrissId } = {}) {
   return solicitar(conConsulta('/indicadores/meses-calculados', { ddrissId }))
 }
+
+// SPEC 61: las opciones de los filtros de «Producción» (meses, vacunas, distritos, municipios y establecimientos).
+export function obtenerOpcionesProduccion({ ddrissId } = {}) {
+  return solicitar(conConsulta('/indicadores/produccion/opciones', { ddrissId }))
+}
+
+// SPEC 61: las dosis aplicadas por municipio de aplicación o por establecimiento. Las listas van separadas por comas.
+export function obtenerProduccion({
+  anio, mes, acumulado, agrupar, vacuna, distritoId, redId, municipioIds, establecimientoIds, ddrissId,
+}) {
+  const lista = (ids) => (ids?.length ? ids.join(',') : undefined)
+  return solicitar(conConsulta('/indicadores/produccion', {
+    anio, mes, acumulado, agrupar, vacuna, distritoId, redId,
+    municipioIds: lista(municipioIds), establecimientoIds: lista(establecimientoIds), ddrissId,
+  }))
+}

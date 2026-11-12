@@ -42,6 +42,7 @@ afterAll(limpiar);
 let token;
 let ddrissUsuario;
 let tokenEpidemiologia;
+let tokenSinConsulta;
 
 const enviar = (metodo, ruta, cuerpo, credencial = token) =>
   request(app)[metodo](`/api/v1${ruta}`).set('Authorization', `Bearer ${credencial}`).send(cuerpo);
@@ -62,46 +63,68 @@ beforeAll(async () => {
   token = res.body.token;
   ddrissUsuario = jwt.decode(token).ddrissId;
 
-  // Una cuenta de Epidemiología de la semilla, con sus datos y permisos reales: autenticar compara el rol, el
-  // establecimiento y el municipio con la base.
+  // Cuentas de la semilla con sus datos y permisos reales: autenticar compara el rol, el establecimiento y el
+  // municipio con la base. Epidemiología no crea, abre ni cambia meses, pero consulta (PERIODO_CONSULTAR desde el
+  // SPEC 44): el 403 de la lectura lo pide una cuenta de un rol sin ese permiso.
+  tokenEpidemiologia = await tokenDeLaPrimeraCuenta("r.codigo = 'EPIDEMIOLOGIA'");
+  tokenSinConsulta = await tokenDeLaPrimeraCuenta(
+    `NOT EXISTS (SELECT 1 FROM rol_permiso rp JOIN permiso p ON p.id = rp.permiso_id
+                  WHERE rp.rol_id = u.rol_id AND p.codigo = 'PERIODO_CONSULTAR')`,
+  );
+});
+
+async function tokenDeLaPrimeraCuenta(condicion) {
   const [[cuenta]] = await pool.query(
-    `SELECT u.id, u.rol_id, e.ddriss_id, e.establecimiento_id, e.municipio_id
+    `SELECT u.id, u.rol_id, r.codigo AS rol, e.ddriss_id, e.establecimiento_id, e.municipio_id
        FROM usuario u
        JOIN rol r ON r.id = u.rol_id
        JOIN empleado e ON e.id = u.empleado_id
-      WHERE r.codigo = 'EPIDEMIOLOGIA' AND u.activo = TRUE AND e.activo = TRUE AND u.debe_cambiar_contrasena = FALSE
+      WHERE ${condicion} AND u.activo = TRUE AND e.activo = TRUE AND u.debe_cambiar_contrasena = FALSE
       ORDER BY u.id LIMIT 1`,
   );
-  if (!cuenta) throw new Error('No hay una cuenta de Epidemiología activa en la base de prueba');
+  if (!cuenta) throw new Error(`No hay una cuenta activa con ${condicion} en la base de prueba`);
   const [permisos] = await pool.query(
     'SELECT p.codigo FROM rol_permiso rp JOIN permiso p ON p.id = rp.permiso_id WHERE rp.rol_id = ?',
     [cuenta.rol_id],
   );
-  tokenEpidemiologia = await tokenDePrueba(cuenta.id, {
-    rol: 'EPIDEMIOLOGIA',
+  return tokenDePrueba(cuenta.id, {
+    rol: cuenta.rol,
     permisos: permisos.map((p) => p.codigo),
     ddrissId: cuenta.ddriss_id,
     establecimientoId: cuenta.establecimiento_id,
     municipioId: cuenta.municipio_id,
   });
-});
+}
+
+// El estado de cada mes de 2026 en cierre_periodo de la DDRISS del usuario. Cambia con el tiempo (la tarea del cierre
+// del SPEC 39 pasa a EN_CIERRE los meses vencidos), así que las pruebas lo leen en lugar de fijarlo.
+async function estadosDe2026() {
+  const [filas] = await pool.query(
+    `SELECT p.mes, cp.estado, DATE_FORMAT(cp.fecha_limite_envio, '%Y-%m-%d') AS fecha_limite
+       FROM periodo p
+       LEFT JOIN cierre_periodo cp ON cp.periodo_id = p.id AND cp.ddriss_id = ?
+      WHERE p.anio = 2026 ORDER BY p.mes`,
+    [ddrissUsuario],
+  );
+  return filas;
+}
 
 describe('GET /periodos', () => {
-  it('trae los 12 meses de 2026 en orden con el estado de la semilla en la DDRISS del usuario', async () => {
+  it('trae los 12 meses de 2026 en orden con el estado de cada mes en la DDRISS del usuario', async () => {
     const res = await consultar('/periodos?anio=2026');
+    const enLaBase = await estadosDe2026();
 
     expect(res.status).toBe(200);
     expect(res.body.map((p) => p.mes)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-    for (const periodo of res.body.slice(0, 8)) {
-      expect(periodo.estado, `mes ${periodo.mes}`).toBe('CERRADO');
-      expect(periodo.cerradoEn, `mes ${periodo.mes}`).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-    }
-    expect(res.body.slice(8, 10).map((p) => [p.mes, p.estado, p.fechaLimiteEnvio, p.cerradoEn])).toEqual([
-      [9, 'ABIERTO', '2026-10-10', null],
-      [10, 'ABIERTO', '2026-11-10', null],
-    ]);
-    for (const periodo of res.body.slice(10)) {
-      expect(periodo, `mes ${periodo.mes}`).toMatchObject({ estado: null, fechaLimiteEnvio: null, cerradoEn: null });
+    expect(res.body.map((p) => [p.mes, p.estado, p.fechaLimiteEnvio])).toEqual(
+      enLaBase.map((f) => [f.mes, f.estado, f.fecha_limite]),
+    );
+    // La semilla cierra de enero a agosto y deja noviembre y diciembre sin abrir.
+    expect(res.body.slice(0, 8).every((p) => p.estado === 'CERRADO')).toBe(true);
+    expect(res.body.slice(10).every((p) => p.estado === null && p.fechaLimiteEnvio === null)).toBe(true);
+    for (const periodo of res.body) {
+      if (periodo.estado === 'CERRADO') expect(periodo.cerradoEn, `mes ${periodo.mes}`).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      else expect(periodo.cerradoEn, `mes ${periodo.mes}`).toBeNull();
     }
   });
 
@@ -126,11 +149,13 @@ describe('GET /periodos', () => {
     expect(res.body.filter((p) => p.anio === 2026)).toHaveLength(12);
   });
 
-  it('estado=ABIERTO trae solo septiembre y octubre de 2026', async () => {
-    const res = await consultar('/periodos?anio=2026&estado=ABIERTO');
+  it.each(['ABIERTO', 'EN_CIERRE', 'CERRADO'])('estado=%s trae solo los meses de 2026 así', async (estado) => {
+    const res = await consultar(`/periodos?anio=2026&estado=${estado}`);
+    const enLaBase = await estadosDe2026();
 
     expect(res.status).toBe(200);
-    expect(res.body.map((p) => p.mes)).toEqual([9, 10]);
+    expect(res.body.map((p) => p.mes)).toEqual(enLaBase.filter((f) => f.estado === estado).map((f) => f.mes));
+    expect(res.body.every((p) => p.estado === estado)).toBe(true);
   });
 
   it.each([
@@ -146,8 +171,8 @@ describe('GET /periodos', () => {
     expect(res.body.error).toEqual({ codigo: 'ENTRADA_INVALIDA', mensaje });
   });
 
-  it('una cuenta de Epidemiología recibe 403 SIN_PERMISO', async () => {
-    const res = await consultar('/periodos', tokenEpidemiologia);
+  it('una cuenta sin PERIODO_CONSULTAR recibe 403 SIN_PERMISO', async () => {
+    const res = await consultar('/periodos', tokenSinConsulta);
 
     expect(res.status).toBe(403);
     expect(res.body.error.codigo).toBe('SIN_PERMISO');

@@ -4,6 +4,7 @@ import { Collection, Int32, ObjectId } from 'mongodb';
 import app from '../src/app.js';
 import pool from '../src/config/mysql.js';
 import { obtenerDb } from '../src/config/mongodb.js';
+import { TIPOS_INDICADOR } from '../src/modulos/configuracion/tiposIndicador.js';
 import { tokenDePrueba } from './sesionDePrueba.js';
 
 // Las pruebas crean por SQL las vacunas ZVT_HU35 (activa, con D1 a D3 activas y D4 inactiva) y ZVT_HU35I (inactiva),
@@ -326,8 +327,15 @@ describe('GET /configuracion-indicadores', () => {
   });
 
   it('ordena por vacuna y luego por tipo', () => {
-    const hexa = filas.filter((f) => f.vacuna.codigo === 'HEXA').map((f) => f.codigo);
-    expect(hexa).toEqual(['COB_HEXA3', 'AVANCE_HEXA3', 'BRECHA_HEXA3', 'DES_HEXA1_3', 'PROY_COB_HEXA3']);
+    // Por tipo y, en el mismo tipo, por código. La base puede tener más indicadores de Hexavalente que los de la
+    // semilla (las coberturas anuales del SPEC 60), así que se compara el orden, no la lista exacta.
+    const hexa = filas.filter((f) => f.vacuna.codigo === 'HEXA');
+    const tipos = Object.keys(TIPOS_INDICADOR);
+    const ordenadas = [...hexa].sort((a, b) =>
+      tipos.indexOf(a.tipoCalculo) - tipos.indexOf(b.tipoCalculo) || a.codigo.localeCompare(b.codigo));
+    expect(hexa.map((f) => f.codigo)).toEqual(ordenadas.map((f) => f.codigo));
+    const SEMILLA = ['COB_HEXA3', 'AVANCE_HEXA3', 'BRECHA_HEXA3', 'DES_HEXA1_3', 'PROY_COB_HEXA3'];
+    expect(hexa.map((f) => f.codigo).filter((codigo) => SEMILLA.includes(codigo))).toEqual(SEMILLA);
     const nombres = filas.map((f) => f.vacuna.nombre);
     expect(nombres).toEqual([...nombres].sort((a, b) => a.localeCompare(b, 'es')));
   });
