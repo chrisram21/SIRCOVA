@@ -71,6 +71,8 @@ node scripts/mapa-obsidian.mjs --revisar  # solo revisa; falla si mapa/ no está
 
 Se corre cada vez que se crea un spec o cambia su encabezado (estado, historia, origen o dependencias). La regla está en la sección 7 de `AGENTS.md`.
 
+Si `git status` muestra archivos de `mapa/` o `.obsidian/app.json` como modificados pero `git diff` no muestra nada, son solo finales de línea (CRLF de Windows contra LF de Obsidian). Se limpian con `git add mapa .obsidian/app.json`: no prepara ningún cambio, solo actualiza lo que git tiene guardado. El `.gitattributes` evita que vuelva a pasar.
+
 ## Notas propias
 
 Las notas personales van en `mapa/notas/` (el generador no la toca). Si no quieres subirlas, no las agregues a git.

@@ -1,0 +1,4 @@
+# Obsidian y scripts/mapa-obsidian.mjs escriben con LF: si git los dejara en CRLF (autocrlf de Windows),
+# saldrían como modificados sin ningún cambio real.
+mapa/** text eol=lf
+.obsidian/*.json text eol=lf
