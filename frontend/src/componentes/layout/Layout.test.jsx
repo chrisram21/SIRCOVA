@@ -29,6 +29,7 @@ const PERMISOS_REVISOR = [
 const HIJOS_ADMINISTRACION = [
   'Usuarios',
   'Territorio',
+  'Redes',
   'Establecimientos',
   'Vacunas',
   'Dimensiones',
@@ -123,7 +124,7 @@ test('con todos los permisos ve las 11 opciones en el orden de la tabla; «Admin
   expect(hijosVisibles()).toEqual([])
 })
 
-test('un clic en «Administración» despliega sus once hijos en orden, y otro la pliega', () => {
+test('un clic en «Administración» despliega sus doce hijos en orden, y otro la pliega', () => {
   abrir('/inicio', { permisos: TODOS_LOS_PERMISOS })
 
   fireEvent.click(padre())
@@ -154,6 +155,30 @@ test('con los permisos de Epidemiología, «Administración» muestra solo «Con
   expect(menu().getByRole('link', { name: 'Configuración de indicadores' }).getAttribute('href')).toBe(
     '/administracion/indicadores',
   )
+})
+
+test('con los permisos de redes de Epidemiología, «Administración» muestra también «Redes»', () => {
+  abrir('/inicio', {
+    permisos: [
+      'CONFIGURACION_CONSULTAR',
+      'INDICADOR_CONFIG_CONSULTAR',
+      'INDICADOR_CONFIG_EDITAR',
+      'RED_CONSULTAR',
+      'RED_CREAR',
+      'RED_EDITAR',
+    ],
+  })
+
+  fireEvent.click(padre())
+  expect(hijosVisibles()).toEqual(['Redes', 'Configuración de indicadores'])
+  expect(menu().getByRole('link', { name: 'Redes' }).getAttribute('href')).toBe('/administracion/redes')
+})
+
+test('«Redes» pide RED_EDITAR: el Revisor, que solo consulta las redes, no la ve', () => {
+  abrir('/inicio', { permisos: [...PERMISOS_REVISOR, 'RED_CONSULTAR'] })
+
+  fireEvent.click(padre())
+  expect(hijosVisibles()).not.toContain('Redes')
 })
 
 test('«Configuración de indicadores» pide INDICADOR_CONFIG_CONSULTAR', () => {

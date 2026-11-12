@@ -46,6 +46,35 @@ export function reactivarDistrito(id) {
   return yLuegoInvalidar(solicitar(`/distritos/${id}/reactivar`, { metodo: 'POST' }), '/distritos', '/municipios', '/establecimientos')
 }
 
+export function listarRedes({ activo } = {}) {
+  return consultarConCache(conConsulta('/redes', { activo }))
+}
+
+export function obtenerRed(id) {
+  return solicitar(`/redes/${id}`)
+}
+
+// Las opciones del formulario no se guardan en la caché: dependen de las otras redes, los municipios y las vacunas.
+export function obtenerOpcionesRed() {
+  return solicitar('/redes/opciones')
+}
+
+export function crearRed({ nombre, municipioIds }) {
+  return yLuegoInvalidar(solicitar('/redes', { metodo: 'POST', cuerpo: { nombre, municipioIds } }), '/redes')
+}
+
+export function editarRed(id, cambios) {
+  return yLuegoInvalidar(solicitar(`/redes/${id}`, { metodo: 'PATCH', cuerpo: cambios }), '/redes')
+}
+
+export function desactivarRed(id) {
+  return yLuegoInvalidar(solicitar(`/redes/${id}/desactivar`, { metodo: 'POST' }), '/redes')
+}
+
+export function reactivarRed(id, datos) {
+  return yLuegoInvalidar(solicitar(`/redes/${id}/reactivar`, { metodo: 'POST', cuerpo: datos }), '/redes')
+}
+
 export function listarEstablecimientos({ activo, municipioId, tipoEstablecimientoId } = {}) {
   return consultarConCache(conConsulta('/establecimientos', { activo, municipioId, tipoEstablecimientoId }))
 }
