@@ -391,3 +391,39 @@ export async function editarRed(id, cuerpo, usuario, contexto) {
     return buscarRed(conexion, red.id);
   });
 }
+
+// Libera los municipios para que otra red los pueda tomar; las trazadoras se conservan.
+export async function desactivarRed(id, usuario, contexto) {
+  const ddrissId = ddrissDeQuienEscribe(usuario);
+  return enTransaccion(async (conexion) => {
+    await bloquearDdriss(conexion, ddrissId);
+    const red = await bloquearRed(conexion, id, ddrissId);
+    if (red.activo) {
+      const antes = await estadoGuardado(conexion, red);
+      const despues = { ...antes, activo: false, municipioIds: [] };
+      await conexion.query('UPDATE red SET activo = FALSE WHERE id = ?', [red.id]);
+      await reemplazarListas(conexion, red.id, antes, despues);
+      await registrar(conexion, contexto, ACCIONES.DESACTIVAR, red.id, diferencias(antes, despues));
+    }
+    return buscarRed(conexion, red.id);
+  });
+}
+
+// Una red inactiva no tiene municipios: se reactiva con al menos uno libre, y puede cambiar nombre y trazadoras.
+export async function reactivarRed(id, cuerpo, usuario, contexto) {
+  revisarCuerpo(cuerpo, ['municipioIds', 'nombre', 'dosisIds']);
+  if (cuerpo.municipioIds === undefined) throw entradaInvalida('La red debe tener al menos un municipio.');
+  const cambios = leerCambios(cuerpo);
+  const ddrissId = ddrissDeQuienEscribe(usuario);
+
+  return enTransaccion(async (conexion) => {
+    await bloquearDdriss(conexion, ddrissId);
+    const red = await bloquearRed(conexion, id, ddrissId);
+    if (red.activo) throw errores.activa();
+    const antes = await estadoGuardado(conexion, red);
+    const despues = { ...aplicar(antes, cambios), activo: true };
+    if (despues.dosisIds.length === 0) throw entradaInvalida('La red debe tener al menos una trazadora.');
+    await guardarCambios(conexion, { red, ddrissId, antes, despues, accion: ACCIONES.REACTIVAR, contexto });
+    return buscarRed(conexion, red.id);
+  });
+}

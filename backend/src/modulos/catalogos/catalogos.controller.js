@@ -56,6 +56,14 @@ export async function editarRed(req, res) {
   res.json(await redesService.editarRed(req.params.id, req.body, req.usuario, contextoAuditoria(req)));
 }
 
+export async function desactivarRed(req, res) {
+  res.json(await redesService.desactivarRed(req.params.id, req.usuario, contextoAuditoria(req)));
+}
+
+export async function reactivarRed(req, res) {
+  res.json(await redesService.reactivarRed(req.params.id, req.body, req.usuario, contextoAuditoria(req)));
+}
+
 export async function listarEstablecimientos(req, res) {
   res.json(await establecimientosService.listarEstablecimientos(req.usuario, req.query));
 }

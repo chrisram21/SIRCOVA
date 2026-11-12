@@ -27,6 +27,8 @@ router.post('/redes', autenticar, requierePermiso('RED_CREAR'), catalogosControl
 router.get('/redes/opciones', autenticar, requierePermiso('RED_EDITAR'), catalogosController.opcionesRed);
 router.get('/redes/:id', autenticar, requierePermiso('RED_CONSULTAR'), catalogosController.obtenerRed);
 router.patch('/redes/:id', autenticar, requierePermiso('RED_EDITAR'), catalogosController.editarRed);
+router.post('/redes/:id/desactivar', autenticar, requierePermiso('RED_EDITAR'), catalogosController.desactivarRed);
+router.post('/redes/:id/reactivar', autenticar, requierePermiso('RED_EDITAR'), catalogosController.reactivarRed);
 router.get(
   '/establecimientos',
   autenticar,

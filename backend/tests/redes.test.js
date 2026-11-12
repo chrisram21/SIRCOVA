@@ -445,3 +445,93 @@ describe('PATCH /redes/{id}', () => {
     expect((await enviar('patch', `/redes/${redId}`, { nombre: 'vitest-redes Red Z' }, tokens.revisor)).status).toBe(403);
   });
 });
+
+describe('POST /redes/{id}/desactivar y /reactivar', () => {
+  let redId;
+
+  beforeAll(async () => {
+    // Municipios propios de este bloque: los de las otras pruebas siguen ocupados.
+    await pool.query(
+      'DELETE rm FROM red_municipio rm JOIN red r ON r.id = rm.red_id WHERE r.ddriss_id = ? AND rm.municipio_id IN (?)',
+      [ddrissId, ids('ZR07', 'ZR08')],
+    );
+    redId = await insertarRed({
+      codigo: 'RED_20',
+      nombre: 'vitest-redes Red I',
+      municipiosIne: ['ZR07', 'ZR08'],
+      dosisIds: [dosisHexa3, dosisPruebaActiva],
+    });
+  });
+
+  it('desactivar libera los municipios, conserva las trazadoras y lo registra', async () => {
+    const res = await enviar('post', `/redes/${redId}/desactivar`, undefined, tokens.epidemiologia);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ activo: false, municipios: [] });
+    expect(ordenar(res.body.trazadoras.map((t) => t.dosisId))).toEqual(ordenar([dosisHexa3, dosisPruebaActiva]));
+    expect(await filasBitacora('DESACTIVAR', redId)).toEqual([
+      { anteriores: { activo: true, municipioIds: ids('ZR07', 'ZR08') }, nuevos: { activo: false, municipioIds: [] } },
+    ]);
+  });
+
+  it('desactivar una red ya inactiva responde 200 sin registrar nada', async () => {
+    const res = await enviar('post', `/redes/${redId}/desactivar`);
+    expect(res.status).toBe(200);
+    expect(await filasBitacora('DESACTIVAR', redId)).toHaveLength(1);
+  });
+
+  it('otra red puede tomar los municipios liberados', async () => {
+    const otra = await enviar('post', '/redes', { nombre: 'vitest-redes Red J', municipioIds: ids('ZR07') });
+    expect(otra.status).toBe(201);
+  });
+
+  it('reactivar exige al menos un municipio libre', async () => {
+    for (const cuerpo of [{}, { municipioIds: [] }, { nombre: 'vitest-redes Red I' }]) {
+      const res = await enviar('post', `/redes/${redId}/reactivar`, cuerpo);
+      expect(res.status, JSON.stringify(cuerpo)).toBe(400);
+    }
+    const ocupado = await enviar('post', `/redes/${redId}/reactivar`, { municipioIds: ids('ZR07') });
+    expect(ocupado.status).toBe(409);
+    expect(ocupado.body.error).toEqual({
+      codigo: 'MUNICIPIO_EN_OTRA_RED',
+      mensaje: 'vitest-redes-ZR07 ya pertenece a la vitest-redes Red J.',
+    });
+    const inactivo = await enviar('post', `/redes/${redId}/reactivar`, { municipioIds: [municipios[MUNICIPIO_INACTIVO]] });
+    expect(inactivo.status).toBe(422);
+  });
+
+  it('reactiva con sus municipios, puede cambiar nombre y trazadoras, y lo registra', async () => {
+    const res = await enviar('post', `/redes/${redId}/reactivar`, {
+      municipioIds: ids('ZR08'),
+      nombre: 'vitest-redes Red K',
+      dosisIds: [dosisHexa3],
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ activo: true, nombre: 'vitest-redes Red K' });
+    expect(res.body.municipios.map((m) => m.codigoIne)).toEqual(['ZR08']);
+    expect(res.body.trazadoras.map((t) => t.dosisId)).toEqual([dosisHexa3]);
+    expect(await filasBitacora('REACTIVAR', redId)).toEqual([
+      {
+        anteriores: {
+          nombre: 'vitest-redes Red I',
+          activo: false,
+          municipioIds: [],
+          dosisIds: ordenar([dosisHexa3, dosisPruebaActiva]),
+        },
+        nuevos: { nombre: 'vitest-redes Red K', activo: true, municipioIds: ids('ZR08'), dosisIds: [dosisHexa3] },
+      },
+    ]);
+  });
+
+  it('reactivar una red activa responde 409', async () => {
+    const res = await enviar('post', `/redes/${redId}/reactivar`, { municipioIds: ids('ZR08') });
+    expect(res.status).toBe(409);
+    expect(res.body.error.codigo).toBe('RED_ACTIVA');
+  });
+
+  it('el Revisor recibe 403 y otra DDRISS 404', async () => {
+    expect((await enviar('post', `/redes/${redId}/desactivar`, undefined, tokens.revisor)).status).toBe(403);
+    const reactivar = await enviar('post', `/redes/${redId}/reactivar`, { municipioIds: ids('ZR08') }, tokens.revisor);
+    expect(reactivar.status).toBe(403);
+    expect((await enviar('post', `/redes/${redId}/desactivar`, undefined, tokens.adminSede)).status).toBe(404);
+  });
+});
