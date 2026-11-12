@@ -46,14 +46,23 @@ function filaContraMeta(municipioId, numerador, poblacion, { prorrateo, meta, co
 // COBERTURA y AVANCE_META_MES: dosis acumuladas contra la población (prorrateada al mes con MENSUAL_LINEAL).
 // numeradores y poblaciones son Map por municipio; una población que falta deja la fila no calculable, y también la
 // departamental (municipioId null), que suma los numeradores y las poblaciones de todos los municipios.
-export function calcularContraMeta({ version, mesHasta, municipios, numeradores, poblaciones }) {
+function parametrosContraMeta(version, mesHasta) {
   const tipo = TIPOS_INDICADOR[version.tipo_calculo];
-  const parametros = {
+  return {
     prorrateo: tipo.prorrateo.editable ? version.denominador?.prorrateo ?? tipo.prorrateo.porDefecto : tipo.prorrateo.fijo,
     meta: tipo.meta.editable ? version.meta?.valor ?? tipo.meta.porDefecto : tipo.meta.fijo,
     comparador: version.meta?.comparador ?? tipo.meta.comparador,
     mesHasta,
   };
+}
+
+const parametrosDesercion = (version) => {
+  const tipo = TIPOS_INDICADOR[version.tipo_calculo];
+  return { meta: version.meta?.valor ?? tipo.meta.porDefecto, comparador: version.meta?.comparador ?? tipo.meta.comparador };
+};
+
+export function calcularContraMeta({ version, mesHasta, municipios, numeradores, poblaciones }) {
+  const parametros = parametrosContraMeta(version, mesHasta);
 
   let numeradorTotal = 0;
   let poblacionTotal = 0;
@@ -90,11 +99,7 @@ function filaDesercion(municipioId, inicial, final, { meta, comparador }) {
 // DESERCION (SPEC 46), como la semilla: numerador = inicial − final (negativo si hubo más finales), denominador =
 // inicial. No usa población: solo deja de calcularse sin dosis iniciales. iniciales y finales son Map por municipio.
 export function calcularDesercion({ version, municipios, iniciales, finales }) {
-  const tipo = TIPOS_INDICADOR[version.tipo_calculo];
-  const parametros = {
-    meta: version.meta?.valor ?? tipo.meta.porDefecto,
-    comparador: version.meta?.comparador ?? tipo.meta.comparador,
-  };
+  const parametros = parametrosDesercion(version);
   let inicialTotal = 0;
   let finalTotal = 0;
   const filas = municipios.map((municipioId) => {
@@ -155,6 +160,26 @@ export const CALCULADORES = {
   PROYECCION: calcularProyeccion,
 };
 
+// SPEC 60: la fila «Total de la red» se arma al leer, con las filas guardadas de los municipios de la red, como la
+// departamental: suma de numeradores y de denominadores (ya prorrateados, así que no se vuelven a prorratear) o, en
+// DESERCION, de las pérdidas y de las dosis iniciales. Un municipio sin denominador deja la fila no calculable.
+// Devuelve { numerador, denominador, valor, meta, brechaDosis, cumpleMeta }, o null si el tipo no tiene total de red.
+export const TIPOS_CON_TOTAL_DE_RED = ['COBERTURA', 'AVANCE_META_MES', 'BRECHA', 'DESERCION'];
+
+export function calcularTotalDeRed(version, municipales) {
+  if (!TIPOS_CON_TOTAL_DE_RED.includes(version?.tipo_calculo)) return null;
+  const suma = (campo) => municipales.reduce((total, fila) => total + (fila[campo] ?? 0), 0);
+  const { municipioId, ...fila } = version.tipo_calculo === 'DESERCION'
+    ? filaDesercion(null, suma('denominador'), suma('denominador') - suma('numerador'), parametrosDesercion(version))
+    : filaContraMeta(
+      null,
+      suma('numerador'),
+      municipales.some((f) => f.denominador == null) ? null : suma('denominador'),
+      { ...parametrosContraMeta(version, 12), prorrateo: 'NINGUNO' },
+    );
+  return fila;
+}
+
 // La meta en dosis y el excedente de una fila guardada, que no se guardan (SPEC 45). El denominador guardado va
 // redondeado a 2 decimales y la brecha se calculó sin redondear, así que, para que siempre se cumpla
 // metaDosis − numerador = brechaDosis − excedenteDosis, la meta sale de la brecha cuando falta algo y, si no,
@@ -199,4 +224,14 @@ export function colorDelValor(umbrales, valor, tipoCalculo) {
     ? (desde == null || valor > desde) && (hasta == null || valor <= hasta)
     : (desde == null || valor >= desde) && (hasta == null || valor < hasta)));
   return franja?.color ?? null;
+}
+
+// SPEC 60: lo esperado de una cobertura contra la población anual (prorrateo NINGUNO) avanza 100 ÷ 12 por mes.
+export const esperadoDelMes = (mes) => redondear((100 / 12) * mes, 2);
+
+// Color de una cobertura anual: los cortes del indicador se aplican al cumplimiento (valor ÷ esperado del mes × 100),
+// no al valor. Sin valor, sin umbrales o sin mes, null.
+export function colorContraEsperado(umbrales, valor, mes) {
+  if (valor == null || !mes) return null;
+  return colorDelValor(umbrales, (valor / ((100 / 12) * mes)) * 100, 'COBERTURA');
 }

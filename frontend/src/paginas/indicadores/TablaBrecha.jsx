@@ -3,6 +3,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from '@/lib/utils'
 import InsigniaCumple from './InsigniaCumple.jsx'
 import { AvisoMayorACien, MarcaMayorACien } from './MarcaMayorACien.jsx'
+import { nombreDeFila } from './panelIndicadores.js'
 
 // SPEC 45: los resultados de un indicador BRECHA, con lo que falta o el excedente por municipio. La fila de la
 // DDRISS compara el total del departamento; la suma municipal, debajo, no deja que los excedentes compensen.
@@ -55,7 +56,7 @@ export default function TablaBrecha({ resultados }) {
               return (
                 <TableRow key={r.municipio?.id ?? 'ddriss'} className={cn(departamental && 'bg-muted/50 font-semibold')}>
                   <TableCell>
-                    {departamental ? 'Total de la DDRISS' : r.municipio.nombre}
+                    {nombreDeFila(r)}
                     {r.mayorACien && <MarcaMayorACien className="ml-1.5" />}
                   </TableCell>
                   <TableCell className="text-right font-mono">{formatoEntero.format(r.numerador ?? 0)}</TableCell>

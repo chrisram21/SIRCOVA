@@ -46,8 +46,9 @@ export function reactivarDistrito(id) {
   return yLuegoInvalidar(solicitar(`/distritos/${id}/reactivar`, { metodo: 'POST' }), '/distritos', '/municipios', '/establecimientos')
 }
 
-export function listarRedes({ activo } = {}) {
-  return consultarConCache(conConsulta('/redes', { activo }))
+// ddrissId solo lo manda la Autoridad nacional (SPEC 60).
+export function listarRedes({ activo, ddrissId } = {}) {
+  return consultarConCache(conConsulta('/redes', { activo, ddrissId }))
 }
 
 export function obtenerRed(id) {

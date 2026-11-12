@@ -353,14 +353,19 @@ async function revisarReferencias(vacuna, campos) {
 }
 
 // Qué mide un indicador: tipo, vacuna y dosis (o dosis inicial y final). La población y el grupo de edad no cuentan.
-function llaveDeMedida(tipo, vacuna, dosis) {
-  return JSON.stringify([tipo, vacuna, dosis.dosis ?? null, dosis.dosisInicial ?? null, dosis.dosisFinal ?? null]);
+// En COBERTURA cuenta también el prorrateo (SPEC 60): una cobertura mensual y una anual de la misma dosis conviven.
+function llaveDeMedida(tipo, vacuna, campos) {
+  const prorrateo = tipo === 'COBERTURA' ? campos.prorrateo ?? 'MENSUAL_LINEAL' : null;
+  return JSON.stringify([
+    tipo, vacuna, campos.dosis ?? null, campos.dosisInicial ?? null, campos.dosisFinal ?? null, prorrateo,
+  ]);
 }
 
 function llaveDeDocumento(doc) {
   const aplica = doc.aplica_a?.[0] ?? {};
   return llaveDeMedida(doc.tipo_calculo, aplica.vacuna, {
     dosis: aplica.dosis, dosisInicial: aplica.dosis_inicial, dosisFinal: aplica.dosis_final,
+    prorrateo: doc.denominador?.prorrateo,
   });
 }
 
@@ -478,7 +483,7 @@ export async function crearIndicador(cuerpo, contexto, usuario) {
   const dosis = TIPOS_INDICADOR[tipo].dosis === 'DOS'
     ? { inicial: contenido.campos.dosisInicial, final: contenido.campos.dosisFinal }
     : contenido.campos.dosis;
-  const codigo = codigoIndicador(tipo, vacuna, dosis, existentes);
+  const codigo = codigoIndicador(tipo, vacuna, dosis, existentes, contenido.campos.prorrateo);
   if (codigo.error) throw errores.codigoLargo();
 
   const doc = nuevaVersion({

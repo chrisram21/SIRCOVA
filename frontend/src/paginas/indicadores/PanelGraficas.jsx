@@ -15,14 +15,17 @@ import {
 // vacuna elegida; solo la línea de avance pide algo más a la API (la serie del indicador base). SPEC 51: la tarjeta
 // «Comparar periodos» comparte con la línea la serie del año de la corrida. SPEC 54: solo se dibujan las gráficas de
 // la pestaña (vista); el panel sigue montado aunque la pestaña no tenga indicador, para conservar las series pedidas.
+// SPEC 60: con red elegida, las barras toman «Total de la red»; la serie (línea y «Comparar periodos») no tiene
+// versión por red, así que sigue con el total de la DDRISS, como con un distrito.
 
 export default function PanelGraficas({
-  corrida, indicadores, resultados, vacuna, vacunaNombre, vista, codigoElegido, visibles, ddrissId, comparacion,
+  corrida, indicadores, resultados, vacuna, vacunaNombre, vista, codigoElegido, visibles, red = null, ddrissId, comparacion,
 }) {
   const panel = indicadoresDelPanel(indicadores, resultados, vacuna, codigoElegido)
   const hayIndicador = indicadoresDeLaVista(indicadoresDeLaVacuna(indicadores, resultados, vacuna), vista).length > 0
   const unSolo = visibles.length === 1 ? visibles[0] : null
-  const referencia = unSolo ? unSolo.nombre : 'Total de la DDRISS'
+  const referencia = unSolo ? unSolo.nombre : red ? 'Total de la red' : 'Total de la DDRISS'
+  const referenciaDeSerie = unSolo ? unSolo.nombre : 'Total de la DDRISS'
   const base = panel.base?.codigo ?? null
   // La serie de la línea solo hace falta en «Proyección»; «Comparar periodos» pide las suyas.
   const baseDeLinea = vista === 'proyeccion' && hayIndicador ? base : null
@@ -89,6 +92,7 @@ export default function PanelGraficas({
         indicadores={indicadores}
         resultados={resultados}
         visibles={visibles}
+        red={red}
         vacuna={vacuna}
         referencia={referencia}
         preliminar={preliminar}
@@ -106,7 +110,7 @@ export default function PanelGraficas({
             corrida={corrida}
             base={panel.base}
             municipioId={unSolo?.id}
-            referencia={referencia}
+            referencia={referenciaDeSerie}
             vacunaNombre={vacunaNombre}
             ddrissId={ddrissId}
             pedirSerie={pedirSerie}
@@ -128,6 +132,7 @@ export default function PanelGraficas({
           indicador={panel.desercion}
           filas={panel.desercion ? filasDe(resultados, panel.desercion.codigo) : []}
           visibles={visibles}
+          red={red}
           vacuna={vacunaNombre}
           referencia={referencia}
           preliminar={preliminar}
@@ -138,7 +143,7 @@ export default function PanelGraficas({
           linea={baseDeLinea ? linea : null}
           mesCorte={corrida.mesHasta}
           meta={metaDeLaLinea}
-          referencia={referencia}
+          referencia={referenciaDeSerie}
           vacuna={vacunaNombre}
           cargando={Boolean(baseDeLinea) && serie === null && error === null}
           error={error}

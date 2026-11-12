@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
-  CALCULADORES, calcularContraMeta, calcularDesercion, calcularProyeccion, colorDelValor, filtroCanonico,
-  mayorACien, metaYExcedente, sumaBrechasMunicipales,
+  CALCULADORES, calcularContraMeta, calcularDesercion, calcularProyeccion, calcularTotalDeRed, colorContraEsperado,
+  colorDelValor,
+  esperadoDelMes, filtroCanonico, mayorACien, metaYExcedente, sumaBrechasMunicipales,
 } from '../src/modulos/indicadores/calculadores.js';
 
 // Las fórmulas son puras: cada caso arma la versión, los numeradores y las poblaciones en memoria, sin base.
@@ -380,6 +381,77 @@ describe('colorDelValor', () => {
     expect(colorDelValor(ascendente, null, 'COBERTURA')).toBeNull();
     expect(colorDelValor([], 50, 'COBERTURA')).toBeNull();
     expect(colorDelValor(undefined, 50, 'COBERTURA')).toBeNull();
+  });
+});
+
+describe('colorContraEsperado (SPEC 60)', () => {
+  const umbrales = [
+    { color: 'verde', desde: 90, hasta: null },
+    { color: 'amarillo', desde: 80, hasta: 90 },
+    { color: 'rojo', desde: 0, hasta: 80 },
+  ];
+
+  it('lo esperado avanza 8.33 % por mes', () => {
+    expect(esperadoDelMes(1)).toBe(8.33);
+    expect(esperadoDelMes(7)).toBe(58.33);
+    expect(esperadoDelMes(9)).toBe(75);
+    expect(esperadoDelMes(12)).toBe(100);
+  });
+
+  it('a julio, 52.70 % es 90.3 % de lo esperado (verde) y 43.56 % es 74.7 % (rojo)', () => {
+    expect(colorContraEsperado(umbrales, 52.7, 7)).toBe('verde');
+    expect(colorContraEsperado(umbrales, 43.56, 7)).toBe('rojo');
+    expect(colorContraEsperado(umbrales, 50, 7)).toBe('amarillo');
+  });
+
+  it('a diciembre, lo esperado es 100 % y los cortes se aplican al valor', () => {
+    expect(colorContraEsperado(umbrales, 89.99, 12)).toBe('amarillo');
+    expect(colorContraEsperado(umbrales, 90, 12)).toBe('verde');
+    expect(colorContraEsperado(umbrales, 79.9, 12)).toBe('rojo');
+  });
+
+  it('sin valor, sin umbrales o sin mes es null', () => {
+    expect(colorContraEsperado(umbrales, null, 7)).toBeNull();
+    expect(colorContraEsperado([], 50, 7)).toBeNull();
+    expect(colorContraEsperado(undefined, 50, 7)).toBeNull();
+    expect(colorContraEsperado(umbrales, 50, 0)).toBeNull();
+  });
+});
+
+describe('calcularTotalDeRed (SPEC 60)', () => {
+  const desercion = { tipo_calculo: 'DESERCION', meta: { valor: 10, comparador: '<=' } };
+
+  it('suma numeradores y denominadores guardados sin volver a prorratear', () => {
+    const filas = [{ numerador: 60, denominador: 100 }, { numerador: 30, denominador: 100 }];
+    expect(calcularTotalDeRed(cobertura('MENSUAL_LINEAL'), filas)).toEqual({
+      numerador: 90, denominador: 200, valor: 45, meta: 95, brechaDosis: 100, cumpleMeta: false,
+    });
+  });
+
+  it('el avance usa su meta fija y puede pasar de 100', () => {
+    const filas = [{ numerador: 120, denominador: 100 }, { numerador: 10, denominador: 10 }];
+    expect(calcularTotalDeRed(AVANCE, filas)).toEqual({
+      numerador: 130, denominador: 110, valor: 118.1818, meta: 100, brechaDosis: 0, cumpleMeta: true,
+    });
+  });
+
+  it('un municipio sin denominador deja la fila no calculable', () => {
+    const filas = [{ numerador: 60, denominador: 100 }, { numerador: 9, denominador: null }];
+    expect(calcularTotalDeRed(cobertura('NINGUNO'), filas)).toMatchObject({
+      numerador: 69, denominador: null, valor: null, brechaDosis: null, cumpleMeta: null,
+    });
+  });
+
+  it('la deserción suma pérdidas e iniciales', () => {
+    const filas = [{ numerador: 5, denominador: 50 }, { numerador: 15, denominador: 50 }];
+    expect(calcularTotalDeRed(desercion, filas)).toEqual({
+      numerador: 20, denominador: 100, valor: 20, meta: 10, brechaDosis: null, cumpleMeta: false,
+    });
+  });
+
+  it('la proyección y una versión que falta no tienen total de red', () => {
+    expect(calcularTotalDeRed({ tipo_calculo: 'PROYECCION' }, [])).toBeNull();
+    expect(calcularTotalDeRed(undefined, [])).toBeNull();
   });
 });
 

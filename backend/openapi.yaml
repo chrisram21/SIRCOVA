@@ -3240,7 +3240,8 @@ paths:
         El backend genera el código `{PREFIJO}_{VACUNA}{DOSIS}`: el prefijo sale del tipo (`COB`, `AVANCE`,
         `BRECHA`, `DES`), `{VACUNA}` es el código de la vacuna y `{DOSIS}` el de la dosis sin la `D` inicial
         (`D3` → `3`, `R1` → `R1`, `UNICA` → `U`); en `DESERCION`, las dos dosis unidas con `_` (`DES_HEXA1_3`).
-        Si el código ya existe en cualquier territorio y estado, agrega `_2`, `_3`… (el primero libre). Si pasa
+        Una `COBERTURA` con prorrateo `NINGUNO` (la cobertura anual, SPEC 60) lleva el prefijo `COB_ANUAL`
+        (`COB_ANUAL_HEXA3`). Si el código ya existe en cualquier territorio y estado, agrega `_2`, `_3`… (el primero libre). Si pasa
         de 40 caracteres, responde 422 `INDICADOR_INVALIDO`.
 
         Lo que no se edita sale de los valores por defecto del tipo: numerador de producción `CERRADO`, por
@@ -3250,7 +3251,8 @@ paths:
         Guarda la versión 1 `VIGENTE` con el territorio de la DDRISS del usuario y `vigencia.desde` = el instante
         de la publicación. Se revisa, en este orden: el cuerpo (400), la vacuna, las dosis y el grupo de edad
         (422 `INDICADOR_INVALIDO`) y que otro código que aplica a la DDRISS no tenga el mismo tipo, vacuna y dosis
-        (409 `INDICADOR_DUPLICADO`). Si dos altas chocan en el código, la segunda responde 409
+        (409 `INDICADOR_DUPLICADO`). En `COBERTURA` cuenta también el prorrateo (SPEC 60): una cobertura
+        `MENSUAL_LINEAL` y una `NINGUNO` de la misma dosis conviven. Si dos altas chocan en el código, la segunda responde 409
         `INDICADOR_DESACTUALIZADO`.
 
         Bitácora (módulo `CONFIGURACION`, entidad `configuracion_indicadores`, `entidadId` el ObjectId): `CREAR`
@@ -5185,12 +5187,25 @@ paths:
         `proyeccion` (SPEC 47) tampoco se guarda: en las filas `PROYECCION` se arma al leer con los `parametros` de
         la versión usada, los meses cerrados al iniciar la corrida y la fila del indicador base del mismo
         municipio en la misma corrida, aunque la consulta filtre por `indicador` o por `municipioId`.
+
+        Con `redId` (SPEC 60), además de lo de siempre, cada indicador `COBERTURA`, `AVANCE_META_MES`, `BRECHA` o
+        `DESERCION` trae una fila «Total de la red», justo después de su fila departamental, con `red: { id, nombre }`
+        y `municipio: null`. No se guarda: se calcula al leer con los municipios **actuales** de la red que están en
+        la corrida, sumando sus numeradores y sus denominadores guardados (en `DESERCION`, las pérdidas y las dosis
+        iniciales), con la meta, el comparador y el semáforo de la versión usada, como la fila departamental. Si
+        a un municipio de la red le falta el denominador, la fila no es calculable. `sumaBrechasMunicipales`
+        suma solo los municipios de la red. `PROYECCION` no tiene fila de la red. La red debe estar activa y ser
+        de la DDRISS de la consulta (404 si no); `redId` no se combina con `municipioId` (400).
       x-permiso: INDICADOR_CONSULTAR
       parameters:
         - { name: anio, in: query, required: true, schema: { type: integer, minimum: 2000, maximum: 2100, example: 2026 } }
         - { name: mes, in: query, required: true, schema: { type: integer, minimum: 1, maximum: 12, example: 8 } }
         - { name: indicador, in: query, schema: { type: string, pattern: "^[A-Z0-9_]{1,40}$", example: AVANCE_HEXA3 } }
         - { name: municipioId, in: query, schema: { type: integer, example: 1 } }
+        - name: redId
+          in: query
+          description: Agrega la fila «Total de la red» de cada indicador (SPEC 60); no se combina con `municipioId`
+          schema: { type: integer, minimum: 1, example: 1 }
         - { $ref: "#/components/parameters/DdrissIdAutoridad" }
       responses:
         "200":
@@ -5199,7 +5214,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ResultadosVigentes" }
         "400":
-          description: Un parámetro falta, no es válido, es desconocido o está repetido
+          description: Un parámetro falta, no es válido, es desconocido o está repetido, o vienen `redId` y `municipioId`
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -5207,6 +5222,13 @@ paths:
                 error: { codigo: ENTRADA_INVALIDA, mensaje: El mes debe ser un número de 1 a 12. }
         "401": { $ref: "#/components/responses/NoAutenticado" }
         "403": { $ref: "#/components/responses/SinPermiso" }
+        "404":
+          description: La red no existe, está inactiva o es de otra DDRISS
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: NO_ENCONTRADO, mensaje: La red no existe. }
 
   /indicadores/serie:
     get:
@@ -8528,7 +8550,7 @@ components:
           description: Los indicadores calculados con la versión usada (en la corrida de la semilla, sin bitácora, salen de sus resultados)
           items:
             type: object
-            required: [codigo, version, nombre, tipoCalculo, esIndicadorMapa, umbrales, umbralesProvisionales]
+            required: [codigo, version, nombre, tipoCalculo, esIndicadorMapa, umbrales, umbralesProvisionales, prorrateo, clasificacionPoblacion, descripcionPoblacion]
             properties:
               codigo: { type: string, example: COB_HEXA3 }
               version: { type: integer, example: 1 }
@@ -8546,6 +8568,29 @@ components:
                 type: boolean
                 description: De la versión usada; `false` si no lo tiene
                 example: true
+              prorrateo:
+                type: string
+                nullable: true
+                enum: [NINGUNO, MENSUAL_LINEAL, null]
+                description: |
+                  `denominador.prorrateo` de la versión usada (SPEC 60). `NINGUNO` en una cobertura es la cobertura
+                  anual. `null` en los tipos sin prorrateo o si la versión ya no está en MongoDB.
+                example: NINGUNO
+              clasificacionPoblacion:
+                type: string
+                nullable: true
+                description: |
+                  `aplica_a[0].clasificacion_poblacion` de la versión usada (SPEC 60), para agrupar las columnas de la
+                  tabla de la red. `null` en los tipos sin población o si la versión ya no está en MongoDB.
+                example: MENOR_1
+              descripcionPoblacion:
+                type: string
+                nullable: true
+                description: |
+                  La descripción de `clasificacionPoblacion` en el catálogo `clasificacion_poblacion` (SPEC 60), para
+                  los encabezados de la tabla de la red sin pedir otro permiso. `null` si no hay clasificación o si
+                  el código no está en el catálogo.
+                example: Menores de 1 año
         omitidos:
           type: array
           description: Los indicadores que aplicaban y no se calcularon, con el motivo
@@ -8637,7 +8682,7 @@ components:
 
     ResultadoIndicador:
       type: object
-      required: [indicadorCodigo, indicadorVersion, tipoCalculo, municipio, vacuna, dosis, filtroDimensiones, anio, mes, numerador, denominador, valor, meta, brechaDosis, cumpleMeta, calculable, color, esProyeccion, mayorACien, metaDosis, excedenteDosis, sumaBrechasMunicipales, proyeccion]
+      required: [indicadorCodigo, indicadorVersion, tipoCalculo, municipio, red, vacuna, dosis, filtroDimensiones, anio, mes, numerador, denominador, valor, meta, brechaDosis, cumpleMeta, calculable, color, esperado, esProyeccion, mayorACien, metaDosis, excedenteDosis, sumaBrechasMunicipales, proyeccion]
       properties:
         indicadorCodigo: { type: string, example: AVANCE_HEXA3 }
         indicadorVersion: { type: integer, description: Versión de `configuracion_indicadores` usada, example: 1 }
@@ -8651,6 +8696,14 @@ components:
             id: { type: integer, example: 1 }
             nombre: { type: string, example: San Marcos }
             codigoIne: { type: string, description: La llave del GeoJSON del mapa (SPEC 50), example: "1201" }
+        red:
+          type: object
+          nullable: true
+          description: "Solo en la fila «Total de la red» (SPEC 60, con `redId`), que lleva `municipio: null`; `null` en las demás"
+          required: [id, nombre]
+          properties:
+            id: { type: integer, example: 1 }
+            nombre: { type: string, example: Red No. 1 }
         vacuna:
           type: object
           required: [codigo, nombre]
@@ -8685,8 +8738,19 @@ components:
           type: string
           nullable: true
           enum: [verde, amarillo, rojo, null]
-          description: Franja del semáforo de la versión usada; `null` sin umbrales o sin valor
+          description: |
+            Franja del semáforo de la versión usada; `null` sin umbrales o sin valor. En una `COBERTURA` con
+            prorrateo `NINGUNO` (SPEC 60), los cortes se aplican al cumplimiento de lo esperado del mes
+            (`valor` ÷ `esperado` × 100), no al valor. Se calcula al leer.
           example: verde
+        esperado:
+          type: number
+          nullable: true
+          description: |
+            Solo en una `COBERTURA` con prorrateo `NINGUNO` (SPEC 60): el porcentaje de la población anual que se
+            espera al mes de corte, 100 ÷ 12 × `mes`, a 2 decimales (58.33 a julio). `null` en los demás. Se calcula
+            al leer.
+          example: 58.33
         esProyeccion: { type: boolean, description: "`true` en `PROYECCION`: es una estimación, no un dato registrado", example: false }
         mayorACien:
           type: boolean

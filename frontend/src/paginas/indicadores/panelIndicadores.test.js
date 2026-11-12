@@ -3,6 +3,7 @@ import {
   barrasDeDesercion,
   barrasPorMunicipio,
   barrasPorVacuna,
+  esFilaDeTotal,
   filaDeReferencia,
   filasVisibles,
   indicadoresDeLaVacuna,
@@ -10,6 +11,7 @@ import {
   indicadoresDelPanel,
   municipiosDeLaCorrida,
   municipiosVisibles,
+  nombreDeFila,
   puntosDeLinea,
   vacunaElegida,
   vacunasDeLaCorrida,
@@ -62,8 +64,10 @@ describe('pestañas por tipo', () => {
   const COB_HEXA1 = { codigo: 'COB_HEXA1', nombre: 'Cobertura Hexa 1', tipoCalculo: 'COBERTURA' }
   const SOLO_COBERTURA = [{ codigo: 'COB_BCG', nombre: 'Cobertura BCG', tipoCalculo: 'COBERTURA' }]
 
-  test('las cinco pestañas van en orden y cada tipo tiene la suya', () => {
-    expect(Object.keys(VISTAS)).toEqual(['avance', 'brecha', 'cobertura', 'desercion', 'proyeccion'])
+  test('las seis pestañas van en orden y cada tipo tiene la suya; «Redes» no es de un tipo', () => {
+    expect(Object.keys(VISTAS)).toEqual(['avance', 'brecha', 'cobertura', 'desercion', 'proyeccion', 'redes'])
+    expect(vistaDeTipo(null)).toBeNull()
+    expect(indicadoresDeLaVista([{ codigo: 'X', tipoCalculo: null }], 'redes')).toEqual([])
     expect(vistaDeTipo('AVANCE_META_MES')).toBe('avance')
     expect(vistaDeTipo('PROYECCION')).toBe('proyeccion')
     expect(vistaDeTipo('OTRO')).toBeNull()
@@ -191,6 +195,44 @@ describe('municipios visibles', () => {
     expect(filaDeReferencia(filas, [SAN_MARCOS]).municipio).toEqual(SAN_MARCOS)
     expect(filaDeReferencia(filas, [SAN_MARCOS, TAJUMULCO]).municipio).toBeNull()
     expect(filaDeReferencia(filas, TODOS).municipio).toBeNull()
+  })
+})
+
+describe('red (SPEC 60)', () => {
+  const RED = { id: 3, nombre: 'Red No. 1' }
+  const totalRed = (codigo, cambios = {}) => fila(codigo, null, { red: RED, valor: 45, ...cambios })
+
+  test('la red recorta como el distrito y manda sobre él; los elegidos recortan dentro de la red', () => {
+    expect(municipiosVisibles(TODOS, { deLaRed: [4, 9] })).toEqual([COMITANCILLO, TAJUMULCO])
+    expect(municipiosVisibles(TODOS, { deLaRed: [4, 9], delDistrito: [1] })).toEqual([COMITANCILLO, TAJUMULCO])
+    expect(municipiosVisibles(TODOS, { deLaRed: [4, 9], elegidos: [9, 1] })).toEqual([TAJUMULCO])
+  })
+
+  test('con red, las tablas llevan «Total de la red» en lugar de la DDRISS; sin red, solo la DDRISS', () => {
+    const filas = [fila('A', null), totalRed('A'), fila('A', COMITANCILLO), fila('A', SAN_MARCOS)]
+    expect(filasVisibles(filas, [COMITANCILLO], RED).map(nombreDeFila)).toEqual(['Total de la red', 'Comitancillo'])
+    expect(filasVisibles(filas, [COMITANCILLO]).map(nombreDeFila)).toEqual(['Total de la DDRISS', 'Comitancillo'])
+    // Una fila de otra red no se confunde con la elegida.
+    expect(filasVisibles([totalRed('A', { red: { id: 8, nombre: 'Otra' } })], [], RED)).toEqual([])
+  })
+
+  test('la fila de referencia es la de la red con varios visibles y la del municipio con uno solo', () => {
+    const filas = [fila('A', null), totalRed('A'), fila('A', COMITANCILLO), fila('A', TAJUMULCO)]
+    expect(filaDeReferencia(filas, [COMITANCILLO, TAJUMULCO], RED).red).toEqual(RED)
+    expect(filaDeReferencia(filas, [COMITANCILLO, TAJUMULCO]).red).toBeUndefined()
+    expect(filaDeReferencia(filas, [TAJUMULCO], RED).municipio).toEqual(TAJUMULCO)
+    // La proyección no tiene fila de la red: no hay referencia.
+    const proyeccion = [fila('P', null), fila('P', COMITANCILLO), fila('P', TAJUMULCO)]
+    expect(filaDeReferencia(proyeccion, [COMITANCILLO, TAJUMULCO], RED)).toBeNull()
+  })
+
+  test('esFilaDeTotal acepta filas sin el campo red, y la barra por vacuna usa la fila de la red', () => {
+    expect(esFilaDeTotal(fila('A', null))).toBe(true)
+    expect(esFilaDeTotal(fila('A', null), RED)).toBe(false)
+    expect(esFilaDeTotal(fila('A', SAN_MARCOS))).toBe(false)
+    const resultados = [fila('COB_HEXA3', null, { valor: 80 }), totalRed('COB_HEXA3')]
+    const { barras } = barrasPorVacuna(INDICADORES, resultados, 'COBERTURA', TODOS, 'HEXA', RED)
+    expect(barras.map((b) => b.valor)).toEqual([45])
   })
 })
 

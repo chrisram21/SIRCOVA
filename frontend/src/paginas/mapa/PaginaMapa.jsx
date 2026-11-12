@@ -179,7 +179,7 @@ export default function PaginaMapa({ hoy }) {
     features: limites.datos?.features ?? [],
     modo,
   })
-  const leyenda = rotulosDeLeyenda(modo, { indicador, clases, mesNombre })
+  const leyenda = rotulosDeLeyenda(modo, { indicador, clases, mesNombre, mes: filtros.mes })
   const seleccionada = filas.find((f) => f.municipioId !== null && f.municipioId === filtros.municipio) ?? null
   const filaPanel = seleccionada ?? filaDeLaDdriss({ resultados: todos, indicador, avance: avance.datos, modo })
   const franja = leyenda.franjas.find((f) => f.color === filaPanel.color && f.texto !== 'Sin datos')?.texto ?? null

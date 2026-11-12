@@ -1,12 +1,11 @@
 import { TriangleAlert } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { nombreDeFila as nombreDe } from './panelIndicadores.js'
 
 // SPEC 52 (HU-44): una cobertura mayor al 100 % (mayorACien, calculado por la API) pide revisar la población
 // (denominador) o los registros. La marca y el aviso usan estos textos en «Indicadores» y en el mapa.
 
 export const TEXTO_MAYOR_A_CIEN = 'Mayor al 100 %: revise la población (denominador) o los registros.'
-
-const nombreDe = (r) => (r.municipio === null ? 'Total de la DDRISS' : r.municipio.nombre)
 
 export function MarcaMayorACien({ className }) {
   return (
@@ -20,7 +19,8 @@ export function MarcaMayorACien({ className }) {
   )
 }
 
-// El texto del aviso, o null si ninguna fila está marcada. Nombra la DDRISS primero y luego los municipios.
+// El texto del aviso, o null si ninguna fila está marcada. Nombra el total (de la DDRISS o de la red) primero y luego
+// los municipios.
 export function textoDelAviso(resultados) {
   const marcadas = resultados.filter((r) => r.mayorACien)
   if (marcadas.length === 0) return null

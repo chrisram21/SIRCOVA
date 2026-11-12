@@ -316,11 +316,13 @@ describe('POST /indicadores/corridas', () => {
     });
     expect(corrida.indicadores).toContainEqual({
       codigo: COB, version: 1, nombre: `vitest-hu36 ${COB} v1`, tipoCalculo: 'COBERTURA',
-      esIndicadorMapa: false, umbrales: UMBRALES, umbralesProvisionales: false,
+      esIndicadorMapa: false, umbrales: UMBRALES, umbralesProvisionales: false, prorrateo: 'NINGUNO',
+      clasificacionPoblacion: '1_A_MENOR_2', descripcionPoblacion: 'De 1 a menos de 2 años',
     });
     expect(corrida.indicadores).toContainEqual({
       codigo: DES, version: 1, nombre: `vitest-hu36 ${DES} v1`, tipoCalculo: 'DESERCION',
-      esIndicadorMapa: false, umbrales: desercion().umbrales, umbralesProvisionales: false,
+      esIndicadorMapa: false, umbrales: desercion().umbrales, umbralesProvisionales: false, prorrateo: null,
+      clasificacionPoblacion: null, descripcionPoblacion: null,
     });
     expect(corrida.omitidos.map((o) => o.codigo)).not.toContain(DES);
     expect(corrida.totalResultados).toBe(resultados.length);
@@ -354,6 +356,7 @@ describe('POST /indicadores/corridas', () => {
       indicadorVersion: 1,
       tipoCalculo: 'COBERTURA',
       municipio: { id: MUNICIPIO_SM, nombre: 'San Marcos', codigoIne: '1201' },
+      red: null,
       vacuna: { codigo: VACUNA, nombre: 'vitest-hu36 Vacuna' },
       dosis: 'D2',
       filtroDimensiones: '',
@@ -367,6 +370,7 @@ describe('POST /indicadores/corridas', () => {
       cumpleMeta: false,
       calculable: true,
       color: 'rojo',
+      esperado: 16.67,
       esProyeccion: false,
       mayorACien: false,
       metaDosis: 228,
@@ -428,6 +432,7 @@ describe('POST /indicadores/corridas', () => {
       indicadorVersion: 1,
       tipoCalculo: 'DESERCION',
       municipio: { id: MUNICIPIO_SM, nombre: 'San Marcos', codigoIne: '1201' },
+      red: null,
       vacuna: { codigo: VACUNA, nombre: 'vitest-hu36 Vacuna' },
       dosis: 'D2',
       filtroDimensiones: '',
@@ -441,6 +446,7 @@ describe('POST /indicadores/corridas', () => {
       cumpleMeta: true,
       calculable: true,
       color: 'verde',
+      esperado: null,
       esProyeccion: false,
       mayorACien: false,
       metaDosis: null,

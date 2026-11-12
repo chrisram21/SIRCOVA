@@ -216,6 +216,18 @@ describe('rotulosDeLeyenda', () => {
     expect(rotulosDeLeyenda('cobertura', { indicador: indicador('C', 'COBERTURA') }).titulo).toBe('Cobertura')
   })
 
+  test('una cobertura anual dice que sus franjas son el porcentaje de lo esperado del mes (SPEC 60)', () => {
+    const anual = indicador('COB_ANUAL_HEXA3', 'COBERTURA', { prorrateo: 'NINGUNO', umbralesProvisionales: true })
+    const leyenda = rotulosDeLeyenda('cobertura', { indicador: anual, mes: 7 })
+    expect(leyenda.titulo).toBe('Cobertura anual: % de lo esperado a julio (58.3 %)')
+    expect(textos(leyenda)).toEqual(['90 % o más', '80 a 89.9 %', 'Menos de 80 %', 'Sin datos'])
+    expect(rotulosDeLeyenda('cobertura', { indicador: anual, mes: 12 }).titulo)
+      .toBe('Cobertura anual: % de lo esperado a diciembre (100 %)')
+    // Una cobertura mensual no cambia.
+    const mensual = indicador('COB_HEXA3', 'COBERTURA', { prorrateo: 'MENSUAL_LINEAL' })
+    expect(rotulosDeLeyenda('cobertura', { indicador: mensual, mes: 7 }).titulo).toBe('Cobertura')
+  })
+
   test('descendente, con dos franjas (como DES_HEXA1_3)', () => {
     const leyenda = rotulosDeLeyenda('desercion', {
       indicador: indicador('DES_HEXA1_3', 'DESERCION', { umbrales: UMBRALES_DESERCION }),
