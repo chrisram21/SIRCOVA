@@ -482,10 +482,29 @@ describe('POST /configuracion-indicadores', () => {
   it('una cobertura que mide lo mismo que la nacional responde 409 con su código', async () => {
     const res = await crear({
       tipoCalculo: 'COBERTURA', vacuna: VACUNA, nombre: 'vitest-hu35-cobertura', dosis: 'D3',
-      clasificacionPoblacion: '1_A_MENOR_2', prorrateo: 'NINGUNO', meta: 90, cortes: [70, 85], motivoCambio: MOTIVO,
+      clasificacionPoblacion: '1_A_MENOR_2', prorrateo: 'MENSUAL_LINEAL', meta: 90, cortes: [70, 85], motivoCambio: MOTIVO,
     });
     expect(res.status).toBe(409);
     expect(res.body.codigoExistente).toBe('ZVT_HU35_NAC');
+  });
+
+  it('una cobertura anual convive con la mensual de la misma dosis y lleva COB_ANUAL (SPEC 60)', async () => {
+    const anual = {
+      tipoCalculo: 'COBERTURA', vacuna: VACUNA, nombre: 'vitest-hu35-cobertura-anual', dosis: 'D3',
+      clasificacionPoblacion: 'MENOR_1', prorrateo: 'NINGUNO', meta: 95, cortes: [80, 90], motivoCambio: MOTIVO,
+    };
+    try {
+      const alta = await crear(anual);
+      expect(alta.status).toBe(201);
+      expect(alta.body).toMatchObject({ codigo: `COB_ANUAL_${VACUNA}3`, denominador: { prorrateo: 'NINGUNO' } });
+
+      const otra = await crear({ ...anual, nombre: 'vitest-hu35-cobertura-anual-2' });
+      expect(otra.status).toBe(409);
+      expect(otra.body).toMatchObject({ error: { codigo: 'INDICADOR_DUPLICADO' }, codigoExistente: `COB_ANUAL_${VACUNA}3` });
+    } finally {
+      // Sin borrarla, la versión NINGUNO de ZVT_HU35_NAC (D3) de una prueba posterior chocaría con esta.
+      await (await indicadores()).deleteMany({ codigo: `COB_ANUAL_${VACUNA}3` });
+    }
   });
 
   it('crea una deserción sin población ni prorrateo, con las franjas descendentes', async () => {
@@ -677,7 +696,7 @@ describe('POST /configuracion-indicadores/{codigo}/versiones', () => {
   it('pasar a la dosis de otro código que aplica responde 409 con ese código', async () => {
     const alta = await enviar('/configuracion-indicadores', {
       tipoCalculo: 'COBERTURA', vacuna: VACUNA, nombre: 'vitest-hu35-cobertura-d1', dosis: 'D1',
-      clasificacionPoblacion: 'MENOR_1', prorrateo: 'NINGUNO', meta: 90, cortes: [70, 85], motivoCambio: MOTIVO,
+      clasificacionPoblacion: 'MENOR_1', prorrateo: 'MENSUAL_LINEAL', meta: 90, cortes: [70, 85], motivoCambio: MOTIVO,
     });
     expect(alta.status).toBe(201);
     const res = await publicar('ZVT_HU35_NAC', versionNacional({ dosis: 'D1' }));

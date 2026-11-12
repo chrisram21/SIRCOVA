@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
-import { listarDdriss, listarDistritos, listarPeriodos } from '@/api/catalogos.js'
+import { listarDdriss, listarDistritos, listarPeriodos, listarRedes } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
 import {
   calcularIndicadores, listarCorridas, listarResultados, obtenerMesesCalculados, obtenerSerie,
@@ -11,7 +11,9 @@ import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 import PaginaIndicadores, { filtrosDeUrl, indicadorElegido, mesPorDefecto } from './PaginaIndicadores.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
-vi.mock('@/api/catalogos.js', () => ({ listarDdriss: vi.fn(), listarDistritos: vi.fn(), listarPeriodos: vi.fn() }))
+vi.mock('@/api/catalogos.js', () => ({
+  listarDdriss: vi.fn(), listarDistritos: vi.fn(), listarPeriodos: vi.fn(), listarRedes: vi.fn(),
+}))
 vi.mock('@/api/indicadores.js', () => ({
   calcularIndicadores: vi.fn(),
   listarCorridas: vi.fn(),
@@ -184,9 +186,11 @@ test('mes por defecto, filtros de la URL e indicador elegido', () => {
   expect(mesPorDefecto(new Date(2026, 10, 3))).toEqual({ anio: 2026, mes: 10 })
   expect(mesPorDefecto(new Date(2027, 0, 15))).toEqual({ anio: 2026, mes: 12 })
   expect(filtrosDeUrl(new URLSearchParams('anio=2025&mes=13&indicador=cob'), HOY)).toEqual({
-    anio: 2025, mes: 10, indicador: undefined, vista: undefined, ddriss: undefined, vacuna: undefined, distrito: undefined,
-    municipios: [], comparar: undefined, anios: undefined, meses: undefined,
+    anio: 2025, mes: 10, indicador: undefined, vista: undefined, ddriss: undefined, vacuna: undefined, red: undefined,
+    distrito: undefined, municipios: [], comparar: undefined, anios: undefined, meses: undefined,
   })
+  expect(filtrosDeUrl(new URLSearchParams('red=3'), HOY).red).toBe(3)
+  expect(filtrosDeUrl(new URLSearchParams('red=x'), HOY).red).toBeUndefined()
   expect(filtrosDeUrl(new URLSearchParams('vista=brecha'), HOY).vista).toBe('brecha')
   expect(filtrosDeUrl(new URLSearchParams('vista=mapa'), HOY).vista).toBeUndefined()
   expect(filtrosDeUrl(new URLSearchParams('vacuna=HEXA&distrito=3&municipios=4,x,1,4'), HOY)).toMatchObject({
@@ -637,6 +641,80 @@ describe('panel de gráficas y filtros', () => {
     await waitFor(() => expect(obtenerSerie).toHaveBeenLastCalledWith(expect.objectContaining({ municipioId: 9 })))
   })
 
+  // SPEC 60: la red recorta a sus municipios y pide su total a la API.
+  const RED = {
+    id: 3,
+    codigo: 'RED_01',
+    nombre: 'Red No. 1',
+    activo: true,
+    ddriss: { id: 1, codigo: 'DDRISS_SM', nombre: 'DDRISS San Marcos' },
+    municipios: [{ id: 9, codigoIne: '1209', nombre: 'Tajumulco' }, { id: 4, codigoIne: '1204', nombre: 'Comitancillo' }],
+    trazadoras: [],
+  }
+  const conRed = () => {
+    listarRedes.mockResolvedValue([RED])
+    listarResultados.mockImplementation(async ({ redId }) => ({
+      corrida: corrida(),
+      resultados: redId
+        ? RESULTADOS.flatMap((r) => (r.municipio === null && r.tipoCalculo !== 'PROYECCION'
+          ? [r, { ...r, red: { id: RED.id, nombre: RED.nombre }, valor: 45, color: 'rojo' }]
+          : [r]))
+        : RESULTADOS,
+    }))
+  }
+  const PERMISOS_RED = ['INDICADOR_CONSULTAR', 'RED_CONSULTAR', 'DISTRITO_CONSULTAR']
+
+  test('elegir una red recorta a sus municipios, limpia distrito y municipios y muestra «Total de la red»', async () => {
+    conRed()
+    listarDistritos.mockResolvedValue(DISTRITOS)
+    const router = await montar({ url: '/indicadores?vista=brecha&distrito=32&municipios=9', permisos: PERMISOS_RED })
+    await screen.findByText('Total de la DDRISS')
+    await waitFor(() => expect(opciones('red')).toEqual(['todos', '3']))
+    expect(listarRedes).toHaveBeenCalledWith({ activo: true, ddrissId: undefined })
+
+    fireEvent.change(document.querySelector('select[name="red"]'), { target: { value: '3' } })
+    await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&vista=brecha&red=3'))
+    await screen.findByText('Total de la red')
+    expect(listarResultados).toHaveBeenLastCalledWith({ anio: 2026, mes: 10, redId: 3, ddrissId: undefined })
+    expect(nombresEnTabla()).toEqual(['Total de la red', 'Comitancillo', 'Tajumulco'])
+    expect(screen.getByRole('button', { name: 'Municipios' }).textContent).toBe('Todos (2)')
+  })
+
+  test('con red en la URL, los resultados esperan a las redes; en Proyección no hay fila de total', async () => {
+    conRed()
+    await montar({ url: '/indicadores?vista=proyeccion&red=3', permisos: PERMISOS_RED })
+    await waitFor(() => expect(nombresEnTabla()).toEqual(['Comitancillo', 'Tajumulco']))
+    expect(listarResultados).toHaveBeenCalledTimes(1)
+    expect(listarResultados).toHaveBeenCalledWith({ anio: 2026, mes: 10, redId: 3, ddrissId: undefined })
+  })
+
+  test('elegir un distrito limpia la red', async () => {
+    conRed()
+    listarDistritos.mockResolvedValue(DISTRITOS)
+    const router = await montar({ url: '/indicadores?red=3', permisos: PERMISOS_RED })
+    await screen.findByText('Total de la red')
+    await waitFor(() => expect(opciones('distrito')).toEqual(['todos', '31', '32']))
+
+    fireEvent.change(document.querySelector('select[name="distrito"]'), { target: { value: '31' } })
+    await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&distrito=31'))
+    await screen.findByText('Total de la DDRISS')
+    expect(listarResultados).toHaveBeenLastCalledWith({ anio: 2026, mes: 10, redId: undefined, ddrissId: undefined })
+  })
+
+  test('una red de la URL que no existe se ignora', async () => {
+    conRed()
+    await montar({ url: '/indicadores?red=99', permisos: PERMISOS_RED })
+    await screen.findByText('Total de la DDRISS')
+    expect(listarResultados).toHaveBeenCalledWith({ anio: 2026, mes: 10, redId: undefined, ddrissId: undefined })
+  })
+
+  test('sin RED_CONSULTAR no hay selector de red ni se piden las redes', async () => {
+    await montar({ url: '/indicadores?red=3' })
+    await screen.findByText('Total de la DDRISS')
+    expect(document.querySelector('select[name="red"]')).toBeNull()
+    expect(listarRedes).not.toHaveBeenCalled()
+  })
+
   test('sin DISTRITO_CONSULTAR no hay selector de distrito ni se piden los distritos', async () => {
     await montar()
     await screen.findByText('Total de la DDRISS')
@@ -927,5 +1005,107 @@ describe('pantalla de carga (SPEC 56)', () => {
     expect(await screen.findByRole('button', { name: 'Reintentar' })).toBeTruthy()
     expect(screen.getByText(/No se pudieron cargar los indicadores/)).toBeTruthy()
     expect(cargaDeIndicadores()).toBeNull()
+  })
+})
+
+// SPEC 60: la pestaña «Redes», con la cobertura anual de las trazadoras de la red. La red tiene HEXA D3 (con
+// cobertura anual) y SPR D1 (sin ella).
+describe('pestaña «Redes»', () => {
+  const ANUAL = {
+    codigo: 'COB_ANUAL_HEXA3',
+    version: 1,
+    nombre: 'Cobertura anual de Hexavalente 3.ª dosis',
+    tipoCalculo: 'COBERTURA',
+    prorrateo: 'NINGUNO',
+    clasificacionPoblacion: 'MENOR_1',
+    descripcionPoblacion: 'Menores de 1 año',
+  }
+  const trazadora = (vacunaCodigo, codigo) => ({
+    dosisId: 0, codigo, nombre: codigo, activa: true, vacuna: { id: 0, codigo: vacunaCodigo, nombre: vacunaCodigo, activa: true },
+  })
+  const RED_1 = {
+    id: 3,
+    codigo: 'RED_01',
+    nombre: 'Red No. 1',
+    activo: true,
+    ddriss: { id: 1, codigo: 'DDRISS_SM', nombre: 'DDRISS San Marcos' },
+    municipios: [TAJUMULCO, COMITANCILLO],
+    trazadoras: [trazadora('HEXA', 'D3'), trazadora('SPR', 'D1')],
+  }
+  const RED_2 = { ...RED_1, id: 5, codigo: 'RED_02', nombre: 'Red No. 2', municipios: [SAN_MARCOS] }
+  const anual = (municipio, cambios) => resultado('COB_ANUAL_HEXA3', municipio, {
+    tipoCalculo: 'COBERTURA', meta: 95, esperado: 83.33, mayorACien: false, ...cambios,
+  })
+  const conAnual = ({ parcial = false } = {}) => {
+    listarRedes.mockResolvedValue([RED_2, RED_1])
+    listarResultados.mockImplementation(async ({ redId }) => ({
+      corrida: corrida({ indicadores: [...corrida().indicadores, ANUAL], parcial, mesesSinCerrar: parcial ? [10] : [] }),
+      resultados: [
+        ...RESULTADOS,
+        anual(null, { valor: 60 }),
+        anual(TAJUMULCO, { valor: 80, color: 'verde' }),
+        anual(COMITANCILLO, { valor: 50, color: 'rojo' }),
+        anual(SAN_MARCOS, { valor: 110, color: 'verde', mayorACien: true }),
+        ...(redId ? [anual(null, { red: { id: redId, nombre: 'red' }, valor: 65, color: 'amarillo' })] : []),
+      ],
+    }))
+  }
+  const PERMISOS = ['INDICADOR_CONSULTAR', 'RED_CONSULTAR']
+  const opciones = (nombre) => [...document.querySelectorAll(`select[name="${nombre}"] option`)].map((o) => o.value).filter(Boolean)
+  const titulosDeGraficas = () => [...document.querySelectorAll('[data-slot="card-title"]')].map((t) => t.textContent)
+
+  test('abre con la primera red por nombre, solo con año, mes y red, y pide su total', async () => {
+    conAnual()
+    const router = await montar({ permisos: PERMISOS })
+    await screen.findByText('Total de la DDRISS')
+    pestana('Redes')
+    await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&vista=redes'))
+    await waitFor(() => expect(titulo()).toBe('Cobertura de la Red No. 1'))
+    expect(listarResultados).toHaveBeenLastCalledWith({ anio: 2026, mes: 10, redId: 3, ddrissId: undefined })
+
+    expect(opciones('red')).toEqual(['5', '3'])
+    for (const nombre of ['vacuna', 'distrito']) expect(document.querySelector(`select[name="${nombre}"]`)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Municipios' })).toBeNull()
+    expect(titulosDeGraficas()).toEqual(['Trazadoras de la red contra la meta', 'Cobertura por municipio'])
+    expect(screen.getByText(/Sin indicador de cobertura anual para: SPR 1\./)).toBeTruthy()
+  })
+
+  test('elegir otra red la deja en la URL y pide su total', async () => {
+    conAnual()
+    const router = await montar({ url: '/indicadores?vista=redes', permisos: PERMISOS })
+    await waitFor(() => expect(titulo()).toBe('Cobertura de la Red No. 1'))
+
+    fireEvent.change(document.querySelector('select[name="red"]'), { target: { value: '5' } })
+    await waitFor(() => expect(router.state.location.search).toBe('?anio=2026&mes=10&vista=redes&red=5'))
+    await waitFor(() => expect(titulo()).toBe('Cobertura de la Red No. 2'))
+    expect(listarResultados).toHaveBeenLastCalledWith({ anio: 2026, mes: 10, redId: 5, ddrissId: undefined })
+  })
+
+  test('con corrida parcial, las dos gráficas llevan la marca «PRELIMINAR»', async () => {
+    conAnual({ parcial: true })
+    await montar({ url: '/indicadores?vista=redes', permisos: PERMISOS })
+    await waitFor(() => expect(titulo()).toBe('Cobertura de la Red No. 1'))
+    const conMarca = [...document.querySelectorAll('[data-slot="card-title"]')]
+      .map((t) => t.closest('[data-slot="card"]').querySelector('[data-marca="preliminar"]') !== null)
+    expect(conMarca).toEqual([true, true])
+  })
+
+  test('sin redes activas, la pestaña lo dice y las demás pestañas no tienen filtro de red', async () => {
+    listarRedes.mockResolvedValue([])
+    await montar({ url: '/indicadores?vista=redes', permisos: PERMISOS })
+    expect(await screen.findByText('La DDRISS no tiene redes activas. Se crean en Administración · Redes.')).toBeTruthy()
+    expect(titulo()).toBe('Redes')
+
+    pestana('Avance')
+    await screen.findByText('Total de la DDRISS')
+    expect(document.querySelector('select[name="red"]')).toBeNull()
+  })
+
+  test('sin RED_CONSULTAR no hay pestaña «Redes» y vista=redes abre la pestaña por defecto', async () => {
+    await montar({ url: '/indicadores?vista=redes' })
+    await screen.findByText('Total de la DDRISS')
+    expect(screen.queryByRole('tab', { name: 'Redes' })).toBeNull()
+    expect(titulo()).toBe('Avance de Hexavalente')
+    expect(listarRedes).not.toHaveBeenCalled()
   })
 })

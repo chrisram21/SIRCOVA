@@ -8,7 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { listarDdriss, listarDistritos } from '@/api/catalogos.js'
+import { listarDdriss, listarDistritos, listarRedes } from '@/api/catalogos.js'
 import { mensajeDeError } from '@/api/cliente.js'
 import { listarCorridas, listarResultados, obtenerMesesCalculados } from '@/api/indicadores.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
@@ -19,6 +19,7 @@ import { MESES, mesAnterior } from '@/lib/fechas.js'
 import { cn } from '@/lib/utils'
 import BarraFiltrosIndicadores, { Selector } from './BarraFiltrosIndicadores.jsx'
 import DialogoCalcularIndicadores, { avisoDeMesesSinCerrar } from './DialogoCalcularIndicadores.jsx'
+import GraficasRed from './GraficasRed.jsx'
 import InsigniaCumple from './InsigniaCumple.jsx'
 import InsigniaValor from './InsigniaValor.jsx'
 import { AvisoMayorACien, MarcaMayorACien } from './MarcaMayorACien.jsx'
@@ -30,6 +31,7 @@ import {
   indicadoresDeLaVista,
   municipiosDeLaCorrida,
   municipiosVisibles,
+  nombreDeFila,
   vacunaElegida,
   vacunasDeLaCorrida,
   VISTAS,
@@ -40,11 +42,14 @@ import {
 import TablaBrecha from './TablaBrecha.jsx'
 import TablaDesercion from './TablaDesercion.jsx'
 import TablaProyeccion from './TablaProyeccion.jsx'
+import TablaRed from './TablaRed.jsx'
+import { columnasDeLaRed, redElegida } from './tablaRed.js'
 
 // SPEC 44: la corrida vigente de un mes, sus resultados por municipio y el historial de corridas del año. SPEC 45 a
 // 47 agregan las tablas de brecha, deserción y proyección; SPEC 49, los filtros de vacuna, distrito y municipios; SPEC
 // 51, los periodos de «Comparar periodos» (comparar, anios, meses), que valida comparacionPeriodos.js. SPEC 54, la
-// pestaña (vista), que elige qué tipo de indicador se mira.
+// pestaña (vista), que elige qué tipo de indicador se mira. SPEC 60, la red (red), que recorta a sus municipios y
+// pide a la API la fila «Total de la red».
 
 const ANIOS_HACIA_ATRAS = 6
 const MOTIVOS = {
@@ -86,6 +91,7 @@ export function filtrosDeUrl(parametros, hoy) {
     vista: Object.hasOwn(VISTAS, parametros.get('vista') ?? '') ? parametros.get('vista') : undefined,
     ddriss: id(parametros.get('ddriss')),
     vacuna: codigo(parametros.get('vacuna')),
+    red: id(parametros.get('red')),
     distrito: id(parametros.get('distrito')),
     municipios: [...new Set(municipios)],
     comparar: parametros.get('comparar') === 'mes' ? 'mes' : undefined,
@@ -137,8 +143,8 @@ function TablaResultados({ resultados, tipoCalculo }) {
             {resultados.map((r) => {
               const departamental = r.municipio === null
               return (
-                <TableRow key={r.municipio?.id ?? 'ddriss'} className={cn(departamental && 'bg-muted/50 font-semibold')}>
-                  <TableCell>{departamental ? 'Total de la DDRISS' : r.municipio.nombre}</TableCell>
+                <TableRow key={r.municipio?.id ?? 'total'} className={cn(departamental && 'bg-muted/50 font-semibold')}>
+                  <TableCell>{nombreDeFila(r)}</TableCell>
                   <TableCell className="text-right font-mono">{formatoEntero.format(r.numerador ?? 0)}</TableCell>
                   <TableCell className="text-right font-mono">
                     {r.denominador === null ? '—' : formatoEntero.format(r.denominador)}
@@ -171,7 +177,8 @@ function Aviso({ children }) {
   )
 }
 
-function PestanasIndicadores({ vista, alCambiar }) {
+function PestanasIndicadores({ vista, alCambiar, conRedes }) {
+  const vistas = Object.entries(VISTAS).filter(([codigo]) => conRedes || codigo !== 'redes')
   return (
     <Tabs value={vista} onValueChange={alCambiar} className="max-sm:w-full">
       {/* En el teléfono, tres arriba y dos abajo a todo el ancho: las cinco en una fila no caben en 390 px. */}
@@ -179,7 +186,7 @@ function PestanasIndicadores({ vista, alCambiar }) {
         aria-label="Tipo de indicador"
         className="grid h-auto! w-full grid-cols-3 bg-accent sm:inline-flex sm:h-8! sm:w-fit"
       >
-        {Object.entries(VISTAS).map(([codigo, { etiqueta }]) => (
+        {vistas.map(([codigo, { etiqueta }]) => (
           <TabsTrigger
             key={codigo}
             value={codigo}
@@ -282,6 +289,7 @@ export default function PaginaIndicadores({ hoy }) {
   const usuario = sesion?.sesion?.usuario
   const puedeCalcular = sesion?.tienePermiso('INDICADOR_CALCULAR') ?? false
   const puedeVerDistritos = sesion?.tienePermiso('DISTRITO_CONSULTAR') ?? false
+  const puedeVerRedes = sesion?.tienePermiso('RED_CONSULTAR') ?? false
   const nacional = usuario?.rol === 'AUTORIDAD' && (usuario?.empleado?.ddrissId ?? null) === null
 
   const [ddriss, setDdriss] = useState(null)
@@ -290,6 +298,9 @@ export default function PaginaIndicadores({ hoy }) {
   const [distritos, setDistritos] = useState(null)
   const [errorDistritos, setErrorDistritos] = useState(null)
   const [intentoDistritos, setIntentoDistritos] = useState(0)
+  const [redes, setRedes] = useState(null)
+  const [errorRedes, setErrorRedes] = useState(null)
+  const [intentoRedes, setIntentoRedes] = useState(0)
   const [datos, setDatos] = useState(null)
   const [errorCarga, setErrorCarga] = useState(null)
   const [intento, setIntento] = useState(0)
@@ -301,11 +312,21 @@ export default function PaginaIndicadores({ hoy }) {
   const filtros = filtrosDeUrl(parametros, hoy)
   const ddrissId = nacional ? (filtros.ddriss ?? ddriss?.[0]?.id) : undefined
   const esperandoDdriss = nacional && ddrissId === undefined
-  const clave = `${filtros.anio}-${filtros.mes}-${ddrissId ?? ''}`
+  // Solo las redes activas con municipios; una red de la URL que no está se ignora. Con red en la URL, o en la pestaña
+  // «Redes», los resultados esperan a las redes para saber de cuál piden el total. En «Redes» la red es obligatoria (por
+  // defecto la primera) y no recorta las demás pestañas; fuera de ella, solo la de la URL filtra.
+  const enRedes = filtros.vista === 'redes' && puedeVerRedes
+  const opcionesRed = redes?.filter((r) => r.municipios.length > 0) ?? null
+  const redDeLaPestana = enRedes ? redElegida(opcionesRed, filtros.red) : null
+  const red = enRedes ? null : opcionesRed?.find((r) => r.id === filtros.red) ?? null
+  const redPedida = redDeLaPestana ?? red
+  const esperandoRedes = (filtros.red !== undefined || enRedes) && puedeVerRedes && redes === null && !errorRedes
+  const esperando = esperandoDdriss || esperandoRedes
+  const clave = `${filtros.anio}-${filtros.mes}-${ddrissId ?? ''}-${redPedida?.id ?? ''}`
   // La primera visita espera las DDRISS y los resultados; después, cada cambio usa sus esqueletos. Sin DDRISS (error
   // o lista vacía) no se pide nada más.
   const sinDdriss = errorDdriss || ddriss?.length === 0
-  const primeraCarga = usePrimeraCarga(Boolean(sinDdriss || (!esperandoDdriss && (datos || errorCarga))), { conMinimo: true })
+  const primeraCarga = usePrimeraCarga(Boolean(sinDdriss || (!esperando && (datos || errorCarga))), { conMinimo: true })
 
   useEffect(() => {
     if (!nacional) return undefined
@@ -332,12 +353,25 @@ export default function PaginaIndicadores({ hoy }) {
   }, [puedeVerDistritos, intentoDistritos])
 
   useEffect(() => {
-    if (esperandoDdriss) return undefined
+    if (!puedeVerRedes || esperandoDdriss) return undefined
+    let vigente = true
+    setRedes(null)
+    setErrorRedes(null)
+    listarRedes({ activo: true, ddrissId })
+      .then((recibidas) => vigente && setRedes(recibidas))
+      .catch((err) => vigente && setErrorRedes(mensajeDeError(err)))
+    return () => {
+      vigente = false
+    }
+  }, [puedeVerRedes, ddrissId, esperandoDdriss, intentoRedes])
+
+  useEffect(() => {
+    if (esperando) return undefined
     let vigente = true
     setDatos(null)
     setErrorCarga(null)
     Promise.all([
-      listarResultados({ anio: filtros.anio, mes: filtros.mes, ddrissId }),
+      listarResultados({ anio: filtros.anio, mes: filtros.mes, redId: redPedida?.id, ddrissId }),
       listarCorridas({ anio: filtros.anio, ddrissId }),
     ])
       .then(([vigentes, corridas]) => vigente && setDatos({ ...vigentes, corridas }))
@@ -345,8 +379,8 @@ export default function PaginaIndicadores({ hoy }) {
     return () => {
       vigente = false
     }
-    // clave resume año, mes y DDRISS; intento cambia al recargar.
-  }, [clave, intento, esperandoDdriss])
+    // clave resume año, mes, DDRISS y red; intento cambia al recargar.
+  }, [clave, intento, esperando])
 
   // Los años y meses con corrida de la DDRISS; un cálculo nuevo (intento) puede agregar uno.
   useEffect(() => {
@@ -381,7 +415,9 @@ export default function PaginaIndicadores({ hoy }) {
   const vacuna = vacunaElegida(conResultados, todos, filtros)
   const vacunaNombre = vacunas.find((v) => v.codigo === vacuna)?.nombre ?? vacuna
   const deLaVacuna = indicadoresDeLaVacuna(conResultados, todos, vacuna)
-  const vista = vistaElegida(deLaVacuna, filtros)
+  // Sin RED_CONSULTAR, vista=redes se trata como una vista inválida.
+  const vistaDeUrl = filtros.vista === 'redes' ? undefined : filtros.vista
+  const vista = enRedes ? 'redes' : vistaElegida(deLaVacuna, { ...filtros, vista: vistaDeUrl })
   const deLaVista = indicadoresDeLaVista(deLaVacuna, vista)
   const indicador = indicadorElegido(deLaVista, filtros.indicador)
 
@@ -400,15 +436,19 @@ export default function PaginaIndicadores({ hoy }) {
   // Solo los distritos cuyo municipio está en la corrida: así quedan los de la DDRISS.
   const municipiosCorrida = municipiosDeLaCorrida(todos)
   const opcionesDistrito = distritos?.filter((d) => municipiosCorrida.some((m) => m.id === d.municipioId)) ?? null
-  const distrito = opcionesDistrito?.find((d) => d.id === filtros.distrito)
+  // La red manda sobre el distrito (elegir una limpia el otro, pero la URL puede traer los dos).
+  const distrito = red ? undefined : opcionesDistrito?.find((d) => d.id === filtros.distrito)
   const delDistrito = distrito ? [distrito.municipioId] : null
-  const opcionesMunicipio = municipiosVisibles(municipiosCorrida, { delDistrito })
-  const elegidos = opcionesMunicipio.filter((m) => filtros.municipios.includes(m.id))
-  const visibles = municipiosVisibles(municipiosCorrida, { delDistrito, elegidos: filtros.municipios })
+  const deLaRed = red ? red.municipios.map((m) => m.id) : null
+  const opcionesMunicipio = municipiosVisibles(municipiosCorrida, { delDistrito, deLaRed })
+  const elegidos = red ? [] : opcionesMunicipio.filter((m) => filtros.municipios.includes(m.id))
+  const visibles = municipiosVisibles(municipiosCorrida, { delDistrito, deLaRed, elegidos: elegidos.map((m) => m.id) })
 
-  const resultados = indicador ? filasVisibles(filasDe(todos, indicador.codigo), visibles) : []
+  const resultados = indicador ? filasVisibles(filasDe(todos, indicador.codigo), visibles, red) : []
   const muestra = resultados[0]
-  const titulo = corrida && vacuna ? `${VISTAS[vista].etiqueta} de ${vacunaNombre}` : 'Indicadores'
+  const columnasRed = redDeLaPestana && corrida ? columnasDeLaRed(redDeLaPestana, corrida.indicadores, todos) : []
+  let titulo = corrida && vacuna ? `${VISTAS[vista].etiqueta} de ${vacunaNombre}` : 'Indicadores'
+  if (enRedes) titulo = redDeLaPestana ? `Cobertura de la ${redDeLaPestana.nombre}` : 'Redes'
 
   return (
     <>
@@ -426,6 +466,10 @@ export default function PaginaIndicadores({ hoy }) {
           <AvisoError onReintentar={() => setIntentoDdriss((n) => n + 1)}>No se pudieron cargar las DDRISS: {errorDdriss}</AvisoError>
         )}
 
+        {errorRedes && (
+          <AvisoError onReintentar={() => setIntentoRedes((n) => n + 1)}>No se pudieron cargar las redes: {errorRedes}</AvisoError>
+        )}
+
         {errorDistritos && (
           <AvisoError onReintentar={() => setIntentoDistritos((n) => n + 1)}>
             No se pudieron cargar los distritos: {errorDistritos}
@@ -439,6 +483,9 @@ export default function PaginaIndicadores({ hoy }) {
           ddrissId={ddrissId}
           vacunas={vacunas}
           vacuna={vacuna}
+          redes={opcionesRed}
+          redDeLaPestana={redDeLaPestana}
+          enRedes={enRedes}
           distritos={opcionesDistrito}
           municipios={opcionesMunicipio}
           elegidos={elegidos}
@@ -448,7 +495,7 @@ export default function PaginaIndicadores({ hoy }) {
         {errorCarga ? (
           <AvisoError onReintentar={() => setIntento((n) => n + 1)}>No se pudieron cargar los indicadores: {errorCarga}</AvisoError>
         ) : datos === null ? (
-          !esperandoDdriss && (
+          !esperando && (
             <div className="flex flex-col gap-2" aria-label="Cargando indicadores">
               {[1, 2, 3].map((n) => (
                 <Skeleton key={n} className="h-10 w-full" />
@@ -466,8 +513,16 @@ export default function PaginaIndicadores({ hoy }) {
                   <p className="text-muted-foreground">La corrida no tiene resultados de cobertura, avance, brecha, deserción ni proyección.</p>
                 ) : (
                   <>
-                    <PestanasIndicadores vista={vista} alCambiar={(nueva) => irA({ vista: nueva, indicador: undefined })} />
-                    {indicador === null ? (
+                    <PestanasIndicadores
+                      vista={vista}
+                      conRedes={puedeVerRedes}
+                      alCambiar={(nueva) => irA({ vista: nueva, indicador: undefined })}
+                    />
+                    {enRedes ? (
+                      opcionesRed?.length === 0 && (
+                        <Aviso>La DDRISS no tiene redes activas. Se crean en Administración · Redes.</Aviso>
+                      )
+                    ) : indicador === null ? (
                       <Aviso>La corrida no tiene un indicador de {VISTAS[vista].nombreDelTipo} de {vacunaNombre}.</Aviso>
                     ) : (
                       <div className="flex flex-wrap items-center gap-3">
@@ -499,6 +554,7 @@ export default function PaginaIndicadores({ hoy }) {
                       vista={vista}
                       codigoElegido={indicador?.codigo}
                       visibles={visibles}
+                      red={red}
                       ddrissId={ddrissId}
                       comparacion={{
                         calculados,
@@ -508,7 +564,19 @@ export default function PaginaIndicadores({ hoy }) {
                         irA,
                       }}
                     />
-                    {indicador?.tipoCalculo === 'BRECHA' ? (
+                    {redDeLaPestana && (
+                      <>
+                        <GraficasRed
+                          key={redDeLaPestana.id}
+                          red={redDeLaPestana}
+                          columnas={columnasRed}
+                          resultados={todos}
+                          preliminar={corrida.parcial === true}
+                        />
+                        <TablaRed red={redDeLaPestana} columnas={columnasRed} resultados={todos} mes={corrida.mesHasta} />
+                      </>
+                    )}
+                    {enRedes ? null : indicador?.tipoCalculo === 'BRECHA' ? (
                       <TablaBrecha resultados={resultados} />
                     ) : indicador?.tipoCalculo === 'DESERCION' ? (
                       <TablaDesercion resultados={resultados} />

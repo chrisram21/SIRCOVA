@@ -22,6 +22,9 @@
 //   - Regla RANGO_DOSIS_MES en BORRADOR.
 //   - Indicador COB_BCG vigente y AVANCE_HEXA3 v2 en BORRADOR con los rangos
 //     del mapa ya confirmados (ejemplo de cómo se publicará el cambio).
+//   - Coberturas anuales (prorrateo NINGUNO, SPEC 60) de BCG, Hexavalente D3
+//     y SPR D1: la tabla de la red de «Indicadores». En una base ya cargada
+//     las agrega 13_coberturas_anuales_mongo.js sin recrear nada.
 //
 // Los ids de usuario (creado_por, publicado_por) son los de
 // 03_datos_prueba_mysql.sql: 1 = admin.prueba, 4 = epidemiologia.
@@ -198,7 +201,36 @@ db_.reglas_validacion.insertMany([
 ]);
 
 // --- Configuración de indicadores ------------------------------------------------
+// Cobertura contra la población anual (SPEC 60): el semáforo se aplica al cumplimiento de lo esperado del mes
+// (8.33 % por mes). Los mismos tres documentos están en 13_coberturas_anuales_mongo.js: un cambio va en los dos.
+const coberturaAnual = (codigo, nombre, aplica) => ({
+  codigo, version: NumberInt(1), nombre,
+  tipo_calculo: "COBERTURA",
+  aplica_a: [aplica],
+  numerador:   { fuente: "PRODUCCION", estados_reporte: ["CERRADO"], atribucion: "PROCEDENCIA", acumulado: "ANUAL" },
+  denominador: { fuente: "POBLACION_OBJETIVO", prorrateo: "NINGUNO" },
+  meta: { valor: 95, unidad: "PORCENTAJE", comparador: ">", homogeneidad_municipal: true },
+  umbrales: [
+    { color: "verde",    desde: 90, hasta: null },
+    { color: "amarillo", desde: 80, hasta: 90 },
+    { color: "rojo",     desde: 0,  hasta: 80 }
+  ],
+  umbrales_provisionales: true,
+  niveles: ["MUNICIPIO", "DEPARTAMENTO"], periodicidad: "MENSUAL",
+  alerta: { generar: false },
+  es_estimacion: false,
+  territorio: territorioNacional, estado: "VIGENTE", vigencia: desdeOctubre,
+  auditoria: auditoriaPrueba,
+  datos_prueba: true
+});
+
 db_.configuracion_indicadores.insertMany([
+  coberturaAnual("COB_ANUAL_BCGU", "Cobertura anual de BCG en nacidos vivos",
+    { vacuna: "BCG", dosis: "UNICA", clasificacion_poblacion: "NACIDOS_VIVOS" }),
+  coberturaAnual("COB_ANUAL_HEXA3", "Cobertura anual de Hexavalente 3.ª dosis en menores de 1 año",
+    { vacuna: "HEXA", dosis: "D3", clasificacion_poblacion: "MENOR_1", filtros_dimension: { grupo_edad: ["MENOR_1"] } }),
+  coberturaAnual("COB_ANUAL_SPR1", "Cobertura anual de SPR 1.ª dosis de 1 a menos de 2 años",
+    { vacuna: "SPR", dosis: "D1", clasificacion_poblacion: "1_A_MENOR_2" }),
   {
     codigo: "COB_BCG", version: NumberInt(1), nombre: "Cobertura de BCG en nacidos vivos",
     tipo_calculo: "COBERTURA",

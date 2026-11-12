@@ -1,5 +1,6 @@
 // SPEC 50: lo que el mapa territorial arma con los resultados de la corrida vigente, el avance del mes por municipio
 // y los límites. Funciones puras: las cuentas se prueban aquí y el mapa, el panel y la clasificación solo las dibujan.
+import { MESES } from '@/lib/fechas.js'
 import { DESCENDENTE, TIPOS_INDICADOR } from '@/paginas/configuracion/tiposIndicador.js'
 import { indicadoresDeLaVacuna, vacunaDe } from '@/paginas/indicadores/panelIndicadores.js'
 import { TEXTO_MAYOR_A_CIEN } from '@/paginas/indicadores/MarcaMayorACien.jsx'
@@ -218,8 +219,10 @@ const textoDeClase = ({ token, desde, hasta }) => {
   return desde === hasta ? `${entero.format(desde)} dosis` : `${entero.format(desde)} a ${entero.format(hasta)}`
 }
 
-// El título, las franjas y si los rangos son provisionales. «Sin datos» va siempre al final.
-export function rotulosDeLeyenda(modo, { indicador = null, clases = [], mesNombre = '' } = {}) {
+// El título, las franjas y si los rangos son provisionales. «Sin datos» va siempre al final. SPEC 60: una cobertura
+// anual (prorrateo NINGUNO) se pinta contra lo esperado del mes (100 ÷ 12 por mes), así que sus franjas son el
+// porcentaje de lo esperado y el título lo dice; mes es el mes de corte (1 a 12).
+export function rotulosDeLeyenda(modo, { indicador = null, clases = [], mesNombre = '', mes = null } = {}) {
   const sinDatos = { color: COLOR_SIN_DATOS, texto: 'Sin datos' }
   if (modo === 'estado') {
     return {
@@ -235,9 +238,11 @@ export function rotulosDeLeyenda(modo, { indicador = null, clases = [], mesNombr
       provisional: false,
     }
   }
-  const titulo = modo === 'desercion'
+  const anual = modo !== 'desercion' && indicador?.tipoCalculo === 'COBERTURA' && indicador?.prorrateo === 'NINGUNO' && mes
+  let titulo = modo === 'desercion'
     ? 'Deserción'
     : indicador?.tipoCalculo === 'AVANCE_META_MES' ? 'Avance contra la meta del mes' : 'Cobertura'
+  if (anual) titulo = `Cobertura anual: % de lo esperado a ${MESES[mes - 1]} (${formato.format((100 / 12) * mes)} %)`
   return {
     titulo,
     franjas: [...rotulosDeUmbrales(indicador?.umbrales ?? [], indicador?.tipoCalculo), sinDatos],

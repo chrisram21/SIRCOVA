@@ -14,7 +14,7 @@ const LARGO_ETIQUETA = 14
 const recortar = (texto) => (texto.length > LARGO_ETIQUETA ? `${texto.slice(0, LARGO_ETIQUETA - 1)}…` : texto)
 
 export default function GraficaPorVacuna({
-  tipo, indicadores, resultados, visibles, vacuna, referencia, preliminar, className,
+  tipo, indicadores, resultados, visibles, red, vacuna, referencia, preliminar, className,
 }) {
   const titulo = tipo === 'COBERTURA' ? 'Cobertura por vacuna' : 'Avance por vacuna'
   if (!tipo) {
@@ -24,7 +24,7 @@ export default function GraficaPorVacuna({
       </TarjetaGrafica>
     )
   }
-  const { barras, sinPoblacion, metaComun } = barrasPorVacuna(indicadores, resultados, tipo, visibles, vacuna)
+  const { barras, sinPoblacion, metaComun } = barrasPorVacuna(indicadores, resultados, tipo, visibles, vacuna, red)
   const datos = barras.map((b) => ({ ...b, etiqueta: recortar(b.nombre) }))
   return (
     <TarjetaGrafica

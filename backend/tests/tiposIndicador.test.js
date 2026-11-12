@@ -136,6 +136,20 @@ const CASOS = {
       ['PROYECCION', 'HEXA', 'D3', [], M.tipo],
     ],
   },
+  // SPEC 60: con el prorrateo; solo la COBERTURA con NINGUNO cambia de prefijo.
+  codigoConProrrateo: {
+    validos: [
+      ['COBERTURA', 'HEXA', 'D3', ['COB_HEXA3'], 'NINGUNO', 'COB_ANUAL_HEXA3'],
+      ['COBERTURA', 'BCG', 'UNICA', ['COB_BCG'], 'NINGUNO', 'COB_ANUAL_BCGU'],
+      ['COBERTURA', 'SPR', 'D1', ['COB_ANUAL_SPR1'], 'NINGUNO', 'COB_ANUAL_SPR1_2'],
+      ['COBERTURA', 'HEXA', 'D3', [], 'MENSUAL_LINEAL', 'COB_HEXA3'],
+      ['BRECHA', 'HEXA', 'D3', [], 'NINGUNO', 'BRECHA_HEXA3'],
+      ['COBERTURA', 'A'.repeat(29), 'D1', [], 'NINGUNO', `COB_ANUAL_${'A'.repeat(29)}1`],
+    ],
+    invalidos: [
+      ['COBERTURA', 'A'.repeat(30), 'D1', [], 'NINGUNO', M.codigoLargo],
+    ],
+  },
 };
 
 describe('catálogo de tipos', () => {
@@ -195,4 +209,18 @@ describe('codigoIndicador', () => {
   it.each(CASOS.codigoIndicador.invalidos)('%s de %s %j se rechaza', (tipo, vacuna, dosis, existentes, mensaje) => {
     expect(codigoIndicador(tipo, vacuna, dosis, existentes)).toEqual({ error: mensaje });
   });
+
+  it.each(CASOS.codigoConProrrateo.validos)(
+    '%s de %s %j con %j y %s → %s',
+    (tipo, vacuna, dosis, existentes, prorrateo, esperado) => {
+      expect(codigoIndicador(tipo, vacuna, dosis, existentes, prorrateo)).toEqual({ valor: esperado });
+    },
+  );
+
+  it.each(CASOS.codigoConProrrateo.invalidos)(
+    '%s de %s %j con %j y %s se rechaza',
+    (tipo, vacuna, dosis, existentes, prorrateo, mensaje) => {
+      expect(codigoIndicador(tipo, vacuna, dosis, existentes, prorrateo)).toEqual({ error: mensaje });
+    },
+  );
 });

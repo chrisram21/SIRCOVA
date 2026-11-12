@@ -248,7 +248,8 @@ describe('PROYECCION con corte a abril', () => {
     expect(corrida).toMatchObject({ estado: 'COMPLETADA', parcial: false, mesesSinCerrar: [] });
     expect(corrida.indicadores).toContainEqual({
       codigo: PROY, version: 1, nombre: `vitest-hu39 ${PROY}`, tipoCalculo: 'PROYECCION',
-      esIndicadorMapa: false, umbrales: [], umbralesProvisionales: false,
+      esIndicadorMapa: false, umbrales: [], umbralesProvisionales: false, prorrateo: 'NINGUNO',
+      clasificacionPoblacion: 'MENOR_1', descripcionPoblacion: 'Menores de 1 año',
     });
     expect(corrida.omitidos.map((o) => o.codigo)).not.toContain(PROY);
     expect(corrida.omitidos).toEqual(expect.arrayContaining([

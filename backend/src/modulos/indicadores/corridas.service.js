@@ -5,7 +5,10 @@ import { registrarBitacora, contextoAuditoria, MODULOS, ACCIONES } from '../audi
 import { esAlcanceNacional, verificarAlcance } from '../auth/alcance.service.js';
 import { entradaInvalida, revisarCampos, revisarParametros } from '../catalogos/catalogos.service.js';
 import { indicadoresQueAplican } from '../configuracion/indicadores.service.js';
-import { colorDelValor, mayorACien, metaYExcedente, sumaBrechasMunicipales } from './calculadores.js';
+import {
+  calcularTotalDeRed, colorContraEsperado, colorDelValor, esperadoDelMes, mayorACien, metaYExcedente,
+  sumaBrechasMunicipales,
+} from './calculadores.js';
 import { calcularIndicadores, leerDatos } from './motor.service.js';
 
 // Una corrida es de una DDRISS y se calcula entera en una transacción (SPEC 44): nunca se ve EN_PROCESO. La última
@@ -17,6 +20,7 @@ const MIGRANTES = '9999';
 
 const errores = {
   noEncontrado: () => new ErrorApi(404, 'NO_ENCONTRADO', 'El recurso solicitado no existe.'),
+  redNoEncontrada: () => new ErrorApi(404, 'NO_ENCONTRADO', 'La red no existe.'),
   sinDdriss: () => new ErrorApi(403, 'SIN_PERMISO', 'No tiene permiso para realizar esta acción.'),
   fueraDelCalendario: (anio, mes) =>
     new ErrorApi(422, 'CORRIDA_INVALIDA', `El mes ${mes} de ${anio} no está en el calendario.`),
@@ -205,10 +209,36 @@ async function versionesUsadas(pares) {
     .find({ $or: unicos.map(({ codigo, version }) => ({ codigo, version })) })
     .project({
       codigo: 1, version: 1, nombre: 1, tipo_calculo: 1, umbrales: 1, umbrales_provisionales: 1, es_indicador_mapa: 1,
-      parametros: 1,
+      parametros: 1, 'denominador.prorrateo': 1, 'aplica_a.clasificacion_poblacion': 1,
     })
     .toArray();
   return new Map(documentos.map((d) => [`${d.codigo}:${Number(d.version)}`, d]));
+}
+
+// SPEC 60: una COBERTURA con prorrateo NINGUNO es la cobertura anual, que se pinta contra lo esperado del mes.
+const esCoberturaAnual = (doc) => doc?.tipo_calculo === 'COBERTURA' && doc?.denominador?.prorrateo === 'NINGUNO';
+
+const colorDe = (doc, valor, mes) => (esCoberturaAnual(doc)
+  ? colorContraEsperado(doc.umbrales, valor, mes)
+  : colorDelValor(doc?.umbrales, valor, doc?.tipo_calculo));
+
+// SPEC 60: la fila «Total de la red» de un indicador, a partir de su departamental y de las filas de los municipios
+// de la red; null si el tipo no tiene total de red o la versión ya no está en MongoDB.
+function filaDeRed(departamental, municipales, doc, red) {
+  const calculo = calcularTotalDeRed(doc, municipales);
+  if (!calculo) return null;
+  const fila = {
+    ...departamental,
+    red: { id: red.id, nombre: red.nombre },
+    ...calculo,
+    calculable: calculo.valor !== null,
+    color: colorDe(doc, calculo.valor, departamental.mes),
+    mayorACien: mayorACien({ tipoCalculo: doc.tipo_calculo, valor: calculo.valor, esProyeccion: false }),
+    ...metaYExcedente(calculo),
+    proyeccion: null,
+  };
+  fila.sumaBrechasMunicipales = sumaBrechasMunicipales(fila, municipales);
+  return fila;
 }
 
 const aUmbrales = (umbrales) => (Array.isArray(umbrales)
@@ -243,13 +273,15 @@ async function indicadoresDeResultados(ids) {
 
 async function aCorridas(filas) {
   const ids = filas.map((f) => f.id);
-  const [bitacoras, deResultados, sinCerrarPorCorrida] = await Promise.all([
+  const [bitacoras, deResultados, sinCerrarPorCorrida, [clasificaciones]] = await Promise.all([
     detallesDeBitacora(ids),
     indicadoresDeResultados(ids),
     Promise.all(filas.map((f) => mesesCerradosAl(pool, {
       ddrissId: f.ddriss_id, anio: f.anio, mesHasta: f.mes_hasta, corridaId: f.id,
     }))),
+    pool.query('SELECT codigo, descripcion FROM clasificacion_poblacion'),
   ]);
+  const descripciones = new Map(clasificaciones.map((c) => [c.codigo, c.descripcion]));
   const usados = (f) => bitacoras.get(f.id)?.indicadores ?? deResultados.get(f.id) ?? [];
   const versiones = await versionesUsadas(filas.flatMap(usados));
   return filas.map((f, i) => {
@@ -277,6 +309,9 @@ async function aCorridas(filas) {
           esIndicadorMapa: doc?.es_indicador_mapa ?? false,
           umbrales: aUmbrales(doc?.umbrales),
           umbralesProvisionales: doc?.umbrales_provisionales ?? false,
+          prorrateo: doc?.denominador?.prorrateo ?? null,
+          clasificacionPoblacion: doc?.aplica_a?.[0]?.clasificacion_poblacion ?? null,
+          descripcionPoblacion: descripciones.get(doc?.aplica_a?.[0]?.clasificacion_poblacion) ?? null,
         };
       }),
       omitidos: bitacoras.get(f.id)?.omitidos ?? [],
@@ -328,7 +363,7 @@ function proyeccionDe(doc, fila, { numerador, mes }, { mesesCerrados, acumulados
   };
 }
 
-async function leerResultados(corridaId, { indicador, municipioId } = {}) {
+async function leerResultados(corridaId, { indicador, municipioId, red } = {}) {
   const condiciones = ['ri.corrida_id = ?'];
   const parametros = [corridaId];
   if (indicador) {
@@ -374,6 +409,7 @@ async function leerResultados(corridaId, { indicador, municipioId } = {}) {
         municipio: f.municipio_id == null
           ? null
           : { id: f.municipio_id, nombre: f.municipio_nombre, codigoIne: f.codigo_ine },
+        red: null,
         vacuna: { codigo: f.vacuna_codigo, nombre: f.vacuna_nombre },
         dosis: f.dosis_codigo ?? null,
         filtroDimensiones: f.filtro_dimensiones,
@@ -386,7 +422,8 @@ async function leerResultados(corridaId, { indicador, municipioId } = {}) {
         brechaDosis,
         cumpleMeta: f.cumple_meta == null ? null : Boolean(f.cumple_meta),
         calculable: valor !== null,
-        color: colorDelValor(doc?.umbrales, valor, doc?.tipo_calculo),
+        color: colorDe(doc, valor, f.mes),
+        esperado: esCoberturaAnual(doc) ? esperadoDelMes(f.mes) : null,
         esProyeccion: Boolean(f.es_proyeccion),
         mayorACien: mayorACien({ tipoCalculo: doc?.tipo_calculo ?? null, valor, esProyeccion: Boolean(f.es_proyeccion) }),
         ...metaYExcedente({ numerador, denominador, meta, brechaDosis }),
@@ -399,7 +436,24 @@ async function leerResultados(corridaId, { indicador, municipioId } = {}) {
     const municipales = resultados.filter((r) => r.municipio !== null && r.indicadorCodigo === departamental.indicadorCodigo);
     departamental.sumaBrechasMunicipales = sumaBrechasMunicipales(departamental, municipales);
   }
-  return resultados;
+  if (!red) return resultados;
+  const deLaRed = new Set(red.municipioIds);
+  return resultados.flatMap((r) => {
+    if (r.municipio !== null) return [r];
+    const municipales = resultados.filter((m) => m.indicadorCodigo === r.indicadorCodigo && deLaRed.has(m.municipio?.id));
+    const total = filaDeRed(r, municipales, versiones.get(`${r.indicadorCodigo}:${r.indicadorVersion}`), red);
+    return total ? [r, total] : [r];
+  });
+}
+
+// La red activa de la DDRISS con sus municipios actuales (SPEC 60); 404 si no existe, está inactiva o es de otra.
+async function leerRedDeLaDdriss(redId, ddrissId) {
+  const [[red]] = await pool.query('SELECT id, nombre FROM red WHERE id = ? AND ddriss_id = ? AND activo = TRUE', [
+    redId, ddrissId,
+  ]);
+  if (!red) throw errores.redNoEncontrada();
+  const [municipios] = await pool.query('SELECT municipio_id FROM red_municipio WHERE red_id = ?', [red.id]);
+  return { id: red.id, nombre: red.nombre, municipioIds: municipios.map((m) => m.municipio_id) };
 }
 
 export async function listarCorridas(usuario, query = {}) {
@@ -436,16 +490,20 @@ export async function obtenerCorrida(id, usuario) {
 }
 
 export async function resultadosVigentes(usuario, query = {}) {
-  revisarParametros(query, ['anio', 'mes', 'indicador', 'municipioId', 'ddrissId']);
+  revisarParametros(query, ['anio', 'mes', 'indicador', 'municipioId', 'redId', 'ddrissId']);
   const ddrissId = ddrissDeLaConsulta(usuario, query);
   if (query.anio === undefined) throw entradaInvalida('El año es obligatorio.');
   if (query.mes === undefined) throw entradaInvalida('El mes es obligatorio.');
+  if (query.redId !== undefined && query.municipioId !== undefined) {
+    throw entradaInvalida('redId y municipioId no se combinan.');
+  }
   const anio = leerAnio(query.anio);
   const mes = leerMes(query.mes, 'El mes');
   if (query.indicador !== undefined && !FORMATO_CODIGO.test(query.indicador)) {
     throw entradaInvalida('indicador debe ser un código en mayúsculas, dígitos y guion bajo.');
   }
   const municipioId = query.municipioId === undefined ? undefined : leerId(query.municipioId, 'municipioId');
+  const red = query.redId === undefined ? undefined : await leerRedDeLaDdriss(leerId(query.redId, 'redId'), ddrissId);
   const [[vigente]] = await pool.query(
     `SELECT id FROM corrida_calculo
       WHERE ddriss_id = ? AND anio = ? AND mes_hasta = ? AND vigente = TRUE AND estado = 'COMPLETADA'
@@ -455,7 +513,7 @@ export async function resultadosVigentes(usuario, query = {}) {
   if (!vigente) return { corrida: null, resultados: [] };
   return {
     corrida: await leerCorrida(vigente.id),
-    resultados: await leerResultados(vigente.id, { indicador: query.indicador, municipioId }),
+    resultados: await leerResultados(vigente.id, { indicador: query.indicador, municipioId, red }),
   };
 }
 

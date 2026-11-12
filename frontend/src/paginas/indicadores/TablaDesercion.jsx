@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 import { TIPOS_INDICADOR } from '../configuracion/tiposIndicador.js'
 import InsigniaCumple from './InsigniaCumple.jsx'
 import InsigniaValor from './InsigniaValor.jsx'
+import { nombreDeFila } from './panelIndicadores.js'
 
 // SPEC 46: los resultados de un indicador DESERCION. El numerador guardado es la pérdida (iniciales − finales) y el
 // denominador, las iniciales: las finales se deducen.
@@ -50,7 +51,7 @@ export default function TablaDesercion({ resultados }) {
               const departamental = r.municipio === null
               return (
                 <TableRow key={r.municipio?.id ?? 'ddriss'} className={cn(departamental && 'bg-muted/50 font-semibold')}>
-                  <TableCell>{departamental ? 'Total de la DDRISS' : r.municipio.nombre}</TableCell>
+                  <TableCell>{nombreDeFila(r)}</TableCell>
                   <TableCell className="text-right font-mono">{formatoEntero.format(r.denominador ?? 0)}</TableCell>
                   <TableCell className="text-right font-mono">{formatoEntero.format(dosisFinales(r))}</TableCell>
                   <TableCell className="text-right font-mono">{formatoEntero.format(r.numerador ?? 0)}</TableCell>

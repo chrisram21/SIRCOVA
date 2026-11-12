@@ -74,6 +74,9 @@ export default function BarraFiltrosIndicadores({
   ddrissId,
   vacunas,
   vacuna,
+  redes,
+  redDeLaPestana,
+  enRedes,
   distritos,
   municipios,
   elegidos,
@@ -89,8 +92,8 @@ export default function BarraFiltrosIndicadores({
           placeholder="Elija la DDRISS"
           valor={ddrissId ? String(ddrissId) : undefined}
           alCambiar={(id) => irA({
-            ddriss: Number(id), vacuna: undefined, indicador: undefined, distrito: undefined, municipios: [], anios: undefined,
-            meses: undefined,
+            ddriss: Number(id), vacuna: undefined, indicador: undefined, red: undefined, distrito: undefined, municipios: [],
+            anios: undefined, meses: undefined,
           })}
           opciones={ddriss.map((d) => ({ valor: String(d.id), texto: d.nombre }))}
           className="sm:w-56"
@@ -112,7 +115,19 @@ export default function BarraFiltrosIndicadores({
         opciones={MESES.map((nombre, i) => ({ valor: String(i + 1), texto: nombre }))}
         className="sm:w-44"
       />
-      {vacunas.length > 0 && (
+      {/* SPEC 60: en «Redes» solo cuentan el año, el mes y la red (obligatoria); vacuna, distrito y municipios no se
+          ven, pero se conservan en la URL. */}
+      {enRedes && redes && redes.length > 0 && (
+        <Selector
+          nombre="red"
+          etiqueta="Red"
+          valor={String(redDeLaPestana?.id)}
+          alCambiar={(id) => irA({ red: Number(id) })}
+          opciones={redes.map((r) => ({ valor: String(r.id), texto: r.nombre }))}
+          className="sm:w-56"
+        />
+      )}
+      {!enRedes && vacunas.length > 0 && (
         <Selector
           nombre="vacuna"
           etiqueta="Vacuna"
@@ -122,18 +137,29 @@ export default function BarraFiltrosIndicadores({
           className="sm:w-48"
         />
       )}
-      {distritos && distritos.length > 0 && (
+      {/* SPEC 60: la red es un preset de municipios; elegirla limpia el distrito y los municipios, y al revés. */}
+      {!enRedes && redes && redes.length > 0 && (
+        <Selector
+          nombre="red"
+          etiqueta="Red"
+          valor={filtros.red && redes.some((r) => r.id === filtros.red) ? String(filtros.red) : TODOS}
+          alCambiar={(id) => irA({ red: id === TODOS ? undefined : Number(id), distrito: undefined, municipios: [] })}
+          opciones={[{ valor: TODOS, texto: 'Todas las redes' }, ...redes.map((r) => ({ valor: String(r.id), texto: r.nombre }))]}
+          className="sm:w-56"
+        />
+      )}
+      {!enRedes && distritos && distritos.length > 0 && (
         <Selector
           nombre="distrito"
           etiqueta="Distrito"
           valor={filtros.distrito && distritos.some((d) => d.id === filtros.distrito) ? String(filtros.distrito) : TODOS}
-          alCambiar={(id) => irA({ distrito: id === TODOS ? undefined : Number(id), municipios: [] })}
+          alCambiar={(id) => irA({ distrito: id === TODOS ? undefined : Number(id), red: undefined, municipios: [] })}
           opciones={[{ valor: TODOS, texto: 'Todos los distritos' }, ...distritos.map((d) => ({ valor: String(d.id), texto: d.nombre }))]}
           className="sm:w-64"
         />
       )}
-      {municipios.length > 0 && (
-        <MenuMunicipios municipios={municipios} elegidos={elegidos} alCambiar={(ids) => irA({ municipios: ids })} />
+      {!enRedes && municipios.length > 0 && (
+        <MenuMunicipios municipios={municipios} elegidos={elegidos} alCambiar={(ids) => irA({ municipios: ids, red: undefined })} />
       )}
     </form>
   )

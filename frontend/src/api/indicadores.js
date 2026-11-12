@@ -25,9 +25,10 @@ export function obtenerCorrida(id) {
   return solicitar(`/indicadores/corridas/${id}`)
 }
 
-// { corrida, resultados } de la corrida vigente del mes; corrida es null si el mes no tiene.
-export function listarResultados({ anio, mes, indicador, municipioId, ddrissId } = {}) {
-  return solicitar(conConsulta('/indicadores/resultados', { anio, mes, indicador, municipioId, ddrissId }))
+// { corrida, resultados } de la corrida vigente del mes; corrida es null si el mes no tiene. Con redId, cada indicador
+// trae además su fila «Total de la red» (SPEC 60).
+export function listarResultados({ anio, mes, indicador, municipioId, redId, ddrissId } = {}) {
+  return solicitar(conConsulta('/indicadores/resultados', { anio, mes, indicador, municipioId, redId, ddrissId }))
 }
 
 // SPEC 49: { puntos } con la fila del indicador en la corrida vigente de cada mes del año (sin municipioId, la de la

@@ -31,18 +31,22 @@ export const indicadoresDeLaVacuna = (indicadores, resultados, vacuna) =>
   indicadores.filter((i) => vacunaDe(resultados, i.codigo)?.codigo === vacuna)
 
 // SPEC 54: las pestañas de «Indicadores», en su orden. nombreDelTipo completa el aviso de una pestaña sin indicador.
+// SPEC 60: «Redes» no es de un tipo (tipo null): usa las coberturas anuales de las trazadoras de la red, nunca es la
+// pestaña por defecto y solo se ve con RED_CONSULTAR.
 export const VISTAS = {
   avance: { tipo: 'AVANCE_META_MES', etiqueta: 'Avance', nombreDelTipo: 'avance' },
   brecha: { tipo: 'BRECHA', etiqueta: 'Brecha', nombreDelTipo: 'brecha de dosis' },
   cobertura: { tipo: 'COBERTURA', etiqueta: 'Cobertura', nombreDelTipo: 'cobertura' },
   desercion: { tipo: 'DESERCION', etiqueta: 'Deserción', nombreDelTipo: 'deserción entre dosis' },
   proyeccion: { tipo: 'PROYECCION', etiqueta: 'Proyección', nombreDelTipo: 'proyección' },
+  redes: { tipo: null, etiqueta: 'Redes', nombreDelTipo: null },
 }
 
 export const vistaDeTipo = (tipoCalculo) =>
-  Object.keys(VISTAS).find((vista) => VISTAS[vista].tipo === tipoCalculo) ?? null
+  Object.keys(VISTAS).find((vista) => VISTAS[vista].tipo && VISTAS[vista].tipo === tipoCalculo) ?? null
 
-export const indicadoresDeLaVista = (deLaVacuna, vista) => deLaVacuna.filter((i) => i.tipoCalculo === VISTAS[vista]?.tipo)
+export const indicadoresDeLaVista = (deLaVacuna, vista) =>
+  (VISTAS[vista]?.tipo ? deLaVacuna.filter((i) => i.tipoCalculo === VISTAS[vista].tipo) : [])
 
 // La primera pestaña con indicador de la vacuna; sin ninguno, Avance.
 export const vistaPorDefecto = (deLaVacuna) =>
@@ -81,23 +85,33 @@ export function municipiosDeLaCorrida(resultados) {
   return [...porId.values()].sort(porNombre)
 }
 
-// Los de la corrida, recortados al distrito (si lo hay) y luego a los elegidos (si los hay).
-export function municipiosVisibles(municipios, { delDistrito = null, elegidos = [] } = {}) {
-  const enDistrito = delDistrito ? municipios.filter((m) => delDistrito.includes(m.id)) : municipios
-  const validos = elegidos.filter((id) => enDistrito.some((m) => m.id === id))
-  return validos.length > 0 ? enDistrito.filter((m) => validos.includes(m.id)) : enDistrito
+// Los de la corrida, recortados a la red o al distrito (si lo hay; la red manda, SPEC 60) y luego a los elegidos (si
+// los hay). deLaRed y delDistrito son listas de ids.
+export function municipiosVisibles(municipios, { delDistrito = null, deLaRed = null, elegidos = [] } = {}) {
+  const recorte = deLaRed ?? delDistrito
+  const enRecorte = recorte ? municipios.filter((m) => recorte.includes(m.id)) : municipios
+  const validos = elegidos.filter((id) => enRecorte.some((m) => m.id === id))
+  return validos.length > 0 ? enRecorte.filter((m) => validos.includes(m.id)) : enRecorte
 }
 
-// La DDRISS y los municipios visibles, para las tablas.
-export function filasVisibles(filas, visibles) {
+// La fila de total que se ve: con red elegida, «Total de la red» de esa red (SPEC 60); sin red, la de la DDRISS.
+export const esFilaDeTotal = (r, red = null) => r.municipio === null && (red ? r.red?.id === red.id : !r.red)
+
+export function nombreDeFila(r) {
+  if (r.municipio !== null) return r.municipio.nombre
+  return r.red ? 'Total de la red' : 'Total de la DDRISS'
+}
+
+// La fila de total y los municipios visibles, para las tablas.
+export function filasVisibles(filas, visibles, red = null) {
   const ids = new Set(visibles.map((m) => m.id))
-  return filas.filter((r) => r.municipio === null || ids.has(r.municipio.id))
+  return filas.filter((r) => (r.municipio === null ? esFilaDeTotal(r, red) : ids.has(r.municipio.id)))
 }
 
-// Con un solo municipio visible, su fila; con todos o con varios, la de la DDRISS.
-export function filaDeReferencia(filas, visibles) {
+// Con un solo municipio visible, su fila; con todos o con varios, la de total (la de la red si hay red elegida).
+export function filaDeReferencia(filas, visibles, red = null) {
   if (visibles.length === 1) return filas.find((r) => r.municipio?.id === visibles[0].id) ?? null
-  return filas.find((r) => r.municipio === null) ?? null
+  return filas.find((r) => esFilaDeTotal(r, red)) ?? null
 }
 
 // Los doce meses de la línea de avance. El prorrateo del indicador base no viene en los resultados, así que con una
@@ -129,10 +143,10 @@ export function puntosDeLinea({ puntos, mesCorte, metaBase, filaProyeccion }) {
 }
 
 // Una barra por indicador del tipo de la cobertura del panel, de todas las vacunas, con su fila de referencia.
-export function barrasPorVacuna(indicadores, resultados, tipo, visibles, vacuna) {
+export function barrasPorVacuna(indicadores, resultados, tipo, visibles, vacuna, red = null) {
   const barras = indicadores
     .filter((i) => i.tipoCalculo === tipo)
-    .map((i) => ({ indicador: i, fila: filaDeReferencia(filasDe(resultados, i.codigo), visibles) }))
+    .map((i) => ({ indicador: i, fila: filaDeReferencia(filasDe(resultados, i.codigo), visibles, red) }))
     .filter(({ fila }) => fila !== null)
     .map(({ indicador, fila }) => ({
       codigo: indicador.codigo,

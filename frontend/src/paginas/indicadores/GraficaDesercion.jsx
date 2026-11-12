@@ -6,7 +6,7 @@ import TarjetaGrafica, { colorDeBarra, porcentaje, SinDatos } from './TarjetaGra
 // SPEC 49: las 8 deserciones más altas de los municipios visibles, con su semáforo y la meta como umbral. El título
 // es el nombre del indicador: el resultado solo trae la dosis final.
 
-export default function GraficaDesercion({ indicador, filas, visibles, vacuna, referencia, preliminar, className }) {
+export default function GraficaDesercion({ indicador, filas, visibles, red, vacuna, referencia, preliminar, className }) {
   if (!indicador) {
     return (
       <TarjetaGrafica titulo="Deserción" className={className}>
@@ -16,7 +16,7 @@ export default function GraficaDesercion({ indicador, filas, visibles, vacuna, r
   }
   const titulo = indicador.nombre ?? indicador.codigo
   const barras = barrasDeDesercion(filas, visibles)
-  const fila = filaDeReferencia(filas, visibles)
+  const fila = filaDeReferencia(filas, visibles, red)
   const meta = fila?.meta ?? barras[0]?.meta ?? null
   const subtitulo = fila?.calculable ? `${referencia}: ${porcentaje(fila.valor)}` : referencia
   return (

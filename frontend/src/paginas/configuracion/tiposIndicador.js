@@ -234,15 +234,17 @@ function sufijoDosis(codigo) {
 }
 
 // {PREFIJO}_{VACUNA}{DOSIS}, o {PREFIJO}_{VACUNA}{INICIAL}_{FINAL} en DESERCION; si ya existe, el primer _2, _3…
-// libre. existentes: los códigos de la colección en cualquier territorio y estado.
-export function codigoIndicador(tipo, vacuna, dosis, existentes) {
+// libre. existentes: los códigos de la colección en cualquier territorio y estado. Una COBERTURA con prorrateo
+// NINGUNO (la cobertura anual, SPEC 60) lleva el prefijo COB_ANUAL.
+export function codigoIndicador(tipo, vacuna, dosis, existentes, prorrateo) {
   const d = TIPOS_INDICADOR[tipo]
   if (!d?.prefijo) return { error: M.tipo }
   const usados = new Set(existentes)
   const parteDosis = d.dosis === 'DOS'
     ? `${sufijoDosis(dosis.inicial)}_${sufijoDosis(dosis.final)}`
     : sufijoDosis(dosis)
-  const base = `${d.prefijo}_${vacuna}${parteDosis}`
+  const prefijo = tipo === 'COBERTURA' && prorrateo === 'NINGUNO' ? 'COB_ANUAL' : d.prefijo
+  const base = `${prefijo}_${vacuna}${parteDosis}`
   let codigo = base
   for (let n = 2; usados.has(codigo); n += 1) codigo = `${base}_${n}`
   if (codigo.length > LARGO_CODIGO) return { error: M.codigoLargo }

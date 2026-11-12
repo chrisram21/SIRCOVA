@@ -4,6 +4,7 @@ import { MESES } from '@/lib/fechas.js'
 import { cn } from '@/lib/utils'
 import { TIPOS_INDICADOR } from '../configuracion/tiposIndicador.js'
 import InsigniaCumple from './InsigniaCumple.jsx'
+import { nombreDeFila } from './panelIndicadores.js'
 
 // SPEC 47: los resultados de un indicador PROYECCION. El numerador guardado son las dosis proyectadas a diciembre; las
 // acumuladas y el ritmo vienen en proyeccion. Las columnas estimadas van sobre fondo gris, como pide el estilo general.
@@ -88,7 +89,7 @@ export default function TablaProyeccion({ resultados }) {
               const motivo = motivoNoCalculable(r)
               return (
                 <TableRow key={r.municipio?.id ?? 'ddriss'} className={cn(departamental && 'font-semibold')}>
-                  <TableCell>{departamental ? 'Total de la DDRISS' : r.municipio.nombre}</TableCell>
+                  <TableCell>{nombreDeFila(r)}</TableCell>
                   <TableCell className="text-right font-mono">{dosis(r.proyeccion?.dosisAcumuladas)}</TableCell>
                   <TableCell className={cn('text-right font-mono', ESTIMADA)}>{dosis(r.proyeccion?.ritmoMensual)}</TableCell>
                   <TableCell className={cn('text-right font-mono', ESTIMADA)}>{dosis(r.numerador)}</TableCell>
