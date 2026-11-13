@@ -8,6 +8,7 @@ import { ddrissDeLaConsulta, leerRedDeLaDdriss } from '../indicadores/corridas.s
 import { seccionesDeducidas } from '../produccion/celdas.service.js';
 import { PRODUCCION_DE_LA_DDRISS, municipiosDelUniverso } from '../indicadores/produccion.service.js';
 import { libroDelInforme } from './informeExcel.service.js';
+import { pdfDelInforme } from './informePdf.service.js';
 
 const noEncontrado = (mensaje) => new ErrorApi(404, 'NO_ENCONTRADO', mensaje);
 
@@ -495,7 +496,7 @@ export async function informePorFila(usuario, query = {}) {
   };
 }
 
-// ---------------------------------------------------------------- Exportación a Excel (SPEC 64, HU-47)
+// ---------------------------------------------------------------- Exportación a Excel y PDF (SPEC 64 y 65)
 
 // Los nombres del encabezado del libro: DDRISS, quien exporta, vacuna, red y municipios elegidos.
 async function datosDelEncabezado(usuario, consulta, ddrissId) {
@@ -523,14 +524,20 @@ async function datosDelEncabezado(usuario, consulta, ddrissId) {
 
 const aTextoDeMes = ({ anio, mes }) => `${anio}-${String(mes).padStart(2, '0')}`;
 
-// El mismo informe de informePorFila, como libro .xlsx. Deja la fila EXPORTAR después de armar el libro: si la
-// bitácora falla, no se entrega el archivo. contexto: contextoAuditoria(req).
-export async function exportarInformeExcel(usuario, query, contexto, ahora = new Date()) {
+// Cómo se arma cada formato a partir del informe y los datos del encabezado; la clave es la extensión del archivo.
+const ARCHIVOS = {
+  xlsx: async (informe, datos) => Buffer.from(await libroDelInforme(informe, datos).xlsx.writeBuffer()),
+  pdf: (informe, datos) => pdfDelInforme(informe, datos),
+};
+
+// El mismo informe de informePorFila como archivo (formato: xlsx o pdf). Deja la fila EXPORTAR después de armarlo:
+// si la bitácora falla, no se entrega el archivo. contexto: contextoAuditoria(req).
+export async function exportarInforme(usuario, query, contexto, formato, ahora = new Date()) {
   const informe = await informePorFila(usuario, query);
   const consulta = leerConsulta(query);
   const ddrissId = ddrissDeLaConsulta(usuario, query);
   const datos = await datosDelEncabezado(usuario, consulta, ddrissId);
-  const bytes = await libroDelInforme(informe, { ...datos, generadoEn: ahora }).xlsx.writeBuffer();
+  const bytes = await ARCHIVOS[formato](informe, { ...datos, generadoEn: ahora });
 
   const desde = aTextoDeMes(consulta.desde);
   const hasta = aTextoDeMes(consulta.hasta);
@@ -541,7 +548,7 @@ export async function exportarInformeExcel(usuario, query, contexto, ahora = new
     entidad: 'informe',
     entidadId: consulta.informe,
     valoresNuevos: {
-      formato: 'xlsx',
+      formato,
       desde,
       hasta,
       nivel: consulta.nivel,
@@ -555,5 +562,5 @@ export async function exportarInformeExcel(usuario, query, contexto, ahora = new
   }));
 
   const agrupacion = consulta.agrupacion ? `-por-${consulta.agrupacion}` : '';
-  return { bytes: Buffer.from(bytes), nombre: `informe-${consulta.informe}-${desde}-a-${hasta}${agrupacion}.xlsx` };
+  return { bytes, nombre: `informe-${consulta.informe}-${desde}-a-${hasta}${agrupacion}.${formato}` };
 }

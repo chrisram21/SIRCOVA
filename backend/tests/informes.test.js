@@ -10,6 +10,7 @@ import {
   columnasDelInforme,
   dimensionDeAgrupacion,
 } from '../src/modulos/informes/informes.service.js';
+import { documentoDelInforme } from '../src/modulos/informes/informePdf.service.js';
 import { claveCombinacion } from '../src/modulos/produccion/celdas.service.js';
 import { tokenDePrueba } from './sesionDePrueba.js';
 
@@ -1134,6 +1135,151 @@ describe('GET /informes/produccion/excel (SPEC 64)', () => {
         .parse(binario);
       expect(res.status, rol).toBe(200);
       expect((await hojaDe(res)).getCell('A1').value).toBe('Producción total (incluye Migrantes) · Departamento');
+    }
+  });
+});
+
+describe('GET /informes/produccion/pdf (SPEC 65)', () => {
+  const binario = (res, listo) => {
+    const partes = [];
+    res.on('data', (parte) => partes.push(parte));
+    res.on('end', () => listo(null, Buffer.concat(partes)));
+  };
+  const descargar = (consulta, token = cuentas.AUTORIDAD.token) =>
+    request(app)
+      .get(`/api/v1/informes/produccion/pdf?ddrissId=${ddrissId}&${consulta}`)
+      .set('Authorization', `Bearer ${token}`)
+      .buffer(true)
+      .parse(binario);
+  const json = (consulta) => consultar('produccion', `ddrissId=${ddrissId}&${consulta}`);
+  const esPdf = (res) => Buffer.isBuffer(res.body) && res.body.subarray(0, 5).toString('latin1') === '%PDF-';
+  const DATOS = {
+    ddriss: 'vitest-spec62', vacuna: null, red: null, municipios: [], generadoPor: 'prueba', generadoEn: new Date(),
+  };
+  const texto = (celda) => (typeof celda === 'string' ? celda : celda.text ?? null);
+  const formato = new Intl.NumberFormat('es-GT');
+
+  async function filasExportar(desdeId) {
+    const [filas] = await pool.query(
+      `SELECT modulo, entidad, entidad_id, valores_nuevos FROM bitacora
+        WHERE id > ? AND usuario_id = ? AND accion = 'EXPORTAR' ORDER BY id`,
+      [desdeId, cuentas.AUTORIDAD.id],
+    );
+    return filas.map((f) => ({
+      ...f,
+      valores_nuevos: typeof f.valores_nuevos === 'string' ? JSON.parse(f.valores_nuevos) : f.valores_nuevos,
+    }));
+  }
+  const ultimaBitacora = async () => (await pool.query('SELECT COALESCE(MAX(id), 0) AS id FROM bitacora'))[0][0].id;
+
+  it('responde un PDF, y los tramos cubren todas las columnas y filas del informe con sus cantidades', async () => {
+    const consultas = [
+      `informe=poblacion-propia&desde=${ANIO - 1}-12&hasta=${ANIO}-02`,
+      `informe=total&desde=${ANIO}-01&hasta=${ANIO}-02&incluirAprobados=true`,
+      `informe=residencia&desde=${ANIO}-01&hasta=${ANIO}-02&nivel=distrito`,
+      `informe=total&desde=${ANIO}-01&hasta=${ANIO}-01&nivel=establecimiento`,
+      `informe=total&desde=${ANIO}-01&hasta=${ANIO}-02&vacuna=ZVT_SPEC63&agrupacion=sexo&incluirAprobados=true`,
+    ];
+    for (const consulta of consultas) {
+      const [archivo, pantalla] = await Promise.all([descargar(consulta), json(consulta)]);
+      expect(archivo.status, consulta).toBe(200);
+      expect(esPdf(archivo), consulta).toBe(true);
+
+      const informe = pantalla.body;
+      const fijas = ['establecimiento', 'distrito'].includes(informe.nivel) ? 2 : 1;
+      const tramos = documentoDelInforme(informe, DATOS).content.filter((n) => n.id?.startsWith('tramo-'));
+      // Cada fila del informe (y el «Total») es la unión, en orden, de sus pedazos en los tramos.
+      const unidas = [...informe.filas, informe.total].map((_, k) =>
+        tramos.flatMap((t) => t.table.body[3 + k].slice(fijas).map(texto)));
+      expect(unidas, consulta).toEqual([...informe.filas, informe.total]
+        .map((f) => f.cantidades.map((n) => formato.format(n))));
+      expect(tramos.flatMap((t) => t.table.body[2].slice(fijas).map(texto)), consulta)
+        .toEqual(informe.columnas.map((c) => c.dosis.codigo));
+    }
+  });
+
+  it('lleva su tipo y el nombre del archivo, con -por-{agrupación} si la hay', async () => {
+    const res = await descargar(`informe=residencia&desde=${ANIO}-01&hasta=${ANIO}-02`);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('application/pdf');
+    expect(res.headers['content-disposition'])
+      .toBe(`attachment; filename="informe-residencia-${ANIO}-01-a-${ANIO}-02.pdf"`);
+
+    const agrupado = await descargar(`informe=total&desde=${ANIO}-01&hasta=${ANIO}-01&agrupacion=sexo`);
+    expect(agrupado.headers['content-disposition'])
+      .toBe(`attachment; filename="informe-total-${ANIO}-01-a-${ANIO}-01-por-sexo.pdf"`);
+  });
+
+  it('deja una fila EXPORTAR con formato pdf, los parámetros y sin cantidades', async () => {
+    const antes = await ultimaBitacora();
+    const res = await descargar(`informe=total&desde=${ANIO}-01&hasta=${ANIO}-02&redId=${ids.red}&vacuna=ZVT_SPEC62`);
+    expect(res.status).toBe(200);
+
+    const filas = await filasExportar(antes);
+    expect(filas).toHaveLength(1);
+    expect(filas[0]).toMatchObject({ modulo: 'REPORTES', entidad: 'informe', entidad_id: 'total' });
+    expect(filas[0].valores_nuevos).toEqual({
+      formato: 'pdf',
+      desde: `${ANIO}-01`,
+      hasta: `${ANIO}-02`,
+      nivel: 'municipio',
+      vacuna: 'ZVT_SPEC62',
+      redId: ids.red,
+      municipioIds: [],
+      agrupacion: null,
+      incluirAprobados: false,
+      ddrissId,
+    });
+  });
+
+  it('responde los mismos 400 y 404 que el informe en pantalla, sin fila EXPORTAR', async () => {
+    const antes = await ultimaBitacora();
+    const casos = [
+      `informe=residencia&desde=${ANIO}-01&hasta=${ANIO}-01&nivel=establecimiento`,
+      `informe=total&desde=${ANIO}-02&hasta=${ANIO}-01`,
+      `informe=total&desde=${ANIO}-01&hasta=${ANIO}-01&formato=pdf`,
+      `informe=total&desde=${ANIO}-01&hasta=${ANIO}-03`,
+      `informe=total&desde=${ANIO}-01&hasta=${ANIO}-01&agrupacion=zvt_no_existe`,
+    ];
+    for (const consulta of casos) {
+      const [archivo, pantalla] = await Promise.all([
+        request(app)
+          .get(`/api/v1/informes/produccion/pdf?ddrissId=${ddrissId}&${consulta}`)
+          .set('Authorization', `Bearer ${cuentas.AUTORIDAD.token}`),
+        json(consulta),
+      ]);
+      expect([400, 404], consulta).toContain(archivo.status);
+      expect(archivo.status, consulta).toBe(pantalla.status);
+      expect(archivo.body, consulta).toEqual(pantalla.body);
+    }
+    expect(await filasExportar(antes)).toEqual([]);
+  });
+
+  it('el Personal del establecimiento y el Administrador reciben 403', async () => {
+    for (const rol of ['ESTABLECIMIENTO', 'ADMINISTRADOR']) {
+      const res = await request(app)
+        .get(`/api/v1/informes/produccion/pdf?informe=total&desde=${ANIO}-01&hasta=${ANIO}-01`)
+        .set('Authorization', `Bearer ${cuentas[rol].token}`);
+      expect(res.status, rol).toBe(403);
+      expect(res.body.error.codigo).toBe('SIN_PERMISO');
+    }
+  });
+
+  it('el Revisor y Epidemiología exportan el informe de su propia DDRISS', async () => {
+    for (const rol of ['REVISOR', 'EPIDEMIOLOGIA']) {
+      const [[mes]] = await pool.query(
+        `SELECT p.anio, p.mes FROM cierre_periodo cp JOIN periodo p ON p.id = cp.periodo_id
+          WHERE cp.ddriss_id = ? ORDER BY p.anio DESC, p.mes DESC LIMIT 1`,
+        [cuentas[rol].ddrissId],
+      );
+      const textoMes = `${mes.anio}-${String(mes.mes).padStart(2, '0')}`;
+      const res = await request(app)
+        .get(`/api/v1/informes/produccion/pdf?informe=total&desde=${textoMes}&hasta=${textoMes}&nivel=departamento`)
+        .set('Authorization', `Bearer ${cuentas[rol].token}`)
+        .buffer(true)
+        .parse(binario);
+      expect(res.status, rol).toBe(200);
+      expect(esPdf(res), rol).toBe(true);
     }
   });
 });

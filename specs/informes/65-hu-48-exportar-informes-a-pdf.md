@@ -117,7 +117,7 @@ Se mueven ahí, sin cambiar su texto ni lo que devuelven:
 - **Sin columnas** (una agrupación que ninguna vacuna registra): solo la primera página con su aviso, sin tablas.
 - **Colores:** texto negro, encabezados de tabla con un fondo gris claro y líneas finas grises. No usa colores del tema del frontend.
 
-`pdfDelInforme(informe, datos)` convierte la definición en bytes con `PdfPrinter` de pdfmake y la fuente de `fuentes/`.
+`pdfDelInforme(informe, datos)` convierte la definición en bytes con `pdfmake.createPdf(…).getBuffer()` y la fuente de `fuentes/` (pdfmake 0.3; ver «Decisiones»).
 
 ### Pantalla «Informes»
 
@@ -184,6 +184,9 @@ Se mueven ahí, sin cambiar su texto ni lo que devuelven:
 - **Sí (decidido al escribir el spec):** SemiBold como negrita. **No:** subir los cuatro pesos que carga el frontend, cuando el PDF solo usa normal y negrita.
 - **Sí (decidido al escribir el spec):** las pruebas comparan la definición del documento (los textos y las cantidades de las celdas) y comprueban que los bytes son un PDF. **No:** leer el texto del PDF, que necesitaría otra dependencia para pruebas.
 - **Sí (decidido al escribir el spec):** mientras se exporta un formato, los dos botones quedan deshabilitados. **No:** dos descargas a la vez, que dejarían dos filas de bitácora por un solo clic doble.
+- **Sí (agregado en la implementación, paso 1):** se instaló pdfmake 0.3.14, que ya no tiene `PdfPrinter`. El servicio usa el objeto único de pdfmake: `setFonts` con IBM Plex Sans, `setUrlAccessPolicy(() => false)` (no baja nada de internet) y `setLocalAccessPolicy` (solo lee `fuentes/`), y `createPdf(definición).getBuffer()`.
+- **Sí (agregado en la implementación, paso 4):** «si no cabe en lo que queda de la página, pasa a la siguiente» se resuelve con `pageBreakBefore` de pdfmake (`saltarAntesDelTramo`): un tramo que empezaría pasado el primer 10 % de la página y ocupa más de una salta a la siguiente; uno que ya empieza arriba se deja partir y repite su encabezado. Por eso, con muchas filas, la primera página puede quedar solo con el encabezado.
+- **Sí (agregado en la implementación, paso 3):** `textosInforme.js` también lleva `llevaMunicipio`, `nombreDeFila` y `textoFueraDelConsolidado`, que el Excel tenía escritos a mano y el PDF necesita igual.
 
 ## Riesgos
 
