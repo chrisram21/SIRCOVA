@@ -58,3 +58,4 @@ tags: ["spec", "modulo/acceso-y-seguridad", "origen/historia"]
 - [[SPEC 44]] — Calcular la cobertura y el avance contra la meta del mes · *Implementado*
 - [[SPEC 57]] — Control de rectificaciones por establecimiento · *Implementado*
 - [[SPEC 59]] — Catálogo de redes de municipios · *Implementado*
+- [[SPEC 64]] — HU-47 Exportar informes a Excel · *Implementado*

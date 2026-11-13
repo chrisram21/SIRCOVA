@@ -1341,14 +1341,16 @@ Verificado contra la API real el 2026-11-08, con el build servido por `vite prev
 
 **Cómo se hará:** Generación de .xlsx en el backend con ExcelJS, respetando los permisos y la DDRISS del usuario; botón de exportación en cada informe.
 
-**Nota (2026-11-05, spec 49):** el «Exportar Excel» de `Indicadores.html` quedó fuera del SPEC 49. Si esta historia lo agrega, los filtros de esa pantalla ya están en la URL (`anio`, `mes`, `ddriss`, `vacuna`, `indicador`, `distrito`, `municipios`) y pueden pasar tal cual al endpoint que genere el archivo.
+**Nota (2026-11-12, spec 64):** exportar «Indicadores» a Excel no entra en esta historia: pasó a HU-64, con la nota del SPEC 49 que estaba aquí.
 
 **Nota (2026-11-09, spec 55):** si los datos del informe salen de una corrida parcial (`Corrida.parcial`), el archivo lleva la leyenda «PRELIMINAR», como la marca de agua de las gráficas y del mapa.
 
 **Criterios de aceptación:**
-- [ ] El archivo respeta los filtros y la agrupación elegidos.
-- [ ] Incluye encabezado con título, periodo y fecha de generación.
-- [ ] Los números se exportan como números, no como texto.
+- [x] El archivo respeta los filtros y la agrupación elegidos.
+- [x] Incluye encabezado con título, periodo y fecha de generación.
+- [x] Los números se exportan como números, no como texto.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 64 a `main` (`specs/informes/64-hu-47-exportar-informes-a-excel.md`). Botón «Exportar Excel» en «Informes», junto a «Agrupar por», con el informe de la URL (también la agrupación). `GET /informes/produccion/excel` (mismos parámetros, permiso `INFORME_CONSULTAR` y errores que `GET /informes/produccion`) arma con ExcelJS una hoja con el título, «PRELIMINAR» cuando el informe es preliminar (meses sin cerrar con «Incluir aprobados sin cerrar»; los informes no usan `Corrida.parcial`), la DDRISS, los filtros, la fecha y hora de Guatemala con quien lo generó y los avisos de la pantalla; la tabla lleva el encabezado combinado, las cantidades como números con separador de miles y la fila «Total». Cada descarga deja `EXPORTAR` del módulo `REPORTES` en la bitácora, con los parámetros y sin cantidades. Verificada contra la API real el 2026-11-13 desde el navegador: el Revisor exportó los tres informes de enero a agosto de 2026 por municipio, uno por establecimiento y uno de septiembre a octubre con aprobados agrupado por Sexo, y Epidemiología todo 2026 por establecimiento con aprobados (31 filas × 73 columnas); en los seis archivos, cada una de las 9,897 cantidades coincide con la pantalla y es un número, cada descarga tardó menos de 2 s y dejó su fila `EXPORTAR`.
 
 #### HU-48. Exportar informes a PDF
 
@@ -1631,6 +1633,23 @@ Verificado contra la API real el 2026-11-08, con el build servido por `vite prev
 
 **Avance:** criterios cumplidos; queda terminada al integrar el spec 10 a `main`. Backend y frontend en `specs/acceso-y-seguridad/10-hu-62-63-seguridad-de-cuentas.md`, junto con HU-62. `POST /usuarios/{id}/restablecer-contrasena` con el permiso `USUARIO_RESTABLECER_CONTRASENA` (solo Administrador) responde `{ usuario, contrasenaTemporal }`. La contraseña la genera `generarContrasenaTemporal` (`backend/src/modulos/auth/contrasenaTemporal.service.js`): 12 caracteres con `crypto.randomInt`, de un alfabeto sin `0 O o 1 l I`, revisados con la política de HU-03; el largo es la constante `LARGO`. El mismo generador lo usa `POST /usuarios` (nota en HU-04). La acción de bitácora `RESTABLECER_CONTRASENA` se registra siempre, aunque ningún otro dato cambie, y `contrasenaTemporal` está en `CLAVES_SENSIBLES`. La sesión abierta de la cuenta recibe 403 `CAMBIO_CONTRASENA_REQUERIDO` y el frontend la lleva al login con el aviso "Su contraseña fue restablecida…". En `/usuarios`, opción "Restablecer contraseña" en el menú "Más acciones", con confirmación, y el diálogo `DialogoContrasenaTemporal` con el botón "Copiar". Verificado contra la API real el 2026-10-22 con la cuenta `prueba-hu62`.
 
+#### HU-64. Exportar Indicadores a Excel
+
+> **Como** integrante de Epidemiología, **quiero** descargar a Excel la tabla del indicador que estoy viendo en «Indicadores», **para** trabajar la cobertura, la brecha, la deserción o la proyección fuera del sistema y compartirla.
+
+| Para quién | Story points | Sprint | Responsable |
+|---|---|---|---|
+| Epidemiología | Por estimar | Sin asignar | Sin asignar |
+
+**Cómo se hará:** Botón «Exportar Excel» en cada pestaña de «Indicadores»; endpoint del backend que arma el .xlsx con ExcelJS, respetando los permisos y la DDRISS del usuario y registrando la exportación en la bitácora, como el de HU-47.
+
+**Origen (2026-11-12, spec 64):** el «Exportar Excel» de `Indicadores.html` quedó fuera del SPEC 49 (HU-41), y la HU-47 solo exporta «Informes». Nota del SPEC 49: los filtros de esa pantalla ya están en la URL (`anio`, `mes`, `ddriss`, `vacuna`, `indicador`, `distrito`, `municipios`, y `vista` desde el SPEC 54) y pueden pasar tal cual al endpoint que genere el archivo. El de HU-47 (`backend/src/modulos/informes/informeExcel.service.js` y `descargar` de `frontend/src/api/cliente.js`) sirve de modelo.
+
+**Criterios de aceptación:**
+- [ ] El archivo trae la tabla de la pestaña elegida con los mismos filtros que la pantalla.
+- [ ] Incluye encabezado con título, corrida (mes de corte) y fecha de generación, y la leyenda «PRELIMINAR» si la corrida es parcial (`Corrida.parcial`).
+- [ ] Los números se exportan como números, no como texto.
+
 ## 6. Notas y pendientes
 
 - Los umbrales del semáforo (HU-42) y las alertas de cobertura (HU-51) usan la propuesta 80/90 %, pendiente de confirmar con Epidemiología; por eso se definen en la configuración de indicadores (HU-35).
@@ -1641,3 +1660,4 @@ Verificado contra la API real el 2026-11-08, con el build servido por `vite prev
 - 2026-10-20: HU-06 pasó a seguridad granular (un permiso por función) y se agregó HU-61 (gestión de permisos por rol, solo Administrador), todavía sin estimar ni asignar. Los totales de las secciones 3 y 4 siguen contando 60 historias y 280 story points.
 - 2026-10-21: ajustes de la asesoría. HU-03 incluye ahora el cambio obligatorio de la contraseña temporal, la política de fortaleza con zxcvbn y el campo para ver la contraseña, y se trabaja primero. Se agregaron HU-62 (desbloquear cuenta) y HU-63 (restablecer contraseña), todavía sin estimar ni asignar. También se acordó guardar en `empleado` solo una huella HMAC del CUI, en lugar de `codigo_empleado`, para impedir empleados repetidos, y validar el formato de los campos del personal; estos ajustes a HU-04 y HU-05 se describen en `docs/SPECS/PROPUESTA_SPEC_B_DATOS_DEL_EMPLEADO.md`. Los totales de las secciones 3 y 4 siguen contando 60 historias y 280 story points.
 - 2026-10-20: los límites del mapa (HU-42) salen del COD-AB de Guatemala de CONRED/OCHA publicado en HDX (CC BY 3.0 IGO). La licencia obliga a dar crédito, enlazar la licencia, indicar los cambios y no sugerir respaldo de OCHA o de la ONU; por eso HU-42 y HU-60 tienen criterios de atribución. Si se cambia la fuente de los límites, hay que actualizar `frontend/public/geo/FUENTES.md` y el crédito del mapa.
+- 2026-11-12: se agregó HU-64 (exportar «Indicadores» a Excel), que salió del SPEC 64 de HU-47, todavía sin estimar ni asignar; no cuenta en los totales de las secciones 3 y 4.

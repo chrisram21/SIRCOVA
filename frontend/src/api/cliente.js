@@ -56,9 +56,16 @@ export function leerUltimaPeticion() {
   return ultimaPeticion
 }
 
+// El nombre de Content-Disposition (`attachment; filename="…"`), o null si no viene.
+function nombreDelArchivo(respuesta) {
+  const encabezado = respuesta.headers?.get('Content-Disposition') ?? ''
+  return /filename="([^"]+)"/.exec(encabezado)?.[1] ?? null
+}
+
 // credentials: 'include' para que el navegador guarde y mande la cookie del refresh token (solo viaja a /auth).
-async function enviar(ruta, { metodo = 'GET', cuerpo } = {}, token) {
-  const encabezados = { Accept: 'application/json' }
+// archivo: una respuesta correcta se lee como { blob, nombre } (SPEC 64); un error sigue siendo JSON.
+async function enviar(ruta, { metodo = 'GET', cuerpo, archivo = false } = {}, token) {
+  const encabezados = { Accept: archivo ? '*/*' : 'application/json' }
   if (cuerpo !== undefined) encabezados['Content-Type'] = 'application/json'
   if (token) encabezados.Authorization = `Bearer ${token}`
 
@@ -84,6 +91,7 @@ async function enviar(ruta, { metodo = 'GET', cuerpo } = {}, token) {
     if (token) ultimaPeticion = Date.now()
 
     if (respuesta.status === 204) return null
+    if (archivo && respuesta.ok) return { blob: await respuesta.blob(), nombre: nombreDelArchivo(respuesta) }
 
     try {
       datos = await respuesta.json()
@@ -161,4 +169,9 @@ export async function solicitar(ruta, opciones = {}) {
     avisarSiPierdeSesion(error, token)
     throw error
   }
+}
+
+// Un archivo que genera la API (SPEC 64): la misma sesión y renovación que solicitar. Devuelve { blob, nombre }.
+export function descargar(ruta) {
+  return solicitar(ruta, { archivo: true })
 }

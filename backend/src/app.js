@@ -18,8 +18,9 @@ import { rutaNoEncontrada, manejarErrores } from './middlewares/errores.js';
 const app = express();
 const documentoOpenapi = YAML.parse(fs.readFileSync(entorno.rutaOpenapi, 'utf8'));
 
-// credentials: para que el navegador mande y guarde la cookie del refresh token.
-app.use(cors({ origin: entorno.corsOrigen, credentials: true }));
+// credentials: para que el navegador mande y guarde la cookie del refresh token. exposedHeaders: para que el
+// frontend lea el nombre de un archivo descargado (SPEC 64).
+app.use(cors({ origin: entorno.corsOrigen, credentials: true, exposedHeaders: ['Content-Disposition'] }));
 // inflate: false: un cuerpo comprimido no llega al descompresor de Node (CVE-2026-111497).
 app.use(express.json({ inflate: false, limit: '1mb' }));
 

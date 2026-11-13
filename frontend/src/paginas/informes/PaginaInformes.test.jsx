@@ -1,14 +1,17 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { listarDdriss, listarRedes } from '@/api/catalogos.js'
-import { obtenerInforme, obtenerOpcionesInformes } from '@/api/informes.js'
+import { ErrorApi } from '@/api/cliente.js'
+import { descargarInformeExcel, obtenerInforme, obtenerOpcionesInformes } from '@/api/informes.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 import PaginaInformes from './PaginaInformes.jsx'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
 vi.mock('@/api/catalogos.js', () => ({ listarDdriss: vi.fn(), listarRedes: vi.fn() }))
-vi.mock('@/api/informes.js', () => ({ obtenerOpcionesInformes: vi.fn(), obtenerInforme: vi.fn() }))
+vi.mock('@/api/informes.js', () => ({
+  obtenerOpcionesInformes: vi.fn(), obtenerInforme: vi.fn(), descargarInformeExcel: vi.fn(),
+}))
 
 const SAN_MARCOS = { id: 1, codigoIne: '1201', nombre: 'San Marcos' }
 const SAN_PEDRO = { id: 4, codigoIne: '1202', nombre: 'San Pedro Sacatepéquez' }
@@ -306,5 +309,97 @@ describe('«Agrupar por» (SPEC 63)', () => {
     expect(await screen.findByText('Ninguna vacuna de este informe registra Sexo.')).toBeTruthy()
     expect(screen.queryByRole('table')).toBeNull()
     expect(nativo('agrupacion').value).toBe('sexo')
+  })
+})
+
+describe('«Exportar Excel» (SPEC 64)', () => {
+  const URL_INFORME = '/informes?informe=total&desde=2026-02&hasta=2026-08'
+  const ARCHIVO = { blob: new Blob(['PK']), nombre: 'informe-total-2026-02-a-2026-08.xlsx' }
+  const boton = () => screen.queryByRole('button', { name: /Exportar Excel|Exportando…/ })
+  let descargados
+
+  beforeEach(() => {
+    descargarInformeExcel.mockResolvedValue(ARCHIVO)
+    descargados = []
+    URL.createObjectURL = vi.fn(() => 'blob:informe')
+    URL.revokeObjectURL = vi.fn()
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function guardar() {
+      descargados.push({ href: this.href, nombre: this.download })
+    })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  test('no aparece antes de generar', async () => {
+    montar()
+    await screen.findByText(SIN_GENERAR)
+    expect(boton()).toBeNull()
+  })
+
+  test('pide el archivo con los parámetros de la URL y lo guarda con su nombre', async () => {
+    montar({ url: `${URL_INFORME}&municipios=4&aprobados=si&agrupacion=sexo` })
+    await screen.findAllByText('1,234')
+    elegir('informe', 'residencia')
+    fireEvent.click(boton())
+
+    await waitFor(() => expect(descargados).toEqual([{ href: 'blob:informe', nombre: ARCHIVO.nombre }]))
+    expect(descargarInformeExcel).toHaveBeenCalledTimes(1)
+    expect(descargarInformeExcel.mock.lastCall[0]).toEqual(obtenerInforme.mock.lastCall[0])
+    expect(descargarInformeExcel.mock.lastCall[0]).toMatchObject({
+      informe: 'total', desde: '2026-02', hasta: '2026-08', municipioIds: [4], incluirAprobados: true,
+      agrupacion: 'sexo',
+    })
+    expect(URL.createObjectURL).toHaveBeenCalledWith(ARCHIVO.blob)
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:informe')
+  })
+
+  test('mientras descarga dice «Exportando…» y queda deshabilitado', async () => {
+    let terminar
+    descargarInformeExcel.mockReturnValue(new Promise((resolver) => {
+      terminar = resolver
+    }))
+    montar({ url: URL_INFORME })
+    await screen.findAllByText('1,234')
+    fireEvent.click(boton())
+
+    expect((await screen.findByRole('button', { name: 'Exportando…' })).disabled).toBe(true)
+    terminar(ARCHIVO)
+    expect((await screen.findByRole('button', { name: 'Exportar Excel' })).disabled).toBe(false)
+  })
+
+  test('si falla, muestra el error sin reintentar y se puede volver a pulsar', async () => {
+    descargarInformeExcel.mockRejectedValueOnce(new ErrorApi(404, 'NO_ENCONTRADO', 'El mes final no está habilitado.'))
+    montar({ url: URL_INFORME })
+    await screen.findAllByText('1,234')
+    fireEvent.click(boton())
+
+    expect(await screen.findByText('No se pudo exportar el informe: El mes final no está habilitado.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Reintentar' })).toBeNull()
+    expect(descargados).toEqual([])
+    fireEvent.click(boton())
+    await waitFor(() => expect(descargados).toHaveLength(1))
+    expect(screen.queryByText(/No se pudo exportar el informe/)).toBeNull()
+  })
+
+  test('sin columnas (ninguna vacuna registra la dimensión) no aparece', async () => {
+    obtenerInforme.mockResolvedValue(informe({
+      agrupacion: { codigo: 'sexo', nombre: 'Sexo' },
+      columnas: [],
+      filas: [{ id: 1, codigo: '1201', nombre: 'San Marcos', municipio: null, fueraDelConsolidado: false,
+        cantidades: [] }],
+      total: { cantidades: [] },
+    }))
+    montar({ url: `${URL_INFORME}&agrupacion=sexo` })
+    await screen.findByText('Ninguna vacuna de este informe registra Sexo.')
+    expect(boton()).toBeNull()
+  })
+
+  test('no aparece si el informe falla', async () => {
+    obtenerInforme.mockRejectedValue(new ErrorApi(500, 'ERROR_INESPERADO', 'Ocurrió un error inesperado.'))
+    montar({ url: URL_INFORME })
+    await screen.findByText(/No se pudo generar el informe/)
+    expect(boton()).toBeNull()
   })
 })
