@@ -5534,45 +5534,15 @@ paths:
         Es una lectura: no deja bitácora. `ddrissId`, como en `GET /indicadores/corridas`.
       x-permiso: INFORME_CONSULTAR
       parameters:
-        - name: informe
-          in: query
-          required: true
-          schema: { type: string, enum: [poblacion-propia, total, residencia], example: poblacion-propia }
-        - name: desde
-          in: query
-          required: true
-          description: Primer mes del rango (`AAAA-MM`)
-          schema: { type: string, pattern: "^(20[0-9]{2}|2100)-(0[1-9]|1[0-2])$", example: "2026-01" }
-        - name: hasta
-          in: query
-          required: true
-          description: Último mes del rango (`AAAA-MM`), no anterior a `desde`
-          schema: { type: string, pattern: "^(20[0-9]{2}|2100)-(0[1-9]|1[0-2])$", example: "2026-08" }
-        - name: nivel
-          in: query
-          schema: { type: string, enum: [departamento, municipio, distrito, establecimiento], default: municipio }
-        - name: vacuna
-          in: query
-          description: Código de la vacuna; sin él, todas las vacunas
-          schema: { type: string, pattern: "^[A-Z0-9_]{1,20}$", example: HEXA }
-        - name: redId
-          in: query
-          description: Recorta a los municipios actuales de la red
-          schema: { type: integer, minimum: 1, example: 1 }
-        - name: municipioIds
-          in: query
-          description: Ids separados por comas, sin repetir; con `redId`, se cruzan con la red
-          schema: { type: string, pattern: "^[1-9][0-9]*(,[1-9][0-9]*)*$", example: "1,4" }
-        - name: incluirAprobados
-          in: query
-          description: "`true`: suma también los reportes `APROBADO` (preliminar si hay meses sin cerrar)"
-          schema: { type: boolean, default: false }
-        - name: agrupacion
-          in: query
-          description: |
-            Código de una dimensión activa de `catalogo_dimensiones`, distinta de `grupo_edad`; sin él, las columnas
-            van por sección del esquema
-          schema: { type: string, pattern: "^[a-z][a-z0-9_]*$", example: sexo }
+        - { $ref: "#/components/parameters/InformeTipo" }
+        - { $ref: "#/components/parameters/InformeDesde" }
+        - { $ref: "#/components/parameters/InformeHasta" }
+        - { $ref: "#/components/parameters/InformeNivel" }
+        - { $ref: "#/components/parameters/InformeVacuna" }
+        - { $ref: "#/components/parameters/InformeRedId" }
+        - { $ref: "#/components/parameters/InformeMunicipioIds" }
+        - { $ref: "#/components/parameters/InformeIncluirAprobados" }
+        - { $ref: "#/components/parameters/InformeAgrupacion" }
         - { $ref: "#/components/parameters/DdrissIdAutoridad" }
       responses:
         "200":
@@ -5580,27 +5550,61 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/InformeProduccion" }
-        "400":
-          description: |
-            Un parámetro falta, no es válido, es desconocido o está repetido, una lista repite un id, `desde` es
-            posterior a `hasta`, viene `nivel=establecimiento` con `informe=residencia`, viene
-            `agrupacion=grupo_edad`, o falta `ddrissId` (Autoridad nacional)
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Error" }
-              example:
-                error: { codigo: ENTRADA_INVALIDA, mensaje: El mes inicial no puede ser posterior al mes final. }
+        "400": { $ref: "#/components/responses/InformeEntradaInvalida" }
         "401": { $ref: "#/components/responses/NoAutenticado" }
         "403": { $ref: "#/components/responses/SinPermiso" }
-        "404":
-          description: |
-            La vacuna o el `ddrissId` no existen; la red no existe, está inactiva o es de otra DDRISS; la dimensión
-            de `agrupacion` no existe o está inactiva; o `desde` o `hasta` no están habilitados en la DDRISS
+        "404": { $ref: "#/components/responses/InformeNoEncontrado" }
+
+  /informes/produccion/excel:
+    get:
+      tags: [Informes]
+      summary: Descargar el informe de producción como archivo de Excel (SPEC 64, HU-47)
+      description: |
+        El mismo informe de `GET /informes/produccion`, con los mismos parámetros (también `agrupacion`), el mismo
+        permiso, el mismo ámbito y los mismos errores, como un libro .xlsx armado con ExcelJS. El libro sale de la
+        misma respuesta que la pantalla, así que sus cantidades son las mismas.
+
+        Una sola hoja, con el nombre corto del informe:
+        - **Encabezado:** el título («{informe} · {nivel}», más « · por {dimensión}» con agrupación), «PRELIMINAR» si
+          `preliminar`, la DDRISS, el periodo, la vacuna, el territorio (red, municipios o todos), la agrupación, si
+          incluye aprobados sin cerrar, la fecha y hora de generación (Guatemala) con el nombre de quien lo generó, y
+          los mismos avisos que la pantalla (meses sin cerrar, vacunas mostradas al agrupar, ninguna vacuna).
+        - **Tabla:** tres filas de encabezado combinadas (vacuna, sección o valor de la dimensión, dosis), la columna
+          del nombre (y «Municipio» por establecimiento y por distrito) fijas, las cantidades como números con formato
+          `#,##0`, «(no suma en el consolidado)» en las filas `fueraDelConsolidado`, la fila «Total» y, si hay
+          `dosisFueraDelConsolidado`, la línea que lo explica. Con `columnas` vacío, solo el encabezado.
+
+        Cada descarga correcta deja una fila `EXPORTAR` del módulo `REPORTES` en la bitácora (`entidad` `informe`,
+        `entidadId` el código del informe), con los parámetros y `formato: xlsx` en `valoresNuevos`, sin cantidades.
+        Un error no la deja.
+      x-permiso: INFORME_CONSULTAR
+      parameters:
+        - { $ref: "#/components/parameters/InformeTipo" }
+        - { $ref: "#/components/parameters/InformeDesde" }
+        - { $ref: "#/components/parameters/InformeHasta" }
+        - { $ref: "#/components/parameters/InformeNivel" }
+        - { $ref: "#/components/parameters/InformeVacuna" }
+        - { $ref: "#/components/parameters/InformeRedId" }
+        - { $ref: "#/components/parameters/InformeMunicipioIds" }
+        - { $ref: "#/components/parameters/InformeIncluirAprobados" }
+        - { $ref: "#/components/parameters/InformeAgrupacion" }
+        - { $ref: "#/components/parameters/DdrissIdAutoridad" }
+      responses:
+        "200":
+          description: El libro de Excel del informe
+          headers:
+            Content-Disposition:
+              description: |
+                `attachment; filename="informe-{informe}-{desde}-a-{hasta}.xlsx"`, con `-por-{agrupacion}` antes de
+                la extensión si hay agrupación. El frontend lo lee gracias a `Access-Control-Expose-Headers`.
+              schema: { type: string, example: 'attachment; filename="informe-poblacion-propia-2026-01-a-2026-08.xlsx"' }
           content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Error" }
-              example:
-                error: { codigo: NO_ENCONTRADO, mensaje: El mes inicial no está habilitado en la DDRISS. }
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/InformeEntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/InformeNoEncontrado" }
 
   # ---------------------------------------------------------------- Alertas y auditoría
   /alertas:
@@ -5705,6 +5709,54 @@ components:
       name: porPagina
       in: query
       schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+    InformeTipo:
+      name: informe
+      in: query
+      required: true
+      schema: { type: string, enum: [poblacion-propia, total, residencia], example: poblacion-propia }
+    InformeDesde:
+      name: desde
+      in: query
+      required: true
+      description: Primer mes del rango (`AAAA-MM`)
+      schema: { type: string, pattern: "^(20[0-9]{2}|2100)-(0[1-9]|1[0-2])$", example: "2026-01" }
+    InformeHasta:
+      name: hasta
+      in: query
+      required: true
+      description: Último mes del rango (`AAAA-MM`), no anterior a `desde`
+      schema: { type: string, pattern: "^(20[0-9]{2}|2100)-(0[1-9]|1[0-2])$", example: "2026-08" }
+    InformeNivel:
+      name: nivel
+      in: query
+      schema: { type: string, enum: [departamento, municipio, distrito, establecimiento], default: municipio }
+    InformeVacuna:
+      name: vacuna
+      in: query
+      description: Código de la vacuna; sin él, todas las vacunas
+      schema: { type: string, pattern: "^[A-Z0-9_]{1,20}$", example: HEXA }
+    InformeRedId:
+      name: redId
+      in: query
+      description: Recorta a los municipios actuales de la red
+      schema: { type: integer, minimum: 1, example: 1 }
+    InformeMunicipioIds:
+      name: municipioIds
+      in: query
+      description: Ids separados por comas, sin repetir; con `redId`, se cruzan con la red
+      schema: { type: string, pattern: "^[1-9][0-9]*(,[1-9][0-9]*)*$", example: "1,4" }
+    InformeIncluirAprobados:
+      name: incluirAprobados
+      in: query
+      description: "`true`: suma también los reportes `APROBADO` (preliminar si hay meses sin cerrar)"
+      schema: { type: boolean, default: false }
+    InformeAgrupacion:
+      name: agrupacion
+      in: query
+      description: |
+        Código de una dimensión activa de `catalogo_dimensiones`, distinta de `grupo_edad`; sin él, las columnas
+        van por sección del esquema
+      schema: { type: string, pattern: "^[a-z][a-z0-9_]*$", example: sexo }
     DdrissIdAutoridad:
       name: ddrissId
       in: query
@@ -5788,6 +5840,25 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
           example:
             error: { codigo: CAMBIO_CONTRASENA_REQUERIDO, mensaje: Debe cambiar su contraseña temporal antes de continuar. }
+    InformeEntradaInvalida:
+      description: |
+        Un parámetro falta, no es válido, es desconocido o está repetido, una lista repite un id, `desde` es
+        posterior a `hasta`, viene `nivel=establecimiento` con `informe=residencia`, viene
+        `agrupacion=grupo_edad`, o falta `ddrissId` (Autoridad nacional)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: ENTRADA_INVALIDA, mensaje: El mes inicial no puede ser posterior al mes final. }
+    InformeNoEncontrado:
+      description: |
+        La vacuna o el `ddrissId` no existen; la red no existe, está inactiva o es de otra DDRISS; la dimensión
+        de `agrupacion` no existe o está inactiva; o `desde` o `hasta` no están habilitados en la DDRISS
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: NO_ENCONTRADO, mensaje: El mes inicial no está habilitado en la DDRISS. }
     NoEncontrado:
       description: No existe o está fuera del alcance del usuario
       content:

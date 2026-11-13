@@ -28,4 +28,4 @@ tags: ["spec", "modulo/informes", "origen/historia"]
 
 ## Lo usan
 
-Ningún spec depende de este todavía.
+- [[SPEC 64]] — HU-47 Exportar informes a Excel · *Aprobado*
