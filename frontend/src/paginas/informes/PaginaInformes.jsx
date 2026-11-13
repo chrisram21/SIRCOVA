@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { TriangleAlert } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 import { listarDdriss, listarRedes } from '@/api/catalogos.js'
 import { mensajeDeError } from '@/api/cliente.js'
 import { obtenerInforme, obtenerOpcionesInformes } from '@/api/informes.js'
@@ -10,14 +11,20 @@ import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import PantallaCargaSesion, { usePrimeraCarga } from '@/componentes/PantallaCargaSesion.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
+import { Selector } from '@/paginas/indicadores/BarraFiltrosIndicadores.jsx'
 import BarraFiltrosInformes from './BarraFiltrosInformes.jsx'
 import {
-  INFORMES, NIVELES, aTextoDeMes, avisoDeMeses, filtrosDeInforme, parametrosDeInforme, textoRango,
+  INFORMES, NIVELES, aTextoDeMes, agrupacionDeUrl, avisoDeAgrupacion, avisoDeMeses, conAgrupacion, filtrosDeInforme,
+  parametrosDeInforme, textoRango,
 } from './informes.js'
 import TablaInforme from './TablaInforme.jsx'
 
 // SPEC 62 (HU-45): los informes de producción. Los filtros se editan en un borrador y solo «Generar» los pasa a la
 // URL; el informe se pide cuando la URL trae informe, desde y hasta, así que recargar lo repite.
+// SPEC 63 (HU-46): «Agrupar por» cambia `agrupacion` en la URL y vuelve a pedir el informe sin tocar el borrador.
+
+// Radix no acepta un valor vacío en un Select: la opción por defecto lleva este.
+const POR_SECCION = 'seccion'
 
 const CLASES_AVISO =
   'flex items-start gap-2 rounded-md bg-advertencia px-3 py-2 text-sm text-advertencia-foreground'
@@ -97,13 +104,15 @@ export default function PaginaInformes() {
     }
   }, [puedeVerRedes, ddrissId, esperandoDdriss, intentoRedes])
 
-  // Al cambiar la URL (Generar, recargar) o las opciones, el borrador vuelve a lo que dice la URL.
-  const textoUrl = parametros.toString()
+  // Al cambiar los filtros de la URL (Generar, recargar) o las opciones, el borrador vuelve a lo que dice la URL;
+  // cambiar solo la agrupación no lo toca.
+  const textoUrl = conAgrupacion(parametros, null).toString()
   useEffect(() => {
     setBorrador(null)
   }, [textoUrl, opciones])
 
   const deUrl = filtrosDeInforme(parametros, opciones)
+  const agrupacion = agrupacionDeUrl(parametros, opciones)
   const valores = borrador ?? deUrl
   const opcionesRed = redes?.filter((r) => r.municipios.length > 0) ?? null
   // Una red de la URL espera a las redes para saber si existe; si no está, se ignora.
@@ -120,6 +129,7 @@ export default function PaginaInformes() {
       redId: redPedida?.id,
       municipioIds: deUrl.municipios,
       incluirAprobados: deUrl.aprobados,
+      agrupacion: agrupacion ?? undefined,
       ddrissId,
     }
     : null
@@ -148,13 +158,35 @@ export default function PaginaInformes() {
   )
 
   function generar() {
-    setParametros(parametrosDeInforme({ ...valores, ddriss: nacional ? ddrissId : null }))
+    setParametros(conAgrupacion(parametrosDeInforme({ ...valores, ddriss: nacional ? ddrissId : null }), agrupacion))
     setIntentoInforme((n) => n + 1)
+  }
+
+  function agrupar(valor) {
+    setParametros(conAgrupacion(parametros, valor === POR_SECCION ? null : valor))
   }
 
   const nombreDelInforme = informe && INFORMES.find((i) => i.valor === informe.informe)?.nombre
   const nombreDelNivel = informe && NIVELES.find((n) => n.valor === informe.nivel)?.nombre
   const aviso = informe ? avisoDeMeses(informe.mesesSinCerrar, informe.preliminar) : null
+  const avisoAgrupacion = informe ? avisoDeAgrupacion(informe, pedido?.vacuna === undefined) : null
+  const sinColumnas = Boolean(informe?.agrupacion) && informe.columnas.length === 0
+
+  const selectorAgrupacion = (
+    <form className="flex flex-col gap-1 sm:w-56" onSubmit={(evento) => evento.preventDefault()}>
+      <span className="text-xs font-medium text-muted-foreground">Agrupar por</span>
+      <Selector
+        nombre="agrupacion"
+        etiqueta="Agrupar por"
+        valor={agrupacion ?? POR_SECCION}
+        alCambiar={agrupar}
+        opciones={[
+          { valor: POR_SECCION, texto: 'Sección del 5C' },
+          ...(opciones?.dimensiones ?? []).map((d) => ({ valor: d.codigo, texto: d.nombre })),
+        ]}
+      />
+    </form>
+  )
 
   return (
     <>
@@ -200,36 +232,61 @@ export default function PaginaInformes() {
         )}
 
         {!sinMeses && opciones && (
-          errorInforme ? (
-            <AvisoError onReintentar={() => setIntentoInforme((n) => n + 1)}>
-              No se pudo generar el informe: {errorInforme}
-            </AvisoError>
-          ) : clave === null ? (
-            !esperandoRedes && (
-              <p className="text-muted-foreground">Elige el informe y los filtros y pulsa «Generar».</p>
+          clave === null ? (
+            errorInforme ? (
+              <AvisoError onReintentar={() => setIntentoInforme((n) => n + 1)}>
+                No se pudo generar el informe: {errorInforme}
+              </AvisoError>
+            ) : (
+              !esperandoRedes && (
+                <p className="text-muted-foreground">Elige el informe y los filtros y pulsa «Generar».</p>
+              )
             )
-          ) : informe === null ? (
-            <Esqueletos />
           ) : (
             <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-lg font-semibold">{nombreDelInforme} · {nombreDelNivel}</h2>
-                  {informe.preliminar && (
-                    <Badge variant="outline" className="border-advertencia-foreground text-advertencia-foreground">
-                      Preliminar
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground">{textoRango(informe.desde, informe.hasta)}</p>
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                {informe && !errorInforme ? (
+                  <div className="flex flex-col gap-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-lg font-semibold">
+                        {nombreDelInforme} · {nombreDelNivel}
+                        {informe.agrupacion && ` · por ${informe.agrupacion.nombre}`}
+                      </h2>
+                      {informe.preliminar && (
+                        <Badge variant="outline" className="border-advertencia-foreground text-advertencia-foreground">
+                          Preliminar
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">{textoRango(informe.desde, informe.hasta)}</p>
+                  </div>
+                ) : (
+                  <div />
+                )}
+                {selectorAgrupacion}
               </div>
-              {aviso && (
-                <p role="status" className={CLASES_AVISO}>
-                  <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                  {aviso}
-                </p>
+              {errorInforme ? (
+                <AvisoError onReintentar={() => setIntentoInforme((n) => n + 1)}>
+                  No se pudo generar el informe: {errorInforme}
+                </AvisoError>
+              ) : informe === null ? (
+                <Esqueletos />
+              ) : (
+                <>
+                  {aviso && (
+                    <p role="status" className={CLASES_AVISO}>
+                      <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                      {aviso}
+                    </p>
+                  )}
+                  {avisoAgrupacion && (
+                    <p role="status" className={cn('text-muted-foreground', !sinColumnas && 'text-sm')}>
+                      {avisoAgrupacion}
+                    </p>
+                  )}
+                  {!sinColumnas && <TablaInforme informe={informe} />}
+                </>
               )}
-              <TablaInforme informe={informe} />
             </div>
           )
         )}

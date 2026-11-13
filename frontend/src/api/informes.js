@@ -8,14 +8,16 @@ export function obtenerOpcionesInformes({ ddrissId } = {}) {
   return solicitar(conConsulta('/informes/opciones', { ddrissId }))
 }
 
-// desde y hasta van como AAAA-MM; municipioIds, separados por comas; incluirAprobados solo cuando es true.
+// desde y hasta van como AAAA-MM; municipioIds, separados por comas; incluirAprobados solo cuando es true;
+// agrupacion, el código de una dimensión (SPEC 63) o nada.
 export function obtenerInforme({
-  informe, desde, hasta, nivel, vacuna, redId, municipioIds, incluirAprobados, ddrissId,
+  informe, desde, hasta, nivel, vacuna, redId, municipioIds, incluirAprobados, agrupacion, ddrissId,
 }) {
   return solicitar(conConsulta('/informes/produccion', {
     informe, desde, hasta, nivel, vacuna, redId,
     municipioIds: municipioIds?.length ? municipioIds.join(',') : undefined,
     incluirAprobados: incluirAprobados ? true : undefined,
+    agrupacion: agrupacion || undefined,
     ddrissId,
   }))
 }

@@ -99,23 +99,37 @@ export function parametrosDeInforme({ informe, desde, hasta, nivel, vacuna, red,
   return parametros
 }
 
+// SPEC 63: la agrupación de la URL, si es una de las dimensiones de las opciones; si no, la sección del 5C (null).
+export function agrupacionDeUrl(parametros, opciones) {
+  const codigo = parametros.get('agrupacion')
+  return (opciones?.dimensiones ?? []).some((d) => d.codigo === codigo) ? codigo : null
+}
+
+// Los parámetros de la URL con la agrupación puesta o, con null («Sección del 5C»), sin ella; lo demás no cambia.
+export function conAgrupacion(parametros, codigo) {
+  const nuevos = new URLSearchParams(parametros)
+  if (codigo) nuevos.set('agrupacion', codigo)
+  else nuevos.delete('agrupacion')
+  return nuevos
+}
+
 // Las tres filas del encabezado: vacuna y sección abarcan sus columnas seguidas; una columna sin sección deja la
-// celda de sección vacía (titulo '').
+// celda de sección vacía (titulo ''). Al agrupar (SPEC 63), la segunda fila es el valor de la dimensión.
 export function encabezadosDeTabla(columnas) {
   const vacunas = []
   const secciones = []
+  let ultimaIdentidad = null
   columnas.forEach((columna, i) => {
     const ultimaVacuna = vacunas.at(-1)
     if (ultimaVacuna?.codigo === columna.vacuna.codigo) ultimaVacuna.abarca += 1
     else vacunas.push({ clave: `v${i}`, codigo: columna.vacuna.codigo, nombre: columna.vacuna.nombre, abarca: 1 })
 
-    const titulo = columna.seccion?.titulo ?? ''
+    const titulo = columna.valor?.etiqueta ?? columna.seccion?.titulo ?? ''
     const grupo = columna.seccion?.grupoEdad ?? null
-    const ultimaSeccion = secciones.at(-1)
-    const mismaSeccion = ultimaSeccion && ultimaVacuna?.codigo === columna.vacuna.codigo
-      && ultimaSeccion.titulo === titulo && ultimaSeccion.grupoEdad === grupo
-    if (mismaSeccion) ultimaSeccion.abarca += 1
+    const identidad = `${columna.vacuna.codigo}|${columna.valor ? `valor:${columna.valor.codigo}` : grupo}|${titulo}`
+    if (identidad === ultimaIdentidad) secciones.at(-1).abarca += 1
     else secciones.push({ clave: `s${i}`, titulo, grupoEdad: grupo, abarca: 1 })
+    ultimaIdentidad = identidad
   })
   const dosis = columnas.map((columna, i) => ({ clave: `d${i}`, codigo: columna.dosis.codigo }))
   return { vacunas, secciones, dosis }
@@ -140,6 +154,16 @@ export function textoMesesSinCerrar(meses) {
     return `${enumerar(meses.map((m) => MESES[m.mes - 1]))} de ${meses[0].anio}`
   }
   return enumerar(meses.map(nombreDelMes))
+}
+
+// SPEC 63: el aviso de un informe agrupado, o null sin agrupación. Sin columnas, ninguna vacuna registra la
+// dimensión; con «Todas las vacunas», cuáles se muestran.
+export function avisoDeAgrupacion({ agrupacion, columnas }, todasLasVacunas) {
+  if (!agrupacion) return null
+  if (columnas.length === 0) return `Ninguna vacuna de este informe registra ${agrupacion.nombre}.`
+  if (!todasLasVacunas) return null
+  const nombres = [...new Set(columnas.map((c) => c.vacuna.nombre))]
+  return `Solo se muestran las vacunas que registran ${agrupacion.nombre}: ${enumerar(nombres)}.`
 }
 
 // El aviso encima de la tabla, o null si todos los meses del rango están cerrados.

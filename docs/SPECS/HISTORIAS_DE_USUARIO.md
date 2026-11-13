@@ -1324,10 +1324,12 @@ Verificado contra la API real el 2026-11-08, con el build servido por `vite prev
 
 **Cómo se hará:** Parámetro de agrupación en la consulta del informe sobre `v_produccion_dimension`; la agrupación por sexo aplica a las vacunas que registran sexo (VPH y Tdap de 10 años).
 
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 63 a `main` (`specs/informes/63-hu-46-agrupar-informe-por-dimension.md`). Selector «Agrupar por» sobre el informe ya generado, con «Sección del 5C» (la tabla de HU-45) y las dimensiones activas del catálogo sin el grupo de edad. Al agrupar, las columnas son vacuna × valor × dosis y cada valor suma todas las edades; solo salen las vacunas que registran la dimensión, con un aviso. Cambiarla escribe `agrupacion` en la URL y pide el informe otra vez sin pulsar «Generar». Parámetro `agrupacion` de `GET /informes/produccion` (lectura de `v_produccion_dimension`) y `dimensiones` en `GET /informes/opciones`. Verificada contra la API real el 2026-11-12 con la estadígrafa: septiembre y octubre de 2026 con aprobados, por Sexo (VPH), Estado de embarazo (Td) y Presentación (Polio), y cada suma coincide con la de «Sección del 5C». En la base de prueba, Tdap no registra sexo, así que con Sexo solo sale VPH.
+
 **Criterios de aceptación:**
-- [ ] Al agrupar por sexo, el informe suma todas las edades de cada sexo (ejemplo: 5 + 6 + 3 niñas = 14).
-- [ ] Puedo cambiar la agrupación sin volver a generar el filtro.
-- [ ] El detalle original no se modifica.
+- [x] Al agrupar por sexo, el informe suma todas las edades de cada sexo (ejemplo: 5 + 6 + 3 niñas = 14).
+- [x] Puedo cambiar la agrupación sin volver a generar el filtro.
+- [x] El detalle original no se modifica.
 
 #### HU-47. Exportar informes a Excel
 

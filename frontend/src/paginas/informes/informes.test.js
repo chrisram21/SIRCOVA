@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
   aTextoDeMes,
+  agrupacionDeUrl,
   avisoDeMeses,
+  conAgrupacion,
   encabezadosDeTabla,
   filtrosDeInforme,
   nivelPermitido,
@@ -166,6 +168,52 @@ describe('encabezadosDeTabla', () => {
 
   it('sin columnas, sin encabezados', () => {
     expect(encabezadosDeTabla([])).toEqual({ vacunas: [], secciones: [], dosis: [] })
+  })
+
+  it('al agrupar, la segunda fila es el valor de la dimensión y abarca sus dosis (SPEC 63)', () => {
+    const VPH = { codigo: 'VPH', nombre: 'VPH' }
+    const TD = { codigo: 'TD', nombre: 'Td' }
+    const agrupada = (vacuna, valor, codigo) => ({ ...columna(vacuna, null, codigo), valor })
+    const F = { codigo: 'F', etiqueta: 'Femenino' }
+    const M = { codigo: 'M', etiqueta: 'Masculino' }
+    const columnas = [
+      agrupada(VPH, M, 'D1'), agrupada(VPH, M, 'D2'), agrupada(VPH, F, 'D1'),
+      agrupada(TD, F, 'D1'),
+    ]
+    expect(encabezadosDeTabla(columnas).secciones).toEqual([
+      { clave: 's0', titulo: 'Masculino', grupoEdad: null, abarca: 2 },
+      { clave: 's2', titulo: 'Femenino', grupoEdad: null, abarca: 1 },
+      { clave: 's3', titulo: 'Femenino', grupoEdad: null, abarca: 1 },
+    ])
+  })
+})
+
+describe('agrupación en la URL (SPEC 63)', () => {
+  const CON_DIMENSIONES = { ...OPCIONES, dimensiones: [{ codigo: 'sexo', nombre: 'Sexo' }] }
+
+  it('agrupacionDeUrl solo acepta las dimensiones de las opciones', () => {
+    expect(agrupacionDeUrl(url('agrupacion=sexo'), CON_DIMENSIONES)).toBe('sexo')
+    expect(agrupacionDeUrl(url('agrupacion=grupo_edad'), CON_DIMENSIONES)).toBeNull()
+    expect(agrupacionDeUrl(url(''), CON_DIMENSIONES)).toBeNull()
+    expect(agrupacionDeUrl(url('agrupacion=sexo'), OPCIONES)).toBeNull()
+  })
+
+  it('conAgrupacion la pone o la quita sin tocar lo demás', () => {
+    const base = url('informe=total&desde=2026-01&hasta=2026-08&vacuna=VPH')
+    expect(conAgrupacion(base, 'sexo').toString()).toBe(
+      'informe=total&desde=2026-01&hasta=2026-08&vacuna=VPH&agrupacion=sexo',
+    )
+    expect(conAgrupacion(url('informe=total&agrupacion=sexo'), null).toString()).toBe('informe=total')
+    expect(base.has('agrupacion')).toBe(false)
+  })
+
+  it('después de «Generar», conAgrupacion conserva la agrupación', () => {
+    const generados = parametrosDeInforme({
+      informe: 'total', desde: { anio: 2026, mes: 1 }, hasta: { anio: 2026, mes: 8 }, nivel: 'municipio',
+    })
+    expect(Object.fromEntries(conAgrupacion(generados, 'sexo'))).toEqual({
+      informe: 'total', desde: '2026-01', hasta: '2026-08', agrupacion: 'sexo',
+    })
   })
 })
 

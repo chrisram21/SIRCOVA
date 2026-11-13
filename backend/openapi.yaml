@@ -5445,6 +5445,8 @@ paths:
         - `municipios`: los activos del departamento sede de la DDRISS sin el `9999`, más cualquier otro que sea
           municipio de aplicación de un establecimiento de la DDRISS con producción (por ejemplo, un externo), por
           nombre.
+        - `dimensiones`: las activas de `catalogo_dimensiones` sin `grupo_edad`, por nombre; son las que acepta
+          `agrupacion` en `GET /informes/produccion` (SPEC 63).
 
         «Con producción» = alguna cantidad en `v_produccion` de un reporte `APROBADO`, `CERRADO` o `RECTIFICACION`.
         Las redes se leen de `GET /redes` (`RED_CONSULTAR`). Es una lectura: no deja bitácora. `ddrissId`, como en
@@ -5512,6 +5514,18 @@ paths:
           `orden`, con sus dosis por `orden`. Una combinación con producción en el rango que no está en ese esquema
           va al final de su vacuna. Una vacuna sin esquema para ese mes lleva una columna por dosis activa, sin
           sección. Todas las columnas salen, también en cero.
+        - **Agrupación** (`agrupacion`, SPEC 63, HU-46): la producción se lee de `v_produccion_dimension` con esa
+          dimensión y cada valor suma todas las edades; una cantidad sin la dimensión no entra (tampoco en `total`
+          ni en `dosisFueraDelConsolidado`). Las columnas pasan a ser vacuna × valor × dosis (`seccion: null`):
+          - solo las vacunas que registran la dimensión: alguna dosis del esquema que cubre el día 1 de `hasta` la
+            pide en su desagregación efectiva (la de la dosis o, si no tiene, la del esquema), o hay cantidades con
+            ella en el rango;
+          - por cada valor que el esquema pide, en el orden de `catalogo_dimensiones`, las dosis que lo piden, en
+            el orden de `dimensiones.dosis` del esquema;
+          - un valor y una dosis con cantidades en el rango que el esquema no pide van al final de su vacuna, con
+            la etiqueta del catálogo (también de un valor inactivo) o el código;
+          - si ninguna vacuna registra la dimensión, `columnas` es `[]` y las filas llevan `cantidades: []`.
+          Las filas, los niveles, los recortes y los estados son los mismos que sin agrupar.
         - **Coincidencia con las vistas:** con `incluirAprobados=true`, el `total` de `poblacion-propia` y de
           `total` suma por dosis lo mismo que `dosis_poblacion_propia` y `dosis_total` de
           `v_consolidado_establecimiento`; sin él y sin rectificaciones abiertas, el de `residencia` suma lo mismo
@@ -5553,6 +5567,12 @@ paths:
           in: query
           description: "`true`: suma también los reportes `APROBADO` (preliminar si hay meses sin cerrar)"
           schema: { type: boolean, default: false }
+        - name: agrupacion
+          in: query
+          description: |
+            Código de una dimensión activa de `catalogo_dimensiones`, distinta de `grupo_edad`; sin él, las columnas
+            van por sección del esquema
+          schema: { type: string, pattern: "^[a-z][a-z0-9_]*$", example: sexo }
         - { $ref: "#/components/parameters/DdrissIdAutoridad" }
       responses:
         "200":
@@ -5563,8 +5583,8 @@ paths:
         "400":
           description: |
             Un parámetro falta, no es válido, es desconocido o está repetido, una lista repite un id, `desde` es
-            posterior a `hasta`, viene `nivel=establecimiento` con `informe=residencia`, o falta `ddrissId`
-            (Autoridad nacional)
+            posterior a `hasta`, viene `nivel=establecimiento` con `informe=residencia`, viene
+            `agrupacion=grupo_edad`, o falta `ddrissId` (Autoridad nacional)
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -5574,8 +5594,8 @@ paths:
         "403": { $ref: "#/components/responses/SinPermiso" }
         "404":
           description: |
-            La vacuna o el `ddrissId` no existen; la red no existe, está inactiva o es de otra DDRISS; o `desde` o
-            `hasta` no están habilitados en la DDRISS
+            La vacuna o el `ddrissId` no existen; la red no existe, está inactiva o es de otra DDRISS; la dimensión
+            de `agrupacion` no existe o está inactiva; o `desde` o `hasta` no están habilitados en la DDRISS
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -9129,7 +9149,7 @@ components:
 
     OpcionesInformes:
       type: object
-      required: [meses, vacunas, municipios]
+      required: [meses, vacunas, municipios, dimensiones]
       properties:
         meses:
           type: array
@@ -9153,10 +9173,21 @@ components:
         municipios:
           type: array
           items: { $ref: "#/components/schemas/MunicipioProduccion" }
+        dimensiones:
+          type: array
+          description: Las activas de `catalogo_dimensiones` sin `grupo_edad`, por nombre (SPEC 63)
+          items: { $ref: "#/components/schemas/DimensionDeAgrupacion" }
+
+    DimensionDeAgrupacion:
+      type: object
+      required: [codigo, nombre]
+      properties:
+        codigo: { type: string, example: sexo }
+        nombre: { type: string, example: Sexo }
 
     ColumnaInforme:
       type: object
-      required: [vacuna, seccion, dosis]
+      required: [vacuna, seccion, valor, dosis]
       properties:
         vacuna:
           type: object
@@ -9179,6 +9210,19 @@ components:
               description: |
                 El del esquema; fuera del esquema, la descripción de `clasificacion_poblacion` o el código
               example: "< 1 año"
+        valor:
+          type: object
+          nullable: true
+          description: |
+            El valor de la dimensión de `agrupacion` (SPEC 63); `null` sin agrupación. Con agrupación, `seccion` es
+            `null`.
+          required: [codigo, etiqueta]
+          properties:
+            codigo: { type: string, example: F }
+            etiqueta:
+              type: string
+              description: La de `catalogo_dimensiones` (también de un valor inactivo) o el código
+              example: Femenino
         dosis:
           type: object
           required: [id, codigo]
@@ -9231,6 +9275,7 @@ components:
         - desde
         - hasta
         - incluirAprobados
+        - agrupacion
         - columnas
         - filas
         - total
@@ -9243,6 +9288,10 @@ components:
         desde: { $ref: "#/components/schemas/MesDelRango" }
         hasta: { $ref: "#/components/schemas/MesDelRango" }
         incluirAprobados: { type: boolean, example: false }
+        agrupacion:
+          description: La dimensión de `agrupacion` (SPEC 63); `null` sin agrupación
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/DimensionDeAgrupacion" }]
         columnas:
           type: array
           items: { $ref: "#/components/schemas/ColumnaInforme" }

@@ -3,6 +3,7 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import { encabezadosDeTabla } from './informes.js'
 
 // SPEC 62: una fila por unidad del nivel y una columna por vacuna, sección (grupo de edad) y dosis, como el 5C.
+// Al agrupar (SPEC 63), la segunda fila del encabezado es el valor de la dimensión en lugar de la sección.
 // Solo cantidades. La primera columna queda fija al desplazar la tabla a lo ancho.
 
 const formatoEntero = new Intl.NumberFormat('es-GT', { maximumFractionDigits: 0 })
