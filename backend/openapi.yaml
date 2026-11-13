@@ -5605,6 +5605,57 @@ paths:
         "401": { $ref: "#/components/responses/NoAutenticado" }
         "403": { $ref: "#/components/responses/SinPermiso" }
         "404": { $ref: "#/components/responses/InformeNoEncontrado" }
+  /informes/produccion/pdf:
+    get:
+      tags: [Informes]
+      summary: Descargar el informe de producción como PDF (SPEC 65, HU-48)
+      description: |
+        El mismo informe de `GET /informes/produccion`, con los mismos parámetros (también `agrupacion`), el mismo
+        permiso, el mismo ámbito y los mismos errores que `GET /informes/produccion/excel`, como un PDF armado con
+        pdfmake en IBM Plex Sans. Sale de la misma respuesta que la pantalla, así que sus cantidades son las mismas.
+
+        - **Hoja:** carta horizontal.
+        - **Primera página:** el mismo encabezado que el Excel (título, «PRELIMINAR» si `preliminar`, DDRISS,
+          periodo, vacuna, territorio, agrupación, si incluye aprobados sin cerrar, fecha y hora de generación con
+          quien lo generó, y los avisos de la pantalla).
+        - **Marca de agua:** con `preliminar`, «PRELIMINAR» en diagonal en todas las páginas.
+        - **Pie:** el título y «Página {n} de {total}» en cada página.
+        - **Tabla en tramos:** cada tramo junta vacunas seguidas sin partir ninguna, hasta 12 columnas (10 por
+          establecimiento y por distrito, que llevan «Municipio»); tiene todas las filas y su «Total», y repite sus
+          tres filas de encabezado (vacuna, sección o valor de la dimensión, dosis) si sigue en otra página. Las
+          filas `fueraDelConsolidado` llevan «(no suma en el consolidado)» y, si hay `dosisFueraDelConsolidado`,
+          una línea lo explica al final. Con `columnas` vacío, solo el encabezado.
+
+        Cada descarga correcta deja una fila `EXPORTAR` del módulo `REPORTES` en la bitácora, como el Excel, con
+        `formato: pdf` en `valoresNuevos`. Un error no la deja.
+      x-permiso: INFORME_CONSULTAR
+      parameters:
+        - { $ref: "#/components/parameters/InformeTipo" }
+        - { $ref: "#/components/parameters/InformeDesde" }
+        - { $ref: "#/components/parameters/InformeHasta" }
+        - { $ref: "#/components/parameters/InformeNivel" }
+        - { $ref: "#/components/parameters/InformeVacuna" }
+        - { $ref: "#/components/parameters/InformeRedId" }
+        - { $ref: "#/components/parameters/InformeMunicipioIds" }
+        - { $ref: "#/components/parameters/InformeIncluirAprobados" }
+        - { $ref: "#/components/parameters/InformeAgrupacion" }
+        - { $ref: "#/components/parameters/DdrissIdAutoridad" }
+      responses:
+        "200":
+          description: El PDF del informe
+          headers:
+            Content-Disposition:
+              description: |
+                `attachment; filename="informe-{informe}-{desde}-a-{hasta}.pdf"`, con `-por-{agrupacion}` antes de la
+                extensión si hay agrupación. El frontend lo lee gracias a `Access-Control-Expose-Headers`.
+              schema: { type: string, example: 'attachment; filename="informe-total-2026-01-a-2026-08.pdf"' }
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/InformeEntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/InformeNoEncontrado" }
 
   # ---------------------------------------------------------------- Alertas y auditoría
   /alertas:

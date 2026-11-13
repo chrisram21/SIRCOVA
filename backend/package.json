@@ -27,6 +27,7 @@
     "jsonwebtoken": "^9.0.3",
     "mongodb": "^7.7.0",
     "mysql2": "^3.24.5",
+    "pdfmake": "^0.3.14",
     "swagger-ui-express": "^5.0.1",
     "yaml": "^2.9.1"
   },

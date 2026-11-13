@@ -28,4 +28,4 @@ tags: ["spec", "modulo/informes", "origen/historia"]
 
 ## Lo usan
 
-Ningún spec depende de este todavía.
+- [[SPEC 65]] — HU-48 Exportar informes a PDF · *Aprobado*

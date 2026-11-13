@@ -35,3 +35,4 @@ tags: ["spec", "modulo/informes", "origen/historia"]
 
 - [[SPEC 63]] — HU-46 Agrupar el informe por una dimensión · *Implementado*
 - [[SPEC 64]] — HU-47 Exportar informes a Excel · *Implementado*
+- [[SPEC 65]] — HU-48 Exportar informes a PDF · *Aprobado*
