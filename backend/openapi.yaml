@@ -55,6 +55,7 @@ tags:
   - name: Producción
   - name: Revisión
   - name: Indicadores
+  - name: Informes
   - name: Alertas y auditoría
 
 security:
@@ -5431,6 +5432,156 @@ paths:
               example:
                 error: { codigo: NO_ENCONTRADO, mensaje: La red no existe. }
 
+  # ---------------------------------------------------------------- Informes
+  /informes/opciones:
+    get:
+      tags: [Informes]
+      summary: Opciones de los filtros de la pantalla «Informes» (SPEC 62)
+      description: |
+        Lo que necesitan los filtros de «Informes» de la DDRISS, sin pedir permisos de catálogos:
+
+        - `meses`: los de `cierre_periodo` de la DDRISS con su estado, del más reciente al más antiguo.
+        - `vacunas`: las activas por `ordenInforme` y nombre, más las inactivas con producción en la DDRISS.
+        - `municipios`: los activos del departamento sede de la DDRISS sin el `9999`, más cualquier otro que sea
+          municipio de aplicación de un establecimiento de la DDRISS con producción (por ejemplo, un externo), por
+          nombre.
+
+        «Con producción» = alguna cantidad en `v_produccion` de un reporte `APROBADO`, `CERRADO` o `RECTIFICACION`.
+        Las redes se leen de `GET /redes` (`RED_CONSULTAR`). Es una lectura: no deja bitácora. `ddrissId`, como en
+        `GET /indicadores/corridas`.
+      x-permiso: INFORME_CONSULTAR
+      parameters:
+        - { $ref: "#/components/parameters/DdrissIdAutoridad" }
+      responses:
+        "200":
+          description: Las opciones de los filtros
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OpcionesInformes" }
+        "400":
+          description: |
+            Un parámetro no es válido, es desconocido o está repetido, o falta `ddrissId` (Autoridad nacional)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: anio." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+
+  /informes/produccion:
+    get:
+      tags: [Informes]
+      summary: Informe de producción por territorio, vacuna, grupo de edad y dosis (SPEC 62, HU-45)
+      description: |
+        Los tres informes que hoy consolida la estadígrafa, para un rango de meses de la DDRISS. Salen de
+        `v_produccion` con el grupo de edad de `detalle_dimension` (`dimension_codigo = 'grupo_edad'`):
+
+        | `informe` | Qué suma | Territorio de la fila |
+        |---|---|---|
+        | `poblacion-propia` | dosis con procedencia = municipio del establecimiento | municipio de aplicación |
+        | `total` | todas las dosis, con Migrantes y otros departamentos | municipio de aplicación |
+        | `residencia` | dosis con procedencia en el departamento de la DDRISS | municipio de procedencia |
+
+        - **Estados:** por defecto, reportes `CERRADO` y `RECTIFICACION` (sus datos son los cerrados hasta que se
+          resuelve). Con `incluirAprobados=true`, también `APROBADO`. Ningún otro estado cuenta.
+        - **Rango:** de `desde` a `hasta` (pueden ser de años distintos). Solo cuentan los meses con fila en
+          `cierre_periodo` de la DDRISS; `desde` y `hasta` deben tenerla (404 si no). `mesesSinCerrar` lista los
+          del rango que no están `CERRADO`, y `preliminar` es `true` si además `incluirAprobados` es `true`.
+        - **Niveles:**
+          - `departamento`: una fila, el departamento sede de la DDRISS.
+          - `municipio`: el universo de municipios dentro de los recortes. En `poblacion-propia` y `total`, los
+            activos del departamento sede sin el `9999`, más cualquier otro que sea municipio de aplicación de un
+            establecimiento de la DDRISS con producción en el rango; en `residencia`, los del departamento sede sin el
+            `9999` (activos, más los inactivos con dosis atribuidas en el rango).
+          - `distrito`: los distritos activos de la DDRISS cuyo municipio está en los recortes, cada uno con los
+            datos de su municipio; los municipios sin distrito activo van juntos en la fila «Sin distrito» (`id`
+            `null`), al final.
+          - `establecimiento`: los activos de la DDRISS con `reporta_5c` o `solo_cobertura`, más los inactivos o
+            externos con producción en el rango, dentro de los recortes. No existe en `residencia` (400).
+          Todas las filas salen, también en cero, por nombre (por establecimiento: por municipio y luego por
+          nombre).
+        - **Recortes:** `redId` (los municipios actuales de la red) y `municipioIds` (con `redId`, se cruzan). Se
+          aplican al municipio de aplicación en `poblacion-propia` y `total`, y al de residencia en `residencia`.
+        - **`solo_cobertura`** (Hospital de San Marcos), en `poblacion-propia` y `total`: por establecimiento es una
+          fila con `fueraDelConsolidado: true` que no entra en `total`; en los demás niveles no se suma. Lo que
+          aplicó con los mismos filtros va en `dosisFueraDelConsolidado`. En `residencia` suma como cualquiera.
+        - **Columnas:** una por vacuna, sección (grupo de edad) y dosis. Vacunas: con `vacuna`, solo esa; sin ella,
+          las activas por `ordenInforme` y nombre, más las inactivas con producción en el rango. Secciones: las del
+          esquema de captura que cubre el día 1 de `hasta` (el de la DDRISS o, si no hay, el nacional), en su
+          `orden`, con sus dosis por `orden`. Una combinación con producción en el rango que no está en ese esquema
+          va al final de su vacuna. Una vacuna sin esquema para ese mes lleva una columna por dosis activa, sin
+          sección. Todas las columnas salen, también en cero.
+        - **Coincidencia con las vistas:** con `incluirAprobados=true`, el `total` de `poblacion-propia` y de
+          `total` suma por dosis lo mismo que `dosis_poblacion_propia` y `dosis_total` de
+          `v_consolidado_establecimiento`; sin él y sin rectificaciones abiertas, el de `residencia` suma lo mismo
+          que `v_produccion_atribuida`.
+
+        Es una lectura: no deja bitácora. `ddrissId`, como en `GET /indicadores/corridas`.
+      x-permiso: INFORME_CONSULTAR
+      parameters:
+        - name: informe
+          in: query
+          required: true
+          schema: { type: string, enum: [poblacion-propia, total, residencia], example: poblacion-propia }
+        - name: desde
+          in: query
+          required: true
+          description: Primer mes del rango (`AAAA-MM`)
+          schema: { type: string, pattern: "^(20[0-9]{2}|2100)-(0[1-9]|1[0-2])$", example: "2026-01" }
+        - name: hasta
+          in: query
+          required: true
+          description: Último mes del rango (`AAAA-MM`), no anterior a `desde`
+          schema: { type: string, pattern: "^(20[0-9]{2}|2100)-(0[1-9]|1[0-2])$", example: "2026-08" }
+        - name: nivel
+          in: query
+          schema: { type: string, enum: [departamento, municipio, distrito, establecimiento], default: municipio }
+        - name: vacuna
+          in: query
+          description: Código de la vacuna; sin él, todas las vacunas
+          schema: { type: string, pattern: "^[A-Z0-9_]{1,20}$", example: HEXA }
+        - name: redId
+          in: query
+          description: Recorta a los municipios actuales de la red
+          schema: { type: integer, minimum: 1, example: 1 }
+        - name: municipioIds
+          in: query
+          description: Ids separados por comas, sin repetir; con `redId`, se cruzan con la red
+          schema: { type: string, pattern: "^[1-9][0-9]*(,[1-9][0-9]*)*$", example: "1,4" }
+        - name: incluirAprobados
+          in: query
+          description: "`true`: suma también los reportes `APROBADO` (preliminar si hay meses sin cerrar)"
+          schema: { type: boolean, default: false }
+        - { $ref: "#/components/parameters/DdrissIdAutoridad" }
+      responses:
+        "200":
+          description: Las columnas, las filas, el total y el estado de los meses del rango
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InformeProduccion" }
+        "400":
+          description: |
+            Un parámetro falta, no es válido, es desconocido o está repetido, una lista repite un id, `desde` es
+            posterior a `hasta`, viene `nivel=establecimiento` con `informe=residencia`, o falta `ddrissId`
+            (Autoridad nacional)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: El mes inicial no puede ser posterior al mes final. }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404":
+          description: |
+            La vacuna o el `ddrissId` no existen; la red no existe, está inactiva o es de otra DDRISS; o `desde` o
+            `hasta` no están habilitados en la DDRISS
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: NO_ENCONTRADO, mensaje: El mes inicial no está habilitado en la DDRISS. }
+
   # ---------------------------------------------------------------- Alertas y auditoría
   /alertas:
     get:
@@ -8968,6 +9119,167 @@ components:
               anio: { type: integer, example: 2026 }
               mes: { type: integer, example: 8 }
               estado: { $ref: "#/components/schemas/EstadoPeriodo" }
+
+    MesDelRango:
+      type: object
+      required: [anio, mes]
+      properties:
+        anio: { type: integer, example: 2026 }
+        mes: { type: integer, minimum: 1, maximum: 12, example: 8 }
+
+    OpcionesInformes:
+      type: object
+      required: [meses, vacunas, municipios]
+      properties:
+        meses:
+          type: array
+          description: Los de `cierre_periodo` de la DDRISS, del más reciente al más antiguo
+          items:
+            type: object
+            required: [anio, mes, estado]
+            properties:
+              anio: { type: integer, example: 2026 }
+              mes: { type: integer, minimum: 1, maximum: 12, example: 8 }
+              estado: { $ref: "#/components/schemas/EstadoPeriodo" }
+        vacunas:
+          type: array
+          items:
+            type: object
+            required: [codigo, nombre, activa]
+            properties:
+              codigo: { type: string, example: HEXA }
+              nombre: { type: string, example: Hexavalente }
+              activa: { type: boolean, example: true }
+        municipios:
+          type: array
+          items: { $ref: "#/components/schemas/MunicipioProduccion" }
+
+    ColumnaInforme:
+      type: object
+      required: [vacuna, seccion, dosis]
+      properties:
+        vacuna:
+          type: object
+          required: [codigo, nombre]
+          properties:
+            codigo: { type: string, example: HEXA }
+            nombre: { type: string, example: Hexavalente }
+        seccion:
+          type: object
+          nullable: true
+          description: |
+            La sección del esquema de captura (encabezado de grupo de edad del 5C). `null` si la columna no tiene
+            sección (vacuna sin esquema, o datos sin grupo de edad fuera del esquema). Una sección del esquema sin
+            grupo de edad lleva `grupoEdad: null` y su título.
+          required: [grupoEdad, titulo]
+          properties:
+            grupoEdad: { type: string, nullable: true, example: MENOR_1 }
+            titulo:
+              type: string
+              description: |
+                El del esquema; fuera del esquema, la descripción de `clasificacion_poblacion` o el código
+              example: "< 1 año"
+        dosis:
+          type: object
+          required: [id, codigo]
+          properties:
+            id: { type: integer, example: 7 }
+            codigo: { type: string, example: D1 }
+
+    FilaInforme:
+      type: object
+      required: [id, codigo, nombre, municipio, fueraDelConsolidado, cantidades]
+      properties:
+        id:
+          type: integer
+          nullable: true
+          description: Del departamento, municipio, distrito o establecimiento; `null` en «Sin distrito»
+          example: 31
+        codigo:
+          type: string
+          nullable: true
+          description: |
+            Código del departamento, INE del municipio, del distrito o del establecimiento; `null` en «Sin distrito»
+          example: HOSP-SM
+        nombre: { type: string, example: Hospital de San Marcos }
+        municipio:
+          type: object
+          nullable: true
+          description: |
+            Solo por establecimiento y por distrito (su municipio); `null` en los demás y en «Sin distrito»
+          required: [id, nombre]
+          properties:
+            id: { type: integer, example: 1 }
+            nombre: { type: string, example: San Marcos }
+        fueraDelConsolidado:
+          type: boolean
+          description: |
+            Establecimiento `solo_cobertura` por establecimiento en `poblacion-propia` y `total` (no entra en
+            `total`); `false` en los demás casos
+          example: true
+        cantidades:
+          type: array
+          description: Una cantidad entera por columna, en el orden de `columnas`
+          items: { type: integer }
+          example: [120, 0, 35]
+
+    InformeProduccion:
+      type: object
+      required:
+        - informe
+        - nivel
+        - desde
+        - hasta
+        - incluirAprobados
+        - columnas
+        - filas
+        - total
+        - dosisFueraDelConsolidado
+        - mesesSinCerrar
+        - preliminar
+      properties:
+        informe: { type: string, enum: [poblacion-propia, total, residencia], example: poblacion-propia }
+        nivel: { type: string, enum: [departamento, municipio, distrito, establecimiento], example: establecimiento }
+        desde: { $ref: "#/components/schemas/MesDelRango" }
+        hasta: { $ref: "#/components/schemas/MesDelRango" }
+        incluirAprobados: { type: boolean, example: false }
+        columnas:
+          type: array
+          items: { $ref: "#/components/schemas/ColumnaInforme" }
+        filas:
+          type: array
+          items: { $ref: "#/components/schemas/FilaInforme" }
+        total:
+          type: object
+          required: [cantidades]
+          description: |
+            Suma del recorte por columna, sin los `fueraDelConsolidado` ni los `solo_cobertura` en `poblacion-propia`
+            y `total`; por distrito, sin contar dos veces un municipio
+          properties:
+            cantidades:
+              type: array
+              items: { type: integer }
+              example: [940, 12, 310]
+        dosisFueraDelConsolidado:
+          type: integer
+          description: |
+            Dosis de los establecimientos `solo_cobertura` con los mismos filtros (no están en `total`); 0 en
+            `residencia`
+          example: 155
+        mesesSinCerrar:
+          type: array
+          description: Los meses del rango con `cierre_periodo` que no están `CERRADO`, en orden
+          items:
+            type: object
+            required: [anio, mes, estado]
+            properties:
+              anio: { type: integer, example: 2026 }
+              mes: { type: integer, example: 8 }
+              estado: { $ref: "#/components/schemas/EstadoPeriodo" }
+        preliminar:
+          type: boolean
+          description: "`incluirAprobados` es `true` y hay `mesesSinCerrar`"
+          example: false
 
     ResultadoIndicador:
       type: object

@@ -18,6 +18,7 @@ const MODULOS = {
   produccion: 'Producción',
   revision: 'Revisión',
   indicadores: 'Indicadores',
+  informes: 'Informes',
   plataforma: 'Plataforma',
 };
 

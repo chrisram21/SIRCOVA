@@ -14,6 +14,7 @@ const { pendientes } = vi.hoisted(() => ({
 vi.mock('@/api/usuarios.js', pendientes)
 vi.mock('@/api/catalogos.js', pendientes)
 vi.mock('@/api/configuracion.js', pendientes)
+vi.mock('@/api/informes.js', pendientes)
 
 function crearSesion(permisos) {
   const codificar = (objeto) => btoa(JSON.stringify(objeto)).replace(/=+$/, '')
@@ -49,12 +50,20 @@ beforeEach(() => {
   sessionStorage.clear()
 })
 
-// /informes sigue en construcción (sin pagina en opcionesMenu.js): su página es la de «En construcción».
-test('con el permiso, /informes muestra su página', () => {
+// /alertas sigue en construcción (sin pagina en opcionesMenu.js): su página es la de «En construcción».
+test('con el permiso, /alertas muestra su página', () => {
+  abrir('/alertas', ['ALERTA_CONSULTAR'])
+
+  expect(screen.getByRole('heading', { name: 'Alertas' })).toBeTruthy()
+  expect(enConstruccion()).toBeTruthy()
+})
+
+// SPEC 62: /informes ya tiene su pantalla, que abre con la pantalla de carga mientras piden sus opciones.
+test('con el permiso, /informes muestra los informes', async () => {
   abrir('/informes', ['INFORME_CONSULTAR'])
 
-  expect(screen.getByRole('heading', { name: 'Informes' })).toBeTruthy()
-  expect(enConstruccion()).toBeTruthy()
+  expect(await screen.findByRole('status', { name: 'Cargando los informes' }, ESPERA_LAZY)).toBeTruthy()
+  expect(enConstruccion()).toBeNull()
 })
 
 // SPEC 50: /mapa ya tiene su pantalla. Sin INDICADOR_CONSULTAR ni REPORTE_AVANCE_CONSULTAR no pide nada.

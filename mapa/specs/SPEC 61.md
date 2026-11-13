@@ -30,4 +30,4 @@ tags: ["spec", "modulo/indicadores", "origen/retroalimentacion"]
 
 ## Lo usan
 
-Ningún spec depende de este todavía.
+- [[SPEC 62]] — HU-45 Generar informes con filtros · *Implementado*

@@ -55,3 +55,4 @@ tags: ["spec", "modulo/plataforma", "origen/historia"]
 - [[SPEC 48]] — Resumen del Inicio por rol · *Implementado*
 - [[SPEC 53]] — Ajustes menores de interfaz · *Implementado*
 - [[SPEC 56]] — Pantalla de carga en las transiciones · *Implementado*
+- [[SPEC 62]] — HU-45 Generar informes con filtros · *Implementado*

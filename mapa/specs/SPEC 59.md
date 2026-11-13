@@ -31,3 +31,4 @@ tags: ["spec", "modulo/catalogos", "origen/retroalimentacion"]
 
 - [[SPEC 60]] — Redes en Indicadores · *Implementado*
 - [[SPEC 61]] — Pestaña «Producción» en Indicadores · *Implementado*
+- [[SPEC 62]] — HU-45 Generar informes con filtros · *Implementado*
