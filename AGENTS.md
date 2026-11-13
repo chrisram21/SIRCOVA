@@ -47,20 +47,7 @@ Los Excel y PDF se generan en el backend (un endpoint devuelve el archivo) para 
 
 ## 4. Estructura y capas
 
-```
-backend/
-├── openapi.yaml
-├── .env.example        ← variables sin valores reales
-├── docker-compose.yml
-├── db/                 ← scripts 01 (MySQL) y 02 (MongoDB)
-└── src/
-    ├── app.js, server.js
-    ├── config/         ← variables de entorno y conexiones
-    ├── middlewares/    ← autenticación, permisos, errores
-    ├── validaciones/   ← reglas de formato de los campos (campos.js); copia en el frontend
-    └── modulos/        ← auth, usuarios, catalogos, configuracion,
-                          produccion, revision, indicadores, auditoria
-```
+El backend se reparte en `src/config/` (entorno y conexiones), `src/middlewares/` (autenticación, permisos, errores), `src/validaciones/` y `src/modulos/` (un módulo por dominio); los scripts de BD están en `backend/db/`.
 
 Cada módulo separa **rutas** (declaran el endpoint), **controlador** (recibe y responde) y **servicio** (reglas del negocio y acceso a datos). No mezcles capas.
 
@@ -68,20 +55,7 @@ Los archivos de cada módulo usan sufijos técnicos en inglés (`.routes.js`, `.
 
 Errores con el formato común: `{ "error": { "codigo": "...", "mensaje": "..." } }` y los códigos HTTP 400, 401, 403, 404, 409, 413, 415, 422 y 423 según `INSTRUCCIONES_BACKEND.md`.
 
-```
-frontend/
-├── components.json      ← configuración de shadcn
-├── .env.example
-└── src/
-    ├── main.jsx, App.jsx
-    ├── index.css        ← Tailwind y variables del tema (colores del MSPAS)
-    ├── api/             ← cliente único de la API; ninguna pantalla usa fetch directamente
-    ├── components/ui/   ← componentes generados por shadcn (nombres de su CLI)
-    ├── lib/utils.js     ← función cn de shadcn
-    ├── componentes/     ← componentes propios (layout, menú, insignia de estado...)
-    ├── validaciones/    ← las mismas reglas de formato del backend (campos.js); un cambio va en las dos
-    └── paginas/         ← una carpeta por pantalla
-```
+En el frontend, `src/api/` es el cliente único de la API (ninguna pantalla usa `fetch` directamente), `src/componentes/` tiene los componentes propios, `src/paginas/` una carpeta por pantalla y `src/validaciones/` las mismas reglas de formato del backend (un cambio va en las dos).
 
 `components/ui/` y `lib/` quedan en inglés porque los genera shadcn; el resto del código propio va en español.
 
@@ -126,7 +100,7 @@ Reglas del frontend:
 - **Contrato primero:** si creas o cambias un endpoint, actualiza `backend/openapi.yaml` antes de programarlo.
 - Limita tus cambios a lo que pide la tarea.
 - Documentación, mensajes de la API y nombres de carpetas y módulos en **español**. En la BD: `snake_case`, singular.
-- **Comentarios en el código:** cortos, precisos y solo donde el código no se explica solo (una regla del negocio, un caso raro, el porqué de una decisión). Nada de comentarios que repitan lo que hace el código, ni bloques largos, ni encabezados decorativos. Lo que haga falta recordar para trabajar después (decisiones, convenciones, trampas) se anota en una línea en la sección "Notas de contexto" de `CLAUDE.md`, no en el código.
+- **Comentarios en el código:** cortos, precisos y solo donde el código no se explica solo (una regla del negocio, un caso raro, el porqué de una decisión). Nada de comentarios que repitan lo que hace el código, ni bloques largos, ni encabezados decorativos. Lo que haga falta recordar para trabajar después (decisiones, convenciones, trampas) se anota en una línea en el `CLAUDE.md` que corresponda, no en el código: el de `backend/src/modulos/{modulo}/` si es de un módulo (su backend, su pantalla o sus pruebas), `backend/` o `frontend/` si es de todo el backend o el frontend, y el de la raíz solo si afecta a todo el repositorio. La regla completa está en "Notas de contexto" del `CLAUDE.md` de la raíz.
 
 ## 8. Cómo verificar antes de terminar
 
@@ -147,11 +121,7 @@ Al terminar, indica qué cambiaste y cómo lo comprobaste.
 
 Entorno de desarrollo: se trabaja contra las bases de prueba en Aiven (MySQL) y MongoDB Atlas, con `backend/.env` copiado de `backend/.env.example` y el certificado de Aiven en `backend/certs/`. Como alternativa, se pueden usar bases locales según `docs/base-de-datos/GUIA DE INSTALACION DE BASE DE DATOS.docx` (MySQL en `localhost:3306`, MongoDB en `mongodb://localhost:27017/vacunacion_config`).
 
-Comandos del frontend, desde `frontend/` (con `frontend/.env` copiado de `frontend/.env.example`):
-
-- `npm install`: instala las dependencias.
-- `npm run dev`: levanta la app con Vite en `http://localhost:5173`.
-- `npm test`: corre las pruebas con Vitest.
+El frontend usa `frontend/.env` copiado de `frontend/.env.example`; sus comandos están en `frontend/package.json`.
 
 **Pendiente:** los comandos exactos del backend y el lint del frontend se definirán más adelante. No los inventes; si los necesitas y no están aquí, pregunta.
 
