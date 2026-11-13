@@ -1,7 +1,7 @@
 import {
   alPerderSesion, descargar, ErrorApi, ESPERA_MAXIMA_MS, leerUltimaPeticion, refrescar, solicitar,
 } from './cliente.js'
-import { descargarInformeExcel } from './informes.js'
+import { descargarInformeExcel, descargarInformePdf } from './informes.js'
 import { borrarSesion, guardarSesion, leerSesion, leerTokenGuardado } from './sesion.js'
 
 function crearToken(payload) {
@@ -424,5 +424,18 @@ describe('descargar un archivo (SPEC 64)', () => {
       informe: 'total', desde: '2026-01', hasta: '2026-08', municipioIds: '1,4', incluirAprobados: 'true',
       agrupacion: 'sexo',
     })
+  })
+
+  test('descargarInformePdf pide el mismo informe en /informes/produccion/pdf (SPEC 65)', async () => {
+    guardarSesion(sesion)
+    fetch.mockResolvedValue(respuestaArchivo('attachment; filename="informe-total-2026-01-a-2026-08.pdf"'))
+
+    const { nombre } = await descargarInformePdf({ informe: 'total', desde: '2026-01', hasta: '2026-08', redId: 3 })
+    const url = new URL(fetch.mock.calls[0][0], 'http://localhost')
+    expect(url.pathname.endsWith('/informes/produccion/pdf')).toBe(true)
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      informe: 'total', desde: '2026-01', hasta: '2026-08', redId: '3',
+    })
+    expect(nombre).toBe('informe-total-2026-01-a-2026-08.pdf')
   })
 })
