@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import ExcelJS from 'exceljs';
 import { Int32, ObjectId } from 'mongodb';
 import app from '../src/app.js';
 import pool from '../src/config/mysql.js';
@@ -938,5 +939,201 @@ describe('GET /informes/produccion agrupado por una dimensión (SPEC 63)', () =>
     const res = await informe(`informe=total&${ENERO}&agrupacion=zvt_no_existe`);
     expect(res.status).toBe(404);
     expect(res.body.error.codigo).toBe('NO_ENCONTRADO');
+  });
+});
+
+describe('GET /informes/produccion/excel (SPEC 64)', () => {
+  const ruta = (consulta) => `produccion/excel?ddrissId=${ddrissId}&${consulta}`;
+  const binario = (res, listo) => {
+    const partes = [];
+    res.on('data', (parte) => partes.push(parte));
+    res.on('end', () => listo(null, Buffer.concat(partes)));
+  };
+  const descargar = (consulta, token = cuentas.AUTORIDAD.token) =>
+    request(app)
+      .get(`/api/v1/informes/${ruta(consulta)}`)
+      .set('Authorization', `Bearer ${token}`)
+      .buffer(true)
+      .parse(binario);
+  const json = (consulta) => consultar('produccion', `ddrissId=${ddrissId}&${consulta}`);
+  const conMunicipio = (informe) => ['establecimiento', 'distrito'].includes(informe.nivel);
+
+  async function hojaDe(res) {
+    const libro = new ExcelJS.Workbook();
+    await libro.xlsx.load(res.body);
+    return libro.worksheets[0];
+  }
+
+  // Las cantidades de cada fila de datos del archivo (y del «Total»), por su nombre y, si lo hay, su municipio.
+  function cantidadesDelArchivo(hoja, informe) {
+    const fijas = conMunicipio(informe) ? 2 : 1;
+    const nombres = new Set([...informe.filas.map((f) => f.nombre), 'Total']);
+    const porLlave = new Map();
+    hoja.eachRow((fila) => {
+      const nombre = String(fila.getCell(1).value ?? '').replace(' (no suma en el consolidado)', '');
+      if (!nombres.has(nombre)) return;
+      const municipio = fijas === 2 ? fila.getCell(2).value ?? '' : '';
+      porLlave.set(`${nombre}|${municipio}`, informe.columnas.map((_, i) => fila.getCell(fijas + i + 1).value));
+    });
+    return porLlave;
+  }
+  const llaveDeFila = (informe, fila) =>
+    `${fila.nombre}|${conMunicipio(informe) ? fila.municipio?.nombre ?? '' : ''}`;
+
+  async function filasExportar(desdeId) {
+    const [filas] = await pool.query(
+      `SELECT modulo, entidad, entidad_id, valores_nuevos FROM bitacora
+        WHERE id > ? AND usuario_id = ? AND accion = 'EXPORTAR' ORDER BY id`,
+      [desdeId, cuentas.AUTORIDAD.id],
+    );
+    return filas.map((f) => ({
+      ...f,
+      valores_nuevos: typeof f.valores_nuevos === 'string' ? JSON.parse(f.valores_nuevos) : f.valores_nuevos,
+    }));
+  }
+  const ultimaBitacora = async () => (await pool.query('SELECT COALESCE(MAX(id), 0) AS id FROM bitacora'))[0][0].id;
+
+  it('cada cantidad del archivo coincide con la del informe en pantalla, con y sin agrupación', async () => {
+    const consultas = [
+      `informe=poblacion-propia&desde=${ANIO - 1}-12&hasta=${ANIO}-02`,
+      `informe=total&desde=${ANIO}-01&hasta=${ANIO}-02&incluirAprobados=true`,
+      `informe=residencia&desde=${ANIO}-01&hasta=${ANIO}-02&nivel=distrito`,
+      `informe=total&desde=${ANIO}-01&hasta=${ANIO}-01&nivel=establecimiento`,
+      `informe=poblacion-propia&desde=${ANIO}-01&hasta=${ANIO}-01&nivel=departamento`,
+      `informe=total&desde=${ANIO}-01&hasta=${ANIO}-02&vacuna=ZVT_SPEC63&agrupacion=sexo&incluirAprobados=true`,
+    ];
+    for (const consulta of consultas) {
+      const [archivo, pantalla] = await Promise.all([descargar(consulta), json(consulta)]);
+      expect(archivo.status, consulta).toBe(200);
+      expect(pantalla.status, consulta).toBe(200);
+      expect(pantalla.body.columnas.length, consulta).toBeGreaterThan(0);
+      const delArchivo = cantidadesDelArchivo(await hojaDe(archivo), pantalla.body);
+
+      for (const fila of pantalla.body.filas) {
+        expect(delArchivo.get(llaveDeFila(pantalla.body, fila)), `${consulta}: ${fila.nombre}`)
+          .toEqual(fila.cantidades);
+      }
+      const total = [...delArchivo].find(([llave]) => llave.startsWith('Total|'))[1];
+      expect(total, consulta).toEqual(pantalla.body.total.cantidades);
+    }
+  });
+
+  it('responde el libro con su tipo y el nombre del archivo, con -por-{agrupación} si la hay', async () => {
+    const res = await descargar(`informe=residencia&desde=${ANIO}-01&hasta=${ANIO}-02`);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    expect(res.headers['content-disposition'])
+      .toBe(`attachment; filename="informe-residencia-${ANIO}-01-a-${ANIO}-02.xlsx"`);
+
+    const agrupado = await descargar(`informe=total&desde=${ANIO}-01&hasta=${ANIO}-01&agrupacion=sexo`);
+    expect(agrupado.headers['content-disposition'])
+      .toBe(`attachment; filename="informe-total-${ANIO}-01-a-${ANIO}-01-por-sexo.xlsx"`);
+  });
+
+  it('expone Content-Disposition al navegador', async () => {
+    const res = await descargar(`informe=total&desde=${ANIO}-01&hasta=${ANIO}-01`)
+      .set('Origin', 'http://localhost:5173');
+    expect(res.headers['access-control-expose-headers']).toContain('Content-Disposition');
+  });
+
+  it('el encabezado lleva la DDRISS, el nombre de quien exporta, la red y PRELIMINAR', async () => {
+    const [[empleado]] = await pool.query(
+      `SELECT CONCAT(e.nombres, ' ', e.apellidos) AS nombre FROM usuario u JOIN empleado e ON e.id = u.empleado_id
+        WHERE u.id = ?`,
+      [cuentas.AUTORIDAD.id],
+    );
+    const res = await descargar(
+      `informe=total&desde=${ANIO}-01&hasta=${ANIO}-02&redId=${ids.red}&vacuna=ZVT_SPEC62&incluirAprobados=true`,
+    );
+    const hoja = await hojaDe(res);
+    const valores = new Map();
+    hoja.eachRow((fila) => valores.set(fila.getCell(1).value, fila.getCell(2).value));
+
+    expect(hoja.getCell('A1').value).toBe('Producción total (incluye Migrantes) · Municipio');
+    expect(hoja.getCell('A2').value).toBe('PRELIMINAR');
+    expect(valores.get('DDRISS')).toBe('vitest-spec62');
+    expect(valores.get('Vacuna')).toBe('vitest-spec62 ZVT_SPEC62');
+    expect(valores.get('Territorio')).toBe('Red vitest-spec62 Red');
+    expect(valores.get('Generado')).toMatch(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2} por /);
+    expect(valores.get('Generado').endsWith(` por ${empleado.nombre}`)).toBe(true);
+    expect(valores.get('Aviso')).toBe(`Datos preliminares: febrero de ${ANIO} todavía no está cerrado.`);
+  });
+
+  it('deja una fila EXPORTAR del módulo REPORTES con los parámetros y sin cantidades', async () => {
+    const antes = await ultimaBitacora();
+    const res = await descargar(
+      `informe=poblacion-propia&desde=${ANIO}-01&hasta=${ANIO}-02&municipioIds=${ids.municipios.Z802},`
+        + `${ids.municipios.Z801}&agrupacion=sexo&incluirAprobados=true`,
+    );
+    expect(res.status).toBe(200);
+
+    const filas = await filasExportar(antes);
+    expect(filas).toHaveLength(1);
+    expect(filas[0]).toMatchObject({ modulo: 'REPORTES', entidad: 'informe', entidad_id: 'poblacion-propia' });
+    expect(filas[0].valores_nuevos).toEqual({
+      formato: 'xlsx',
+      desde: `${ANIO}-01`,
+      hasta: `${ANIO}-02`,
+      nivel: 'municipio',
+      vacuna: null,
+      redId: null,
+      municipioIds: [ids.municipios.Z802, ids.municipios.Z801],
+      agrupacion: 'sexo',
+      incluirAprobados: true,
+      ddrissId,
+    });
+  });
+
+  it('responde los mismos 400 y 404 que el informe en pantalla, sin fila EXPORTAR', async () => {
+    const antes = await ultimaBitacora();
+    const casos = [
+      `informe=residencia&desde=${ANIO}-01&hasta=${ANIO}-01&nivel=establecimiento`,
+      `informe=total&desde=${ANIO}-02&hasta=${ANIO}-01`,
+      `informe=total&desde=${ANIO}-01&hasta=${ANIO}-01&agrupacion=grupo_edad`,
+      `informe=total&desde=${ANIO}-01&hasta=${ANIO}-01&formato=xlsx`,
+      `informe=total&desde=${ANIO}-01&hasta=${ANIO}-03`,
+      `informe=total&desde=${ANIO}-01&hasta=${ANIO}-01&vacuna=ZVT_NO_EXISTE`,
+      `informe=total&desde=${ANIO}-01&hasta=${ANIO}-01&agrupacion=zvt_no_existe`,
+    ];
+    for (const consulta of casos) {
+      const [archivo, pantalla] = await Promise.all([
+        request(app)
+          .get(`/api/v1/informes/${ruta(consulta)}`)
+          .set('Authorization', `Bearer ${cuentas.AUTORIDAD.token}`),
+        json(consulta),
+      ]);
+      expect([400, 404], consulta).toContain(archivo.status);
+      expect(archivo.status, consulta).toBe(pantalla.status);
+      expect(archivo.body, consulta).toEqual(pantalla.body);
+    }
+    expect(await filasExportar(antes)).toEqual([]);
+  });
+
+  it('el Personal del establecimiento y el Administrador reciben 403', async () => {
+    for (const rol of ['ESTABLECIMIENTO', 'ADMINISTRADOR']) {
+      const res = await request(app)
+        .get(`/api/v1/informes/produccion/excel?informe=total&desde=${ANIO}-01&hasta=${ANIO}-01`)
+        .set('Authorization', `Bearer ${cuentas[rol].token}`);
+      expect(res.status, rol).toBe(403);
+      expect(res.body.error.codigo).toBe('SIN_PERMISO');
+    }
+  });
+
+  it('el Revisor y Epidemiología exportan el informe de su propia DDRISS', async () => {
+    for (const rol of ['REVISOR', 'EPIDEMIOLOGIA']) {
+      const [[mes]] = await pool.query(
+        `SELECT p.anio, p.mes FROM cierre_periodo cp JOIN periodo p ON p.id = cp.periodo_id
+          WHERE cp.ddriss_id = ? ORDER BY p.anio DESC, p.mes DESC LIMIT 1`,
+        [cuentas[rol].ddrissId],
+      );
+      const texto = `${mes.anio}-${String(mes.mes).padStart(2, '0')}`;
+      const res = await request(app)
+        .get(`/api/v1/informes/produccion/excel?informe=total&desde=${texto}&hasta=${texto}&nivel=departamento`)
+        .set('Authorization', `Bearer ${cuentas[rol].token}`)
+        .buffer(true)
+        .parse(binario);
+      expect(res.status, rol).toBe(200);
+      expect((await hojaDe(res)).getCell('A1').value).toBe('Producción total (incluye Migrantes) · Departamento');
+    }
   });
 });

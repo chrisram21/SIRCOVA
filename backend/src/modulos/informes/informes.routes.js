@@ -17,5 +17,11 @@ router.get(
   requierePermiso('INFORME_CONSULTAR'),
   informesController.informePorFila,
 );
+router.get(
+  '/informes/produccion/excel',
+  autenticar,
+  requierePermiso('INFORME_CONSULTAR'),
+  informesController.informeEnExcel,
+);
 
 export default router;

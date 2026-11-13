@@ -1,11 +1,13 @@
 import { obtenerDb } from '../../config/mongodb.js';
-import pool from '../../config/mysql.js';
+import pool, { enTransaccion } from '../../config/mysql.js';
 import { ErrorApi } from '../../middlewares/errores.js';
+import { ACCIONES, MODULOS, registrarBitacora } from '../auditoria/auditoria.service.js';
 import { entradaInvalida, leerBooleano, revisarParametros } from '../catalogos/catalogos.service.js';
 import { codigoDdriss, seccionesDelPeriodo } from '../configuracion/esquemas.service.js';
 import { ddrissDeLaConsulta, leerRedDeLaDdriss } from '../indicadores/corridas.service.js';
 import { seccionesDeducidas } from '../produccion/celdas.service.js';
 import { PRODUCCION_DE_LA_DDRISS, municipiosDelUniverso } from '../indicadores/produccion.service.js';
+import { libroDelInforme } from './informeExcel.service.js';
 
 const noEncontrado = (mensaje) => new ErrorApi(404, 'NO_ENCONTRADO', mensaje);
 
@@ -491,4 +493,67 @@ export async function informePorFila(usuario, query = {}) {
     mesesSinCerrar,
     preliminar: incluirAprobados && mesesSinCerrar.length > 0,
   };
+}
+
+// ---------------------------------------------------------------- Exportación a Excel (SPEC 64, HU-47)
+
+// Los nombres del encabezado del libro: DDRISS, quien exporta, vacuna, red y municipios elegidos.
+async function datosDelEncabezado(usuario, consulta, ddrissId) {
+  const [[[ddriss]], [[empleado]], [vacunas], red, [municipios]] = await Promise.all([
+    pool.query('SELECT nombre FROM ddriss WHERE id = ?', [ddrissId]),
+    pool.query(
+      `SELECT CONCAT(e.nombres, ' ', e.apellidos) AS nombre FROM usuario u JOIN empleado e ON e.id = u.empleado_id
+        WHERE u.id = ?`,
+      [usuario.id],
+    ),
+    consulta.vacuna === null ? [[]] : pool.query('SELECT nombre FROM vacuna WHERE codigo = ?', [consulta.vacuna]),
+    consulta.redId === null ? null : leerRedDeLaDdriss(consulta.redId, ddrissId),
+    consulta.municipioIds === null
+      ? [[]]
+      : pool.query('SELECT nombre FROM municipio WHERE id IN (?) ORDER BY nombre', [consulta.municipioIds]),
+  ]);
+  return {
+    ddriss: ddriss.nombre,
+    generadoPor: empleado.nombre,
+    vacuna: vacunas[0]?.nombre ?? null,
+    red: red && { nombre: red.nombre },
+    municipios: municipios.map((m) => m.nombre),
+  };
+}
+
+const aTextoDeMes = ({ anio, mes }) => `${anio}-${String(mes).padStart(2, '0')}`;
+
+// El mismo informe de informePorFila, como libro .xlsx. Deja la fila EXPORTAR después de armar el libro: si la
+// bitácora falla, no se entrega el archivo. contexto: contextoAuditoria(req).
+export async function exportarInformeExcel(usuario, query, contexto, ahora = new Date()) {
+  const informe = await informePorFila(usuario, query);
+  const consulta = leerConsulta(query);
+  const ddrissId = ddrissDeLaConsulta(usuario, query);
+  const datos = await datosDelEncabezado(usuario, consulta, ddrissId);
+  const bytes = await libroDelInforme(informe, { ...datos, generadoEn: ahora }).xlsx.writeBuffer();
+
+  const desde = aTextoDeMes(consulta.desde);
+  const hasta = aTextoDeMes(consulta.hasta);
+  await enTransaccion((conexion) => registrarBitacora(conexion, {
+    ...contexto,
+    modulo: MODULOS.REPORTES,
+    accion: ACCIONES.EXPORTAR,
+    entidad: 'informe',
+    entidadId: consulta.informe,
+    valoresNuevos: {
+      formato: 'xlsx',
+      desde,
+      hasta,
+      nivel: consulta.nivel,
+      vacuna: consulta.vacuna,
+      redId: consulta.redId,
+      municipioIds: consulta.municipioIds ?? [],
+      agrupacion: consulta.agrupacion,
+      incluirAprobados: consulta.incluirAprobados,
+      ddrissId,
+    },
+  }));
+
+  const agrupacion = consulta.agrupacion ? `-por-${consulta.agrupacion}` : '';
+  return { bytes: Buffer.from(bytes), nombre: `informe-${consulta.informe}-${desde}-a-${hasta}${agrupacion}.xlsx` };
 }
