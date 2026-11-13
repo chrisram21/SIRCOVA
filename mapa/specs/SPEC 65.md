@@ -2,7 +2,7 @@
 numero: 65
 titulo: "HU-48 Exportar informes a PDF"
 modulo: "Informes"
-estado: "Aprobado"
+estado: "Implementado"
 origen: "Historia de usuario"
 historias: ["[[HU-48]]"]
 archivo: "specs/informes/65-hu-48-exportar-informes-a-pdf.md"
@@ -15,7 +15,7 @@ tags: ["spec", "modulo/informes", "origen/historia"]
 
 - **Spec completo:** [[specs/informes/65-hu-48-exportar-informes-a-pdf|abrir el spec]]
 - **Módulo:** [[Módulo Informes]]
-- **Estado:** Aprobado
+- **Estado:** Implementado
 - **Origen:** Historia de usuario
 - **Historia:** [[HU-48]] Exportar informes a PDF
 - **Texto del encabezado:** HU-48

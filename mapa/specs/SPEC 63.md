@@ -29,4 +29,4 @@ tags: ["spec", "modulo/informes", "origen/historia"]
 ## Lo usan
 
 - [[SPEC 64]] — HU-47 Exportar informes a Excel · *Implementado*
-- [[SPEC 65]] — HU-48 Exportar informes a PDF · *Aprobado*
+- [[SPEC 65]] — HU-48 Exportar informes a PDF · *Implementado*

@@ -1,6 +1,6 @@
 # SPEC 65 — HU-48 Exportar informes a PDF
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-48
 > **Origen:** historia
 > **Depende de:** SPEC 62, SPEC 63 y SPEC 64
@@ -160,16 +160,16 @@ Se mueven ahí, sin cambiar su texto ni lo que devuelven:
 
 ## Criterios de aceptación
 
-- [ ] Con un informe generado aparece «Exportar PDF» junto a «Exportar Excel», que descarga `informe-{informe}-{desde}-a-{hasta}[-por-{agrupacion}].pdf`.
-- [ ] El PDF es carta horizontal, en IBM Plex Sans, con el título, la DDRISS, el periodo, la vacuna, el territorio, la agrupación, si incluye aprobados, la fecha y hora de generación y quién lo generó.
-- [ ] La tabla va en tramos de vacunas que no pasan de 12 columnas (10 con «Municipio»), sin partir ninguna vacuna, y cada tramo tiene todas las filas y su «Total».
-- [ ] Cada cantidad del PDF coincide con la de la pantalla para los mismos parámetros, en los tres informes, con y sin agrupación.
-- [ ] Con `preliminar`, cada página lleva la marca de agua «PRELIMINAR» y el encabezado su línea. Los avisos de la pantalla aparecen con el mismo texto.
-- [ ] Cada página lleva el pie con el título y «Página n de total», y los encabezados de una tabla se repiten si sigue en otra página.
-- [ ] Cada descarga correcta deja una fila `EXPORTAR` del módulo `REPORTES` con `formato: 'pdf'` y los parámetros, sin cantidades. Un 400 o un 404 no la deja.
-- [ ] El endpoint pide `INFORME_CONSULTAR` y respeta la DDRISS del usuario.
-- [ ] El Excel del SPEC 64 sale igual que antes: sus pruebas pasan sin cambiar lo que esperan.
-- [ ] Las pruebas del backend que tocan los archivos cambiados y la suite del frontend pasan.
+- [x] Con un informe generado aparece «Exportar PDF» junto a «Exportar Excel», que descarga `informe-{informe}-{desde}-a-{hasta}[-por-{agrupacion}].pdf`.
+- [x] El PDF es carta horizontal, en IBM Plex Sans, con el título, la DDRISS, el periodo, la vacuna, el territorio, la agrupación, si incluye aprobados, la fecha y hora de generación y quién lo generó.
+- [x] La tabla va en tramos de vacunas que no pasan de 12 columnas (10 con «Municipio»), sin partir ninguna vacuna, y cada tramo tiene todas las filas y su «Total».
+- [x] Cada cantidad del PDF coincide con la de la pantalla para los mismos parámetros, en los tres informes, con y sin agrupación.
+- [x] Con `preliminar`, cada página lleva la marca de agua «PRELIMINAR» y el encabezado su línea. Los avisos de la pantalla aparecen con el mismo texto.
+- [x] Cada página lleva el pie con el título y «Página n de total», y los encabezados de una tabla se repiten si sigue en otra página.
+- [x] Cada descarga correcta deja una fila `EXPORTAR` del módulo `REPORTES` con `formato: 'pdf'` y los parámetros, sin cantidades. Un 400 o un 404 no la deja.
+- [x] El endpoint pide `INFORME_CONSULTAR` y respeta la DDRISS del usuario.
+- [x] El Excel del SPEC 64 sale igual que antes: sus pruebas pasan sin cambiar lo que esperan.
+- [x] Las pruebas del backend que tocan los archivos cambiados y la suite del frontend pasan.
 
 ## Decisiones
 

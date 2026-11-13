@@ -1365,8 +1365,10 @@ Verificado contra la API real el 2026-11-08, con el build servido por `vite prev
 **Nota (2026-11-09, spec 55):** si los datos del informe salen de una corrida parcial (`Corrida.parcial`), el archivo lleva la leyenda «PRELIMINAR», como la marca de agua de las gráficas y del mapa.
 
 **Criterios de aceptación:**
-- [ ] El PDF incluye título, filtros usados, tabla y fecha de generación.
-- [ ] El contenido coincide con el que se ve en pantalla.
+- [x] El PDF incluye título, filtros usados, tabla y fecha de generación.
+- [x] El contenido coincide con el que se ve en pantalla.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 65 a `main` (`specs/informes/65-hu-48-exportar-informes-a-pdf.md`). Botón «Exportar PDF» en «Informes», junto a «Exportar Excel», con el informe de la URL (también la agrupación). `GET /informes/produccion/pdf` (mismos parámetros, permiso `INFORME_CONSULTAR` y errores que el Excel) arma con pdfmake 0.3 un PDF en carta horizontal con IBM Plex Sans (Regular y SemiBold en `backend/src/modulos/informes/fuentes/`, licencia OFL): el mismo encabezado que el Excel, «PRELIMINAR» como marca de agua y como línea cuando el informe es preliminar (los informes no usan `Corrida.parcial`), el pie con la página, y la tabla en tramos de vacunas enteras de hasta 12 columnas (10 con «Municipio»), cada uno con todas las filas y su «Total». Cada descarga deja `EXPORTAR` del módulo `REPORTES` con `formato: pdf`. Verificada contra la API real el 2026-11-13 desde el navegador: Epidemiología exportó población propia de enero a agosto de 2026 por municipio (7 páginas), producción total por establecimiento (11 páginas) y septiembre a octubre con aprobados agrupado por Sexo (2 páginas, con la marca de agua), y el Revisor residencia por distrito (10 páginas, con «Municipio» y encabezados repetidos al partir un tramo); las cantidades revisadas coinciden con la pantalla, cada PDF tardó unos 2 s, los dos botones quedan deshabilitados mientras se descarga y cada descarga dejó su fila `EXPORTAR`.
 
 #### HU-49. Informe acumulado anual
 
