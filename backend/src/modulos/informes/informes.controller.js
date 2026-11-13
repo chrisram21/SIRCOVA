@@ -9,9 +9,14 @@ export async function informePorFila(req, res) {
   res.json(await informesService.informePorFila(req.usuario, req.query));
 }
 
-export async function informeEnExcel(req, res) {
-  const { bytes, nombre } = await informesService.exportarInformeExcel(req.usuario, req.query, contextoAuditoria(req));
+// formato: la extensión del archivo (xlsx o pdf); express pone su Content-Type.
+const enArchivo = (formato) => async (req, res) => {
+  const contexto = contextoAuditoria(req);
+  const { bytes, nombre } = await informesService.exportarInforme(req.usuario, req.query, contexto, formato);
   res.attachment(nombre);
-  res.type('xlsx');
+  res.type(formato);
   res.send(bytes);
-}
+};
+
+export const informeEnExcel = enArchivo('xlsx');
+export const informeEnPdf = enArchivo('pdf');

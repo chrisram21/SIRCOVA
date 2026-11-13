@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import ExcelJS from 'exceljs';
-import {
-  FORMATO_CANTIDAD, fechaDeGeneracion, libroDelInforme, textoRango, tituloDelInforme,
-} from '../src/modulos/informes/informeExcel.service.js';
+import { FORMATO_CANTIDAD, libroDelInforme } from '../src/modulos/informes/informeExcel.service.js';
+import { fechaDeGeneracion, textoRango, tituloDelInforme } from '../src/modulos/informes/textosInforme.js';
 
 // SPEC 64: el libro se arma con datos fijos y se vuelve a leer desde el archivo, como lo abriría Excel. Los textos
 // esperados son los de frontend/src/paginas/informes/informes.js y TablaInforme.jsx.

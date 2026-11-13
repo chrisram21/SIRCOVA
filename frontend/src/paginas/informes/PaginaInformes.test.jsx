@@ -2,7 +2,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { listarDdriss, listarRedes } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
-import { descargarInformeExcel, obtenerInforme, obtenerOpcionesInformes } from '@/api/informes.js'
+import {
+  descargarInformeExcel, descargarInformePdf, obtenerInforme, obtenerOpcionesInformes,
+} from '@/api/informes.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 import PaginaInformes from './PaginaInformes.jsx'
@@ -10,7 +12,10 @@ import PaginaInformes from './PaginaInformes.jsx'
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
 vi.mock('@/api/catalogos.js', () => ({ listarDdriss: vi.fn(), listarRedes: vi.fn() }))
 vi.mock('@/api/informes.js', () => ({
-  obtenerOpcionesInformes: vi.fn(), obtenerInforme: vi.fn(), descargarInformeExcel: vi.fn(),
+  obtenerOpcionesInformes: vi.fn(),
+  obtenerInforme: vi.fn(),
+  descargarInformeExcel: vi.fn(),
+  descargarInformePdf: vi.fn(),
 }))
 
 const SAN_MARCOS = { id: 1, codigoIne: '1201', nombre: 'San Marcos' }
@@ -401,5 +406,81 @@ describe('«Exportar Excel» (SPEC 64)', () => {
     montar({ url: URL_INFORME })
     await screen.findByText(/No se pudo generar el informe/)
     expect(boton()).toBeNull()
+  })
+})
+
+describe('«Exportar PDF» (SPEC 65)', () => {
+  const URL_INFORME = '/informes?informe=total&desde=2026-02&hasta=2026-08'
+  const ARCHIVO = { blob: new Blob(['%PDF-']), nombre: 'informe-total-2026-02-a-2026-08.pdf' }
+  const botonPdf = () => screen.queryByRole('button', { name: /Exportar PDF/ })
+  const botonExcel = () => screen.queryByRole('button', { name: /Exportar Excel/ })
+  let descargados
+
+  beforeEach(() => {
+    descargarInformePdf.mockResolvedValue(ARCHIVO)
+    descargarInformeExcel.mockResolvedValue({ blob: new Blob(['PK']), nombre: 'informe.xlsx' })
+    descargados = []
+    URL.createObjectURL = vi.fn(() => 'blob:informe')
+    URL.revokeObjectURL = vi.fn()
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function guardar() {
+      descargados.push(this.download)
+    })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  test('aparece junto a «Exportar Excel» solo con un informe generado', async () => {
+    montar()
+    await screen.findByText(SIN_GENERAR)
+    expect(botonPdf()).toBeNull()
+  })
+
+  test('va justo después de «Exportar Excel»', async () => {
+    montar({ url: URL_INFORME })
+    await screen.findAllByText('1,234')
+    const botones = screen.getAllByRole('button').map((b) => b.textContent)
+    expect(botones.indexOf('Exportar PDF')).toBe(botones.indexOf('Exportar Excel') + 1)
+  })
+
+  test('pide el PDF con los parámetros de la URL y lo guarda con su nombre', async () => {
+    montar({ url: `${URL_INFORME}&vacuna=HEXA&agrupacion=sexo` })
+    await screen.findAllByText('1,234')
+    elegir('nivel', 'distrito')
+    fireEvent.click(botonPdf())
+
+    await waitFor(() => expect(descargados).toEqual([ARCHIVO.nombre]))
+    expect(descargarInformeExcel).not.toHaveBeenCalled()
+    expect(descargarInformePdf.mock.lastCall[0]).toEqual(obtenerInforme.mock.lastCall[0])
+    expect(descargarInformePdf.mock.lastCall[0]).toMatchObject({
+      informe: 'total', nivel: 'municipio', vacuna: 'HEXA', agrupacion: 'sexo',
+    })
+  })
+
+  test('mientras descarga, el PDF dice «Exportando…» y los dos botones quedan deshabilitados', async () => {
+    let terminar
+    descargarInformePdf.mockReturnValue(new Promise((resolver) => {
+      terminar = resolver
+    }))
+    montar({ url: URL_INFORME })
+    await screen.findAllByText('1,234')
+    fireEvent.click(botonPdf())
+
+    expect((await screen.findByRole('button', { name: 'Exportando…' })).disabled).toBe(true)
+    expect(botonExcel().disabled).toBe(true)
+    terminar(ARCHIVO)
+    expect((await screen.findByRole('button', { name: 'Exportar PDF' })).disabled).toBe(false)
+    expect(botonExcel().disabled).toBe(false)
+  })
+
+  test('si falla, muestra el mismo aviso que el Excel', async () => {
+    descargarInformePdf.mockRejectedValueOnce(new ErrorApi(404, 'NO_ENCONTRADO', 'La red no existe.'))
+    montar({ url: URL_INFORME })
+    await screen.findAllByText('1,234')
+    fireEvent.click(botonPdf())
+
+    expect(await screen.findByText('No se pudo exportar el informe: La red no existe.')).toBeTruthy()
+    expect(descargados).toEqual([])
   })
 })

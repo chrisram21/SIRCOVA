@@ -30,3 +30,8 @@ export function obtenerInforme(pedido) {
 export function descargarInformeExcel(pedido) {
   return descargar(rutaDelInforme('/informes/produccion/excel', pedido))
 }
+
+// SPEC 65: el mismo informe como PDF; devuelve { blob, nombre }.
+export function descargarInformePdf(pedido) {
+  return descargar(rutaDelInforme('/informes/produccion/pdf', pedido))
+}

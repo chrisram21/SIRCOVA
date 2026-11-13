@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { FileSpreadsheet, TriangleAlert } from 'lucide-react'
+import { FileSpreadsheet, FileText, TriangleAlert } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { listarDdriss, listarRedes } from '@/api/catalogos.js'
 import { mensajeDeError } from '@/api/cliente.js'
-import { descargarInformeExcel, obtenerInforme, obtenerOpcionesInformes } from '@/api/informes.js'
+import {
+  descargarInformeExcel, descargarInformePdf, obtenerInforme, obtenerOpcionesInformes,
+} from '@/api/informes.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import PantallaCargaSesion, { usePrimeraCarga } from '@/componentes/PantallaCargaSesion.jsx'
@@ -23,7 +25,8 @@ import TablaInforme from './TablaInforme.jsx'
 // SPEC 62 (HU-45): los informes de producción. Los filtros se editan en un borrador y solo «Generar» los pasa a la
 // URL; el informe se pide cuando la URL trae informe, desde y hasta, así que recargar lo repite.
 // SPEC 63 (HU-46): «Agrupar por» cambia `agrupacion` en la URL y vuelve a pedir el informe sin tocar el borrador.
-// SPEC 64 (HU-47): «Exportar Excel» pide el mismo informe de la URL (no el borrador) como .xlsx.
+// SPEC 64 y 65 (HU-47, HU-48): «Exportar Excel» y «Exportar PDF» piden el mismo informe de la URL (no el borrador)
+// como archivo; mientras se exporta uno, los dos quedan deshabilitados.
 
 // Radix no acepta un valor vacío en un Select: la opción por defecto lleva este.
 const POR_SECCION = 'seccion'
@@ -41,6 +44,11 @@ function guardarArchivo(blob, nombre) {
   enlace.click()
   enlace.remove()
   URL.revokeObjectURL(url)
+}
+
+const EXPORTACIONES = {
+  xlsx: { texto: 'Exportar Excel', Icono: FileSpreadsheet, descargar: descargarInformeExcel },
+  pdf: { texto: 'Exportar PDF', Icono: FileText, descargar: descargarInformePdf },
 }
 
 const id = (texto) => (/^[1-9]\d*$/.test(texto ?? '') ? Number(texto) : undefined)
@@ -75,7 +83,8 @@ export default function PaginaInformes() {
   const [errorInforme, setErrorInforme] = useState(null)
   const [intentoInforme, setIntentoInforme] = useState(0)
   const [borrador, setBorrador] = useState(null)
-  const [exportando, setExportando] = useState(false)
+  // El formato que se está exportando (xlsx o pdf), o null.
+  const [exportando, setExportando] = useState(null)
   const [errorExportar, setErrorExportar] = useState(null)
 
   const ddrissId = nacional ? (id(parametros.get('ddriss')) ?? ddriss?.[0]?.id) : undefined
@@ -183,16 +192,16 @@ export default function PaginaInformes() {
     setIntentoInforme((n) => n + 1)
   }
 
-  async function exportar() {
-    setExportando(true)
+  async function exportar(formato) {
+    setExportando(formato)
     setErrorExportar(null)
     try {
-      const { blob, nombre } = await descargarInformeExcel(JSON.parse(clave))
-      guardarArchivo(blob, nombre ?? 'informe.xlsx')
+      const { blob, nombre } = await EXPORTACIONES[formato].descargar(JSON.parse(clave))
+      guardarArchivo(blob, nombre ?? `informe.${formato}`)
     } catch (err) {
       setErrorExportar(mensajeDeError(err))
     } finally {
-      setExportando(false)
+      setExportando(null)
     }
   }
 
@@ -299,12 +308,18 @@ export default function PaginaInformes() {
                 )}
                 <div className="flex flex-wrap items-end gap-3">
                   {selectorAgrupacion}
-                  {informe && !errorInforme && informe.columnas.length > 0 && (
-                    <Button variant="outline" onClick={exportar} disabled={exportando}>
-                      <FileSpreadsheet />
-                      {exportando ? 'Exportando…' : 'Exportar Excel'}
-                    </Button>
-                  )}
+                  {informe && !errorInforme && informe.columnas.length > 0 &&
+                    Object.entries(EXPORTACIONES).map(([formato, { texto, Icono }]) => (
+                      <Button
+                        key={formato}
+                        variant="outline"
+                        onClick={() => exportar(formato)}
+                        disabled={exportando !== null}
+                      >
+                        <Icono />
+                        {exportando === formato ? 'Exportando…' : texto}
+                      </Button>
+                    ))}
                 </div>
               </div>
               {errorInforme ? (
