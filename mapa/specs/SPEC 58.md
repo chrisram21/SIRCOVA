@@ -29,3 +29,4 @@ tags: ["spec", "modulo/plataforma", "origen/correccion"]
 ## Lo usan
 
 - [[SPEC 61]] — Pestaña «Producción» en Indicadores · *Implementado*
+- [[SPEC 62]] — HU-45 Generar informes con filtros · *Implementado*

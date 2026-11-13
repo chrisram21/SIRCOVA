@@ -1306,11 +1306,13 @@ Verificado contra la API real el 2026-11-08, con el build servido por `vite prev
 
 **Nota (2026-11-05, spec 49):** «Indicadores» ya filtra por distrito y por varios municipios, con los filtros en la URL (`distrito`, `municipios=1,4,7`, `vacuna` por su código; `filtrosDeUrl` en `PaginaIndicadores.jsx` y el menú con casillas de `BarraFiltrosIndicadores.jsx`). El distrito se lee de `GET /distritos`, y desde este spec Epidemiología y la Autoridad tienen `DISTRITO_CONSULTAR`; la estadígrafa (REVISOR) todavía no.
 
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 62 a `main` (`specs/informes/62-hu-45-generar-informes-con-filtros.md`). Pantalla «Informes» (`/informes`, permiso `INFORME_CONSULTAR` para el Revisor, Epidemiología y la Autoridad) con los tres informes como tabla vacuna × grupo de edad × dosis, sacada del esquema de captura. Rango de meses que puede cruzar años, nivel departamento, municipio, distrito o establecimiento, vacuna, municipios o red, y la casilla «Incluir aprobados sin cerrar» (preliminar). Botón «Generar» con los filtros en la URL. Por defecto solo cuentan los reportes `CERRADO` y `RECTIFICACION`; el Hospital de San Marcos no suma en el Excel 1 ni el 2 y sí en el 3. Endpoints `GET /informes/opciones` y `GET /informes/produccion`. Verificada contra la API real el 2026-11-12 con la estadígrafa, Epidemiología y la Autoridad nacional. La agrupación por sexo u otra dimensión es HU-46, y la exportación, HU-47 y HU-48.
+
 **Criterios de aceptación:**
-- [ ] Puedo generar los tres informes que hoy hace la estadígrafa: producción a la población propia (Excel 1), producción total con Migrantes (Excel 2) y dosis por municipio de residencia (Excel 3).
-- [ ] Puedo elegir mes inicial y final y uno o varios municipios.
-- [ ] Puedo elegir el nivel: departamento, municipio, distrito o establecimiento.
-- [ ] Los totales coinciden con la suma de los reportes cerrados del periodo.
+- [x] Puedo generar los tres informes que hoy hace la estadígrafa: producción a la población propia (Excel 1), producción total con Migrantes (Excel 2) y dosis por municipio de residencia (Excel 3).
+- [x] Puedo elegir mes inicial y final y uno o varios municipios.
+- [x] Puedo elegir el nivel: departamento, municipio, distrito o establecimiento.
+- [x] Los totales coinciden con la suma de los reportes cerrados del periodo.
 
 #### HU-46. Agrupar el informe por una dimensión
 

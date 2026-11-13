@@ -19,7 +19,7 @@ const producto = (dimensiones) =>
 
 // Las versiones anteriores a la v0.4 del modelo no tienen secciones (Hexavalente v1): una por valor de grupo_edad
 // del catálogo que use alguna dosis, con las dosis que lo admiten; sin grupo_edad, una sola con todas las dosis.
-function seccionesDeducidas(contenido, catalogo) {
+export function seccionesDeducidas(contenido, catalogo) {
   const efectiva = (d) => d.desagregacion ?? contenido.desagregacion;
   const edadesDe = (d) => efectiva(d).find((x) => x.dimension === GRUPO_EDAD)?.valores ?? [];
   if (!contenido.desagregacion.some((x) => x.dimension === GRUPO_EDAD)) {

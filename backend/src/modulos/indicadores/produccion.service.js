@@ -5,11 +5,11 @@ import { ddrissDeLaConsulta, leerRedDeLaDdriss } from './corridas.service.js';
 
 // La regla de estados de v_consolidado_establecimiento, sin excluir solo_cobertura (SPEC 61).
 const ESTADOS_CONTADOS = "('APROBADO','CERRADO','RECTIFICACION')";
-const PRODUCCION_DE_LA_DDRISS = `SELECT DISTINCT establecimiento_id, municipio_aplicacion_id, vacuna_id, dosis_id
+export const PRODUCCION_DE_LA_DDRISS = `SELECT DISTINCT establecimiento_id, municipio_aplicacion_id, vacuna_id, dosis_id
   FROM v_produccion WHERE ddriss_id = ? AND estado IN ${ESTADOS_CONTADOS}`;
 
 // Universo de filas: los activos más los que tienen producción en la DDRISS, para que el total cuadre con las filas.
-async function municipiosDelUniverso(ddrissId) {
+export async function municipiosDelUniverso(ddrissId) {
   const [filas] = await pool.query(
     `SELECT m.id, m.codigo_ine, m.nombre
        FROM municipio m

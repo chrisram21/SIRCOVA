@@ -37,3 +37,4 @@ tags: ["spec", "modulo/revision", "origen/historia"]
 - [[SPEC 40]] — Solicitar una rectificación · *Implementado*
 - [[SPEC 44]] — Calcular la cobertura y el avance contra la meta del mes · *Implementado*
 - [[SPEC 48]] — Resumen del Inicio por rol · *Implementado*
+- [[SPEC 62]] — HU-45 Generar informes con filtros · *Implementado*

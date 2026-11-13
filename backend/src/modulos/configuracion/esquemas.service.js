@@ -199,7 +199,7 @@ export async function listarEsquemas(query, usuario) {
 // El esquema publicado que cubre la fecha (día 1 del mes, en UTC como las vigencias): el de la DDRISS o, si no hay,
 // el nacional. Se elige por fecha y no por estado, porque un VIGENTE puede empezar en un mes futuro (SPEC 20).
 // Las vacunas sin esquema para esa fecha no aparecen en el Map.
-export async function esquemasDelPeriodo(codigosVacuna, ddrissCodigo, fecha) {
+async function documentosDelPeriodo(codigosVacuna, ddrissCodigo, fecha, campos) {
   if (codigosVacuna.length === 0) return new Map();
   const territorios = [{ 'territorio.nivel': NACIONAL }];
   if (ddrissCodigo) territorios.push({ 'territorio.ddriss_codigo': ddrissCodigo });
@@ -211,19 +211,47 @@ export async function esquemasDelPeriodo(codigosVacuna, ddrissCodigo, fecha) {
         'vigencia.desde': { $lte: fecha },
         $and: [{ $or: [{ 'vigencia.hasta': null }, { 'vigencia.hasta': { $gte: fecha } }] }, { $or: territorios }],
       },
-      { projection: { vacuna: 1, version: 1, territorio: 1, incluir_por_defecto: 1 } },
+      { projection: Object.fromEntries(['vacuna', 'territorio', ...campos].map((campo) => [campo, 1])) },
     )
     .toArray();
   const nacionales = new Map();
   const deLaDdriss = new Map();
   for (const doc of documentos) {
-    (doc.territorio.nivel === NACIONAL ? nacionales : deLaDdriss).set(doc.vacuna.codigo, {
-      id: doc._id.toString(),
-      version: doc.version,
-      incluirPorDefecto: doc.incluir_por_defecto ?? true,
-    });
+    (doc.territorio.nivel === NACIONAL ? nacionales : deLaDdriss).set(doc.vacuna.codigo, doc);
   }
   return new Map([...nacionales, ...deLaDdriss]);
+}
+
+export async function esquemasDelPeriodo(codigosVacuna, ddrissCodigo, fecha) {
+  const documentos = await documentosDelPeriodo(codigosVacuna, ddrissCodigo, fecha, ['version', 'incluir_por_defecto']);
+  return new Map(
+    [...documentos].map(([codigo, doc]) => [
+      codigo,
+      { id: doc._id.toString(), version: doc.version, incluirPorDefecto: doc.incluir_por_defecto ?? true },
+    ]),
+  );
+}
+
+// Las secciones del esquema que cubre la fecha (misma regla), por orden, con sus dosis y su desagregación en la forma
+// de aEsquema: { secciones: [{ grupoEdad, titulo, dosis }], dosis, desagregacion }. Un esquema anterior a la v0.4 no
+// tiene secciones (lista vacía; se deducen con seccionesDeducidas). Las vacunas sin esquema no aparecen en el Map.
+export async function seccionesDelPeriodo(codigosVacuna, ddrissCodigo, fecha) {
+  const documentos = await documentosDelPeriodo(codigosVacuna, ddrissCodigo, fecha, ['secciones', 'dimensiones']);
+  return new Map(
+    [...documentos].map(([codigo, doc]) => [
+      codigo,
+      {
+        secciones: [...(doc.secciones ?? [])]
+          .sort((a, b) => a.orden - b.orden)
+          .map((s) => ({ grupoEdad: s.grupo_edad ?? null, titulo: s.titulo, dosis: [...s.dosis] })),
+        dosis: doc.dimensiones.dosis.map((d) => ({
+          codigo: d.codigo,
+          desagregacion: d.desagregacion === undefined ? null : aDesagregacion(d.desagregacion),
+        })),
+        desagregacion: aDesagregacion(doc.dimensiones.desagregacion),
+      },
+    ]),
+  );
 }
 
 // Un id que no es un ObjectId, o un esquema de otra DDRISS, responde igual que uno inexistente.

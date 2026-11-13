@@ -37,3 +37,4 @@ tags: ["spec", "modulo/configuracion", "origen/historia"]
 - [[SPEC 30]] — Publicar con vista previa y menú «Administración» · *Implementado*
 - [[SPEC 31]] — Vacunas base y vacunas agregadas al reporte · *Implementado*
 - [[SPEC 32]] — Reglas de validación por DDRISS, con versiones y activación · *Implementado*
+- [[SPEC 62]] — HU-45 Generar informes con filtros · *Implementado*

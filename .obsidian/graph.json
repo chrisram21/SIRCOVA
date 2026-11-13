@@ -57,6 +57,13 @@
       }
     },
     {
+      "query": "tag:#modulo/informes",
+      "color": {
+        "a": 1,
+        "rgb": 11370328
+      }
+    },
+    {
       "query": "tag:#modulo/plataforma",
       "color": {
         "a": 1,

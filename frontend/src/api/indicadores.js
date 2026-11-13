@@ -2,7 +2,7 @@ import { solicitar } from './cliente.js'
 
 // SPEC 44: corridas del motor de indicadores y sus resultados. Sin caché: cada corrida cambia lo que se ve.
 
-function conConsulta(ruta, filtros) {
+export function conConsulta(ruta, filtros) {
   const consulta = new URLSearchParams()
   for (const [nombre, valor] of Object.entries(filtros)) {
     if (valor !== undefined && valor !== null && valor !== '') consulta.set(nombre, String(valor))

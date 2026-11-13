@@ -21,7 +21,7 @@ Una nota por línea, corta y con la fecha (AAAA-MM-DD): decisiones, convenciones
 
 | Archivo | Qué notas lleva |
 |---|---|
-| `backend/src/modulos/{modulo}/CLAUDE.md` | Las de un módulo, con su backend, su pantalla y sus pruebas: `auth` (specs de `acceso-y-seguridad`), `usuarios`, `catalogos`, `configuracion`, `produccion`, `revision` e `indicadores` |
+| `backend/src/modulos/{modulo}/CLAUDE.md` | Las de un módulo, con su backend, su pantalla y sus pruebas: `auth` (specs de `acceso-y-seguridad`), `usuarios`, `catalogos`, `configuracion`, `produccion`, `revision`, `indicadores` e `informes` |
 | `backend/CLAUDE.md` | Las de todo el backend: conexiones, bitácora, permisos, scripts de `backend/db/`, reglas generales de las pruebas |
 | `frontend/CLAUDE.md` | Las de todo el frontend: componentes comunes, menú y rutas, estilo, trampas de las pruebas (y las de `plataforma`) |
 | Este archivo | Solo lo que afecta a todo el repositorio |

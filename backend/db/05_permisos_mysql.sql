@@ -28,6 +28,7 @@
 --        PRODUCCION               (SPEC 22, HU-19)
 --        RECTIFICACION            (SPEC 40, HU-32)
 --        INDICADORES              (SPEC 44, HU-36)
+--        REPORTES                 (SPEC 62, HU-45)
 --    - Un código no se borra ni se renombra (regla 6 de AGENTS.md).
 --    - Asignaciones y retiros siempre por códigos, nunca por ids.
 --
@@ -184,6 +185,10 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('RED_CONSULTAR',             'CONFIGURACION_CATALOGOS', 'Consultar las redes de municipios de su ámbito'),
  ('RED_CREAR',                 'CONFIGURACION_CATALOGOS', 'Registrar redes de municipios en su DDRISS'),
  ('RED_EDITAR',                'CONFIGURACION_CATALOGOS', 'Editar, desactivar y reactivar redes de municipios de su DDRISS');
+
+-- SPEC 62 (HU-45): informes de producción
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('INFORME_CONSULTAR',         'REPORTES',                'Generar los informes de producción de su DDRISS');
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
@@ -394,6 +399,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo IN ('ADMINISTRADOR', 'EPIDEMIOLOGIA')
    AND p.codigo IN ('RED_CREAR', 'RED_EDITAR');
+
+-- SPEC 62 (HU-45): la estadígrafa (Revisor), Epidemiología y la Autoridad generan los informes
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo IN ('REVISOR', 'EPIDEMIOLOGIA', 'AUTORIDAD')
+   AND p.codigo = 'INFORME_CONSULTAR';
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas
