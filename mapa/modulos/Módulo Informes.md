@@ -11,4 +11,4 @@ Carpeta: `specs/informes/` · 2 specs · [[Inicio]]
 ## Specs
 
 - [[SPEC 62]] — HU-45 Generar informes con filtros · *Implementado* · [[HU-45]]
-- [[SPEC 63]] — HU-46 Agrupar el informe por una dimensión · *Aprobado* · [[HU-46]]
+- [[SPEC 63]] — HU-46 Agrupar el informe por una dimensión · *Implementado* · [[HU-46]]

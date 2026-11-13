@@ -36,4 +36,4 @@ tags: ["spec", "modulo/configuracion", "origen/historia"]
 - [[SPEC 23]] — Capturar la producción con el formulario dinámico · *Implementado*
 - [[SPEC 30]] — Publicar con vista previa y menú «Administración» · *Implementado*
 - [[SPEC 43]] — Configurar indicadores por DDRISS, con versiones y activación · *Implementado*
-- [[SPEC 63]] — HU-46 Agrupar el informe por una dimensión · *Aprobado*
+- [[SPEC 63]] — HU-46 Agrupar el informe por una dimensión · *Implementado*
