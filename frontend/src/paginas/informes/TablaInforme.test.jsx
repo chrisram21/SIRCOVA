@@ -46,6 +46,35 @@ test('el encabezado tiene vacuna, sección y dosis, cada una sobre sus columnas'
   expect(celdasDe(dosis, 'th').map((th) => th.textContent)).toEqual(['D1', 'D2', 'D1', 'UNICA'])
 })
 
+test('al agrupar, la segunda fila del encabezado es el valor y abarca sus dosis (SPEC 63)', () => {
+  const VPH = { codigo: 'VPH', nombre: 'VPH' }
+  const agrupada = (codigo, etiqueta, dosis, id) => ({
+    vacuna: VPH, seccion: null, valor: { codigo, etiqueta }, dosis: { id, codigo: dosis },
+  })
+  const columnas = [
+    agrupada('M', 'Masculino', 'D1', 31), agrupada('M', 'Masculino', 'D2', 32), agrupada('F', 'Femenino', 'D1', 31),
+  ]
+  render(
+    <TablaInforme
+      informe={informe({
+        columnas,
+        agrupacion: { codigo: 'sexo', nombre: 'Sexo' },
+        filas: [fila(1, 'San Marcos', [4, 0, 14])],
+        total: { cantidades: [4, 0, 14] },
+      })}
+    />,
+  )
+  const [vacunas, valores, dosis] = screen.getAllByRole('row').slice(0, 3)
+  expect(celdasDe(vacunas, 'th').map((th) => [th.textContent, th.getAttribute('colspan')])).toEqual([
+    ['Municipio de aplicación', null], ['VPH', '3'],
+  ])
+  expect(celdasDe(valores, 'th').map((th) => [th.textContent, th.getAttribute('colspan')])).toEqual([
+    ['Masculino', '2'], ['Femenino', '1'],
+  ])
+  expect(celdasDe(dosis, 'th').map((th) => th.textContent)).toEqual(['D1', 'D2', 'D1'])
+  expect(celdasDe(filaDe('San Marcos'), 'td').map((td) => td.textContent)).toEqual(['San Marcos', '4', '0', '14'])
+})
+
 test('cada fila lleva sus cantidades con separador de miles, y al final la fila «Total»', () => {
   render(
     <TablaInforme

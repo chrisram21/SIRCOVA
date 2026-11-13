@@ -33,4 +33,4 @@ tags: ["spec", "modulo/informes", "origen/historia"]
 
 ## Lo usan
 
-Ningún spec depende de este todavía.
+- [[SPEC 63]] — HU-46 Agrupar el informe por una dimensión · *Aprobado*

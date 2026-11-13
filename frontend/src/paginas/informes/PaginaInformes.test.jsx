@@ -20,6 +20,7 @@ const OPCIONES = {
   ],
   vacunas: [{ codigo: 'HEXA', nombre: 'Hexavalente', activa: true }],
   municipios: [SAN_MARCOS, SAN_PEDRO],
+  dimensiones: [{ codigo: 'sexo', nombre: 'Sexo' }],
 }
 const REDES = [{ id: 3, nombre: 'Red No. 1', municipios: [{ id: 4, nombre: 'San Pedro Sacatepéquez' }] }]
 const informe = (cambios = {}) => ({
@@ -206,4 +207,104 @@ test('la Autoridad nacional elige la DDRISS y la manda con ddrissId', async () =
   generar()
   await waitFor(() => expect(busqueda(router).ddriss).toBe('1'))
   await waitFor(() => expect(obtenerInforme).toHaveBeenCalledWith(expect.objectContaining({ ddrissId: 1 })))
+})
+
+describe('«Agrupar por» (SPEC 63)', () => {
+  const URL_TOTAL = '/informes?informe=total&desde=2026-02&hasta=2026-08'
+  const SEXO = { codigo: 'sexo', nombre: 'Sexo' }
+  const VPH = { codigo: 'VPH', nombre: 'VPH' }
+  const agrupada = (codigo, etiqueta, dosis) => ({ vacuna: VPH, seccion: null, valor: { codigo, etiqueta }, dosis })
+  const agrupado = (cambios = {}) => informe({
+    agrupacion: SEXO,
+    columnas: [
+      agrupada('M', 'Masculino', { id: 31, codigo: 'D1' }),
+      agrupada('F', 'Femenino', { id: 31, codigo: 'D1' }),
+    ],
+    filas: [
+      { id: 1, codigo: '1201', nombre: 'San Marcos', municipio: null, fueraDelConsolidado: false, cantidades: [4, 14] },
+    ],
+    total: { cantidades: [4, 14] },
+    ...cambios,
+  })
+
+  test('no aparece antes de generar', async () => {
+    montar()
+    await screen.findByText(SIN_GENERAR)
+    expect(nativo('agrupacion')).toBeNull()
+  })
+
+  test('cambiarla escribe la URL y pide el informe sin «Generar», sin tocar el borrador', async () => {
+    const router = montar({ url: URL_TOTAL })
+    await screen.findAllByText('1,234')
+    expect(nativo('agrupacion').value).toBe('seccion')
+    expect([...nativo('agrupacion').options].map((o) => o.textContent)).toEqual(['Sección del 5C', 'Sexo'])
+    elegir('informe', 'residencia')
+    obtenerInforme.mockResolvedValueOnce(agrupado())
+    elegir('agrupacion', 'sexo')
+    await waitFor(() => expect(busqueda(router)).toEqual({
+      informe: 'total', desde: '2026-02', hasta: '2026-08', agrupacion: 'sexo',
+    }))
+    await waitFor(() => expect(obtenerInforme).toHaveBeenLastCalledWith(expect.objectContaining({
+      informe: 'total', agrupacion: 'sexo',
+    })))
+    expect(await screen.findByRole('heading', {
+      level: 2, name: 'Producción a la población propia · Municipio · por Sexo',
+    })).toBeTruthy()
+    expect(screen.getByText('Masculino')).toBeTruthy()
+    expect(nativo('informe').value).toBe('residencia')
+  })
+
+  test('volver a «Sección del 5C» quita la agrupación de la URL', async () => {
+    obtenerInforme.mockResolvedValueOnce(agrupado())
+    const router = montar({ url: `${URL_TOTAL}&agrupacion=sexo` })
+    await screen.findByText('Masculino')
+    elegir('agrupacion', 'seccion')
+    await waitFor(() => expect(busqueda(router).agrupacion).toBeUndefined())
+    await waitFor(() => expect(obtenerInforme).toHaveBeenCalledTimes(2))
+    expect(obtenerInforme.mock.lastCall[0].agrupacion).toBeUndefined()
+  })
+
+  test('«Generar» conserva la agrupación', async () => {
+    obtenerInforme.mockResolvedValue(agrupado())
+    const router = montar({ url: `${URL_TOTAL}&agrupacion=sexo` })
+    await screen.findByText('Masculino')
+    elegir('nivel', 'distrito')
+    generar()
+    await waitFor(() => expect(busqueda(router)).toEqual({
+      informe: 'total', desde: '2026-02', hasta: '2026-08', nivel: 'distrito', agrupacion: 'sexo',
+    }))
+  })
+
+  test('una agrupación que no está en las opciones se ignora', async () => {
+    montar({ url: `${URL_TOTAL}&agrupacion=grupo_edad` })
+    await screen.findAllByText('1,234')
+    expect(nativo('agrupacion').value).toBe('seccion')
+    expect(obtenerInforme.mock.lastCall[0].agrupacion).toBeUndefined()
+  })
+
+  test('con «Todas las vacunas» dice cuáles se muestran', async () => {
+    obtenerInforme.mockResolvedValue(agrupado())
+    montar({ url: `${URL_TOTAL}&agrupacion=sexo` })
+    expect(await screen.findByText('Solo se muestran las vacunas que registran Sexo: VPH.')).toBeTruthy()
+  })
+
+  test('con una vacuna elegida no lleva ese aviso', async () => {
+    obtenerInforme.mockResolvedValue(agrupado())
+    montar({ url: `${URL_TOTAL}&vacuna=HEXA&agrupacion=sexo` })
+    await screen.findByText('Masculino')
+    expect(screen.queryByText(/Solo se muestran las vacunas/)).toBeNull()
+  })
+
+  test('si ninguna vacuna registra la dimensión, lo dice en lugar de la tabla y deja el selector', async () => {
+    obtenerInforme.mockResolvedValue(agrupado({
+      columnas: [],
+      filas: [{ id: 1, codigo: '1201', nombre: 'San Marcos', municipio: null, fueraDelConsolidado: false,
+        cantidades: [] }],
+      total: { cantidades: [] },
+    }))
+    montar({ url: `${URL_TOTAL}&vacuna=HEXA&agrupacion=sexo` })
+    expect(await screen.findByText('Ninguna vacuna de este informe registra Sexo.')).toBeTruthy()
+    expect(screen.queryByRole('table')).toBeNull()
+    expect(nativo('agrupacion').value).toBe('sexo')
+  })
 })

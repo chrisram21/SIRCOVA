@@ -4,7 +4,12 @@ import { Int32, ObjectId } from 'mongodb';
 import app from '../src/app.js';
 import pool from '../src/config/mysql.js';
 import { obtenerDb } from '../src/config/mongodb.js';
-import { columnasDelInforme } from '../src/modulos/informes/informes.service.js';
+import {
+  columnasAgrupadas,
+  columnasDelInforme,
+  dimensionDeAgrupacion,
+} from '../src/modulos/informes/informes.service.js';
+import { claveCombinacion } from '../src/modulos/produccion/celdas.service.js';
 import { tokenDePrueba } from './sesionDePrueba.js';
 
 // SPEC 62 (HU-45): la pantalla «Informes». Por SQL: la DDRISS ficticia ZVT_INF62 con su departamento (Z8), los
@@ -12,12 +17,14 @@ import { tokenDePrueba } from './sesionDePrueba.js';
 // externo, establecimientos ZVT62-, las vacunas ZVT_SPEC62* y reportes de diciembre de 2085 a febrero de 2086 (años
 // que ninguna otra prueba usa).
 // En MongoDB, dos esquemas de captura de ZVT_SPEC62: el nacional desde enero de 2086 y el de la DDRISS desde febrero.
+// SPEC 63 (HU-46): la vacuna ZVT_SPEC63, con un esquema nacional desde enero de 2086 que pide sexo en D1 y D2 y no
+// en R1.
 // Lo consulta la Autoridad nacional con ddrissId. Se borra al inicio y al final.
 const ANIO = 2086;
 const DDRISS_PRUEBA = 'ZVT_INF62';
 const DEPARTAMENTO_PRUEBA = 'Z8';
 const PREFIJO_EST = 'ZVT62-';
-const VACUNAS_PRUEBA = ['ZVT_SPEC62', 'ZVT_SPEC62I', 'ZVT_SPEC62N'];
+const VACUNAS_PRUEBA = ['ZVT_SPEC62', 'ZVT_SPEC62I', 'ZVT_SPEC62N', 'ZVT_SPEC63'];
 
 const cuentas = {};
 const ids = { municipios: {}, establecimientos: {}, distritos: {}, vacunas: {}, dosis: {}, periodos: {} };
@@ -146,6 +153,26 @@ async function prepararEsquemas() {
       desde: `${ANIO}-02-01T00:00:00.000Z`,
       secciones: [seccion('1_A_5', 'De 1 a < 6 años', 2, ['D1']), seccion('MENOR_1', '< 1 año', 1, ['D2', 'D1'])],
     }),
+    {
+      ...esquema({ version: 1, territorio: { nivel: 'NACIONAL', ddriss_codigo: null }, desde: `${ANIO}-01-01` }),
+      vacuna: { id: new Int32(ids.vacunas.ZVT_SPEC63), codigo: 'ZVT_SPEC63', nombre: 'vitest-spec62 ZVT_SPEC63' },
+      dimensiones: {
+        dosis: [
+          { codigo: 'D1', etiqueta: 'D1' },
+          { codigo: 'D2', etiqueta: 'D2' },
+          { codigo: 'R1', etiqueta: 'R1', desagregacion: [{ dimension: 'grupo_edad', valores: ['MENOR_1'] }] },
+        ],
+        procedencia: { modo: 'MUNICIPIO_DETALLADO', permite_no_especificado: true },
+        desagregacion: [
+          { dimension: 'grupo_edad', valores: ['MENOR_1', '1_A_5'] },
+          { dimension: 'sexo', valores: ['F', 'M'] },
+        ],
+      },
+      secciones: [
+        seccion('MENOR_1', '< 1 año', 1, ['D1', 'D2', 'R1']),
+        seccion('1_A_5', 'De 1 a < 6 años', 2, ['D1']),
+      ],
+    },
   ]);
 }
 
@@ -213,7 +240,9 @@ async function preparar() {
   }
 
   // ZVT_SPEC62I está inactiva pero tiene producción; ZVT_SPEC62N está inactiva y no tiene.
-  const VACUNAS = [['ZVT_SPEC62', true, 900], ['ZVT_SPEC62I', false, 1], ['ZVT_SPEC62N', false, 1]];
+  const VACUNAS = [
+    ['ZVT_SPEC62', true, 900], ['ZVT_SPEC62I', false, 1], ['ZVT_SPEC62N', false, 1], ['ZVT_SPEC63', true, 901],
+  ];
   for (const [codigo, activa, orden] of VACUNAS) {
     ids.vacunas[codigo] = await insertar(
       'INSERT INTO vacuna (codigo, nombre, orden_informe, activa) VALUES (?, ?, ?, ?)',
@@ -224,6 +253,7 @@ async function preparar() {
   const DOSIS = [
     ['ZVT_SPEC62', 'D1', 1, true], ['ZVT_SPEC62', 'D2', 2, true], ['ZVT_SPEC62', 'R1', 3, false],
     ['ZVT_SPEC62I', 'D1', 1, true], ['ZVT_SPEC62I', 'D2', 2, false], ['ZVT_SPEC62N', 'D1', 1, true],
+    ['ZVT_SPEC63', 'D1', 1, true], ['ZVT_SPEC63', 'D2', 2, true], ['ZVT_SPEC63', 'R1', 3, true],
   ];
   for (const [vacuna, codigo, orden, activa] of DOSIS) {
     ids.dosis[`${vacuna}.${codigo}`] = await insertar(
@@ -253,18 +283,26 @@ async function preparar() {
     }
   }
 
-  // [establecimiento, mes, estado, [[vacuna.dosis, procedencia, grupo de edad, cantidad]]]
+  // [establecimiento, mes, estado, [[vacuna.dosis, procedencia, grupo de edad, cantidad, otras dimensiones]]]
+  // ZVT_SPEC63 (SPEC 63): en enero, CS1 aplica D1 a 5 + 6 + 3 niñas en dos grupos de edad y dos procedencias; R1 no
+  // tiene sexo; el hospital, 10 niñas; en febrero, CS2 (aprobado) un niño.
   const M1 = 'MENOR_1';
+  const F = { sexo: 'F' };
   const REPORTES = [
     ['CS1', 'dic', 'CERRADO', [['ZVT_SPEC62.D1', 'Z801', M1, 4]]],
     ['CS2', 'dic', 'RECTIFICACION', [['ZVT_SPEC62.D1', 'Z802', M1, 8], ['ZVT_SPEC62.D1', 'Z801', M1, 1]]],
     ['CS1', 1, 'CERRADO', [
       ['ZVT_SPEC62.D1', 'Z801', M1, 10], ['ZVT_SPEC62.D1', 'Z802', M1, 3], ['ZVT_SPEC62.D1', 'migrantes', M1, 2],
       ['ZVT_SPEC62.D2', 'Z801', M1, 6], ['ZVT_SPEC62.D1', 'Z801', '1_A_5', 5],
+      ['ZVT_SPEC63.D1', 'Z801', M1, 5, F], ['ZVT_SPEC63.D1', 'Z801', '1_A_5', 6, F],
+      ['ZVT_SPEC63.D1', 'Z802', M1, 3, F], ['ZVT_SPEC63.D1', 'Z801', M1, 4, { sexo: 'M' }],
+      ['ZVT_SPEC63.D2', 'Z801', M1, 2, F], ['ZVT_SPEC63.R1', 'Z801', M1, 7],
     ]],
-    ['HOSP', 1, 'CERRADO', [['ZVT_SPEC62.D1', 'Z801', M1, 20], ['ZVT_SPEC62.D1', 'Z802', M1, 7]]],
+    ['HOSP', 1, 'CERRADO', [
+      ['ZVT_SPEC62.D1', 'Z801', M1, 20], ['ZVT_SPEC62.D1', 'Z802', M1, 7], ['ZVT_SPEC63.D1', 'Z801', M1, 10, F],
+    ]],
     ['EXT', 1, 'CERRADO', [['ZVT_SPEC62.D1', 'Z801', M1, 2], ['ZVT_SPEC62.D2', 'externo', M1, 4]]],
-    ['CS2', 2, 'APROBADO', [['ZVT_SPEC62.D1', 'Z802', M1, 9]]],
+    ['CS2', 2, 'APROBADO', [['ZVT_SPEC62.D1', 'Z802', M1, 9], ['ZVT_SPEC63.D1', 'Z802', M1, 1, { sexo: 'M' }]]],
     ['CS1', 2, 'BORRADOR', [['ZVT_SPEC62.D1', 'Z801', M1, 100]]],
     ['EXT', 2, 'APROBADO', [['ZVT_SPEC62I.D1', 'externo', null, 3]]],
   ];
@@ -276,7 +314,8 @@ async function preparar() {
       [ids.establecimientos[establecimiento], ids.periodos[mes], estado, usuarioId],
     );
     const porVacuna = new Map();
-    for (const [llave, procedencia, grupoEdad, cantidad] of celdas) {
+    for (const [llave, procedencia, grupoEdad, cantidad, otras = {}] of celdas) {
+      const dimensiones = { ...(grupoEdad ? { grupo_edad: grupoEdad } : {}), ...otras };
       const vacuna = llave.split('.')[0];
       if (!porVacuna.has(vacuna)) {
         porVacuna.set(vacuna, await insertar(
@@ -291,13 +330,13 @@ async function preparar() {
          VALUES (?, ?, ?, ?, ?, ?)`,
         [
           porVacuna.get(vacuna), ids.dosis[llave], ids.municipios[procedencia],
-          grupoEdad ? `grupo_edad=${grupoEdad}` : '', cantidad, usuarioId,
+          claveCombinacion(dimensiones), cantidad, usuarioId,
         ],
       );
-      if (grupoEdad) {
+      for (const [dimension, valor] of Object.entries(dimensiones)) {
         await pool.query(
-          "INSERT INTO detalle_dimension (detalle_id, dimension_codigo, valor_codigo) VALUES (?, 'grupo_edad', ?)",
-          [detalleId, grupoEdad],
+          'INSERT INTO detalle_dimension (detalle_id, dimension_codigo, valor_codigo) VALUES (?, ?, ?)',
+          [detalleId, dimension, valor],
         );
       }
     }
@@ -353,6 +392,20 @@ describe('GET /informes/opciones (SPEC 62)', () => {
     });
   });
 
+  it('las dimensiones son las activas del catálogo sin el grupo de edad, por nombre (SPEC 63)', async () => {
+    const [res, activas] = await Promise.all([
+      opciones(),
+      (await obtenerDb()).collection('catalogo_dimensiones').find({ activo: true }).toArray(),
+    ]);
+    const esperadas = activas
+      .filter((d) => d.codigo !== 'grupo_edad')
+      .map((d) => ({ codigo: d.codigo, nombre: d.nombre }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+    expect(res.body.dimensiones).toEqual(esperadas);
+    expect(res.body.dimensiones).toContainEqual({ codigo: 'sexo', nombre: 'Sexo' });
+    expect(res.body.dimensiones.map((d) => d.codigo)).not.toContain('grupo_edad');
+  });
+
   it('la Autoridad nacional debe mandar ddrissId', async () => {
     const res = await opciones('');
     expect(res.status).toBe(400);
@@ -393,7 +446,7 @@ describe('columnasDelInforme (SPEC 62)', () => {
   const VACUNA = { codigo: 'ZVT_SPEC62', nombre: 'vitest-spec62 ZVT_SPEC62' };
   const dosis = (vacuna, codigo) => ({ id: ids.dosis[`${vacuna}.${codigo}`], codigo });
   const columna = (vacuna, codigo, seccion) => ({
-    vacuna: { codigo: vacuna, nombre: `vitest-spec62 ${vacuna}` }, seccion, dosis: dosis(vacuna, codigo),
+    vacuna: { codigo: vacuna, nombre: `vitest-spec62 ${vacuna}` }, seccion, valor: null, dosis: dosis(vacuna, codigo),
   });
   const MENOR_1 = { grupoEdad: 'MENOR_1', titulo: '< 1 año' };
   const DE_1_A_5 = { grupoEdad: '1_A_5', titulo: 'De 1 a < 6 años' };
@@ -463,6 +516,77 @@ describe('columnasDelInforme (SPEC 62)', () => {
     expect(vacunas).not.toContain('ZVT_SPEC62N');
     expect(vacunas.at(-1)).toBe('ZVT_SPEC62I');
     expect(resultado.filter((c) => c.vacuna.codigo === VACUNA.codigo)).toEqual(await columnas(2));
+  });
+});
+
+describe('columnasAgrupadas (SPEC 63)', () => {
+  const HASTA = { anio: ANIO, mes: 2 };
+  let sexo;
+  const columna = (vacuna, codigo, valor, etiqueta) => ({
+    vacuna: { codigo: vacuna, nombre: `vitest-spec62 ${vacuna}` },
+    seccion: null,
+    valor: { codigo: valor, etiqueta },
+    dosis: { id: ids.dosis[`${vacuna}.${codigo}`], codigo },
+  });
+  const conDato = (vacuna, codigo, valor) => ({
+    vacunaId: ids.vacunas[vacuna], dosisId: ids.dosis[`${vacuna}.${codigo}`], valor,
+  });
+  const agrupadas = (vacunaCodigo, conDatos = []) =>
+    columnasAgrupadas({ ddrissId, vacunaCodigo, hasta: HASTA, dimension: sexo, conDatos });
+
+  beforeAll(async () => {
+    sexo = await dimensionDeAgrupacion('sexo');
+  });
+
+  it('dimensionDeAgrupacion trae los valores por su orden del catálogo', async () => {
+    const doc = await (await obtenerDb()).collection('catalogo_dimensiones').findOne({ codigo: 'sexo' });
+    const esperados = [...doc.valores].sort((a, b) => a.orden - b.orden).map((v) => v.codigo);
+    expect(sexo.nombre).toBe(doc.nombre);
+    expect(sexo.valores.map((v) => v.codigo)).toEqual(esperados);
+  });
+
+  it('los valores van por el orden del catálogo, cada uno con las dosis que lo piden y sin R1', async () => {
+    const etiqueta = new Map(sexo.valores.map((v) => [v.codigo, v.etiqueta]));
+    const esperadas = sexo.valores
+      .filter((v) => ['F', 'M'].includes(v.codigo))
+      .flatMap((v) => ['D1', 'D2'].map((d) => columna('ZVT_SPEC63', d, v.codigo, etiqueta.get(v.codigo))));
+    expect(await agrupadas('ZVT_SPEC63')).toEqual(esperadas);
+  });
+
+  it('las combinaciones con datos fuera del esquema van al final de su vacuna', async () => {
+    const conDatos = [
+      conDato('ZVT_SPEC63', 'D1', 'ZVT_SEXO'),
+      conDato('ZVT_SPEC63', 'R1', 'F'),
+      conDato('ZVT_SPEC63', 'D1', 'M'),
+    ];
+    const resultado = await agrupadas('ZVT_SPEC63', conDatos);
+    const femenino = sexo.valores.find((v) => v.codigo === 'F').etiqueta;
+    expect(resultado).toHaveLength(6);
+    expect(resultado.slice(4)).toEqual([
+      columna('ZVT_SPEC63', 'R1', 'F', femenino),
+      columna('ZVT_SPEC63', 'D1', 'ZVT_SEXO', 'ZVT_SEXO'),
+    ]);
+  });
+
+  it('una vacuna que no registra la dimensión no tiene columnas', async () => {
+    expect(await agrupadas('ZVT_SPEC62')).toEqual([]);
+  });
+
+  it('una vacuna sin esquema solo lleva las combinaciones con datos', async () => {
+    expect(await agrupadas('ZVT_SPEC62I')).toEqual([]);
+    const femenino = sexo.valores.find((v) => v.codigo === 'F').etiqueta;
+    expect(await agrupadas('ZVT_SPEC62I', [conDato('ZVT_SPEC62I', 'D1', 'F')])).toEqual([
+      columna('ZVT_SPEC62I', 'D1', 'F', femenino),
+    ]);
+  });
+
+  it('con todas las vacunas solo salen las que registran la dimensión', async () => {
+    const resultado = await agrupadas(null);
+    const vacunas = new Set(resultado.map((c) => c.vacuna.codigo));
+    expect(vacunas.has('ZVT_SPEC63')).toBe(true);
+    expect(vacunas.has('ZVT_SPEC62')).toBe(false);
+    expect(resultado.every((c) => c.seccion === null && c.valor !== null)).toBe(true);
+    expect(resultado.filter((c) => c.vacuna.codigo === 'ZVT_SPEC63')).toEqual(await agrupadas('ZVT_SPEC63'));
   });
 });
 
@@ -693,5 +817,126 @@ describe('GET /informes/produccion por distrito y establecimiento (SPEC 62)', ()
     expect(res.body.filas.map((f) => f.id)).toEqual([ids.establecimientos.CS2]);
     expect(res.body.filas[0].cantidades).toEqual([9, 0, 0]);
     expect(res.body.dosisFueraDelConsolidado).toBe(0);
+  });
+});
+
+describe('GET /informes/produccion agrupado por una dimensión (SPEC 63)', () => {
+  const informe = (consulta) => consultar('produccion', `ddrissId=${ddrissId}&${consulta}`);
+  const ENERO = `desde=${ANIO}-01&hasta=${ANIO}-01&vacuna=ZVT_SPEC63`;
+  const POR_SEXO = `${ENERO}&agrupacion=sexo`;
+  let orden;
+  // Las cantidades de una fila en el orden de `orden` (valor.dosis).
+  const enOrden = (res, cantidades) => {
+    const llaves = res.body.columnas.map((c) => `${c.valor.codigo}.${c.dosis.codigo}`);
+    return orden.map((llave) => cantidades[llaves.indexOf(llave)]);
+  };
+  const deMunicipio = (res, ine) => res.body.filas.find((f) => f.id === ids.municipios[ine]);
+  const deEstablecimiento = (res, clave) => res.body.filas.find((f) => f.id === ids.establecimientos[clave]);
+
+  beforeAll(async () => {
+    const sexo = await dimensionDeAgrupacion('sexo');
+    const valores = sexo.valores.map((v) => v.codigo).filter((v) => ['F', 'M'].includes(v));
+    orden = valores.flatMap((v) => [`${v}.D1`, `${v}.D2`]);
+  });
+  // Lo esperado se escribe como { 'F.D1': n, … } y se pasa al orden del catálogo.
+  const esperado = (cantidades) => orden.map((llave) => cantidades[llave] ?? 0);
+
+  it('cada sexo suma todas las edades: 5 + 6 + 3 niñas = 14, sin R1 y sin el hospital', async () => {
+    const res = await informe(`informe=total&${POR_SEXO}`);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.agrupacion).toEqual({ codigo: 'sexo', nombre: 'Sexo' });
+    expect(res.body.columnas.map((c) => `${c.valor.codigo}.${c.dosis.codigo}`)).toEqual(orden);
+    expect(res.body.columnas.every((c) => c.seccion === null)).toBe(true);
+    const lleno = esperado({ 'F.D1': 14, 'F.D2': 2, 'M.D1': 4 });
+    expect(enOrden(res, deMunicipio(res, 'Z801').cantidades)).toEqual(lleno);
+    expect(enOrden(res, deMunicipio(res, 'Z802').cantidades)).toEqual(esperado({}));
+    expect(enOrden(res, res.body.total.cantidades)).toEqual(lleno);
+    expect(res.body.dosisFueraDelConsolidado).toBe(10);
+  });
+
+  it('la suma de los valores de cada dosis es igual a su total sin agrupar', async () => {
+    const [agrupado, sinAgrupar] = await Promise.all([
+      informe(`informe=total&${POR_SEXO}`),
+      informe(`informe=total&${ENERO}`),
+    ]);
+    const porDosis = (res) =>
+      res.body.columnas.reduce(
+        (suma, c, i) => ({ ...suma, [c.dosis.codigo]: (suma[c.dosis.codigo] ?? 0) + res.body.total.cantidades[i] }),
+        {},
+      );
+    expect(sinAgrupar.body.agrupacion).toBeNull();
+    expect(sinAgrupar.body.columnas.every((c) => c.valor === null)).toBe(true);
+    expect(porDosis(sinAgrupar)).toEqual({ D1: 18, D2: 2, R1: 7 });
+    expect(porDosis(agrupado)).toEqual({ D1: 18, D2: 2 });
+  });
+
+  it('población propia y residencia agrupan con sus reglas; en residencia el hospital suma', async () => {
+    const propia = await informe(`informe=poblacion-propia&${POR_SEXO}`);
+    expect(enOrden(propia, propia.body.total.cantidades)).toEqual(esperado({ 'F.D1': 11, 'F.D2': 2, 'M.D1': 4 }));
+    const residencia = await informe(`informe=residencia&${POR_SEXO}`);
+    expect(enOrden(residencia, deMunicipio(residencia, 'Z801').cantidades)).toEqual(
+      esperado({ 'F.D1': 21, 'F.D2': 2, 'M.D1': 4 }),
+    );
+    expect(enOrden(residencia, deMunicipio(residencia, 'Z802').cantidades)).toEqual(esperado({ 'F.D1': 3 }));
+    expect(enOrden(residencia, residencia.body.total.cantidades)).toEqual(
+      esperado({ 'F.D1': 24, 'F.D2': 2, 'M.D1': 4 }),
+    );
+    expect(residencia.body.dosisFueraDelConsolidado).toBe(0);
+  });
+
+  it('funciona por departamento, distrito y establecimiento', async () => {
+    const lleno = esperado({ 'F.D1': 14, 'F.D2': 2, 'M.D1': 4 });
+    const departamento = await informe(`informe=total&${POR_SEXO}&nivel=departamento`);
+    expect(departamento.body.filas).toHaveLength(1);
+    expect(enOrden(departamento, departamento.body.filas[0].cantidades)).toEqual(lleno);
+
+    const distrito = await informe(`informe=total&${POR_SEXO}&nivel=distrito`);
+    const porDistrito = (id) => distrito.body.filas.find((f) => f.id === id).cantidades;
+    expect(enOrden(distrito, porDistrito(ids.distritos['1']))).toEqual(lleno);
+    expect(enOrden(distrito, porDistrito(ids.distritos['1b']))).toEqual(lleno);
+    expect(enOrden(distrito, distrito.body.total.cantidades)).toEqual(lleno);
+
+    const establecimiento = await informe(`informe=total&${POR_SEXO}&nivel=establecimiento`);
+    expect(enOrden(establecimiento, deEstablecimiento(establecimiento, 'CS1').cantidades)).toEqual(lleno);
+    const hospital = deEstablecimiento(establecimiento, 'HOSP');
+    expect(hospital.fueraDelConsolidado).toBe(true);
+    expect(enOrden(establecimiento, hospital.cantidades)).toEqual(esperado({ 'F.D1': 10 }));
+    expect(enOrden(establecimiento, establecimiento.body.total.cantidades)).toEqual(lleno);
+    expect(establecimiento.body.dosisFueraDelConsolidado).toBe(10);
+  });
+
+  it('con aprobados cuenta el niño de febrero', async () => {
+    const res = await informe(
+      `informe=total&desde=${ANIO}-01&hasta=${ANIO}-02&vacuna=ZVT_SPEC63&agrupacion=sexo&incluirAprobados=true`,
+    );
+    expect(enOrden(res, res.body.total.cantidades)).toEqual(esperado({ 'F.D1': 14, 'F.D2': 2, 'M.D1': 5 }));
+    expect(res.body.preliminar).toBe(true);
+  });
+
+  it('una vacuna que no registra la dimensión da columnas y cantidades vacías', async () => {
+    const res = await informe(`informe=total&desde=${ANIO}-01&hasta=${ANIO}-01&vacuna=ZVT_SPEC62&agrupacion=sexo`);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.columnas).toEqual([]);
+    expect(res.body.filas.length).toBeGreaterThan(0);
+    expect(res.body.filas.every((f) => f.cantidades.length === 0)).toBe(true);
+    expect(res.body.total.cantidades).toEqual([]);
+  });
+
+  it('con todas las vacunas solo salen las que registran la dimensión', async () => {
+    const res = await informe(`informe=total&desde=${ANIO}-01&hasta=${ANIO}-01&agrupacion=sexo`);
+    const vacunas = new Set(res.body.columnas.map((c) => c.vacuna.codigo));
+    expect(vacunas.has('ZVT_SPEC63')).toBe(true);
+    expect(vacunas.has('ZVT_SPEC62')).toBe(false);
+  });
+
+  it('el grupo de edad o un código mal escrito responden 400, y una dimensión inexistente 404', async () => {
+    for (const agrupacion of ['grupo_edad', 'Sexo', 'sexo&agrupacion=sexo']) {
+      const res = await informe(`informe=total&${ENERO}&agrupacion=${agrupacion}`);
+      expect(res.status, agrupacion).toBe(400);
+      expect(res.body.error.codigo).toBe('ENTRADA_INVALIDA');
+    }
+    const res = await informe(`informe=total&${ENERO}&agrupacion=zvt_no_existe`);
+    expect(res.status).toBe(404);
+    expect(res.body.error.codigo).toBe('NO_ENCONTRADO');
   });
 });

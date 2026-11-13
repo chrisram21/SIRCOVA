@@ -1,3 +1,4 @@
+import { obtenerDb } from '../../config/mongodb.js';
 import pool from '../../config/mysql.js';
 import { ErrorApi } from '../../middlewares/errores.js';
 import { entradaInvalida, leerBooleano, revisarParametros } from '../catalogos/catalogos.service.js';
@@ -8,10 +9,23 @@ import { PRODUCCION_DE_LA_DDRISS, municipiosDelUniverso } from '../indicadores/p
 
 const noEncontrado = (mensaje) => new ErrorApi(404, 'NO_ENCONTRADO', mensaje);
 
+// El grupo de edad no se ofrece para agrupar: las secciones del esquema ya lo separan (SPEC 63).
+const GRUPO_EDAD = 'grupo_edad';
+const dimensionesDelCatalogo = async () => (await obtenerDb()).collection('catalogo_dimensiones');
+
+async function dimensionesDeAgrupacion() {
+  const documentos = await (await dimensionesDelCatalogo())
+    .find({ activo: true, codigo: { $ne: GRUPO_EDAD } }, { projection: { _id: 0, codigo: 1, nombre: 1 } })
+    .toArray();
+  return documentos
+    .map(({ codigo, nombre }) => ({ codigo, nombre }))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+}
+
 export async function opcionesDeInformes(usuario, query = {}) {
   revisarParametros(query, ['ddrissId']);
   const ddrissId = ddrissDeLaConsulta(usuario, query);
-  const [[meses], [producidas], [vacunas], municipios] = await Promise.all([
+  const [[meses], [producidas], [vacunas], municipios, dimensiones] = await Promise.all([
     pool.query(
       `SELECT p.anio, p.mes, cp.estado FROM cierre_periodo cp JOIN periodo p ON p.id = cp.periodo_id
         WHERE cp.ddriss_id = ? ORDER BY p.anio DESC, p.mes DESC`,
@@ -20,6 +34,7 @@ export async function opcionesDeInformes(usuario, query = {}) {
     pool.query(`SELECT DISTINCT vacuna_id FROM (${PRODUCCION_DE_LA_DDRISS}) p`, [ddrissId]),
     pool.query('SELECT id, codigo, nombre, activa FROM vacuna ORDER BY activa DESC, orden_informe, nombre'),
     municipiosDelUniverso(ddrissId),
+    dimensionesDeAgrupacion(),
   ]);
   const conProduccion = new Set(producidas.map((p) => p.vacuna_id));
   return {
@@ -28,36 +43,55 @@ export async function opcionesDeInformes(usuario, query = {}) {
       .filter((v) => v.activa || conProduccion.has(v.id))
       .map((v) => ({ codigo: v.codigo, nombre: v.nombre, activa: Boolean(v.activa) })),
     municipios,
+    dimensiones,
   };
 }
 
-// Una cantidad cae en la columna de su dosis y su grupo de edad; sin grupo de edad, en la de grupoEdad null.
+// Una cantidad cae en la columna de su dosis y su grupo de edad (o su valor de la dimensión, al agrupar); sin grupo
+// de edad, en la de grupoEdad null.
 const llave = (dosisId, grupoEdad) => `${dosisId}|${grupoEdad ?? ''}`;
-export const llaveDeColumna = (columna) => llave(columna.dosis.id, columna.seccion?.grupoEdad);
+export const llaveDeColumna = (columna) => llave(columna.dosis.id, columna.valor?.codigo ?? columna.seccion?.grupoEdad);
+
+const aColumna = (vacuna, seccion, valor, d) => ({
+  vacuna: { codigo: vacuna.codigo, nombre: vacuna.nombre },
+  seccion,
+  valor,
+  dosis: { id: d.id, codigo: d.codigo },
+});
+
+// Las vacunas del informe (con vacunaCodigo, solo esa; sin él, las activas y las inactivas con datos), sus dosis y el
+// esquema de cada una que cubre el día 1 de `hasta` (las que no tienen esquema no están en el Map).
+async function vacunasConSusEsquemas({ ddrissId, vacunaCodigo, hasta, conDatos }) {
+  const [[todas], ddriss] = await Promise.all([
+    vacunaCodigo
+      ? pool.query('SELECT id, codigo, nombre, activa FROM vacuna WHERE codigo = ?', [vacunaCodigo])
+      : pool.query('SELECT id, codigo, nombre, activa FROM vacuna ORDER BY activa DESC, orden_informe, nombre'),
+    codigoDdriss(ddrissId),
+  ]);
+  const vacunasConDatos = new Set(conDatos.map((c) => c.vacunaId));
+  const vacunas = vacunaCodigo ? todas : todas.filter((v) => v.activa || vacunasConDatos.has(v.id));
+  if (vacunas.length === 0) return { vacunas, dosis: [], esquemas: new Map() };
+
+  const fecha = new Date(Date.UTC(hasta.anio, hasta.mes - 1, 1));
+  const [[dosis], esquemas] = await Promise.all([
+    pool.query('SELECT id, vacuna_id, codigo, orden, activa FROM dosis WHERE vacuna_id IN (?) ORDER BY orden, id', [
+      vacunas.map((v) => v.id),
+    ]),
+    seccionesDelPeriodo(vacunas.map((v) => v.codigo), ddriss, fecha),
+  ]);
+  return { vacunas, dosis, esquemas };
+}
 
 // Las columnas del informe (vacuna, sección y dosis), según el esquema que cubre el día 1 de `hasta`.
 // conDatos: [{ vacunaId, dosisId, grupoEdad }], las combinaciones con producción en el rango; una que no está en el
 // esquema va al final de su vacuna. Un esquema sin secciones (anterior a la v0.4) las deduce como la captura, y una
 // vacuna sin esquema lleva sus dosis activas sin sección. vacunaCodigo: solo esa vacuna (su existencia se revisa antes).
 export async function columnasDelInforme({ ddrissId, vacunaCodigo = null, hasta, conDatos = [] }) {
-  const [[todas], [catalogo], ddriss] = await Promise.all([
-    vacunaCodigo
-      ? pool.query('SELECT id, codigo, nombre, activa FROM vacuna WHERE codigo = ?', [vacunaCodigo])
-      : pool.query('SELECT id, codigo, nombre, activa FROM vacuna ORDER BY activa DESC, orden_informe, nombre'),
+  const [{ vacunas, dosis, esquemas: secciones }, [catalogo]] = await Promise.all([
+    vacunasConSusEsquemas({ ddrissId, vacunaCodigo, hasta, conDatos }),
     pool.query('SELECT codigo, descripcion FROM clasificacion_poblacion ORDER BY id'),
-    codigoDdriss(ddrissId),
   ]);
-  const vacunasConDatos = new Set(conDatos.map((c) => c.vacunaId));
-  const vacunas = vacunaCodigo ? todas : todas.filter((v) => v.activa || vacunasConDatos.has(v.id));
   if (vacunas.length === 0) return [];
-
-  const fecha = new Date(Date.UTC(hasta.anio, hasta.mes - 1, 1));
-  const [[dosis], secciones] = await Promise.all([
-    pool.query('SELECT id, vacuna_id, codigo, orden, activa FROM dosis WHERE vacuna_id IN (?) ORDER BY orden, id', [
-      vacunas.map((v) => v.id),
-    ]),
-    seccionesDelPeriodo(vacunas.map((v) => v.codigo), ddriss, fecha),
-  ]);
   const descripcion = new Map(catalogo.map((c) => [c.codigo, c.descripcion]));
   const posicion = new Map(catalogo.map((c, i) => [c.codigo, i]));
   // Sin grupo de edad primero, luego el orden del catálogo y al final los códigos que no están en él.
@@ -73,9 +107,7 @@ export async function columnasDelInforme({ ddrissId, vacunaCodigo = null, hasta,
     const columnas = new Map();
     const agregar = (d, seccion) => {
       const clave = llave(d.id, seccion?.grupoEdad);
-      if (!columnas.has(clave)) {
-        columnas.set(clave, { vacuna: { codigo: vacuna.codigo, nombre: vacuna.nombre }, seccion, dosis: d });
-      }
+      if (!columnas.has(clave)) columnas.set(clave, aColumna(vacuna, seccion, null, d));
     };
 
     const esquema = secciones.get(vacuna.codigo);
@@ -104,7 +136,69 @@ export async function columnasDelInforme({ ddrissId, vacunaCodigo = null, hasta,
       agregar(porId.get(c.dosisId), titulo === null ? null : { grupoEdad: c.grupoEdad, titulo });
     }
 
-    return [...columnas.values()].map((c) => ({ ...c, dosis: { id: c.dosis.id, codigo: c.dosis.codigo } }));
+    return [...columnas.values()];
+  });
+}
+
+// La dimensión de `agrupacion`, con todos sus valores (también los inactivos, que pueden tener datos) por su orden.
+export async function dimensionDeAgrupacion(codigo) {
+  if (codigo === GRUPO_EDAD) throw entradaInvalida('El grupo de edad ya separa las columnas por sección.');
+  const doc = await (await dimensionesDelCatalogo()).findOne({ codigo, activo: true });
+  if (!doc) throw noEncontrado('La dimensión no existe o está inactiva.');
+  return {
+    codigo: doc.codigo,
+    nombre: doc.nombre,
+    valores: [...doc.valores]
+      .sort((a, b) => a.orden - b.orden)
+      .map((v) => ({ codigo: v.codigo, etiqueta: v.etiqueta })),
+  };
+}
+
+// Las columnas al agrupar por una dimensión (SPEC 63): vacuna × valor × dosis, solo de las vacunas que la registran.
+// Del esquema que cubre el día 1 de `hasta`, los valores que pide alguna dosis en su desagregación efectiva, en el
+// orden del catálogo, y en cada valor las dosis que lo piden, en el orden del esquema. conDatos: [{ vacunaId, dosisId,
+// valor }]; una combinación que el esquema no pide va al final de su vacuna. dimension: la de dimensionDeAgrupacion.
+export async function columnasAgrupadas({ ddrissId, vacunaCodigo = null, hasta, dimension, conDatos = [] }) {
+  const { vacunas, dosis, esquemas } = await vacunasConSusEsquemas({ ddrissId, vacunaCodigo, hasta, conDatos });
+  const posicion = new Map(dimension.valores.map((v, i) => [v.codigo, i]));
+  const etiqueta = new Map(dimension.valores.map((v) => [v.codigo, v.etiqueta]));
+  const ordenDelValor = (valor) => posicion.get(valor) ?? dimension.valores.length;
+  const aValor = (codigo) => ({ codigo, etiqueta: etiqueta.get(codigo) ?? codigo });
+
+  return vacunas.flatMap((vacuna) => {
+    const deLaVacuna = dosis.filter((d) => d.vacuna_id === vacuna.id);
+    const porCodigo = new Map(deLaVacuna.map((d) => [d.codigo, d]));
+    const porId = new Map(deLaVacuna.map((d) => [d.id, d]));
+    const columnas = new Map();
+    const agregar = (d, valor) => {
+      const clave = llave(d.id, valor);
+      if (!columnas.has(clave)) columnas.set(clave, aColumna(vacuna, null, aValor(valor), d));
+    };
+
+    const esquema = esquemas.get(vacuna.codigo);
+    if (esquema) {
+      const valoresDe = (desagregacion) => desagregacion.find((x) => x.dimension === dimension.codigo)?.valores ?? [];
+      const pedidos = esquema.dosis
+        .filter((d) => porCodigo.has(d.codigo))
+        .map((d) => ({ dosis: porCodigo.get(d.codigo), valores: valoresDe(d.desagregacion ?? esquema.desagregacion) }));
+      const valores = [...new Set(pedidos.flatMap((p) => p.valores))];
+      valores.sort((a, b) => ordenDelValor(a) - ordenDelValor(b));
+      for (const valor of valores) {
+        for (const p of pedidos.filter((x) => x.valores.includes(valor))) agregar(p.dosis, valor);
+      }
+    }
+
+    const fuera = conDatos
+      .filter((c) => c.vacunaId === vacuna.id && porId.has(c.dosisId) && !columnas.has(llave(c.dosisId, c.valor)))
+      .sort(
+        (a, b) =>
+          ordenDelValor(a.valor) - ordenDelValor(b.valor) ||
+          String(a.valor).localeCompare(String(b.valor)) ||
+          porId.get(a.dosisId).orden - porId.get(b.dosisId).orden,
+      );
+    for (const c of fuera) agregar(porId.get(c.dosisId), c.valor);
+
+    return [...columnas.values()];
   });
 }
 
@@ -134,7 +228,8 @@ function leerIds(valor, nombre) {
 
 function leerConsulta(query) {
   revisarParametros(query, [
-    'informe', 'desde', 'hasta', 'nivel', 'vacuna', 'redId', 'municipioIds', 'incluirAprobados', 'ddrissId',
+    'informe', 'desde', 'hasta', 'nivel', 'vacuna', 'redId', 'municipioIds', 'incluirAprobados', 'agrupacion',
+    'ddrissId',
   ]);
   if (query.informe === undefined) throw entradaInvalida('informe es obligatorio.');
   if (!INFORMES.includes(query.informe)) throw entradaInvalida(`informe debe ser ${INFORMES.join(', ')}.`);
@@ -156,6 +251,9 @@ function leerConsulta(query) {
     if (!/^[1-9]\d*$/.test(query.redId)) throw entradaInvalida('redId debe ser un número entero positivo.');
     redId = Number(query.redId);
   }
+  if (query.agrupacion !== undefined && !/^[a-z][a-z0-9_]*$/.test(query.agrupacion)) {
+    throw entradaInvalida('agrupacion debe ser el código de una dimensión.');
+  }
   return {
     informe: query.informe,
     nivel,
@@ -165,6 +263,7 @@ function leerConsulta(query) {
     redId,
     municipioIds: leerIds(query.municipioIds, 'municipioIds'),
     incluirAprobados: leerBooleano(query, 'incluirAprobados') ?? false,
+    agrupacion: query.agrupacion ?? null,
   };
 }
 
@@ -198,9 +297,10 @@ async function municipiosDelRecorte({ redId, municipioIds }, ddrissId) {
   return recorte === null ? municipioIds : municipioIds.filter((m) => recorte.includes(m));
 }
 
-// Una fila por establecimiento, municipio de la fila (de aplicación o de residencia), dosis y grupo de edad.
+// Una fila por establecimiento, municipio de la fila (de aplicación o de residencia), dosis y grupo de edad; con
+// agrupacion, por valor de esa dimensión en lugar del grupo de edad (las cantidades sin ella no entran).
 // residencia: solo procedencias del departamento de la DDRISS, como v_produccion_atribuida.
-async function leerProduccion({ ddrissId, informe, desde, hasta, vacunaId, incluirAprobados }) {
+async function leerProduccion({ ddrissId, informe, desde, hasta, vacunaId, incluirAprobados, agrupacion }) {
   const estados = incluirAprobados ? ['APROBADO', 'CERRADO', 'RECTIFICACION'] : ['CERRADO', 'RECTIFICACION'];
   const municipio = informe === 'residencia' ? 'vp.municipio_procedencia_id' : 'vp.municipio_aplicacion_id';
   const condiciones = {
@@ -209,18 +309,25 @@ async function leerProduccion({ ddrissId, informe, desde, hasta, vacunaId, inclu
     residencia: `AND vp.municipio_procedencia_id IN
       (SELECT m.id FROM municipio m JOIN ddriss d ON d.departamento_id = m.departamento_id WHERE d.id = ?)`,
   };
+  const origen =
+    agrupacion === null
+      ? `v_produccion vp
+       LEFT JOIN detalle_dimension dd ON dd.detalle_id = vp.detalle_id AND dd.dimension_codigo = 'grupo_edad'`
+      : 'v_produccion_dimension vp';
+  const subcolumna = agrupacion === null ? 'dd.valor_codigo' : 'vp.valor_codigo';
   const [filas] = await pool.query(
     `SELECT vp.establecimiento_id, ${municipio} AS municipio_id, vp.solo_cobertura, vp.vacuna_id, vp.dosis_id,
-            dd.valor_codigo AS grupo_edad, SUM(vp.cantidad) AS cantidad
-       FROM v_produccion vp
-       LEFT JOIN detalle_dimension dd ON dd.detalle_id = vp.detalle_id AND dd.dimension_codigo = 'grupo_edad'
+            ${subcolumna} AS subcolumna, SUM(vp.cantidad) AS cantidad
+       FROM ${origen}
       WHERE vp.ddriss_id = ? AND vp.estado IN (?) AND vp.anio * 100 + vp.mes BETWEEN ? AND ?
         AND vp.periodo_id IN (SELECT periodo_id FROM cierre_periodo WHERE ddriss_id = ?)
+        ${agrupacion === null ? '' : 'AND vp.dimension_codigo = ?'}
         ${vacunaId === null ? '' : 'AND vp.vacuna_id = ?'}
         ${condiciones[informe]}
-      GROUP BY vp.establecimiento_id, municipio_id, vp.solo_cobertura, vp.vacuna_id, vp.dosis_id, grupo_edad`,
+      GROUP BY vp.establecimiento_id, municipio_id, vp.solo_cobertura, vp.vacuna_id, vp.dosis_id, subcolumna`,
     [
       ddrissId, estados, numeroDeMes(desde), numeroDeMes(hasta), ddrissId,
+      ...(agrupacion === null ? [] : [agrupacion]),
       ...(vacunaId === null ? [] : [vacunaId]),
       ...(informe === 'residencia' ? [ddrissId] : []),
     ],
@@ -232,7 +339,7 @@ async function leerProduccion({ ddrissId, informe, desde, hasta, vacunaId, inclu
     fueraDelConsolidado: informe !== 'residencia' && Boolean(f.solo_cobertura),
     vacunaId: f.vacuna_id,
     dosisId: f.dosis_id,
-    grupoEdad: f.grupo_edad ?? null,
+    ...(agrupacion === null ? { grupoEdad: f.subcolumna ?? null } : { valor: f.subcolumna }),
     cantidad: Number(f.cantidad),
   }));
 }
@@ -334,17 +441,22 @@ export async function informePorFila(usuario, query = {}) {
   const { informe, nivel, desde, hasta, incluirAprobados } = consulta;
 
   const departamento = await departamentoDeLaDdriss(ddrissId);
-  const [meses, [vacunas], recorte] = await Promise.all([
+  const [meses, [vacunas], recorte, dimension] = await Promise.all([
     mesesDelRango(ddrissId, desde, hasta),
     consulta.vacuna === null ? [[]] : pool.query('SELECT id FROM vacuna WHERE codigo = ?', [consulta.vacuna]),
     municipiosDelRecorte(consulta, ddrissId),
+    consulta.agrupacion === null ? null : dimensionDeAgrupacion(consulta.agrupacion),
   ]);
   if (consulta.vacuna !== null && vacunas.length === 0) throw noEncontrado('La vacuna no existe.');
 
   const produccion = await leerProduccion({
     ddrissId, informe, desde, hasta, incluirAprobados, vacunaId: vacunas[0]?.id ?? null,
+    agrupacion: consulta.agrupacion,
   });
-  const columnas = await columnasDelInforme({ ddrissId, vacunaCodigo: consulta.vacuna, hasta, conDatos: produccion });
+  const deColumnas = { ddrissId, vacunaCodigo: consulta.vacuna, hasta, conDatos: produccion };
+  const columnas = dimension
+    ? await columnasAgrupadas({ ...deColumnas, dimension })
+    : await columnasDelInforme(deColumnas);
   const indice = new Map(columnas.map((c, i) => [llaveDeColumna(c), i]));
   const enRecorte = (municipioId) => recorte === null || recorte.includes(municipioId);
   const ceros = () => columnas.map(() => 0);
@@ -354,7 +466,7 @@ export async function informePorFila(usuario, query = {}) {
   let dosisFueraDelConsolidado = 0;
   for (const p of produccion) {
     if (!enRecorte(p.municipioId)) continue;
-    const posicion = indice.get(llave(p.dosisId, p.grupoEdad));
+    const posicion = indice.get(llave(p.dosisId, p.valor ?? p.grupoEdad));
     if (p.fueraDelConsolidado) dosisFueraDelConsolidado += p.cantidad;
     else total.cantidades[posicion] += p.cantidad;
     // Un solo_cobertura solo tiene fila propia por establecimiento: en los demás niveles inflaría su municipio.
@@ -371,6 +483,7 @@ export async function informePorFila(usuario, query = {}) {
     desde,
     hasta,
     incluirAprobados,
+    agrupacion: dimension && { codigo: dimension.codigo, nombre: dimension.nombre },
     columnas,
     filas,
     total,
