@@ -1,4 +1,7 @@
-import { alPerderSesion, ErrorApi, ESPERA_MAXIMA_MS, leerUltimaPeticion, refrescar, solicitar } from './cliente.js'
+import {
+  alPerderSesion, descargar, ErrorApi, ESPERA_MAXIMA_MS, leerUltimaPeticion, refrescar, solicitar,
+} from './cliente.js'
+import { descargarInformeExcel } from './informes.js'
 import { borrarSesion, guardarSesion, leerSesion, leerTokenGuardado } from './sesion.js'
 
 function crearToken(payload) {
@@ -341,5 +344,85 @@ describe('renovación con POST /auth/refrescar', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('descargar un archivo (SPEC 64)', () => {
+  const sesion = crearSesion('7')
+  const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  const archivo = new Blob(['PK'], { type: XLSX })
+  const respuestaArchivo = (disposicion = 'attachment; filename="informe-total-2026-01-a-2026-08.xlsx"') => ({
+    status: 200,
+    ok: true,
+    headers: new Headers(disposicion ? { 'Content-Type': XLSX, 'Content-Disposition': disposicion } : {}),
+    blob: async () => archivo,
+    json: async () => {
+      throw new Error('un archivo no se lee como JSON')
+    },
+  })
+
+  test('devuelve el archivo y el nombre de Content-Disposition, con el token de la sesión', async () => {
+    guardarSesion(sesion)
+    fetch.mockResolvedValue(respuestaArchivo())
+
+    expect(await descargar('/informes/produccion/excel?informe=total')).toEqual({
+      blob: archivo,
+      nombre: 'informe-total-2026-01-a-2026-08.xlsx',
+    })
+    const [url, opciones] = fetch.mock.calls[0]
+    expect(url.endsWith('/informes/produccion/excel?informe=total')).toBe(true)
+    expect(opciones.headers.Authorization).toBe(`Bearer ${sesion.token}`)
+    expect(opciones.credentials).toBe('include')
+  })
+
+  test('sin Content-Disposition, el nombre es null', async () => {
+    guardarSesion(sesion)
+    fetch.mockResolvedValue(respuestaArchivo(null))
+
+    expect((await descargar('/informes/produccion/excel')).nombre).toBeNull()
+  })
+
+  test('un error JSON se lanza como ErrorApi, como en solicitar', async () => {
+    guardarSesion(sesion)
+    fetch.mockResolvedValue(respuestaJson(404, {
+      error: { codigo: 'NO_ENCONTRADO', mensaje: 'El mes final no está habilitado en la DDRISS.' },
+    }))
+
+    const error = await descargar('/informes/produccion/excel').catch((e) => e)
+    expect(error).toBeInstanceOf(ErrorApi)
+    expect(error).toMatchObject({ status: 404, codigo: 'NO_ENCONTRADO' })
+  })
+
+  test('con la sesión vencida renueva una vez y repite la descarga con el token nuevo', async () => {
+    const renovada = crearSesion('7', 1)
+    guardarSesion(sesion)
+    fetch.mockImplementation(async (url, { headers }) => {
+      if (url.endsWith('/auth/refrescar')) return respuestaJson(200, renovada)
+      return headers.Authorization === `Bearer ${sesion.token}` ? respuestaJson(401, ERROR_VENCIDA) : respuestaArchivo()
+    })
+
+    expect((await descargar('/informes/produccion/excel')).blob).toBe(archivo)
+    const descargas = fetch.mock.calls.filter(([url]) => url.includes('/informes/produccion/excel'))
+    expect(descargas.map(([, opciones]) => opciones.headers.Authorization)).toEqual([
+      `Bearer ${sesion.token}`,
+      `Bearer ${renovada.token}`,
+    ])
+    expect(fetch.mock.calls.filter(([url]) => url.endsWith('/auth/refrescar'))).toHaveLength(1)
+  })
+
+  test('descargarInformeExcel pide el mismo informe que obtenerInforme, con su agrupación', async () => {
+    guardarSesion(sesion)
+    fetch.mockResolvedValue(respuestaArchivo())
+
+    await descargarInformeExcel({
+      informe: 'total', desde: '2026-01', hasta: '2026-08', municipioIds: [1, 4], incluirAprobados: true,
+      agrupacion: 'sexo',
+    })
+    const url = new URL(fetch.mock.calls[0][0], 'http://localhost')
+    expect(url.pathname.endsWith('/informes/produccion/excel')).toBe(true)
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      informe: 'total', desde: '2026-01', hasta: '2026-08', municipioIds: '1,4', incluirAprobados: 'true',
+      agrupacion: 'sexo',
+    })
   })
 })

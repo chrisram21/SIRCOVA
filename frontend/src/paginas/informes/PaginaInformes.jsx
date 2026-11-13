@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { TriangleAlert } from 'lucide-react'
+import { FileSpreadsheet, TriangleAlert } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { listarDdriss, listarRedes } from '@/api/catalogos.js'
 import { mensajeDeError } from '@/api/cliente.js'
-import { obtenerInforme, obtenerOpcionesInformes } from '@/api/informes.js'
+import { descargarInformeExcel, obtenerInforme, obtenerOpcionesInformes } from '@/api/informes.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import PantallaCargaSesion, { usePrimeraCarga } from '@/componentes/PantallaCargaSesion.jsx'
@@ -22,12 +23,25 @@ import TablaInforme from './TablaInforme.jsx'
 // SPEC 62 (HU-45): los informes de producción. Los filtros se editan en un borrador y solo «Generar» los pasa a la
 // URL; el informe se pide cuando la URL trae informe, desde y hasta, así que recargar lo repite.
 // SPEC 63 (HU-46): «Agrupar por» cambia `agrupacion` en la URL y vuelve a pedir el informe sin tocar el borrador.
+// SPEC 64 (HU-47): «Exportar Excel» pide el mismo informe de la URL (no el borrador) como .xlsx.
 
 // Radix no acepta un valor vacío en un Select: la opción por defecto lleva este.
 const POR_SECCION = 'seccion'
 
 const CLASES_AVISO =
   'flex items-start gap-2 rounded-md bg-advertencia px-3 py-2 text-sm text-advertencia-foreground'
+
+// El navegador guarda el archivo con un enlace temporal.
+function guardarArchivo(blob, nombre) {
+  const url = URL.createObjectURL(blob)
+  const enlace = document.createElement('a')
+  enlace.href = url
+  enlace.download = nombre
+  document.body.append(enlace)
+  enlace.click()
+  enlace.remove()
+  URL.revokeObjectURL(url)
+}
 
 const id = (texto) => (/^[1-9]\d*$/.test(texto ?? '') ? Number(texto) : undefined)
 
@@ -61,6 +75,8 @@ export default function PaginaInformes() {
   const [errorInforme, setErrorInforme] = useState(null)
   const [intentoInforme, setIntentoInforme] = useState(0)
   const [borrador, setBorrador] = useState(null)
+  const [exportando, setExportando] = useState(false)
+  const [errorExportar, setErrorExportar] = useState(null)
 
   const ddrissId = nacional ? (id(parametros.get('ddriss')) ?? ddriss?.[0]?.id) : undefined
   const esperandoDdriss = nacional && ddrissId === undefined
@@ -151,6 +167,11 @@ export default function PaginaInformes() {
     }
   }, [clave, intentoInforme])
 
+  // Un error de exportación es de ese informe: otro informe no lo arrastra.
+  useEffect(() => {
+    setErrorExportar(null)
+  }, [clave])
+
   const sinMeses = opciones?.meses.length === 0
   const primeraCarga = usePrimeraCarga(
     Boolean(sinDdriss || errorOpciones || sinMeses || (opciones && (clave === null || informe || errorInforme))),
@@ -160,6 +181,19 @@ export default function PaginaInformes() {
   function generar() {
     setParametros(conAgrupacion(parametrosDeInforme({ ...valores, ddriss: nacional ? ddrissId : null }), agrupacion))
     setIntentoInforme((n) => n + 1)
+  }
+
+  async function exportar() {
+    setExportando(true)
+    setErrorExportar(null)
+    try {
+      const { blob, nombre } = await descargarInformeExcel(JSON.parse(clave))
+      guardarArchivo(blob, nombre ?? 'informe.xlsx')
+    } catch (err) {
+      setErrorExportar(mensajeDeError(err))
+    } finally {
+      setExportando(false)
+    }
   }
 
   function agrupar(valor) {
@@ -263,7 +297,15 @@ export default function PaginaInformes() {
                 ) : (
                   <div />
                 )}
-                {selectorAgrupacion}
+                <div className="flex flex-wrap items-end gap-3">
+                  {selectorAgrupacion}
+                  {informe && !errorInforme && informe.columnas.length > 0 && (
+                    <Button variant="outline" onClick={exportar} disabled={exportando}>
+                      <FileSpreadsheet />
+                      {exportando ? 'Exportando…' : 'Exportar Excel'}
+                    </Button>
+                  )}
+                </div>
               </div>
               {errorInforme ? (
                 <AvisoError onReintentar={() => setIntentoInforme((n) => n + 1)}>
@@ -273,6 +315,7 @@ export default function PaginaInformes() {
                 <Esqueletos />
               ) : (
                 <>
+                  {errorExportar && <AvisoError>No se pudo exportar el informe: {errorExportar}</AvisoError>}
                   {aviso && (
                     <p role="status" className={CLASES_AVISO}>
                       <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
