@@ -2,7 +2,7 @@
 numero: 63
 titulo: "HU-46 Agrupar el informe por una dimensión"
 modulo: "Informes"
-estado: "Aprobado"
+estado: "Implementado"
 origen: "Historia de usuario"
 historias: ["[[HU-46]]"]
 archivo: "specs/informes/63-hu-46-agrupar-informe-por-dimension.md"
@@ -15,7 +15,7 @@ tags: ["spec", "modulo/informes", "origen/historia"]
 
 - **Spec completo:** [[specs/informes/63-hu-46-agrupar-informe-por-dimension|abrir el spec]]
 - **Módulo:** [[Módulo Informes]]
-- **Estado:** Aprobado
+- **Estado:** Implementado
 - **Origen:** Historia de usuario
 - **Historia:** [[HU-46]] Agrupar el informe por una dimensión
 - **Texto del encabezado:** HU-46
