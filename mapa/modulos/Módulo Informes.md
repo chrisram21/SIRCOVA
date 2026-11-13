@@ -12,4 +12,4 @@ Carpeta: `specs/informes/` · 3 specs · [[Inicio]]
 
 - [[SPEC 62]] — HU-45 Generar informes con filtros · *Implementado* · [[HU-45]]
 - [[SPEC 63]] — HU-46 Agrupar el informe por una dimensión · *Implementado* · [[HU-46]]
-- [[SPEC 64]] — HU-47 Exportar informes a Excel · *Aprobado* · [[HU-47]]
+- [[SPEC 64]] — HU-47 Exportar informes a Excel · *Implementado* · [[HU-47]]

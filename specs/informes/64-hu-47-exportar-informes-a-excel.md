@@ -1,6 +1,6 @@
 # SPEC 64 — HU-47 Exportar informes a Excel
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-47
 > **Origen:** historia
 > **Depende de:** SPEC 05, SPEC 62 y SPEC 63
@@ -172,16 +172,16 @@ Después del encabezado va una fila vacía y luego la tabla.
 
 ## Criterios de aceptación
 
-- [ ] Con un informe generado aparece «Exportar Excel», que descarga un .xlsx con el nombre `informe-{informe}-{desde}-a-{hasta}[-por-{agrupacion}].xlsx`.
-- [ ] El archivo respeta los filtros y la agrupación de la URL: cada cantidad coincide con la de la pantalla para los mismos parámetros, en los tres informes y en los cuatro niveles.
-- [ ] El encabezado del archivo trae el título, la DDRISS, el periodo, la vacuna, el territorio, la agrupación, si incluye aprobados, la fecha y hora de generación y quién lo generó.
-- [ ] Con `preliminar` el archivo lleva «PRELIMINAR», y los avisos de la pantalla aparecen con el mismo texto.
-- [ ] Las cantidades son números de Excel (una suma funciona sobre ellas), con separador de miles.
-- [ ] La tabla tiene las tres filas de encabezado combinadas, la fila «Total», la marca de lo que no suma en el consolidado y los encabezados fijos.
-- [ ] Cada descarga correcta deja una fila `EXPORTAR` del módulo `REPORTES` con los parámetros, sin cantidades. Un 400 o un 404 no la deja.
-- [ ] El endpoint pide `INFORME_CONSULTAR` y respeta la DDRISS del usuario, igual que `GET /informes/produccion`.
-- [ ] La HU-64 está en `HISTORIAS_DE_USUARIO.md` y el mapa está al día.
-- [ ] Las pruebas del backend que tocan los archivos cambiados y la suite del frontend pasan.
+- [x] Con un informe generado aparece «Exportar Excel», que descarga un .xlsx con el nombre `informe-{informe}-{desde}-a-{hasta}[-por-{agrupacion}].xlsx`.
+- [x] El archivo respeta los filtros y la agrupación de la URL: cada cantidad coincide con la de la pantalla para los mismos parámetros, en los tres informes y en los cuatro niveles.
+- [x] El encabezado del archivo trae el título, la DDRISS, el periodo, la vacuna, el territorio, la agrupación, si incluye aprobados, la fecha y hora de generación y quién lo generó.
+- [x] Con `preliminar` el archivo lleva «PRELIMINAR», y los avisos de la pantalla aparecen con el mismo texto.
+- [x] Las cantidades son números de Excel (una suma funciona sobre ellas), con separador de miles.
+- [x] La tabla tiene las tres filas de encabezado combinadas, la fila «Total», la marca de lo que no suma en el consolidado y los encabezados fijos.
+- [x] Cada descarga correcta deja una fila `EXPORTAR` del módulo `REPORTES` con los parámetros, sin cantidades. Un 400 o un 404 no la deja.
+- [x] El endpoint pide `INFORME_CONSULTAR` y respeta la DDRISS del usuario, igual que `GET /informes/produccion`.
+- [x] La HU-64 está en `HISTORIAS_DE_USUARIO.md` y el mapa está al día.
+- [x] Las pruebas del backend que tocan los archivos cambiados y la suite del frontend pasan.
 
 ## Decisiones
 

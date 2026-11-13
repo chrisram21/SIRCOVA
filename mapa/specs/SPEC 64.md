@@ -2,7 +2,7 @@
 numero: 64
 titulo: "HU-47 Exportar informes a Excel"
 modulo: "Informes"
-estado: "Aprobado"
+estado: "Implementado"
 origen: "Historia de usuario"
 historias: ["[[HU-47]]"]
 archivo: "specs/informes/64-hu-47-exportar-informes-a-excel.md"
@@ -15,7 +15,7 @@ tags: ["spec", "modulo/informes", "origen/historia"]
 
 - **Spec completo:** [[specs/informes/64-hu-47-exportar-informes-a-excel|abrir el spec]]
 - **Módulo:** [[Módulo Informes]]
-- **Estado:** Aprobado
+- **Estado:** Implementado
 - **Origen:** Historia de usuario
 - **Historia:** [[HU-47]] Exportar informes a Excel
 - **Texto del encabezado:** HU-47
