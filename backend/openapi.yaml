@@ -5798,11 +5798,33 @@ paths:
   /alertas:
     get:
       tags: [Alertas y auditoría]
-      summary: Alertas activas para el rol y alcance del usuario
-      parameters:
-        - { name: estado, in: query, schema: { type: string, enum: [ACTIVA, ATENDIDA, DESCARTADA] } }
+      summary: Alertas activas para el rol y el ámbito del usuario
+      description: |
+        Las alertas `ACTIVA` cuyo `rol_destino_id` es el rol del usuario y que están en su ámbito: con DDRISS, las
+        de su DDRISS; el Personal del establecimiento, las de su establecimiento; sin DDRISS (Autoridad nacional),
+        todas. Ordenadas por severidad (`CRITICA`, `ADVERTENCIA`, `INFO`) y después de la más reciente a la más
+        antigua; la lista trae hasta 50. `total` y `porSeveridad` cuentan todas las activas, aunque la lista se corte.
+
+        Las genera y las descarta una tarea del backend que corre al arrancar y cada hora (SPEC 67): fecha límite
+        próxima, reporte sin enviar al vencer la fecha y reporte sin revisar por más de 3 días. Las que ya no aplican
+        pasan a `DESCARTADA` y dejan de aparecer. Este endpoint no escribe nada ni deja bitácora. No admite
+        parámetros: uno cualquiera responde 400 `ENTRADA_INVALIDA` (los filtros por tipo y estado llegan con HU-52).
+      x-permiso: ALERTA_CONSULTAR
       responses:
-        "200": { description: Lista de alertas }
+        "200":
+          description: Las alertas activas del usuario
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListaAlertas" }
+        "400":
+          description: La solicitud trae un parámetro
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: estado." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
 
   /auditoria/bitacora:
     get:
@@ -9866,6 +9888,68 @@ components:
                 (`numerador` − `dosisAcumuladas`) ÷ (12 − `mes`), a 2 decimales. `null` con corte en diciembre o si
                 falta el `numerador` o `dosisAcumuladas`.
               example: 121.33
+
+    Alerta:
+      type: object
+      description: Una alerta de la tabla `alerta`
+      required: [id, tipo, severidad, titulo, mensaje, generadaEn, periodo, establecimiento, reporteId]
+      properties:
+        id: { type: integer, example: 41 }
+        tipo: { type: string, enum: [REPORTE_PENDIENTE, CALIDAD, COBERTURA_BAJO_META, PROCESO], example: REPORTE_PENDIENTE }
+        severidad: { type: string, enum: [INFO, ADVERTENCIA, CRITICA], example: CRITICA }
+        titulo:
+          type: string
+          description: |
+            Identifica la clase de alerta. Las del SPEC 67 son `Fecha límite próxima`, `Reporte sin enviar` y
+            `Reporte sin revisar`; la del SPEC 57, `Rectificaciones frecuentes`.
+          example: Reporte sin enviar
+        mensaje:
+          type: string
+          example: CS-1209 C/S Ocós no envió el reporte de octubre de 2026; la fecha límite fue el 05/11/2026.
+        generadaEn: { type: string, format: date-time, example: "2026-11-06T06:00:12.000Z" }
+        periodo:
+          type: object
+          nullable: true
+          description: El mes al que se refiere; `null` si la alerta no tiene periodo
+          required: [id, anio, mes]
+          properties:
+            id: { type: integer, example: 322 }
+            anio: { type: integer, example: 2026 }
+            mes: { type: integer, minimum: 1, maximum: 12, example: 10 }
+        establecimiento:
+          type: object
+          nullable: true
+          description: El establecimiento al que se refiere; `null` si la alerta es de toda la DDRISS
+          required: [id, codigo, nombre]
+          properties:
+            id: { type: integer, example: 9 }
+            codigo: { type: string, example: CS-1209 }
+            nombre: { type: string, example: C/S Ocós }
+        reporteId:
+          type: integer
+          nullable: true
+          description: El reporte al que se refiere; `null` si no hay (por ejemplo, un establecimiento que no lo creó)
+          example: null
+
+    ListaAlertas:
+      type: object
+      description: Respuesta de `GET /alertas`
+      required: [total, porSeveridad, alertas]
+      properties:
+        total: { type: integer, minimum: 0, description: Todas las alertas activas del usuario, example: 12 }
+        porSeveridad:
+          type: object
+          description: Las alertas activas de cada severidad (siempre las tres claves)
+          required: [CRITICA, ADVERTENCIA, INFO]
+          properties:
+            CRITICA: { type: integer, minimum: 0, example: 9 }
+            ADVERTENCIA: { type: integer, minimum: 0, example: 2 }
+            INFO: { type: integer, minimum: 0, example: 1 }
+        alertas:
+          type: array
+          maxItems: 50
+          description: Las primeras 50, por severidad y de la más reciente a la más antigua
+          items: { $ref: "#/components/schemas/Alerta" }
 
     CorridaDeCierre:
       type: object

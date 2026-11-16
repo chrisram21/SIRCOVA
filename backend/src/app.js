@@ -13,6 +13,7 @@ import produccionRoutes from './modulos/produccion/produccion.routes.js';
 import revisionRoutes from './modulos/revision/revision.routes.js';
 import indicadoresRoutes from './modulos/indicadores/indicadores.routes.js';
 import informesRoutes from './modulos/informes/informes.routes.js';
+import alertasRoutes from './modulos/alertas/alertas.routes.js';
 import { rutaNoEncontrada, manejarErrores } from './middlewares/errores.js';
 
 const app = express();
@@ -36,6 +37,7 @@ app.use('/api/v1', produccionRoutes);
 app.use('/api/v1', revisionRoutes);
 app.use('/api/v1', indicadoresRoutes);
 app.use('/api/v1', informesRoutes);
+app.use('/api/v1', alertasRoutes);
 
 app.use(rutaNoEncontrada);
 app.use(manejarErrores);

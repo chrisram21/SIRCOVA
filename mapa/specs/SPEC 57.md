@@ -27,4 +27,4 @@ tags: ["spec", "modulo/revision", "origen/correccion"]
 
 ## Lo usan
 
-Ningún spec depende de este todavía.
+- [[SPEC 67]] — HU-50 Alertas de reportes pendientes y de proceso · *Implementado*

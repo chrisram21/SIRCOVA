@@ -4,6 +4,7 @@ import { obtenerAvance, obtenerBandeja } from '@/api/revision.js'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import { aDiaMesAnio, nombreDelMes, porFecha, textoPlazo } from '@/lib/fechas.js'
 import AvanceCierre, { TarjetaEstadoReportes } from '../AvanceCierre.jsx'
+import TarjetaAlertas from '../TarjetaAlertas.jsx'
 import TarjetaResumen, { Cifra, useConsulta } from '../TarjetaResumen.jsx'
 import { TarjetasDelInicio } from '../TarjetaSinDatos.jsx'
 
@@ -89,7 +90,6 @@ export default function InicioRevisor() {
   const conAvance = tienePermiso('REPORTE_AVANCE_CONSULTAR')
   const avance = useConsulta(consultarAvance, { activa: conAvance })
 
-  // Las alertas llegan con HU-50 a HU-52.
   const tarjetas = [
     {
       titulo: 'Estado de los reportes del periodo',
@@ -103,7 +103,7 @@ export default function InicioRevisor() {
       permisos: ['REPORTE_AVANCE_CONSULTAR', 'REPORTE_REVISAR'],
       props: { consulta: avance },
     },
-    { titulo: 'Alertas de calidad y de proceso' },
+    { titulo: 'Alertas de calidad y de proceso', Datos: TarjetaAlertas, permisos: ['ALERTA_CONSULTAR'] },
     { titulo: 'Periodos por cerrar', Datos: TarjetaPeriodos, permisos: ['PERIODO_CONSULTAR'] },
     { titulo: 'Solicitudes de rectificación', Datos: TarjetaRectificaciones, permisos: ['RECTIFICACION_CONSULTAR'] },
   ]

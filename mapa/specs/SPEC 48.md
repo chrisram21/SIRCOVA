@@ -33,3 +33,4 @@ tags: ["spec", "modulo/indicadores", "origen/historia"]
 ## Lo usan
 
 - [[SPEC 50]] — Mapa territorial con semáforo · *Implementado*
+- [[SPEC 67]] — HU-50 Alertas de reportes pendientes y de proceso · *Implementado*

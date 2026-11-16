@@ -5,6 +5,7 @@ import InsigniaEstadoReporte from '@/componentes/InsigniaEstadoReporte.jsx'
 import { aDiaMesAnio, diasHasta, nombreDelMes, textoPlazo } from '@/lib/fechas.js'
 import { cn } from '@/lib/utils'
 import { cargarMesesAbiertos, mesPendiente } from '@/paginas/registro/mesesAbiertos.js'
+import TarjetaAlertas from '../TarjetaAlertas.jsx'
 import TarjetaResumen, { useConsulta } from '../TarjetaResumen.jsx'
 import { TarjetasDelInicio } from '../TarjetaSinDatos.jsx'
 
@@ -98,6 +99,7 @@ export default function InicioEstablecimiento() {
       props: { consulta: miReporte },
     },
     { titulo: 'Validaciones pendientes', Datos: TarjetaValidaciones, permisos: PERMISOS_MI_REPORTE, props: { consulta: miReporte } },
+    { titulo: 'Alertas', Datos: TarjetaAlertas, permisos: ['ALERTA_CONSULTAR'] },
     { titulo: 'Cobertura de mi municipio' },
     { titulo: 'Tendencia mensual' },
   ]
