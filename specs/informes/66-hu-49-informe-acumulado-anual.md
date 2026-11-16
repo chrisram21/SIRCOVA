@@ -1,6 +1,6 @@
 # SPEC 66 — HU-49 Informe acumulado anual
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-49
 > **Origen:** historia
 > **Depende de:** SPEC 17, SPEC 43, SPEC 45, SPEC 62, SPEC 63, SPEC 64 y SPEC 65
@@ -209,20 +209,20 @@ Respuesta:
 
 ## Criterios de aceptación
 
-- [ ] «Acumulado anual» aparece en el selector Informe de «Informes» para el Revisor, Epidemiología y la Autoridad; los endpoints responden 403 al Personal del establecimiento y al Administrador.
-- [ ] Con «Acumulado anual», se elige un año en lugar del rango de meses, y Establecimiento y «Agrupar por» no están disponibles.
-- [ ] Cada municipio (o distrito, o el departamento) muestra cuatro filas: Dosis, Población, Cobertura % y Brecha, para cada columna vacuna × grupo de edad × dosis.
-- [ ] Las dosis de un municipio coinciden con las del informe «Dosis por municipio de residencia» de enero a diciembre del mismo año y con los mismos filtros.
-- [ ] La población es la de `poblacion_objetivo` del año y del grupo de edad de la columna; sin ella, población, cobertura y brecha salen «—».
-- [ ] La cobertura es dosis ÷ población × 100 con un decimal, y la brecha, ⌈meta × población − dosis⌉ con mínimo 0.
-- [ ] La meta de cada columna es la del indicador `COBERTURA` que aplica, si no la del `BRECHA`, si no 95, y se ve en el encabezado.
-- [ ] Publicar una versión nueva de ese indicador con otra meta cambia la meta y la brecha del acumulado al volver a generarlo.
-- [ ] Si algún mes del año no está cerrado (o no tiene `cierre_periodo`), el informe lo advierte con los meses.
-- [ ] Con «Incluir aprobados sin cerrar», cuentan también los `APROBADO` y el informe se marca «Preliminar».
-- [ ] «Generar» deja `informe=acumulado-anual` y `anio` en la URL, y recargar repite el mismo informe.
-- [ ] «Exportar Excel» y «Exportar PDF» descargan el acumulado con las mismas cifras de la pantalla, y cada exportación queda en la bitácora.
-- [ ] Los informes de los SPEC 62 a 65 dan lo mismo que antes.
-- [ ] Las pruebas del backend que tocan los archivos cambiados y la suite del frontend pasan.
+- [x] «Acumulado anual» aparece en el selector Informe de «Informes» para el Revisor, Epidemiología y la Autoridad; los endpoints responden 403 al Personal del establecimiento y al Administrador.
+- [x] Con «Acumulado anual», se elige un año en lugar del rango de meses, y Establecimiento y «Agrupar por» no están disponibles.
+- [x] Cada municipio (o distrito, o el departamento) muestra cuatro filas: Dosis, Población, Cobertura % y Brecha, para cada columna vacuna × grupo de edad × dosis.
+- [x] Las dosis de un municipio coinciden con las del informe «Dosis por municipio de residencia» de enero a diciembre del mismo año y con los mismos filtros.
+- [x] La población es la de `poblacion_objetivo` del año y del grupo de edad de la columna; sin ella, población, cobertura y brecha salen «—».
+- [x] La cobertura es dosis ÷ población × 100 con un decimal, y la brecha, ⌈meta × población − dosis⌉ con mínimo 0.
+- [x] La meta de cada columna es la del indicador `COBERTURA` que aplica, si no la del `BRECHA`, si no 95, y se ve en el encabezado.
+- [x] Publicar una versión nueva de ese indicador con otra meta cambia la meta y la brecha del acumulado al volver a generarlo.
+- [x] Si algún mes del año no está cerrado (o no tiene `cierre_periodo`), el informe lo advierte con los meses.
+- [x] Con «Incluir aprobados sin cerrar», cuentan también los `APROBADO` y el informe se marca «Preliminar».
+- [x] «Generar» deja `informe=acumulado-anual` y `anio` en la URL, y recargar repite el mismo informe.
+- [x] «Exportar Excel» y «Exportar PDF» descargan el acumulado con las mismas cifras de la pantalla, y cada exportación queda en la bitácora.
+- [x] Los informes de los SPEC 62 a 65 dan lo mismo que antes.
+- [x] Las pruebas del backend que tocan los archivos cambiados y la suite del frontend pasan.
 
 ## Decisiones
 
@@ -246,6 +246,9 @@ Respuesta:
 - **Sí (agregado en la implementación, paso 6):** la cobertura se escribe con `es-GT`, como los demás números del sistema: «89.7 %» (punto decimal, coma de miles). **No:** «85,0 %» como decía este spec, que en `es-GT` chocaría con la coma de los miles. En el Excel la cobertura es un número con formato `0.0` y los `null` son «—».
 - **Sí (agregado en la implementación, paso 6):** el PDF del acumulado lleva hasta 10 columnas de cantidades por tramo, u 8 por distrito (`COLUMNAS_POR_TRAMO_ANUAL`), dos menos que el informe de producción por la columna «Cifra». Por municipio, la columna de los nombres se llama «Municipio de residencia», como el informe por residencia.
 - **Sí (agregado en la implementación, paso 3):** los municipios de cada fila (para sumar su población) salen de los mismos `destinos` de `filasDelNivel` que reparten las dosis, aplicados a cada municipio del universo dentro del recorte. Una fila sin municipios tiene población `null`.
+- **Sí (ajuste después de la prueba manual, pedido por Chris):** en el PDF del acumulado, las columnas fijas tienen ancho fijo en lugar de `'*'` (nombre 90, «Municipio» 76, «Cifra» 48), así el nombre no se estira en un tramo con pocas columnas y el espacio va a las cantidades: `COLUMNAS_POR_TRAMO_ANUAL` pasa a 11 sin municipio y 10 con municipio (antes 10 y 8). Con 8 de relleno por columna y líneas de 0.5, el tramo más ancho ocupa 689 y 725 de los 732 útiles de la carta horizontal. «Municipio de residencia» en negrita mide 87.5 a 8 pt y «Meta 95 %», 39.5; un nombre más largo pasa a otra línea dentro de sus cuatro filas. `ANCHO_MUNICIPIO` del informe de producción no cambia.
+- **Sí (ajuste después de la prueba manual, pedido por Chris):** colores en la tabla, del tema de `index.css`. En los cuatro informes, la vacuna en `accent` y su sección en `accent/50`; en el acumulado, la meta y la población en `muted`, la cobertura en `accent`, la brecha en `advertencia` y, con brecha 0, la cobertura y la brecha en `exito` con una leyenda («En verde, las coberturas que alcanzan su meta»). El Excel y el PDF del acumulado llevan los mismos tonos (`COLORES` y `tonoDeCifra` de `textosInforme.js`, que repiten los hex de `index.css`). Esto no es el semáforo por umbrales, que sigue fuera de alcance: solo marca si la columna llegó a su meta. **No:** colores en el Excel y el PDF de los otros tres informes, que siguen como pendiente del SPEC 64 y 65. **Sí (corrección):** el contenedor de la tabla lleva `isolate`: las columnas fijas (`z-10`) tapaban el encabezado de la página al bajar.
+- **Sí (ajuste después de la prueba manual, pedido por Chris):** la tabla de Informes se desplaza dentro de su contenedor, de altura máxima `100svh − 9rem`, para que la barra horizontal quede a la vista sin bajar hasta el final; el encabezado (`thead`) queda fijo arriba y el contenedor propio del `Table` de shadcn deja de desplazarse (`[&>[data-slot=table-container]]:overflow-visible`). Solo en `TablaInforme` (los cuatro informes). **No:** cambiar el `Table` de shadcn ni las demás tablas del sistema, que van en una rama propia si hace falta.
 
 ## Riesgos
 

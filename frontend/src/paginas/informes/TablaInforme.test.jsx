@@ -184,6 +184,38 @@ describe('acumulado anual (SPEC 66)', () => {
     expect(filas[0].querySelector('td').getAttribute('rowspan')).toBe('4')
   })
 
+  test('la cobertura y la brecha que alcanzan su meta (brecha 0) van en verde, con su leyenda', () => {
+    render(
+      <TablaInforme
+        informe={anual({
+          filas: [{ id: 1, codigo: '1201', nombre: 'San Marcos', municipio: null,
+            ...cifras([1400, 7], [1450, 100], [96.6, 7], [0, 88]) }],
+        })}
+        acumulado
+      />,
+    )
+    const filas = screen.getAllByRole('row').slice(4, 8)
+    const celdas = (tr) => [...tr.querySelectorAll('td')].filter((td) => td.className.includes('font-mono'))
+    const verdes = (tr) => celdas(tr).map((td) => td.hasAttribute('data-cumple'))
+    expect(verdes(filas[2])).toEqual([true, false])
+    expect(verdes(filas[3])).toEqual([true, false])
+    expect(verdes(filas[0])).toEqual([false, false])
+    expect(celdas(filas[2])[0].className).toContain('bg-exito')
+    expect(celdas(filas[3])[1].className).toContain('bg-advertencia')
+    expect(screen.getByText('En verde, las coberturas que alcanzan su meta (brecha 0).')).toBeTruthy()
+  })
+
+  test('la tabla aísla sus columnas fijas y se desplaza en su propio contenedor con el encabezado fijo', () => {
+    const { container } = render(<TablaInforme informe={anual()} acumulado />)
+    const contenedor = screen.getByTestId('contenedor-informe')
+    expect(contenedor.className).toContain('isolate')
+    // jsdom no mide: se comprueba que el contenedor limita la altura y desplaza, y que el de shadcn deja de hacerlo.
+    expect(contenedor.className).toContain('max-h-[calc(100svh-9rem)]')
+    expect(contenedor.className).toContain('overflow-auto')
+    expect(contenedor.className).toContain('[&>[data-slot=table-container]]:overflow-visible')
+    expect(container.querySelector('thead').className).toContain('sticky top-0')
+  })
+
   test('por distrito, el nombre lleva su municipio', () => {
     render(
       <TablaInforme

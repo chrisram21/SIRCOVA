@@ -1,8 +1,8 @@
 import path from 'node:path';
 import pdfmake from 'pdfmake';
 import {
-  CIFRAS, lineasDelAcumulado, lineasDelEncabezado, llevaMunicipio, nombreDeFila, textoCifra, textoFueraDelConsolidado,
-  textoMeta, tituloDeLaFila, tituloDelInforme, tramosDelEncabezado,
+  CIFRAS, COLORES, lineasDelAcumulado, lineasDelEncabezado, llevaMunicipio, nombreDeFila, textoCifra, textoFueraDelConsolidado,
+  textoMeta, tituloDeLaFila, tituloDelInforme, tonoDeCifra, tramosDelEncabezado,
 } from './textosInforme.js';
 
 // SPEC 65 (HU-48): el PDF de un informe de producción, en carta horizontal. Como el Excel, sale de la respuesta de
@@ -154,10 +154,18 @@ export function pdfDelInforme(informe, datos) {
 
 // ---------------------------------------------------------------- Acumulado anual (SPEC 66, HU-49)
 
-// Con la columna «Cifra» caben dos columnas de cantidades menos que en el informe de producción.
-export const COLUMNAS_POR_TRAMO_ANUAL = { conMunicipio: 8, sinMunicipio: 10 };
-const ANCHO_CIFRA = 55;
+// Anchos fijos (sin '*'): el nombre no se estira en un tramo con pocas columnas y el espacio va a las cantidades.
+// Nombre 90 («Municipio de residencia» en negrita mide 87.5 a 8 pt), «Municipio» 76 y «Cifra» 48 («Cobertura %»,
+// 46.9); un nombre más largo pasa a otra línea dentro de sus cuatro filas. Cada columna suma 8 de relleno y cada
+// línea 0.5, contra 732 de ancho útil (carta horizontal, márgenes de 30):
+// sin municipio, 98 + 56 + 11 × 48 + 14 × 0.5 = 689; con municipio, 98 + 84 + 56 + 10 × 48 + 14 × 0.5 = 725.
+export const COLUMNAS_POR_TRAMO_ANUAL = { conMunicipio: 10, sinMunicipio: 11 };
+export const ANCHO_NOMBRE_ANUAL = 90;
+const ANCHO_MUNICIPIO_ANUAL = 76;
+const ANCHO_CIFRA = 48;
 const FILAS_DE_ENCABEZADO_ANUAL = 4;
+// El fondo y el color de texto de una celda (claves de COLORES); pdfmake da prioridad al de la celda sobre el layout.
+const tono = (fondo, texto) => ({ fillColor: COLORES[fondo], color: COLORES[texto] });
 
 function tablaDelTramoAnual(informe, { desde, hasta }, indice) {
   const conMunicipio = llevaMunicipio(informe.nivel);
@@ -172,19 +180,30 @@ function tablaDelTramoAnual(informe, { desde, hasta }, indice) {
       fija(tituloDeLaFila(informe.nivel, informe.informe)),
       ...(conMunicipio ? [fija('Municipio')] : []),
       fija('Cifra'),
-      ...vacunas.flatMap((v) => abarcando({ ...centrado, text: v.nombre }, v.abarca)),
+      ...vacunas.flatMap((v) => abarcando({ ...centrado, ...tono('accent', 'accentTexto'), text: v.nombre }, v.abarca)),
     ],
-    [...vacias(fijas), ...secciones.flatMap((s) => abarcando({ ...centrado, text: s.titulo }, s.abarca))],
+    [
+      ...vacias(fijas),
+      ...secciones.flatMap((s) => abarcando({ ...centrado, ...tono('accentSuave', 'accentTexto'), text: s.titulo }, s.abarca)),
+    ],
     [...vacias(fijas), ...columnas.map((c) => ({ ...centrado, text: c.dosis.codigo }))],
-    [...vacias(fijas), ...columnas.map((c) => ({ ...centrado, text: textoMeta(c.meta) }))],
+    [...vacias(fijas), ...columnas.map((c) => ({ ...centrado, ...tono('muted', 'mutedTexto'), text: textoMeta(c.meta) }))],
   ];
-  // Cuatro filas por unidad; el nombre (y el municipio) abarcan las cuatro.
+  // Cuatro filas por unidad; el nombre (y el municipio) abarcan las cuatro. Cada cifra con su tono; la cobertura y la
+  // brecha que alcanzan su meta (brecha 0), en verde.
+  const deCifra = (clave, cumple) => {
+    const t = tonoDeCifra(clave, cumple);
+    return t ? tono(t.fondo, t.texto) : {};
+  };
   const unidad = (nombre, municipio, cifras, negrita = false) => CIFRAS.map(([clave, etiqueta], n) => [
     ...(n === 0
       ? [{ text: nombre, rowSpan: CIFRAS.length }, ...(conMunicipio ? [{ text: municipio, rowSpan: CIFRAS.length }] : [])]
       : vacias(fijas - 1)),
-    etiqueta,
-    ...cifras[clave].slice(desde, hasta).map((v) => ({ text: textoCifra(clave, v), alignment: 'right' })),
+    { text: etiqueta, ...deCifra(clave, false) },
+    ...cifras[clave].slice(desde, hasta).map((v, i) => {
+      const cumple = cifras.brecha[desde + i] === 0 && (clave === 'cobertura' || clave === 'brecha');
+      return { text: textoCifra(clave, v), alignment: 'right', ...deCifra(clave, cumple), ...(cumple ? { bold: true } : {}) };
+    }),
   ].map((celda) => {
     const objeto = typeof celda === 'string' ? { text: celda } : celda;
     return negrita && 'text' in objeto ? { ...objeto, bold: true } : objeto;
@@ -199,7 +218,8 @@ function tablaDelTramoAnual(informe, { desde, hasta }, indice) {
       headerRows: FILAS_DE_ENCABEZADO_ANUAL,
       dontBreakRows: true,
       widths: [
-        '*', ...(conMunicipio ? [ANCHO_MUNICIPIO] : []), ANCHO_CIFRA, ...columnas.map(() => ANCHO_CANTIDAD),
+        ANCHO_NOMBRE_ANUAL, ...(conMunicipio ? [ANCHO_MUNICIPIO_ANUAL] : []), ANCHO_CIFRA,
+        ...columnas.map(() => ANCHO_CANTIDAD),
       ],
       body: [...encabezado, ...filas, ...unidad('Total', '', informe.total, true)],
     },

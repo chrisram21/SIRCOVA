@@ -13,6 +13,25 @@ const cifra = 'text-right font-mono tabular-nums'
 const fija = 'sticky left-0 z-10 bg-card'
 // La segunda columna fija empieza donde termina la primera (w-56).
 const fijaCifra = 'sticky left-56 z-10 bg-card'
+// Encabezado (SPEC 66, en los cuatro informes): la vacuna y su sección en el celeste del tema, la meta en gris.
+const encabezadoVacuna = 'bg-accent text-accent-foreground'
+const encabezadoSeccion = 'bg-accent/50 text-accent-foreground'
+
+// El tono de cada cifra del acumulado: la etiqueta fija lleva el color entero (opaco, para tapar lo que se desplaza
+// debajo) y las celdas, uno más suave. Una cobertura o una brecha que alcanza la meta (brecha 0) va en verde.
+const TONOS = {
+  dosis: { etiqueta: 'bg-card', celda: '' },
+  poblacion: { etiqueta: 'bg-muted text-muted-foreground', celda: 'bg-muted/60 text-muted-foreground' },
+  cobertura: { etiqueta: 'bg-accent text-accent-foreground', celda: 'bg-accent/40 text-accent-foreground' },
+  brecha: { etiqueta: 'bg-advertencia text-advertencia-foreground', celda: 'bg-advertencia/50 text-advertencia-foreground' },
+}
+const CUMPLE = 'bg-exito text-exito-foreground font-semibold'
+const cumpleMeta = (valores, i) => valores.brecha[i] === 0
+
+function claseDeCelda(clave, valores, i) {
+  if ((clave === 'cobertura' || clave === 'brecha') && cumpleMeta(valores, i)) return CUMPLE
+  return TONOS[clave].celda
+}
 
 function tituloDeLaFila(nivel, informe) {
   if (nivel === 'municipio') {
@@ -42,9 +61,13 @@ function FilasDeCifras({ nombre, valores, dosis, claseNombre = '' }) {
           {nombre}
         </TableCell>
       )}
-      <TableCell className={`${fijaCifra} text-xs text-muted-foreground ${claseNombre}`}>{etiqueta}</TableCell>
+      <TableCell className={`${fijaCifra} text-xs ${TONOS[clave].etiqueta}`}>{etiqueta}</TableCell>
       {valores[clave].map((valor, i) => (
-        <TableCell key={dosis[i].clave} className={`${cifra} border-l`}>
+        <TableCell
+          key={dosis[i].clave}
+          className={`${cifra} border-l ${claseDeCelda(clave, valores, i)}`}
+          data-cumple={(clave === 'cobertura' || clave === 'brecha') && cumpleMeta(valores, i) ? '' : undefined}
+        >
           {textoCifra(clave, valor)}
         </TableCell>
       ))}
@@ -58,9 +81,17 @@ export default function TablaInforme({ informe, acumulado = false }) {
   const filasDeEncabezado = acumulado ? 4 : 3
   return (
     <div className="flex flex-col gap-2">
-      <div className="overflow-x-auto rounded-lg border bg-card">
+      {/*
+        isolate: el z-10 de las columnas fijas queda dentro de la tabla y no tapa el encabezado de la página.
+        La tabla se desplaza dentro de este contenedor, que mide como mucho la ventana, para que la barra horizontal
+        quede a la vista sin bajar hasta el final; el contenedor propio de shadcn deja de desplazarse.
+      */}
+      <div
+        data-testid="contenedor-informe"
+        className="isolate max-h-[calc(100svh-9rem)] overflow-auto rounded-lg border bg-card [&>[data-slot=table-container]]:overflow-visible"
+      >
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-20 bg-card shadow-[0_1px_0_var(--border)]">
             <TableRow>
               <TableHead
                 rowSpan={filasDeEncabezado}
@@ -74,14 +105,23 @@ export default function TablaInforme({ informe, acumulado = false }) {
                 </TableHead>
               )}
               {vacunas.map((v) => (
-                <TableHead key={v.clave} colSpan={v.abarca} className="border-l text-center" title={v.codigo}>
+                <TableHead
+                  key={v.clave}
+                  colSpan={v.abarca}
+                  className={`border-l text-center ${encabezadoVacuna}`}
+                  title={v.codigo}
+                >
                   {v.nombre}
                 </TableHead>
               ))}
             </TableRow>
             <TableRow>
               {secciones.map((s) => (
-                <TableHead key={s.clave} colSpan={s.abarca} className="border-l text-center text-xs font-normal">
+                <TableHead
+                  key={s.clave}
+                  colSpan={s.abarca}
+                  className={`border-l text-center text-xs font-normal ${encabezadoSeccion}`}
+                >
                   {s.titulo}
                 </TableHead>
               ))}
@@ -94,7 +134,10 @@ export default function TablaInforme({ informe, acumulado = false }) {
             {acumulado && (
               <TableRow>
                 {columnas.map((c, i) => (
-                  <TableHead key={dosis[i].clave} className="border-l text-right text-xs font-normal">
+                  <TableHead
+                    key={dosis[i].clave}
+                    className="border-l bg-muted text-right text-xs font-normal text-muted-foreground"
+                  >
                     {textoMeta(c.meta)}
                   </TableHead>
                 ))}
@@ -147,6 +190,12 @@ export default function TablaInforme({ informe, acumulado = false }) {
           )}
         </Table>
       </div>
+      {acumulado && (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span className={`inline-block size-3 rounded-sm ${CUMPLE}`} aria-hidden="true" />
+          En verde, las coberturas que alcanzan su meta (brecha 0).
+        </p>
+      )}
       {dosisFueraDelConsolidado > 0 && (
         <p className="text-sm text-muted-foreground">
           Además, {formatoEntero.format(dosisFueraDelConsolidado)} dosis de establecimientos que no suman en el

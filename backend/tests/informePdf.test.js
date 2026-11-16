@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { libroDelInforme } from '../src/modulos/informes/informeExcel.service.js';
 import {
-  COLUMNAS_POR_TRAMO, COLUMNAS_POR_TRAMO_ANUAL, documentoDelAcumulado, documentoDelInforme, pdfDelAcumulado,
+  ANCHO_NOMBRE_ANUAL, COLUMNAS_POR_TRAMO, COLUMNAS_POR_TRAMO_ANUAL, documentoDelAcumulado, documentoDelInforme, pdfDelAcumulado,
   pdfDelInforme, saltarAntesDelTramo, tramosDeColumnas,
 } from '../src/modulos/informes/informePdf.service.js';
 
@@ -252,12 +252,54 @@ describe('documento PDF del acumulado anual (SPEC 66)', () => {
     expect(cuerpo[4].every((celda) => !('text' in celda) || celda.bold)).toBe(true);
   });
 
-  it('parte las columnas en tramos más cortos que el informe de producción, y con preliminar lleva la marca', () => {
-    const columnas = [...deVacuna('HEXA', 6), ...deVacuna('POLIO', 6)];
-    const doc = documentoDelAcumulado(acumulado({ columnas, preliminar: true }), datos);
-    expect(COLUMNAS_POR_TRAMO_ANUAL.sinMunicipio).toBeLessThan(COLUMNAS_POR_TRAMO.sinMunicipio);
+  // Lo que ocupa la tabla en la hoja: cada columna con 8 de relleno y una línea de 0.5 entre columnas y a los lados.
+  const anchoTotal = (tabla) =>
+    tabla.table.widths.reduce((suma, w) => suma + w + 8, 0) + (tabla.table.widths.length + 1) * 0.5;
+  const ANCHO_UTIL = 792 - 2 * 30;
+
+  it('parte las columnas en tramos de hasta 11 (10 con «Municipio»), y con preliminar lleva la marca', () => {
+    expect(COLUMNAS_POR_TRAMO_ANUAL).toEqual({ conMunicipio: 10, sinMunicipio: 11 });
+    const once = [...deVacuna('HEXA', 5), ...deVacuna('POLIO', 6)];
+    expect(tablas(documentoDelAcumulado(acumulado({ columnas: once }), datos)).map((t) => t.table.widths.length))
+      .toEqual([2 + 11]);
+
+    const doce = [...deVacuna('HEXA', 6), ...deVacuna('POLIO', 6)];
+    const doc = documentoDelAcumulado(acumulado({ columnas: doce, preliminar: true }), datos);
     expect(tablas(doc).map((t) => t.table.widths.length)).toEqual([2 + 6, 2 + 6]);
     expect(doc.watermark).toMatchObject({ text: 'PRELIMINAR' });
+
+    const porDistrito = documentoDelAcumulado(acumulado({ columnas: doce, nivel: 'distrito' }), datos);
+    expect(tablas(porDistrito).map((t) => t.table.widths.length)).toEqual([3 + 6, 3 + 6]);
+  });
+
+  it('las columnas tienen ancho fijo (el nombre no se estira) y el tramo más ancho cabe en la hoja', () => {
+    const lleno = (nivel, n) => tablas(documentoDelAcumulado(acumulado({ nivel, columnas: deVacuna('HEXA', n) }), datos))[0];
+    const sinMunicipio = lleno('municipio', COLUMNAS_POR_TRAMO_ANUAL.sinMunicipio);
+    const conMunicipio = lleno('distrito', COLUMNAS_POR_TRAMO_ANUAL.conMunicipio);
+    for (const tabla of [sinMunicipio, conMunicipio]) {
+      expect(tabla.table.widths.every((w) => typeof w === 'number')).toBe(true);
+      expect(anchoTotal(tabla)).toBeLessThanOrEqual(ANCHO_UTIL);
+    }
+    expect(sinMunicipio.table.widths[0]).toBe(ANCHO_NOMBRE_ANUAL);
+    expect(lleno('municipio', 2).table.widths[0]).toBe(ANCHO_NOMBRE_ANUAL);
+    // Con una columna más ya no cabría: el límite aprovecha la hoja.
+    const unaMas = (tabla) => anchoTotal(tabla) + 40 + 8 + 0.5;
+    expect(unaMas(sinMunicipio)).toBeGreaterThan(ANCHO_UTIL);
+    expect(unaMas(conMunicipio)).toBeGreaterThan(ANCHO_UTIL);
+  });
+
+  it('pinta el encabezado de la vacuna y, en verde, la cobertura con brecha 0', () => {
+    const columnas = [columna('HEXA', 'D3', 'MENOR_1'), columna('BCG', 'UNICA')];
+    const cifras = {
+      dosis: [1450, 3], poblacion: [1450, null], cobertura: [100, null], brecha: [0, null],
+    };
+    const [tabla] = tablas(documentoDelAcumulado(acumulado({
+      columnas, filas: [{ id: 1, codigo: '1201', nombre: 'San Marcos', municipio: null, ...cifras }], total: cifras,
+    }), datos));
+    const [vacunas] = tabla.table.body;
+    expect(vacunas.find((c) => c.text === 'Hexavalente').fillColor).toBe('#dbeaf6');
+    const cobertura = tabla.table.body.slice(4).find((fila) => fila.some((c) => c.text === 'Cobertura %'));
+    expect(cobertura.find((c) => c.text === '100.0 %').fillColor).toBe('#e3f3e8');
   });
 
   it('se convierte en un PDF', async () => {

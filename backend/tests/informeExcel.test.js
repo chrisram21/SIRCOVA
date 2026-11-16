@@ -282,6 +282,28 @@ describe('libro de Excel del acumulado anual (SPEC 66)', () => {
     expect(hoja.views[0]).toMatchObject({ xSplit: 2, ySplit: n + 3 });
   });
 
+  it('colorea el encabezado y cada cifra con los colores del tema, y en verde lo que alcanza la meta', async () => {
+    const hoja = await leerAcumulado(acumuladoBase({
+      filas: [{ ...acumuladoBase().filas[0], brecha: [0, null], cobertura: [96.6, null] }],
+    }));
+    const fondo = (celda) => celda.fill?.fgColor?.argb ?? null;
+    const n = filaQueEmpieza(hoja, 'Municipio de residencia').number;
+    expect(fondo(hoja.getRow(n).getCell(3))).toBe('FFDBEAF6');
+    expect(fondo(hoja.getRow(n + 1).getCell(3))).toBe('FFEDF4FB');
+    expect(fondo(hoja.getRow(n + 3).getCell(3))).toBe('FFF0F4F8');
+
+    const unidad = filaQueEmpieza(hoja, 'San Marcos').number;
+    const tonos = (i) => [2, 3, 4].map((c) => fondo(hoja.getRow(unidad + i).getCell(c)));
+    expect(tonos(0)).toEqual([null, null, null]);
+    expect(tonos(1)).toEqual(['FFF0F4F8', 'FFF0F4F8', 'FFF0F4F8']);
+    expect(tonos(2)).toEqual(['FFEDF4FB', 'FFE3F3E8', 'FFEDF4FB']);
+    expect(tonos(3)).toEqual(['FFFFF5DD', 'FFE3F3E8', 'FFFFF5DD']);
+    expect(hoja.getRow(unidad + 2).getCell(3).font).toMatchObject({ bold: true, color: { argb: 'FF1E5B34' } });
+    const total = filaQueEmpieza(hoja, 'Total');
+    expect(total.getCell(1).font.bold).toBe(true);
+    expect(hoja.getRow(total.number + 3).getCell(2).font).toMatchObject({ bold: true, color: { argb: 'FF7A4A06' } });
+  });
+
   it('por distrito lleva la columna Municipio, y con preliminar su marca', async () => {
     const hoja = await leerAcumulado(acumuladoBase({
       nivel: 'distrito',

@@ -1381,8 +1381,10 @@ Verificado contra la API real el 2026-11-08, con el build servido por `vite prev
 **Cómo se hará:** Informe que suma los 12 periodos cerrados y los compara con la población anual.
 
 **Criterios de aceptación:**
-- [ ] Muestra dosis acumuladas, población, cobertura anual y brecha.
-- [ ] Advierte si algún periodo del año no está cerrado.
+- [x] Muestra dosis acumuladas, población, cobertura anual y brecha.
+- [x] Advierte si algún periodo del año no está cerrado.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 66 a `main` (`specs/informes/66-hu-49-informe-acumulado-anual.md`). Cuarto informe «Acumulado anual» en «Informes», elegido por año (`anio` en la URL), por departamento, municipio o distrito, con vacuna, red, municipios y la casilla de aprobados. `GET /informes/acumulado-anual` (y `/excel`, `/pdf`, permiso `INFORME_CONSULTAR`) suma las dosis atribuidas por residencia de los meses del año con `cierre_periodo` (`CERRADO` y `RECTIFICACION`, más `APROBADO` con la casilla, como preliminar) y, por cada columna vacuna × grupo de edad × dosis, da cuatro cifras: dosis, población del año (`poblacion_objetivo` del grupo de edad de la sección), cobertura (un decimal) y brecha (⌈meta × población − dosis⌉, mínimo 0, con `dosisQueFaltan` del motor). La meta de cada columna es la del indicador `COBERTURA` que aplica, si no la del `BRECHA`, si no 95, y se edita como hoy (SPEC 43). Sin población, las tres últimas cifras salen «—». El aviso lista los meses del año que no están cerrados, también los que no tienen `cierre_periodo`. Verificada contra la API real el 2026-11-15 desde el navegador con Epidemiología: el acumulado de 2026 de Hexavalente por municipio coincide con `COB_ANUAL_HEXA3` de la corrida de agosto en Ayutla (55.3 %, brecha 421) y Catarina (60.0 %, brecha 77); el total departamental lleva 33 dosis más de D3 que el motor, las del reporte 228 en `RECTIFICACION`, que el informe cuenta como cerrado. Por distrito con la Red No. 1 y aprobados salió «Preliminar» con su aviso, y el Excel (cifras iguales a la pantalla) y el PDF (12 páginas) dejaron sus filas `EXPORTAR`.
 
 #### HU-50. Alertas de reportes pendientes y de proceso
 
