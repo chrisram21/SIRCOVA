@@ -2,7 +2,7 @@
 numero: 66
 titulo: "HU-49 Informe acumulado anual"
 modulo: "Informes"
-estado: "Aprobado"
+estado: "Implementado"
 origen: "Historia de usuario"
 historias: ["[[HU-49]]"]
 archivo: "specs/informes/66-hu-49-informe-acumulado-anual.md"
@@ -15,7 +15,7 @@ tags: ["spec", "modulo/informes", "origen/historia"]
 
 - **Spec completo:** [[specs/informes/66-hu-49-informe-acumulado-anual|abrir el spec]]
 - **Módulo:** [[Módulo Informes]]
-- **Estado:** Aprobado
+- **Estado:** Implementado
 - **Origen:** Historia de usuario
 - **Historia:** [[HU-49]] Informe acumulado anual
 - **Texto del encabezado:** HU-49

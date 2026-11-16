@@ -37,4 +37,4 @@ tags: ["spec", "modulo/configuracion", "origen/historia"]
 - [[SPEC 47]] — Proyectar la cobertura al cierre del año · *Implementado*
 - [[SPEC 50]] — Mapa territorial con semáforo · *Implementado*
 - [[SPEC 60]] — Redes en Indicadores · *Implementado*
-- [[SPEC 66]] — HU-49 Informe acumulado anual · *Aprobado*
+- [[SPEC 66]] — HU-49 Informe acumulado anual · *Implementado*

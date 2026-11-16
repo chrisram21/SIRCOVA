@@ -28,4 +28,4 @@ tags: ["spec", "modulo/informes", "origen/historia"]
 
 ## Lo usan
 
-- [[SPEC 66]] — HU-49 Informe acumulado anual · *Aprobado*
+- [[SPEC 66]] — HU-49 Informe acumulado anual · *Implementado*
