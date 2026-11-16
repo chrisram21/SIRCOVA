@@ -6,7 +6,7 @@ tags: ["modulo", "modulo/indicadores"]
 
 > [!info] Nota generada por `scripts/mapa-obsidian.mjs`: no la edites a mano, se reescribe.
 
-Carpeta: `specs/indicadores/` · 13 specs · [[Inicio]]
+Carpeta: `specs/indicadores/` · 14 specs · [[Inicio]]
 
 ## Specs
 
@@ -23,3 +23,4 @@ Carpeta: `specs/indicadores/` · 13 specs · [[Inicio]]
 - [[SPEC 55]] — Marca de agua «Preliminar» · *Implementado* · Corrección
 - [[SPEC 60]] — Redes en Indicadores · *Implementado* · Retroalimentación
 - [[SPEC 61]] — Pestaña «Producción» en Indicadores · *Implementado* · Retroalimentación
+- [[SPEC 68]] — HU-51 Alertas de cobertura y de calidad · *Implementado* · [[HU-51]]

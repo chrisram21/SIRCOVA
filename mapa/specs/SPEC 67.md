@@ -30,4 +30,4 @@ tags: ["spec", "modulo/revision", "origen/historia"]
 
 ## Lo usan
 
-Ningún spec depende de este todavía.
+- [[SPEC 68]] — HU-51 Alertas de cobertura y de calidad · *Implementado*

@@ -34,3 +34,4 @@ tags: ["spec", "modulo/indicadores", "origen/retroalimentacion"]
 
 - [[SPEC 61]] — Pestaña «Producción» en Indicadores · *Implementado*
 - [[SPEC 62]] — HU-45 Generar informes con filtros · *Implementado*
+- [[SPEC 68]] — HU-51 Alertas de cobertura y de calidad · *Implementado*

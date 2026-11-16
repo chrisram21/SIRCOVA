@@ -31,3 +31,4 @@ tags: ["spec", "modulo/indicadores", "origen/historia"]
 - [[SPEC 53]] — Ajustes menores de interfaz · *Implementado*
 - [[SPEC 54]] — Indicadores por pestañas · *Implementado*
 - [[SPEC 60]] — Redes en Indicadores · *Implementado*
+- [[SPEC 68]] — HU-51 Alertas de cobertura y de calidad · *Implementado*

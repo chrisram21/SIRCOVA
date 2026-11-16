@@ -5807,8 +5807,16 @@ paths:
 
         Las genera y las descarta una tarea del backend que corre al arrancar y cada hora (SPEC 67): fecha límite
         próxima, reporte sin enviar al vencer la fecha y reporte sin revisar por más de 3 días. Las que ya no aplican
-        pasan a `DESCARTADA` y dejan de aparecer. Este endpoint no escribe nada ni deja bitácora. No admite
-        parámetros: uno cualquiera responde 400 `ENTRADA_INVALIDA` (los filtros por tipo y estado llegan con HU-52).
+        pasan a `DESCARTADA` y dejan de aparecer.
+
+        Cada corrida de indicadores no parcial genera también, para los roles de `alerta.rol_destino` de cada
+        indicador con `alerta.generar` (SPEC 68): «Municipio bajo la meta» (`COBERTURA_BAJO_META`, `CRITICA`, el
+        municipio en la franja roja del semáforo) y «Cobertura mayor al 100 %» (`CALIDAD`, `ADVERTENCIA`). Una corrida
+        nueva del mismo mes actualiza el mensaje de las activas y descarta las que ya no aplican.
+
+        Este endpoint no escribe nada ni deja bitácora. No admite parámetros: uno cualquiera responde 400
+        `ENTRADA_INVALIDA` (los filtros por tipo y estado llegan con HU-52). Tienen el permiso el Revisor, el Personal
+        del establecimiento y Epidemiología.
       x-permiso: ALERTA_CONSULTAR
       responses:
         "200":

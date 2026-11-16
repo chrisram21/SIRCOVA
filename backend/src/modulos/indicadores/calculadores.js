@@ -235,3 +235,11 @@ export function colorContraEsperado(umbrales, valor, mes) {
   if (valor == null || !mes) return null;
   return colorDelValor(umbrales, (valor / ((100 / 12) * mes)) * 100, 'COBERTURA');
 }
+
+// SPEC 60: una COBERTURA con prorrateo NINGUNO es la cobertura anual, que se pinta contra lo esperado del mes.
+export const esCoberturaAnual = (doc) => doc?.tipo_calculo === 'COBERTURA' && doc?.denominador?.prorrateo === 'NINGUNO';
+
+// Color de una fila con la regla de la pantalla; lo usan la lectura de resultados y las alertas (SPEC 68).
+export const colorDelIndicador = (doc, valor, mes) => (esCoberturaAnual(doc)
+  ? colorContraEsperado(doc.umbrales, valor, mes)
+  : colorDelValor(doc?.umbrales, valor, doc?.tipo_calculo));

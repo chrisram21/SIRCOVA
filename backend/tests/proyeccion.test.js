@@ -90,9 +90,20 @@ const proyeccion = (codigo, parametros) => indicador({
 
 async function limpiar() {
   const corridas = 'SELECT id FROM corrida_calculo WHERE anio = ?';
+  // SPEC 68: las alertas de la corrida apuntan a sus resultados.
+  await pool.query(
+    `DELETE a FROM alerta a JOIN resultado_indicador ri ON ri.id = a.resultado_indicador_id
+       WHERE ri.corrida_id IN (SELECT id FROM (${corridas}) t)`,
+    [ANIO],
+  );
   await pool.query(`DELETE FROM resultado_indicador WHERE corrida_id IN (SELECT id FROM (${corridas}) t)`, [ANIO]);
   await pool.query(`DELETE FROM corrida_calculo WHERE id IN (SELECT id FROM (${corridas}) t)`, [ANIO]);
   // Una corrida de otro archivo (otro año) también calcula ZVT_HU39_*: sin esto, la vacuna no se borra.
+  await pool.query(
+    `DELETE a FROM alerta a JOIN resultado_indicador ri ON ri.id = a.resultado_indicador_id
+       JOIN vacuna v ON v.id = ri.vacuna_id WHERE v.codigo = ?`,
+    [VACUNA],
+  );
   await pool.query('DELETE ri FROM resultado_indicador ri JOIN vacuna v ON v.id = ri.vacuna_id WHERE v.codigo = ?', [VACUNA]);
   await pool.query('DELETE r FROM reporte_produccion r JOIN periodo p ON p.id = r.periodo_id WHERE p.anio = ?', [ANIO]);
   await pool.query('DELETE cp FROM cierre_periodo cp JOIN periodo p ON p.id = cp.periodo_id WHERE p.anio = ?', [ANIO]);

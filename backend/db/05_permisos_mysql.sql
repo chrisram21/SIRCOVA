@@ -416,6 +416,12 @@ SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo IN ('REVISOR', 'ESTABLECIMIENTO')
    AND p.codigo = 'ALERTA_CONSULTAR';
 
+-- SPEC 68 (HU-51): Epidemiología ve las alertas de cobertura y de calidad de su DDRISS
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'EPIDEMIOLOGIA'
+   AND p.codigo = 'ALERTA_CONSULTAR';
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas
 -- -----------------------------------------------------------------------------

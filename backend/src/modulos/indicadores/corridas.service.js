@@ -4,9 +4,10 @@ import { ErrorApi } from '../../middlewares/errores.js';
 import { registrarBitacora, contextoAuditoria, MODULOS, ACCIONES } from '../auditoria/auditoria.service.js';
 import { esAlcanceNacional, verificarAlcance } from '../auth/alcance.service.js';
 import { entradaInvalida, revisarCampos, revisarParametros } from '../catalogos/catalogos.service.js';
+import { alertarCorrida } from '../alertas/cobertura.service.js';
 import { indicadoresQueAplican } from '../configuracion/indicadores.service.js';
 import {
-  calcularTotalDeRed, colorContraEsperado, colorDelValor, esperadoDelMes, mayorACien, metaYExcedente,
+  calcularTotalDeRed, colorDelIndicador, esCoberturaAnual, esperadoDelMes, mayorACien, metaYExcedente,
   sumaBrechasMunicipales,
 } from './calculadores.js';
 import { calcularIndicadores, leerDatos } from './motor.service.js';
@@ -137,6 +138,11 @@ async function guardarCorrida({ ddrissId, anio, mesHasta, motivo, usuarioId = nu
       );
       const id = insercion.insertId;
       await insertarResultados(conexion, id, { anio, mesHasta }, filas);
+      // SPEC 68: con meses sin cerrar faltan reportes y el avance saldría bajo sin serlo.
+      const parcial = datos.mesesSinCerrar.length > 0;
+      const alertas = parcial
+        ? null
+        : await alertarCorrida(conexion, { corridaId: id, ddrissId, anio, mes: mesHasta, versiones }, contexto);
       await registrarBitacora(
         conexion,
         bitacoraDeCorrida(id, contexto, {
@@ -145,10 +151,11 @@ async function guardarCorrida({ ddrissId, anio, mesHasta, motivo, usuarioId = nu
           mesHasta,
           motivo,
           estado: 'COMPLETADA',
-          parcial: datos.mesesSinCerrar.length > 0,
+          parcial,
           indicadores: calculados,
           omitidos,
           resultados: filas.length,
+          alertas,
         }),
       );
       return id;
@@ -215,13 +222,6 @@ async function versionesUsadas(pares) {
   return new Map(documentos.map((d) => [`${d.codigo}:${Number(d.version)}`, d]));
 }
 
-// SPEC 60: una COBERTURA con prorrateo NINGUNO es la cobertura anual, que se pinta contra lo esperado del mes.
-const esCoberturaAnual = (doc) => doc?.tipo_calculo === 'COBERTURA' && doc?.denominador?.prorrateo === 'NINGUNO';
-
-const colorDe = (doc, valor, mes) => (esCoberturaAnual(doc)
-  ? colorContraEsperado(doc.umbrales, valor, mes)
-  : colorDelValor(doc?.umbrales, valor, doc?.tipo_calculo));
-
 // SPEC 60: la fila «Total de la red» de un indicador, a partir de su departamental y de las filas de los municipios
 // de la red; null si el tipo no tiene total de red o la versión ya no está en MongoDB.
 function filaDeRed(departamental, municipales, doc, red) {
@@ -232,7 +232,7 @@ function filaDeRed(departamental, municipales, doc, red) {
     red: { id: red.id, nombre: red.nombre },
     ...calculo,
     calculable: calculo.valor !== null,
-    color: colorDe(doc, calculo.valor, departamental.mes),
+    color: colorDelIndicador(doc, calculo.valor, departamental.mes),
     mayorACien: mayorACien({ tipoCalculo: doc.tipo_calculo, valor: calculo.valor, esProyeccion: false }),
     ...metaYExcedente(calculo),
     proyeccion: null,
@@ -422,7 +422,7 @@ async function leerResultados(corridaId, { indicador, municipioId, red } = {}) {
         brechaDosis,
         cumpleMeta: f.cumple_meta == null ? null : Boolean(f.cumple_meta),
         calculable: valor !== null,
-        color: colorDe(doc, valor, f.mes),
+        color: colorDelIndicador(doc, valor, f.mes),
         esperado: esCoberturaAnual(doc) ? esperadoDelMes(f.mes) : null,
         esProyeccion: Boolean(f.es_proyeccion),
         mayorACien: mayorACien({ tipoCalculo: doc?.tipo_calculo ?? null, valor, esProyeccion: Boolean(f.es_proyeccion) }),

@@ -43,3 +43,4 @@ tags: ["spec", "modulo/indicadores", "origen/historia"]
 - [[SPEC 54]] — Indicadores por pestañas · *Implementado*
 - [[SPEC 55]] — Marca de agua «Preliminar» · *Implementado*
 - [[SPEC 60]] — Redes en Indicadores · *Implementado*
+- [[SPEC 68]] — HU-51 Alertas de cobertura y de calidad · *Implementado*

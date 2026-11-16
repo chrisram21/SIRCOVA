@@ -4,6 +4,7 @@ import AvanceCierre, { TarjetaReportesCerrados } from '../AvanceCierre.jsx'
 import { cargarIndicadoresDelInicio } from '../indicadoresDelInicio.js'
 import { LineaDeCorte, TarjetaCobertura, TarjetaMunicipiosEnMeta, enlaceAIndicadores } from '../ResumenIndicadores.jsx'
 import { useConsulta } from '../TarjetaResumen.jsx'
+import TarjetaAlertas from '../TarjetaAlertas.jsx'
 import { TarjetasDelInicio } from '../TarjetaSinDatos.jsx'
 
 const consultarIndicadores = async () => ({ indicadores: await cargarIndicadoresDelInicio() })
@@ -16,7 +17,6 @@ export default function InicioEpidemiologia() {
   const avance = useConsulta(consultarAvance, { activa: conAvance })
   const deIndicadores = { consulta: indicadores, enlace: enlaceAIndicadores(indicadores) }
 
-  // Las alertas llegan con HU-50 a HU-52.
   const tarjetas = [
     { titulo: 'Cobertura departamental', Datos: TarjetaCobertura, permisos: ['INDICADOR_CONSULTAR'], props: deIndicadores },
     { titulo: 'Municipios en meta', Datos: TarjetaMunicipiosEnMeta, permisos: ['INDICADOR_CONSULTAR'], props: deIndicadores },
@@ -26,7 +26,7 @@ export default function InicioEpidemiologia() {
       permisos: ['REPORTE_AVANCE_CONSULTAR'],
       props: { consulta: avance },
     },
-    { titulo: 'Alertas activas' },
+    { titulo: 'Alertas activas', Datos: TarjetaAlertas, permisos: ['ALERTA_CONSULTAR'] },
   ]
 
   return (
