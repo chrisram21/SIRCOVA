@@ -282,7 +282,7 @@ describe('GET /alertas', () => {
   const ids = {};
   let estadigrafa;
   let personal;
-  let epidemiologia;
+  let sinPermiso;
 
   async function tokenDe(nombreUsuario) {
     const [[cuenta]] = await pool.query(
@@ -345,7 +345,20 @@ describe('GET /alertas', () => {
 
   beforeAll(async () => {
     await limpiarEndpoint();
-    [estadigrafa, personal, epidemiologia] = await Promise.all(['estadigrafa', 'cs1201', 'epidemiologia'].map(tokenDe));
+    // El 403 se prueba con una cuenta de un rol sin ALERTA_CONSULTAR, buscada por SQL (nota del backend, SPEC 61).
+    const [[cuentaSinPermiso]] = await pool.query(
+      `SELECT u.nombre_usuario
+         FROM usuario u
+         JOIN empleado e ON e.id = u.empleado_id
+        WHERE u.activo = TRUE AND e.activo = TRUE AND u.debe_cambiar_contrasena = FALSE
+          AND NOT EXISTS (SELECT 1 FROM rol_permiso rp JOIN permiso p ON p.id = rp.permiso_id
+                           WHERE rp.rol_id = u.rol_id AND p.codigo = 'ALERTA_CONSULTAR')
+        ORDER BY u.id
+        LIMIT 1`,
+    );
+    [estadigrafa, personal, sinPermiso] = await Promise.all(
+      ['estadigrafa', 'cs1201', cuentaSinPermiso.nombre_usuario].map(tokenDe),
+    );
     const [[otroEstablecimiento]] = await pool.query("SELECT id FROM establecimiento WHERE codigo = 'CS-1202'");
     const [otra] = await pool.query(
       `INSERT INTO ddriss (codigo, nombre, departamento_id, activo)
@@ -439,7 +452,6 @@ describe('GET /alertas', () => {
 
     expect((await request(app).get('/api/v1/alertas')).status).toBe(401);
 
-    expect(epidemiologia.rol).toBe('EPIDEMIOLOGIA');
-    expect((await listar(epidemiologia)).status).toBe(403);
+    expect((await listar(sinPermiso)).status).toBe(403);
   });
 });

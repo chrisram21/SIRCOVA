@@ -100,6 +100,11 @@ async function limpiar() {
   await (await indicadores()).deleteMany({ $or: [{ codigo: /ZVT_HU35/ }, { nombre: /^vitest-hu35-/ }] });
   // Una corrida de otro archivo que coincida en el tiempo calcula estos indicadores (SPEC 44): sin esto, la vacuna no se borra.
   await pool.query(
+    `DELETE a FROM alerta a JOIN resultado_indicador ri ON ri.id = a.resultado_indicador_id
+       JOIN vacuna v ON v.id = ri.vacuna_id WHERE v.codigo IN (?)`,
+    [[VACUNA, VACUNA_INACTIVA]],
+  );
+  await pool.query(
     'DELETE ri FROM resultado_indicador ri JOIN vacuna v ON v.id = ri.vacuna_id WHERE v.codigo IN (?)',
     [[VACUNA, VACUNA_INACTIVA]],
   );

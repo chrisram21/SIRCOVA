@@ -112,9 +112,20 @@ const brecha = () => indicador({
 
 async function limpiar() {
   const corridas = 'SELECT c.id FROM corrida_calculo c LEFT JOIN ddriss d ON d.id = c.ddriss_id WHERE c.anio = ? OR d.codigo = ?';
+  // SPEC 68: las alertas de la corrida apuntan a sus resultados.
+  await pool.query(
+    `DELETE a FROM alerta a JOIN resultado_indicador ri ON ri.id = a.resultado_indicador_id
+       WHERE ri.corrida_id IN (SELECT id FROM (${corridas}) t)`,
+    [ANIO, DDRISS_OTRA],
+  );
   await pool.query(`DELETE FROM resultado_indicador WHERE corrida_id IN (SELECT id FROM (${corridas}) t)`, [ANIO, DDRISS_OTRA]);
   await pool.query(`DELETE FROM corrida_calculo WHERE id IN (SELECT id FROM (${corridas}) t)`, [ANIO, DDRISS_OTRA]);
   // Una corrida de otro archivo (otro año) también calcula ZVT_HU36_*: sin esto, la vacuna no se borra.
+  await pool.query(
+    `DELETE a FROM alerta a JOIN resultado_indicador ri ON ri.id = a.resultado_indicador_id
+       JOIN vacuna v ON v.id = ri.vacuna_id WHERE v.codigo = ?`,
+    [VACUNA],
+  );
   await pool.query('DELETE ri FROM resultado_indicador ri JOIN vacuna v ON v.id = ri.vacuna_id WHERE v.codigo = ?', [VACUNA]);
   await pool.query('DELETE FROM ddriss WHERE codigo = ?', [DDRISS_OTRA]);
   await pool.query(

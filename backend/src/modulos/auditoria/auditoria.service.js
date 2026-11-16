@@ -61,28 +61,39 @@ export function contextoAuditoria(req) {
   };
 }
 
-// Recibe la conexión de la transacción en curso para que la fila se confirme o se revierta junto con el cambio.
-export async function registrarBitacora(conexion, datos) {
+const COLUMNAS_BITACORA = `bitacora
+       (usuario_id, nombre_usuario_intento, modulo, accion, entidad, entidad_id,
+        valores_anteriores, valores_nuevos, ip_origen, agente_usuario)`;
+
+function filaDeBitacora(datos) {
   if (!Object.hasOwn(MODULOS, datos.modulo ?? '')) throw new Error(`Módulo de bitácora desconocido: ${datos.modulo}`);
   if (!Object.hasOwn(ACCIONES, datos.accion ?? '')) throw new Error(`Acción de bitácora desconocida: ${datos.accion}`);
+  return [
+    datos.usuarioId ?? null,
+    // Las columnas tienen largo fijo; un texto más largo haría fallar el INSERT.
+    recortar(datos.nombreUsuarioIntento, 50),
+    datos.modulo,
+    datos.accion,
+    datos.entidad,
+    datos.entidadId == null ? null : String(datos.entidadId),
+    aJson(datos.valoresAnteriores),
+    aJson(datos.valoresNuevos),
+    recortar(datos.ipOrigen, 45),
+    recortar(datos.agenteUsuario, 255),
+  ];
+}
 
+// Recibe la conexión de la transacción en curso para que la fila se confirme o se revierta junto con el cambio.
+export async function registrarBitacora(conexion, datos) {
   await conexion.query(
-    `INSERT INTO bitacora
-       (usuario_id, nombre_usuario_intento, modulo, accion, entidad, entidad_id,
-        valores_anteriores, valores_nuevos, ip_origen, agente_usuario)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      datos.usuarioId ?? null,
-      // Las columnas tienen largo fijo; un texto más largo haría fallar el INSERT.
-      recortar(datos.nombreUsuarioIntento, 50),
-      datos.modulo,
-      datos.accion,
-      datos.entidad,
-      datos.entidadId == null ? null : String(datos.entidadId),
-      aJson(datos.valoresAnteriores),
-      aJson(datos.valoresNuevos),
-      recortar(datos.ipOrigen, 45),
-      recortar(datos.agenteUsuario, 255),
-    ],
+    `INSERT INTO ${COLUMNAS_BITACORA} VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    filaDeBitacora(datos),
   );
+}
+
+// Varias filas en un solo INSERT (SPEC 68): una corrida puede crear o descartar decenas de alertas, y en Aiven cada
+// viaje cuesta ~130 ms dentro de una transacción que bloquea la DDRISS.
+export async function registrarBitacoras(conexion, lista) {
+  if (lista.length === 0) return;
+  await conexion.query(`INSERT INTO ${COLUMNAS_BITACORA} VALUES ?`, [lista.map(filaDeBitacora)]);
 }

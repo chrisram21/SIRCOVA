@@ -358,8 +358,45 @@ describe('resumen por rol (SPEC 48)', () => {
     ])
     // Sin REPORTE_REVISAR no lleva a la bandeja.
     expect(cierre.queryByRole('link', { name: 'Ir a revisión' })).toBeNull()
+    // Sin ALERTA_CONSULTAR, «Alertas activas» queda sin datos y no pide nada.
     expect(screen.getAllByText('Sin datos todavía')).toHaveLength(1)
+    expect(listarAlertas).not.toHaveBeenCalled()
     expect(document.querySelector('svg.recharts-surface, canvas')).toBeNull()
+  })
+
+  test('EPIDEMIOLOGIA con ALERTA_CONSULTAR ve en «Alertas activas» la alerta más importante', async () => {
+    listarResultados.mockResolvedValue({ corrida: corridaDe([AVANCE_HEXA3]), resultados: [] })
+    obtenerAvance.mockResolvedValue(AVANCE)
+    listarAlertas.mockResolvedValue({
+      total: 3,
+      porSeveridad: { CRITICA: 2, ADVERTENCIA: 1, INFO: 0 },
+      alertas: [
+        {
+          id: 41,
+          tipo: 'COBERTURA_BAJO_META',
+          severidad: 'CRITICA',
+          titulo: 'Municipio bajo la meta',
+          mensaje: 'Tacaná: Avance de Hexavalente 3.ª dosis (Hexavalente) en septiembre de 2026 quedó en 60.0 %.',
+          generadaEn: '2026-10-27T06:00:00.000Z',
+          periodo: { id: 321, anio: 2026, mes: 9 },
+          establecimiento: null,
+          reporteId: null,
+        },
+      ],
+    })
+    abrirInicio({
+      rol: 'EPIDEMIOLOGIA',
+      permisos: ['INDICADOR_CONSULTAR', 'REPORTE_AVANCE_CONSULTAR', 'ALERTA_CONSULTAR'],
+    })
+
+    const alertas = within(tarjeta('Alertas activas'))
+    const principal = await alertas.findByRole('group', { name: 'Alerta más importante' })
+    expect(alertas.getByText('2 críticas, 1 advertencia')).toBeTruthy()
+    expect(within(principal).getByText('Crítica')).toBeTruthy()
+    expect(within(principal).getByText(/^Tacaná: Avance de Hexavalente/)).toBeTruthy()
+    expect(alertas.getByRole('link', { name: 'Ver alertas' }).getAttribute('href')).toBe('/alertas')
+    expect(listarAlertas).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('Sin datos todavía')).toBeNull()
   })
 
   test('sin corridas en el año ni en el anterior, las tarjetas de indicadores lo dicen', async () => {

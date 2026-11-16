@@ -62,6 +62,12 @@ async function limpiar() {
   const anios = [ANIO, ANIO_ANTERIOR];
   const deLaPrueba =
     'SELECT c.id FROM corrida_calculo c LEFT JOIN ddriss d ON d.id = c.ddriss_id WHERE c.anio IN (?) OR d.codigo = ?';
+  // SPEC 68: las alertas de la corrida apuntan a sus resultados.
+  await pool.query(
+    `DELETE a FROM alerta a JOIN resultado_indicador ri ON ri.id = a.resultado_indicador_id
+       WHERE ri.corrida_id IN (SELECT id FROM (${deLaPrueba}) t)`,
+    [anios, DDRISS_OTRA],
+  );
   await pool.query(`DELETE FROM resultado_indicador WHERE corrida_id IN (SELECT id FROM (${deLaPrueba}) t)`, [anios, DDRISS_OTRA]);
   await pool.query(`DELETE FROM corrida_calculo WHERE id IN (SELECT id FROM (${deLaPrueba}) t)`, [anios, DDRISS_OTRA]);
   await pool.query('DELETE FROM ddriss WHERE codigo = ?', [DDRISS_OTRA]);

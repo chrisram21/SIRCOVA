@@ -76,8 +76,19 @@ async function limpiar() {
   // Aplicar una rectificación calcula los indicadores (SPEC 44): sus corridas no caen con el periodo, y una corrida de
   // otro archivo también calcula ZVT_HU33_COB.
   const corridas = 'SELECT id FROM corrida_calculo WHERE anio IN (?)';
+  // SPEC 68: las alertas de la corrida apuntan a sus resultados.
+  await pool.query(
+    `DELETE a FROM alerta a JOIN resultado_indicador ri ON ri.id = a.resultado_indicador_id
+       WHERE ri.corrida_id IN (SELECT id FROM (${corridas}) t)`,
+    [ANIOS],
+  );
   await pool.query(`DELETE FROM resultado_indicador WHERE corrida_id IN (SELECT id FROM (${corridas}) t)`, [ANIOS]);
   await pool.query('DELETE FROM corrida_calculo WHERE anio IN (?)', [ANIOS]);
+  await pool.query(
+    `DELETE a FROM alerta a JOIN resultado_indicador ri ON ri.id = a.resultado_indicador_id
+       JOIN vacuna v ON v.id = ri.vacuna_id WHERE v.codigo = ?`,
+    [VACUNA],
+  );
   await pool.query('DELETE ri FROM resultado_indicador ri JOIN vacuna v ON v.id = ri.vacuna_id WHERE v.codigo = ?', [VACUNA]);
   await (await obtenerDb()).collection('configuracion_indicadores').deleteMany({ codigo: /^ZVT_HU33/ });
   const reportes = `SELECT r.id FROM reporte_produccion r JOIN periodo p ON p.id = r.periodo_id WHERE p.anio IN (${ANIOS.join(', ')})`;

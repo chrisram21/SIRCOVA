@@ -141,6 +141,12 @@ const filaDeRed = (lista, codigo) => lista.find((r) => r.indicadorCodigo === cod
 async function limpiar() {
   await (await coleccion()).deleteMany({ codigo: /^ZVT_HU60_/ });
   const delDdriss = 'SELECT c.id FROM corrida_calculo c JOIN ddriss d ON d.id = c.ddriss_id WHERE d.codigo = ?';
+  // SPEC 68: las alertas de la corrida apuntan a sus resultados.
+  await pool.query(
+    `DELETE a FROM alerta a JOIN resultado_indicador ri ON ri.id = a.resultado_indicador_id
+       WHERE ri.corrida_id IN (SELECT id FROM (${delDdriss}) t)`,
+    [DDRISS_PRUEBA],
+  );
   await pool.query(`DELETE FROM resultado_indicador WHERE corrida_id IN (SELECT id FROM (${delDdriss}) t)`, [DDRISS_PRUEBA]);
   await pool.query(`DELETE FROM corrida_calculo WHERE id IN (SELECT id FROM (${delDdriss}) t)`, [DDRISS_PRUEBA]);
   const redesDelDdriss = 'SELECT r.id FROM red r JOIN ddriss d ON d.id = r.ddriss_id WHERE d.codigo = ?';

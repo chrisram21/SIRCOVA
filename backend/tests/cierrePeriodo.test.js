@@ -62,6 +62,12 @@ const dosDigitos = (n) => String(n).padStart(2, '0');
 async function limpiar() {
   // Cada cierre calcula los indicadores del mes (SPEC 44): sus corridas no caen con el periodo.
   const corridas = 'SELECT id FROM corrida_calculo WHERE anio = ?';
+  // SPEC 68: las alertas de la corrida apuntan a sus resultados.
+  await pool.query(
+    `DELETE a FROM alerta a JOIN resultado_indicador ri ON ri.id = a.resultado_indicador_id
+       WHERE ri.corrida_id IN (SELECT id FROM (${corridas}) t)`,
+    [ANIO],
+  );
   await pool.query(`DELETE FROM resultado_indicador WHERE corrida_id IN (SELECT id FROM (${corridas}) t)`, [ANIO]);
   await pool.query('DELETE FROM corrida_calculo WHERE anio = ?', [ANIO]);
   const reportes = `SELECT r.id FROM reporte_produccion r JOIN periodo p ON p.id = r.periodo_id WHERE p.anio = ${ANIO}`;
