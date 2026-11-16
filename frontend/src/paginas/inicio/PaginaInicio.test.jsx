@@ -5,6 +5,7 @@ import { listarDdriss, listarPeriodos } from '@/api/catalogos.js'
 import { listarEsquemas } from '@/api/configuracion.js'
 import { listarCorridas, listarResultados } from '@/api/indicadores.js'
 import { listarReportes, obtenerValidacionGuardada } from '@/api/produccion.js'
+import { listarAlertas } from '@/api/alertas.js'
 import { listarRectificaciones } from '@/api/rectificaciones.js'
 import { obtenerAvance, obtenerBandeja } from '@/api/revision.js'
 import { listarUsuarios } from '@/api/usuarios.js'
@@ -22,6 +23,7 @@ vi.mock('@/api/indicadores.js', () => ({
 }))
 vi.mock('@/api/revision.js', () => ({ obtenerAvance: vi.fn(), obtenerBandeja: vi.fn() }))
 vi.mock('@/api/rectificaciones.js', () => ({ listarRectificaciones: vi.fn() }))
+vi.mock('@/api/alertas.js', () => ({ listarAlertas: vi.fn() }))
 vi.mock('@/api/usuarios.js', () => ({ listarUsuarios: vi.fn() }))
 vi.mock('@/api/configuracion.js', () => ({ listarEsquemas: vi.fn() }))
 
@@ -29,6 +31,7 @@ const TARJETAS_POR_ROL = {
   ESTABLECIMIENTO: [
     'Estado y fecha límite de mi reporte',
     'Validaciones pendientes',
+    'Alertas',
     'Cobertura de mi municipio',
     'Tendencia mensual',
   ],
@@ -199,7 +202,8 @@ describe('tarjetas con datos', () => {
     listarReportes.mockImplementation(async ({ periodoId }) => ({
       elementos: periodoId === 9 ? [{ id: 250, estado: 'EN_REVISION' }] : [],
     }))
-    abrirInicio({ rol: 'ESTABLECIMIENTO', permisos: ['PERIODO_CONSULTAR', 'REPORTE_CONSULTAR'] })
+    listarAlertas.mockResolvedValue({ total: 0, porSeveridad: { CRITICA: 0, ADVERTENCIA: 0, INFO: 0 }, alertas: [] })
+    abrirInicio({ rol: 'ESTABLECIMIENTO', permisos: ['PERIODO_CONSULTAR', 'REPORTE_CONSULTAR', 'ALERTA_CONSULTAR'] })
 
     const miReporte = within(tarjeta('Estado y fecha límite de mi reporte'))
     expect(await miReporte.findByText('octubre de 2026')).toBeTruthy()
@@ -209,6 +213,7 @@ describe('tarjetas con datos', () => {
     const validaciones = within(tarjeta('Validaciones pendientes'))
     expect(validaciones.getByText('Todavía no ha creado el reporte de octubre de 2026.')).toBeTruthy()
     expect(obtenerValidacionGuardada).not.toHaveBeenCalled()
+    expect(await screen.findByText('No hay alertas activas.')).toBeTruthy()
     expect(screen.getAllByText('Sin datos todavía')).toHaveLength(2)
   })
 

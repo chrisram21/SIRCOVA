@@ -6,7 +6,7 @@ tags: ["modulo", "modulo/revision"]
 
 > [!info] Nota generada por `scripts/mapa-obsidian.mjs`: no la edites a mano, se reescribe.
 
-Carpeta: `specs/revision/` · 9 specs · [[Inicio]]
+Carpeta: `specs/revision/` · 10 specs · [[Inicio]]
 
 ## Specs
 
@@ -19,3 +19,4 @@ Carpeta: `specs/revision/` · 9 specs · [[Inicio]]
 - [[SPEC 40]] — Solicitar una rectificación · *Implementado* · [[HU-32]]
 - [[SPEC 41]] — Resolver una rectificación · *Implementado* · [[HU-33]]
 - [[SPEC 57]] — Control de rectificaciones por establecimiento · *Implementado* · Corrección
+- [[SPEC 67]] — HU-50 Alertas de reportes pendientes y de proceso · *Implementado* · [[HU-50]]

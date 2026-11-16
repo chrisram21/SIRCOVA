@@ -190,6 +190,10 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
 INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('INFORME_CONSULTAR',         'REPORTES',                'Generar los informes de producción de su DDRISS');
 
+-- SPEC 67 (HU-50): alertas activas en el Inicio
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('ALERTA_CONSULTAR',          'REVISION',                'Consultar las alertas activas dirigidas a su rol en su ámbito');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -405,6 +409,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo IN ('REVISOR', 'EPIDEMIOLOGIA', 'AUTORIDAD')
    AND p.codigo = 'INFORME_CONSULTAR';
+
+-- SPEC 67 (HU-50): la estadígrafa (Revisor) y el Personal del establecimiento ven sus alertas en el Inicio
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo IN ('REVISOR', 'ESTABLECIMIENTO')
+   AND p.codigo = 'ALERTA_CONSULTAR';
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

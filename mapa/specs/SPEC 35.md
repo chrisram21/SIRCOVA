@@ -40,3 +40,4 @@ tags: ["spec", "modulo/revision", "origen/historia"]
 - [[SPEC 48]] — Resumen del Inicio por rol · *Implementado*
 - [[SPEC 53]] — Ajustes menores de interfaz · *Implementado*
 - [[SPEC 58]] — Límite de opciones en los combobox que crecen · *Implementado*
+- [[SPEC 67]] — HU-50 Alertas de reportes pendientes y de proceso · *Implementado*

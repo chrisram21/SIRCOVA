@@ -38,3 +38,4 @@ tags: ["spec", "modulo/revision", "origen/historia"]
 - [[SPEC 39]] — Cerrar el periodo · *Implementado*
 - [[SPEC 41]] — Resolver una rectificación · *Implementado*
 - [[SPEC 42]] — Historial de estados del reporte · *Implementado*
+- [[SPEC 67]] — HU-50 Alertas de reportes pendientes y de proceso · *Implementado*
