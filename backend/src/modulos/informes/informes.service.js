@@ -355,7 +355,7 @@ export async function leerProduccion({ ddrissId, informe, desde, hasta, vacunaId
 }
 
 // Los activos del departamento sede sin el 9999, más los que tienen datos en el rango.
-async function universoDeMunicipios(ddrissId, conDatos) {
+export async function universoDeMunicipios(ddrissId, conDatos) {
   const [filas] = await pool.query(
     `SELECT m.id, m.codigo_ine, m.nombre FROM municipio m
       WHERE (m.activo = TRUE AND m.codigo_ine <> '9999'

@@ -1,4 +1,5 @@
 import * as informesService from './informes.service.js';
+import * as acumuladoAnualService from './acumuladoAnual.service.js';
 import { contextoAuditoria } from '../auditoria/auditoria.service.js';
 
 export async function opcionesDeInformes(req, res) {
@@ -7,6 +8,10 @@ export async function opcionesDeInformes(req, res) {
 
 export async function informePorFila(req, res) {
   res.json(await informesService.informePorFila(req.usuario, req.query));
+}
+
+export async function acumuladoAnual(req, res) {
+  res.json(await acumuladoAnualService.acumuladoAnual(req.usuario, req.query));
 }
 
 // formato: la extensión del archivo (xlsx o pdf); express pone su Content-Type.

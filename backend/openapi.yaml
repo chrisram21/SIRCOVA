@@ -5681,7 +5681,8 @@ paths:
           suyos. La de una fila que junta municipios (departamento, «Sin distrito», `total`) es `null` si a uno le
           falta.
         - **Meta de cada columna:** entre las versiones de `configuracion_indicadores` que aplican hoy a la DDRISS,
-          sin `filtros_dimension`, con la misma vacuna, dosis y `clasificacion_poblacion` que la columna, la de
+          con la misma vacuna, dosis y `clasificacion_poblacion` que la columna y que la midan entera (sin
+          `filtros_dimension`, o con `grupo_edad` como único filtro y justo el grupo de la columna), la de
           `tipoCalculo` `COBERTURA`; si no hay, la de `BRECHA` (con varias, la primera por código). La meta es su
           `meta.valor`; sin versión, 95 e `indicador: null`.
         - **Cobertura:** dosis ÷ población × 100, con 1 decimal. **Brecha:** máx(0, ⌈meta ÷ 100 × población −

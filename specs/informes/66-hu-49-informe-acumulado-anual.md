@@ -77,7 +77,7 @@ No hay tablas, colecciones, vistas ni permisos nuevos. Se leen `v_produccion`, `
 ### Meta de cada columna
 
 1. Se leen las versiones que aplican hoy a la DDRISS con `indicadoresQueAplican`.
-2. Se descartan las que tienen `filtros_dimension` en `aplica_a[0]`: miden un subconjunto, no la columna entera.
+2. Se descartan las que filtran una parte de la columna: cuenta una versión sin `filtros_dimension` en `aplica_a[0]`, o cuyo único filtro es `grupo_edad` con justo el grupo de edad de la columna (como `COB_HEXA3`, con `grupo_edad: [MENOR_1]`). Un filtro de otra dimensión (por ejemplo, solo un sexo) o de otros grupos no cuenta.
 3. Una versión corresponde a la columna si su `aplica_a[0]` tiene la misma vacuna, la misma dosis y la `clasificacion_poblacion` igual al grupo de edad de la columna.
 4. Manda la de `tipo_calculo` `COBERTURA`; si no hay, la de `BRECHA`. Si hay varias del mismo tipo, la primera por `codigo`.
 5. La meta es `meta.valor` de esa versión; sin versión, 95.
@@ -180,8 +180,8 @@ Respuesta:
 
 1. **Contrato.** Los tres endpoints en `backend/openapi.yaml`, con `InformeAcumuladoAnual`, el parámetro `anio` y sus 400, 403 y 404.
 2. **Separar lo reutilizable.** En `informes.service.js`, dejar como funciones exportadas las columnas, las filas por nivel, los recortes y la consulta de dosis por residencia, y exportar `dosisQueFaltan`. Correr `informes.test.js` y `corridas.test.js`: deben pasar igual.
-3. **Dosis y población.** `acumuladoAnual.service.js` con las dosis del año por residencia, los meses sin cerrar, `preliminar` y la población por fila y columna. Pruebas en `informes.test.js` con un año ficticio, la DDRISS `ZVT_INF66` y su población por SQL, borrados al inicio y al final:
-   - las dosis cuadran con el informe `residencia` de enero a diciembre;
+3. **Dosis y población.** `acumuladoAnual.service.js` con las dosis del año por residencia, los meses sin cerrar, `preliminar` y la población por fila y columna. Pruebas en `informes.test.js` sobre los datos de 2086 de la DDRISS `ZVT_INF62` del SPEC 62, más su población de 2086 por SQL, que `limpiar` borra al inicio y al final:
+   - las dosis cuadran con el informe `residencia` de los meses del año con `cierre_periodo`;
    - un mes sin `cierre_periodo` y otro `ABIERTO` salen en `mesesSinCerrar`;
    - un `APROBADO` solo cuenta con la casilla;
    - un municipio sin población deja `null` su fila y el total;
@@ -189,7 +189,7 @@ Respuesta:
 4. **Metas y cálculos.** La meta por columna y la cobertura y la brecha por celda. Pruebas con indicadores de prueba en MongoDB (`ZVT_SPEC66*`), borrados al terminar:
    - manda `COBERTURA` sobre `BRECHA`;
    - sin indicador, 95;
-   - un indicador con `filtros_dimension` no cuenta;
+   - un indicador que filtra otra dimensión no cuenta, y uno que filtra solo el grupo de edad de la columna sí;
    - la brecha del total sale de su población, no de la suma de las filas;
    - población 0 da `null`.
 5. **Rutas y controlador** de `GET /informes/acumulado-anual`, con los 403 del Personal del establecimiento y del Administrador.
@@ -233,13 +233,16 @@ Respuesta:
 - **Sí:** dosis atribuidas por residencia, como el Excel 3 del SPEC 62: es la base de la cobertura. **Sí:** la casilla de aprobados, como en los demás informes.
 - **Sí:** meta del indicador `COBERTURA`, si no la del `BRECHA`, si no 95, decidido por el equipo. Se edita como hoy (SPEC 43), sin tocar la base. **No:** una meta nueva por DDRISS o por vacuna guardada en la base, que toca el modelo y los permisos (zona protegida). **No:** un campo de meta en los filtros.
 - **Sí:** la versión que aplica hoy (`indicadoresQueAplican`). **No:** la que aplicaba en diciembre del año del informe, que pediría leer el historial de versiones; queda como riesgo.
-- **Sí:** descartar las versiones con `filtros_dimension`: miden un subconjunto (por ejemplo, solo un sexo) y su meta no es la de la columna entera.
+- **Sí (corregido en la implementación, paso 4, decidido con Chris):** descartar solo las versiones cuyos `filtros_dimension` miden una parte de la columna (otra dimensión, u otros grupos de edad). Los indicadores reales (`COB_HEXA3`, `BRECHA_HEXA3`) filtran `grupo_edad: [MENOR_1]`, que es justo su columna: con la regla de antes («descartar las que tienen `filtros_dimension`») ninguno contaba y todas las metas salían en 95. **No:** ignorar los filtros, que daría a la columna entera la meta de un indicador solo de niñas.
 - **Sí:** población anual completa, sin prorrateo: el informe es para el cierre del año. Durante el año, la cobertura sale baja; el aviso de meses sin cerrar lo explica.
 - **Sí:** la brecha del total con sus propias dosis y población, como la fila departamental del motor. **No:** sumar las brechas de las filas, que no cuadra con la cobertura del total.
 - **Sí:** si a un municipio le falta la población, el total queda sin cobertura ni brecha, como el motor. **No:** sumar solo los que la tienen, que daría una cobertura engañosa.
 - **Sí:** el esquema del último mes del año con `cierre_periodo`. **No:** el de diciembre sin más, que puede no existir todavía.
 - **Sí:** el aviso incluye los meses sin `cierre_periodo`, porque la historia pide advertir «si algún periodo del año no está cerrado».
 - **Sí:** reutilizar `TablaInforme.jsx` con props nuevas y las funciones de `informes.service.js`. **No:** una tabla o un servicio copiado.
+- **Sí (agregado en la implementación, paso 2):** además de lo previsto, se exportan `llave`, `leerIds`, `departamentoDeLaDdriss`, `municipiosDelRecorte`, `leerProduccion`, `filasDelNivel`, `universoDeMunicipios` y `datosDelEncabezado`, y las revisiones de `vacuna` y `redId` pasan a `leerVacuna` y `leerRedId`, en el mismo orden dentro de `leerConsulta`.
+- **Sí (agregado en la implementación, paso 3, decidido con Chris):** las pruebas usan los datos de 2086 de `ZVT_INF62` (enero `CERRADO`, febrero `EN_CIERRE` con un `APROBADO`, marzo sin `cierre_periodo`, distritos y red) más su población de 2086. **No:** una DDRISS `ZVT_INF66` propia, que repetía unas 150 líneas de preparación.
+- **Sí (agregado en la implementación, paso 3):** los municipios de cada fila (para sumar su población) salen de los mismos `destinos` de `filasDelNivel` que reparten las dosis, aplicados a cada municipio del universo dentro del recorte. Una fila sin municipios tiene población `null`.
 
 ## Riesgos
 
