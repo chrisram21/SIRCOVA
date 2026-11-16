@@ -135,3 +135,66 @@ test('por distrito, «Sin distrito» no lleva municipio y cada distrito sí', ()
   expect(filaDe('Distrito San Marcos').querySelector('p').textContent).toBe('San Marcos')
   expect(filaDe('Sin distrito').querySelector('p')).toBeNull()
 })
+
+describe('acumulado anual (SPEC 66)', () => {
+  const COLUMNAS_ANUAL = [
+    { vacuna: HEXA, seccion: { grupoEdad: 'MENOR_1', titulo: '< 1 año' }, dosis: { id: 9, codigo: 'D3' },
+      meta: { valor: 95, indicador: 'COB_HEXA3' } },
+    { vacuna: BCG, seccion: null, dosis: { id: 20, codigo: 'UNICA' }, meta: { valor: 90.5, indicador: null } },
+  ]
+  const cifras = (dosis, poblacion, cobertura, brecha) => ({ dosis, poblacion, cobertura, brecha })
+  const anual = (cambios = {}) => ({
+    informe: 'acumulado-anual',
+    nivel: 'municipio',
+    anio: 2026,
+    incluirAprobados: false,
+    columnas: COLUMNAS_ANUAL,
+    filas: [{ id: 1, codigo: '1201', nombre: 'San Marcos', municipio: null,
+      ...cifras([1300, 7], [1450, null], [89.66, null], [78, null]) }],
+    total: cifras([1300, 7], [1450, null], [89.66, null], [78, null]),
+    mesesSinCerrar: [],
+    preliminar: false,
+    ...cambios,
+  })
+  const textosDe = (tr) => [...tr.querySelectorAll('td')].map((td) => td.textContent)
+
+  test('el encabezado lleva «Cifra» y una cuarta fila con la meta de cada columna', () => {
+    render(<TablaInforme informe={anual()} acumulado />)
+    const [vacunas, , dosis, metas] = screen.getAllByRole('row').slice(0, 4)
+    expect(celdasDe(vacunas, 'th').map((th) => [th.textContent, th.getAttribute('rowspan')])).toEqual([
+      ['Municipio de residencia', '4'], ['Cifra', '4'], ['Hexavalente', null], ['BCG', null],
+    ])
+    expect(celdasDe(dosis, 'th').map((th) => th.textContent)).toEqual(['D3', 'UNICA'])
+    expect(celdasDe(metas, 'th').map((th) => th.textContent)).toEqual(['Meta 95 %', 'Meta 90.5 %'])
+  })
+
+  test('cada unidad ocupa cuatro filas, con «—» sin valor y la cobertura con un decimal', () => {
+    render(<TablaInforme informe={anual()} acumulado />)
+    const filas = screen.getAllByRole('row').slice(4)
+    expect(filas.map(textosDe)).toEqual([
+      ['San Marcos', 'Dosis', '1,300', '7'],
+      ['Población', '1,450', '—'],
+      ['Cobertura %', '89.7 %', '—'],
+      ['Brecha', '78', '—'],
+      ['Total', 'Dosis', '1,300', '7'],
+      ['Población', '1,450', '—'],
+      ['Cobertura %', '89.7 %', '—'],
+      ['Brecha', '78', '—'],
+    ])
+    expect(filas[0].querySelector('td').getAttribute('rowspan')).toBe('4')
+  })
+
+  test('por distrito, el nombre lleva su municipio', () => {
+    render(
+      <TablaInforme
+        informe={anual({
+          nivel: 'distrito',
+          filas: [{ ...anual().filas[0], id: 3, nombre: 'Distrito San Marcos', municipio: SAN_MARCOS }],
+        })}
+        acumulado
+      />,
+    )
+    expect(screen.getByRole('columnheader', { name: 'Distrito' })).toBeTruthy()
+    expect(screen.getAllByRole('row')[4].querySelector('td p').textContent).toBe('San Marcos')
+  })
+})

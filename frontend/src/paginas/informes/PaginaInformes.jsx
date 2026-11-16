@@ -8,7 +8,8 @@ import { cn } from '@/lib/utils'
 import { listarDdriss, listarRedes } from '@/api/catalogos.js'
 import { mensajeDeError } from '@/api/cliente.js'
 import {
-  descargarInformeExcel, descargarInformePdf, obtenerInforme, obtenerOpcionesInformes,
+  descargarAcumuladoAnualExcel, descargarAcumuladoAnualPdf, descargarInformeExcel, descargarInformePdf,
+  obtenerAcumuladoAnual, obtenerInforme, obtenerOpcionesInformes,
 } from '@/api/informes.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
@@ -17,8 +18,8 @@ import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import { Selector } from '@/paginas/indicadores/BarraFiltrosIndicadores.jsx'
 import BarraFiltrosInformes from './BarraFiltrosInformes.jsx'
 import {
-  INFORMES, NIVELES, aTextoDeMes, agrupacionDeUrl, avisoDeAgrupacion, avisoDeMeses, conAgrupacion, filtrosDeInforme,
-  parametrosDeInforme, textoRango,
+  INFORMES, NIVELES, aTextoDeMes, agrupacionDeUrl, avisoDeAgrupacion, avisoDeMeses, conAgrupacion, esAcumulado,
+  filtrosDeInforme, parametrosDeInforme, textoAnio, textoRango,
 } from './informes.js'
 import TablaInforme from './TablaInforme.jsx'
 
@@ -27,6 +28,8 @@ import TablaInforme from './TablaInforme.jsx'
 // SPEC 63 (HU-46): «Agrupar por» cambia `agrupacion` en la URL y vuelve a pedir el informe sin tocar el borrador.
 // SPEC 64 y 65 (HU-47, HU-48): «Exportar Excel» y «Exportar PDF» piden el mismo informe de la URL (no el borrador)
 // como archivo; mientras se exporta uno, los dos quedan deshabilitados.
+// SPEC 66 (HU-49): el acumulado anual se pide por año a sus propios endpoints, sin «Agrupar por», y su tabla lleva
+// cuatro filas por unidad.
 
 // Radix no acepta un valor vacío en un Select: la opción por defecto lleva este.
 const POR_SECCION = 'seccion'
@@ -47,8 +50,14 @@ function guardarArchivo(blob, nombre) {
 }
 
 const EXPORTACIONES = {
-  xlsx: { texto: 'Exportar Excel', Icono: FileSpreadsheet, descargar: descargarInformeExcel },
-  pdf: { texto: 'Exportar PDF', Icono: FileText, descargar: descargarInformePdf },
+  xlsx: {
+    texto: 'Exportar Excel', Icono: FileSpreadsheet, descargar: descargarInformeExcel,
+    descargarAcumulado: descargarAcumuladoAnualExcel,
+  },
+  pdf: {
+    texto: 'Exportar PDF', Icono: FileText, descargar: descargarInformePdf,
+    descargarAcumulado: descargarAcumuladoAnualPdf,
+  },
 }
 
 const id = (texto) => (/^[1-9]\d*$/.test(texto ?? '') ? Number(texto) : undefined)
@@ -144,20 +153,27 @@ export default function PaginaInformes() {
   const esperandoRedes = deUrl.red !== null && puedeVerRedes && redes === null && !errorRedes
   const redPedida = opcionesRed?.find((r) => r.id === deUrl.red)
 
-  const pedido = opciones && deUrl.generado && deUrl.hasta && !esperandoRedes
-    ? {
-      informe: deUrl.informe,
-      desde: aTextoDeMes(deUrl.desde),
-      hasta: aTextoDeMes(deUrl.hasta),
-      nivel: deUrl.nivel,
-      vacuna: deUrl.vacuna ?? undefined,
-      redId: redPedida?.id,
-      municipioIds: deUrl.municipios,
-      incluirAprobados: deUrl.aprobados,
-      agrupacion: agrupacion ?? undefined,
-      ddrissId,
-    }
-    : null
+  const acumuladoPedido = esAcumulado(deUrl.informe)
+  const recortes = {
+    nivel: deUrl.nivel,
+    vacuna: deUrl.vacuna ?? undefined,
+    redId: redPedida?.id,
+    municipioIds: deUrl.municipios,
+    incluirAprobados: deUrl.aprobados,
+    ddrissId,
+  }
+  let pedido = null
+  if (opciones && deUrl.generado && deUrl.hasta && !esperandoRedes) {
+    pedido = acumuladoPedido
+      ? { informe: deUrl.informe, anio: deUrl.anio, ...recortes }
+      : {
+        informe: deUrl.informe,
+        desde: aTextoDeMes(deUrl.desde),
+        hasta: aTextoDeMes(deUrl.hasta),
+        ...recortes,
+        agrupacion: agrupacion ?? undefined,
+      }
+  }
   const clave = pedido ? JSON.stringify(pedido) : null
 
   useEffect(() => {
@@ -168,7 +184,9 @@ export default function PaginaInformes() {
     let vigente = true
     setInforme(null)
     setErrorInforme(null)
-    obtenerInforme(JSON.parse(clave))
+    const pedidoGuardado = JSON.parse(clave)
+    const obtener = esAcumulado(pedidoGuardado.informe) ? obtenerAcumuladoAnual : obtenerInforme
+    obtener(pedidoGuardado)
       .then((recibido) => vigente && setInforme(recibido))
       .catch((err) => vigente && setErrorInforme(mensajeDeError(err)))
     return () => {
@@ -188,7 +206,8 @@ export default function PaginaInformes() {
   )
 
   function generar() {
-    setParametros(conAgrupacion(parametrosDeInforme({ ...valores, ddriss: nacional ? ddrissId : null }), agrupacion))
+    const nuevos = parametrosDeInforme({ ...valores, ddriss: nacional ? ddrissId : null })
+    setParametros(conAgrupacion(nuevos, esAcumulado(valores.informe) ? null : agrupacion))
     setIntentoInforme((n) => n + 1)
   }
 
@@ -196,7 +215,8 @@ export default function PaginaInformes() {
     setExportando(formato)
     setErrorExportar(null)
     try {
-      const { blob, nombre } = await EXPORTACIONES[formato].descargar(JSON.parse(clave))
+      const { descargar, descargarAcumulado } = EXPORTACIONES[formato]
+      const { blob, nombre } = await (acumulado ? descargarAcumulado : descargar)(JSON.parse(clave))
       guardarArchivo(blob, nombre ?? `informe.${formato}`)
     } catch (err) {
       setErrorExportar(mensajeDeError(err))
@@ -209,9 +229,13 @@ export default function PaginaInformes() {
     setParametros(conAgrupacion(parametros, valor === POR_SECCION ? null : valor))
   }
 
+  // Lo que se dibuja sale del informe recibido, no de la URL: al cambiar de informe, el anterior sigue un instante.
+  const acumulado = esAcumulado(informe?.informe)
   const nombreDelInforme = informe && INFORMES.find((i) => i.valor === informe.informe)?.nombre
   const nombreDelNivel = informe && NIVELES.find((n) => n.valor === informe.nivel)?.nombre
-  const aviso = informe ? avisoDeMeses(informe.mesesSinCerrar, informe.preliminar) : null
+  const aviso = informe
+    ? avisoDeMeses(informe.mesesSinCerrar, informe.preliminar, acumulado ? 'el acumulado' : 'el informe')
+    : null
   const avisoAgrupacion = informe ? avisoDeAgrupacion(informe, pedido?.vacuna === undefined) : null
   const sinColumnas = Boolean(informe?.agrupacion) && informe.columnas.length === 0
 
@@ -301,13 +325,15 @@ export default function PaginaInformes() {
                         </Badge>
                       )}
                     </div>
-                    <p className="text-sm text-muted-foreground">{textoRango(informe.desde, informe.hasta)}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {acumulado ? textoAnio(informe.anio) : textoRango(informe.desde, informe.hasta)}
+                    </p>
                   </div>
                 ) : (
                   <div />
                 )}
                 <div className="flex flex-wrap items-end gap-3">
-                  {selectorAgrupacion}
+                  {!acumuladoPedido && selectorAgrupacion}
                   {informe && !errorInforme && informe.columnas.length > 0 &&
                     Object.entries(EXPORTACIONES).map(([formato, { texto, Icono }]) => (
                       <Button
@@ -342,7 +368,7 @@ export default function PaginaInformes() {
                       {avisoAgrupacion}
                     </p>
                   )}
-                  {!sinColumnas && <TablaInforme informe={informe} />}
+                  {!sinColumnas && <TablaInforme informe={informe} acumulado={acumulado} />}
                 </>
               )}
             </div>
