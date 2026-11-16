@@ -19,7 +19,7 @@ function redondear(numero, decimales) {
 }
 
 // El redondeo a 6 decimales quita el error de coma flotante antes de subir al entero (0.95 × 1450 = 1377.4999…).
-function dosisQueFaltan(meta, denominador, numerador) {
+export function dosisQueFaltan(meta, denominador, numerador) {
   return Math.max(0, Math.ceil(redondear((meta / 100) * denominador - numerador, 6)));
 }
 

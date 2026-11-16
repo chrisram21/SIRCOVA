@@ -5657,6 +5657,142 @@ paths:
         "403": { $ref: "#/components/responses/SinPermiso" }
         "404": { $ref: "#/components/responses/InformeNoEncontrado" }
 
+  /informes/acumulado-anual:
+    get:
+      tags: [Informes]
+      summary: Informe acumulado anual con población, cobertura y brecha (SPEC 66, HU-49)
+      description: |
+        Las dosis atribuidas al municipio de residencia (las del informe `residencia` de `GET /informes/produccion`)
+        de enero a diciembre de `anio`, contra la población del año, por columna vacuna × sección (grupo de edad) ×
+        dosis. Cada fila trae cuatro cifras por columna: `dosis`, `poblacion`, `cobertura` y `brecha`.
+
+        - **Meses y estados:** los de `anio` con fila en `cierre_periodo` de la DDRISS (404 si no tiene ninguno).
+          Cuentan los reportes `CERRADO` y `RECTIFICACION`; con `incluirAprobados=true`, también `APROBADO`.
+        - **`mesesSinCerrar`:** los doce meses de `anio` que no están `CERRADO`, en orden; un mes sin
+          `cierre_periodo` sale con `estado: null`. `preliminar` es `true` si `incluirAprobados` es `true` y algún
+          mes con `cierre_periodo` no está `CERRADO`.
+        - **Niveles:** `departamento`, `municipio` y `distrito`, con las filas y los recortes (`redId`,
+          `municipioIds`, sobre el municipio de residencia) del informe `residencia`. No hay `establecimiento` (400).
+        - **Columnas:** las del informe `residencia` (sin `agrupacion`), con el esquema de captura que cubre el día 1
+          del último mes de `anio` con `cierre_periodo`.
+        - **Población:** `poblacion_objetivo.cantidad` del municipio, de `anio` y de la `clasificacion_poblacion`
+          cuyo `codigo` es el `grupoEdad` de la sección. Sin sección, sin grupo de edad o con un grupo que no está en
+          `clasificacion_poblacion`, `null`. El distrito usa la de su municipio y «Sin distrito», la suma de los
+          suyos. La de una fila que junta municipios (departamento, «Sin distrito», `total`) es `null` si a uno le
+          falta.
+        - **Meta de cada columna:** entre las versiones de `configuracion_indicadores` que aplican hoy a la DDRISS,
+          sin `filtros_dimension`, con la misma vacuna, dosis y `clasificacion_poblacion` que la columna, la de
+          `tipoCalculo` `COBERTURA`; si no hay, la de `BRECHA` (con varias, la primera por código). La meta es su
+          `meta.valor`; sin versión, 95 e `indicador: null`.
+        - **Cobertura:** dosis ÷ población × 100, con 1 decimal. **Brecha:** máx(0, ⌈meta ÷ 100 × población −
+          dosis⌉). Las dos son `null` sin población o con población 0. El `total` las calcula con sus propias dosis
+          y población, no sumando las de las filas. Una cobertura mayor a 100 sale tal cual.
+
+        Es una lectura: no deja bitácora. `ddrissId`, como en `GET /indicadores/corridas`.
+      x-permiso: INFORME_CONSULTAR
+      parameters:
+        - { $ref: "#/components/parameters/InformeAnio" }
+        - { $ref: "#/components/parameters/InformeNivelAnual" }
+        - { $ref: "#/components/parameters/InformeVacuna" }
+        - { $ref: "#/components/parameters/InformeRedId" }
+        - { $ref: "#/components/parameters/InformeMunicipioIds" }
+        - { $ref: "#/components/parameters/InformeIncluirAprobados" }
+        - { $ref: "#/components/parameters/DdrissIdAutoridad" }
+      responses:
+        "200":
+          description: Las columnas con su meta, las filas con sus cuatro cifras, el total y los meses sin cerrar
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InformeAcumuladoAnual" }
+        "400": { $ref: "#/components/responses/InformeAnualEntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/InformeAnualNoEncontrado" }
+
+  /informes/acumulado-anual/excel:
+    get:
+      tags: [Informes]
+      summary: Descargar el acumulado anual como archivo de Excel (SPEC 66, HU-49)
+      description: |
+        El mismo informe de `GET /informes/acumulado-anual`, con los mismos parámetros, permiso, ámbito y errores,
+        como un libro .xlsx armado con ExcelJS desde la misma respuesta que la pantalla.
+
+        - **Encabezado:** como el de `GET /informes/produccion/excel` («Acumulado anual · {nivel}», «PRELIMINAR» si
+          `preliminar`, DDRISS, «Enero a diciembre de {anio}», vacuna, territorio, si incluye aprobados sin cerrar,
+          fecha y hora de generación con quien lo generó, y el aviso de meses sin cerrar).
+        - **Tabla:** las tres filas de encabezado combinadas (vacuna, sección, dosis) más una cuarta con la meta de
+          cada columna («Meta 95 %»); las columnas del nombre (combinada en sus cuatro filas) y «Cifra» (Dosis,
+          Población, Cobertura %, Brecha) fijas; dosis, población y brecha con formato `#,##0`, cobertura con
+          `0.0`, y las celdas `null` como «—»; las cuatro filas del «Total» al final.
+
+        Cada descarga correcta deja una fila `EXPORTAR` del módulo `REPORTES` en la bitácora (`entidad` `informe`,
+        `entidadId` `acumulado-anual`), con los parámetros y `formato: xlsx` en `valoresNuevos`, sin cantidades. Un
+        error no la deja.
+      x-permiso: INFORME_CONSULTAR
+      parameters:
+        - { $ref: "#/components/parameters/InformeAnio" }
+        - { $ref: "#/components/parameters/InformeNivelAnual" }
+        - { $ref: "#/components/parameters/InformeVacuna" }
+        - { $ref: "#/components/parameters/InformeRedId" }
+        - { $ref: "#/components/parameters/InformeMunicipioIds" }
+        - { $ref: "#/components/parameters/InformeIncluirAprobados" }
+        - { $ref: "#/components/parameters/DdrissIdAutoridad" }
+      responses:
+        "200":
+          description: El libro de Excel del acumulado anual
+          headers:
+            Content-Disposition:
+              description: |
+                `attachment; filename="informe-acumulado-anual-{anio}.xlsx"`. El frontend lo lee gracias a
+                `Access-Control-Expose-Headers`.
+              schema: { type: string, example: 'attachment; filename="informe-acumulado-anual-2026.xlsx"' }
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/InformeAnualEntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/InformeAnualNoEncontrado" }
+
+  /informes/acumulado-anual/pdf:
+    get:
+      tags: [Informes]
+      summary: Descargar el acumulado anual como PDF (SPEC 66, HU-49)
+      description: |
+        El mismo informe de `GET /informes/acumulado-anual`, con los mismos parámetros, permiso, ámbito y errores,
+        como un PDF de pdfmake con la hoja, la fuente, la marca de agua «PRELIMINAR», el pie y los tramos de
+        columnas de `GET /informes/produccion/pdf`. Cada tramo repite sus cuatro filas de encabezado (vacuna,
+        sección, dosis y meta) y lleva las columnas del nombre y «Cifra», con las cuatro filas por unidad y las del
+        «Total»; las celdas `null` salen «—».
+
+        Cada descarga correcta deja una fila `EXPORTAR` del módulo `REPORTES` en la bitácora, como el Excel, con
+        `formato: pdf` en `valoresNuevos`. Un error no la deja.
+      x-permiso: INFORME_CONSULTAR
+      parameters:
+        - { $ref: "#/components/parameters/InformeAnio" }
+        - { $ref: "#/components/parameters/InformeNivelAnual" }
+        - { $ref: "#/components/parameters/InformeVacuna" }
+        - { $ref: "#/components/parameters/InformeRedId" }
+        - { $ref: "#/components/parameters/InformeMunicipioIds" }
+        - { $ref: "#/components/parameters/InformeIncluirAprobados" }
+        - { $ref: "#/components/parameters/DdrissIdAutoridad" }
+      responses:
+        "200":
+          description: El PDF del acumulado anual
+          headers:
+            Content-Disposition:
+              description: |
+                `attachment; filename="informe-acumulado-anual-{anio}.pdf"`. El frontend lo lee gracias a
+                `Access-Control-Expose-Headers`.
+              schema: { type: string, example: 'attachment; filename="informe-acumulado-anual-2026.pdf"' }
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/InformeAnualEntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/InformeAnualNoEncontrado" }
+
   # ---------------------------------------------------------------- Alertas y auditoría
   /alertas:
     get:
@@ -5808,6 +5944,17 @@ components:
         Código de una dimensión activa de `catalogo_dimensiones`, distinta de `grupo_edad`; sin él, las columnas
         van por sección del esquema
       schema: { type: string, pattern: "^[a-z][a-z0-9_]*$", example: sexo }
+    InformeAnio:
+      name: anio
+      in: query
+      required: true
+      description: Año del acumulado (`AAAA`); suma de enero a diciembre
+      schema: { type: string, pattern: "^(20[0-9]{2}|2100)$", example: "2026" }
+    InformeNivelAnual:
+      name: nivel
+      in: query
+      description: Sin `establecimiento`, que no tiene población
+      schema: { type: string, enum: [departamento, municipio, distrito], default: municipio }
     DdrissIdAutoridad:
       name: ddrissId
       in: query
@@ -5910,6 +6057,24 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
           example:
             error: { codigo: NO_ENCONTRADO, mensaje: El mes inicial no está habilitado en la DDRISS. }
+    InformeAnualEntradaInvalida:
+      description: |
+        Falta `anio` o no es un año, un parámetro no es válido, es desconocido o está repetido, una lista repite un
+        id, viene `nivel=establecimiento`, o falta `ddrissId` (Autoridad nacional)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro inválido: nivel." }
+    InformeAnualNoEncontrado:
+      description: |
+        La vacuna o el `ddrissId` no existen; la red no existe, está inactiva o es de otra DDRISS; o `anio` no tiene
+        ningún mes habilitado en la DDRISS
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: NO_ENCONTRADO, mensaje: El año no tiene meses habilitados en la DDRISS. }
     NoEncontrado:
       description: No existe o está fuera del alcance del usuario
       content:
@@ -9450,6 +9615,123 @@ components:
         preliminar:
           type: boolean
           description: "`incluirAprobados` es `true` y hay `mesesSinCerrar`"
+          example: false
+
+    CifrasAcumuladoAnual:
+      type: object
+      required: [dosis, poblacion, cobertura, brecha]
+      description: Cuatro listas en el orden de `columnas`
+      properties:
+        dosis:
+          type: array
+          items: { type: integer }
+          example: [850]
+        poblacion:
+          type: array
+          description: "`null` si la columna o la fila no tienen población"
+          items: { type: integer, nullable: true }
+          example: [1000]
+        cobertura:
+          type: array
+          description: Porcentaje con 1 decimal; `null` sin población o con población 0
+          items: { type: number, nullable: true }
+          example: [85.0]
+        brecha:
+          type: array
+          description: Dosis que faltan para la meta, mínimo 0; `null` sin población o con población 0
+          items: { type: integer, nullable: true }
+          example: [100]
+
+    ColumnaAcumuladoAnual:
+      type: object
+      required: [vacuna, seccion, dosis, meta]
+      properties:
+        vacuna:
+          type: object
+          required: [codigo, nombre]
+          properties:
+            codigo: { type: string, example: HEXA }
+            nombre: { type: string, example: Hexavalente }
+        seccion:
+          type: object
+          nullable: true
+          description: Como en `ColumnaInforme`
+          required: [grupoEdad, titulo]
+          properties:
+            grupoEdad: { type: string, nullable: true, example: MENOR_1 }
+            titulo: { type: string, example: "< 1 año" }
+        dosis:
+          type: object
+          required: [id, codigo]
+          properties:
+            id: { type: integer, example: 7 }
+            codigo: { type: string, example: D3 }
+        meta:
+          type: object
+          required: [valor, indicador]
+          properties:
+            valor: { type: number, description: Porcentaje, example: 95 }
+            indicador:
+              type: string
+              nullable: true
+              description: Código del indicador de donde sale; `null` con el 95 por defecto
+              example: COB_HEXA3
+
+    FilaAcumuladoAnual:
+      allOf:
+        - type: object
+          required: [id, codigo, nombre, municipio]
+          properties:
+            id:
+              type: integer
+              nullable: true
+              description: Del departamento, municipio o distrito; `null` en «Sin distrito»
+              example: 1
+            codigo: { type: string, nullable: true, example: "1201" }
+            nombre: { type: string, example: San Marcos }
+            municipio:
+              type: object
+              nullable: true
+              description: Solo por distrito (su municipio); `null` en los demás y en «Sin distrito»
+              required: [id, nombre]
+              properties:
+                id: { type: integer, example: 1 }
+                nombre: { type: string, example: San Marcos }
+        - { $ref: "#/components/schemas/CifrasAcumuladoAnual" }
+
+    InformeAcumuladoAnual:
+      type: object
+      required: [informe, nivel, anio, incluirAprobados, columnas, filas, total, mesesSinCerrar, preliminar]
+      properties:
+        informe: { type: string, enum: [acumulado-anual] }
+        nivel: { type: string, enum: [departamento, municipio, distrito], example: municipio }
+        anio: { type: integer, example: 2026 }
+        incluirAprobados: { type: boolean, example: false }
+        columnas:
+          type: array
+          items: { $ref: "#/components/schemas/ColumnaAcumuladoAnual" }
+        filas:
+          type: array
+          items: { $ref: "#/components/schemas/FilaAcumuladoAnual" }
+        total:
+          description: Del recorte; por distrito, sin contar dos veces un municipio
+          allOf: [{ $ref: "#/components/schemas/CifrasAcumuladoAnual" }]
+        mesesSinCerrar:
+          type: array
+          description: Los doce meses de `anio` que no están `CERRADO`, en orden
+          items:
+            type: object
+            required: [anio, mes, estado]
+            properties:
+              anio: { type: integer, example: 2026 }
+              mes: { type: integer, example: 12 }
+              estado:
+                description: "`null` si el mes no tiene `cierre_periodo` en la DDRISS"
+                nullable: true
+                allOf: [{ $ref: "#/components/schemas/EstadoPeriodo" }]
+        preliminar:
+          type: boolean
+          description: "`incluirAprobados` es `true` y algún mes con `cierre_periodo` no está `CERRADO`"
           example: false
 
     ResultadoIndicador:
