@@ -35,3 +35,4 @@ tags: ["spec", "modulo/indicadores", "origen/historia"]
 - [[SPEC 52]] — Señalar coberturas mayores al 100 % · *Implementado*
 - [[SPEC 53]] — Ajustes menores de interfaz · *Implementado*
 - [[SPEC 54]] — Indicadores por pestañas · *Implementado*
+- [[SPEC 66]] — HU-49 Informe acumulado anual · *Implementado*

@@ -35,3 +35,4 @@ tags: ["spec", "modulo/catalogos", "origen/historia"]
 - [[SPEC 18]] — Catálogo de dimensiones de desagregación · *Implementado*
 - [[SPEC 30]] — Publicar con vista previa y menú «Administración» · *Implementado*
 - [[SPEC 44]] — Calcular la cobertura y el avance contra la meta del mes · *Implementado*
+- [[SPEC 66]] — HU-49 Informe acumulado anual · *Implementado*

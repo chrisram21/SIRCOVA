@@ -3,7 +3,8 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { listarDdriss, listarRedes } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
 import {
-  descargarInformeExcel, descargarInformePdf, obtenerInforme, obtenerOpcionesInformes,
+  descargarAcumuladoAnualExcel, descargarAcumuladoAnualPdf, descargarInformeExcel, descargarInformePdf,
+  obtenerAcumuladoAnual, obtenerInforme, obtenerOpcionesInformes,
 } from '@/api/informes.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
@@ -16,6 +17,9 @@ vi.mock('@/api/informes.js', () => ({
   obtenerInforme: vi.fn(),
   descargarInformeExcel: vi.fn(),
   descargarInformePdf: vi.fn(),
+  obtenerAcumuladoAnual: vi.fn(),
+  descargarAcumuladoAnualExcel: vi.fn(),
+  descargarAcumuladoAnualPdf: vi.fn(),
 }))
 
 const SAN_MARCOS = { id: 1, codigoIne: '1201', nombre: 'San Marcos' }
@@ -482,5 +486,113 @@ describe('«Exportar PDF» (SPEC 65)', () => {
 
     expect(await screen.findByText('No se pudo exportar el informe: La red no existe.')).toBeTruthy()
     expect(descargados).toEqual([])
+  })
+})
+
+describe('acumulado anual (SPEC 66)', () => {
+  const URL_ACUMULADO = '/informes?informe=acumulado-anual&anio=2026'
+  const acumulado = (cambios = {}) => ({
+    informe: 'acumulado-anual',
+    nivel: 'municipio',
+    anio: 2026,
+    incluirAprobados: false,
+    columnas: [
+      { vacuna: { codigo: 'HEXA', nombre: 'Hexavalente' }, seccion: { grupoEdad: 'MENOR_1', titulo: '< 1 año' },
+        dosis: { id: 9, codigo: 'D3' }, meta: { valor: 95, indicador: 'COB_HEXA3' } },
+    ],
+    filas: [{ id: 1, codigo: '1201', nombre: 'San Marcos', municipio: null,
+      dosis: [1300], poblacion: [1450], cobertura: [89.66], brecha: [78] }],
+    total: { dosis: [1300], poblacion: [1450], cobertura: [89.66], brecha: [78] },
+    mesesSinCerrar: [],
+    preliminar: false,
+    ...cambios,
+  })
+
+  beforeEach(() => {
+    obtenerAcumuladoAnual.mockResolvedValue(acumulado())
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  test('al elegirlo, un select «Año» toma el lugar de Desde y Hasta, y Establecimiento no se puede elegir', async () => {
+    montar()
+    await screen.findByText(SIN_GENERAR)
+    elegir('nivel', 'establecimiento')
+    elegir('informe', 'acumulado-anual')
+    expect(nativo('anio').value).toBe('2026')
+    expect(nativo('desde-anio')).toBeNull()
+    expect(nativo('hasta-mes')).toBeNull()
+    expect(nativo('nivel').value).toBe('municipio')
+    expect(screen.getByText(/contra la población del año, con su cobertura y su brecha/)).toBeTruthy()
+  })
+
+  test('«Generar» escribe informe y anio en la URL y pide el acumulado, no el informe de producción', async () => {
+    const router = montar()
+    await screen.findByText(SIN_GENERAR)
+    elegir('informe', 'acumulado-anual')
+    elegir('nivel', 'distrito')
+    generar()
+    await waitFor(() => expect(busqueda(router)).toEqual({ informe: 'acumulado-anual', anio: '2026', nivel: 'distrito' }))
+    await waitFor(() => expect(obtenerAcumuladoAnual).toHaveBeenCalledWith({
+      informe: 'acumulado-anual', anio: 2026, nivel: 'distrito', vacuna: undefined, redId: undefined,
+      municipioIds: [], incluirAprobados: false, ddrissId: undefined,
+    }))
+    expect(obtenerInforme).not.toHaveBeenCalled()
+  })
+
+  test('una URL del acumulado lo genera al entrar, con su título, el año, la tabla de cifras y sin «Agrupar por»', async () => {
+    montar({ url: `${URL_ACUMULADO}&agrupacion=sexo` })
+    expect(await screen.findByRole('heading', { level: 2, name: 'Acumulado anual · Municipio' })).toBeTruthy()
+    expect(screen.getByText('Enero a diciembre de 2026')).toBeTruthy()
+    expect(screen.getByText('Meta 95 %')).toBeTruthy()
+    expect(screen.getAllByText('Cobertura %')).toHaveLength(2)
+    expect(screen.getAllByText('89.7 %')).toHaveLength(2)
+    expect(nativo('agrupacion')).toBeNull()
+    expect(obtenerAcumuladoAnual.mock.lastCall[0].agrupacion).toBeUndefined()
+  })
+
+  test('avisa los meses sin cerrar del acumulado, también los que no tienen cierre_periodo', async () => {
+    obtenerAcumuladoAnual.mockResolvedValue(acumulado({
+      mesesSinCerrar: [{ anio: 2026, mes: 11, estado: 'ABIERTO' }, { anio: 2026, mes: 12, estado: null }],
+    }))
+    montar({ url: URL_ACUMULADO })
+    expect(await screen.findByText(
+      'Noviembre y diciembre de 2026 todavía no están cerrados y no suman en el acumulado. Marca «Incluir aprobados '
+        + 'sin cerrar» para verlos como preliminares.',
+    )).toBeTruthy()
+  })
+
+  test('preliminar: insignia y aviso de datos preliminares', async () => {
+    obtenerAcumuladoAnual.mockResolvedValue(acumulado({
+      incluirAprobados: true, preliminar: true, mesesSinCerrar: [{ anio: 2026, mes: 12, estado: 'EN_CIERRE' }],
+    }))
+    montar({ url: `${URL_ACUMULADO}&aprobados=si` })
+    expect(await screen.findByText('Datos preliminares: diciembre de 2026 todavía no está cerrado.')).toBeTruthy()
+    expect(screen.getByText('Preliminar')).toBeTruthy()
+  })
+
+  test('los botones de exportar piden el Excel y el PDF del acumulado con los parámetros de la URL', async () => {
+    descargarAcumuladoAnualExcel.mockResolvedValue({ blob: new Blob(['PK']), nombre: 'informe-acumulado-anual-2026.xlsx' })
+    descargarAcumuladoAnualPdf.mockResolvedValue({ blob: new Blob(['%PDF']), nombre: 'informe-acumulado-anual-2026.pdf' })
+    const descargados = []
+    URL.createObjectURL = vi.fn(() => 'blob:acumulado')
+    URL.revokeObjectURL = vi.fn()
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function guardar() {
+      descargados.push(this.download)
+    })
+    montar({ url: `${URL_ACUMULADO}&municipios=4` })
+    await screen.findByText('Meta 95 %')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Exportar Excel' }))
+    await waitFor(() => expect(descargados).toEqual(['informe-acumulado-anual-2026.xlsx']))
+    fireEvent.click(screen.getByRole('button', { name: 'Exportar PDF' }))
+    await waitFor(() => expect(descargados).toHaveLength(2))
+
+    expect(descargarAcumuladoAnualExcel.mock.lastCall[0]).toEqual(obtenerAcumuladoAnual.mock.lastCall[0])
+    expect(descargarAcumuladoAnualPdf.mock.lastCall[0]).toMatchObject({ anio: 2026, municipioIds: [4] })
+    expect(descargarInformeExcel).not.toHaveBeenCalled()
+    expect(descargarInformePdf).not.toHaveBeenCalled()
   })
 })

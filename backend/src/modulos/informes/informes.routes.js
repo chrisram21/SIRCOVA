@@ -29,5 +29,23 @@ router.get(
   requierePermiso('INFORME_CONSULTAR'),
   informesController.informeEnPdf,
 );
+router.get(
+  '/informes/acumulado-anual',
+  autenticar,
+  requierePermiso('INFORME_CONSULTAR'),
+  informesController.acumuladoAnual,
+);
+router.get(
+  '/informes/acumulado-anual/excel',
+  autenticar,
+  requierePermiso('INFORME_CONSULTAR'),
+  informesController.acumuladoEnExcel,
+);
+router.get(
+  '/informes/acumulado-anual/pdf',
+  autenticar,
+  requierePermiso('INFORME_CONSULTAR'),
+  informesController.acumuladoEnPdf,
+);
 
 export default router;

@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { libroDelInforme } from '../src/modulos/informes/informeExcel.service.js';
 import {
-  COLUMNAS_POR_TRAMO, documentoDelInforme, pdfDelInforme, saltarAntesDelTramo, tramosDeColumnas,
+  ANCHO_NOMBRE_ANUAL, COLUMNAS_POR_TRAMO, COLUMNAS_POR_TRAMO_ANUAL, documentoDelAcumulado, documentoDelInforme, pdfDelAcumulado,
+  pdfDelInforme, saltarAntesDelTramo, tramosDeColumnas,
 } from '../src/modulos/informes/informePdf.service.js';
 
 // SPEC 65: el PDF se prueba sobre su definición de pdfmake (textos y cantidades de las celdas) y sobre los bytes
@@ -192,5 +193,119 @@ describe('documento PDF de un informe (SPEC 65)', () => {
     expect(Buffer.isBuffer(bytes)).toBe(true);
     expect(bytes.subarray(0, 5).toString('latin1')).toBe('%PDF-');
     expect(bytes.toString('latin1')).toMatch(/IBMPlexSans/);
+  });
+});
+
+// SPEC 66: el PDF del acumulado anual.
+const acumulado = (cambios = {}) => {
+  const columnas = (cambios.columnas ?? [columna('HEXA', 'D3', 'MENOR_1'), columna('BCG', 'UNICA')])
+    .map(({ valor, ...c }, i) => ({ ...c, meta: { valor: i === 0 ? 95 : 90, indicador: null } }));
+  const cifras = (base) => ({
+    dosis: columnas.map((_, i) => base + i),
+    poblacion: columnas.map((_, i) => (i === 0 ? 1450 : null)),
+    cobertura: columnas.map((_, i) => (i === 0 ? 89.7 : null)),
+    brecha: columnas.map((_, i) => (i === 0 ? 78 : null)),
+  });
+  return {
+    informe: 'acumulado-anual',
+    nivel: 'municipio',
+    anio: 2026,
+    incluirAprobados: false,
+    columnas,
+    filas: [{ id: 1, codigo: '1201', nombre: 'San Marcos', municipio: null, ...cifras(1300) }],
+    total: cifras(1300),
+    mesesSinCerrar: [],
+    preliminar: false,
+    ...cambios,
+    ...(cambios.columnas ? { columnas } : {}),
+  };
+};
+
+describe('documento PDF del acumulado anual (SPEC 66)', () => {
+  it('lleva el título, el año y cuatro filas de encabezado con la meta', () => {
+    const doc = documentoDelAcumulado(acumulado(), datos);
+    expect(doc).toMatchObject({ pageSize: 'LETTER', pageOrientation: 'landscape' });
+    expect(doc.content[0].text).toBe('Acumulado anual · Municipio');
+    expect(encabezadoDe(doc)).toContainEqual(['Periodo', 'Enero a diciembre de 2026']);
+    const [tabla] = tablas(doc);
+    expect(tabla.table.headerRows).toBe(4);
+    const cuerpo = tabla.table.body.map((f) => f.map(texto));
+    expect(cuerpo[0].slice(0, 3)).toEqual(['Municipio de residencia', 'Cifra', 'Hexavalente']);
+    expect(cuerpo[2].slice(2)).toEqual(['D3', 'UNICA']);
+    expect(cuerpo[3].slice(2)).toEqual(['Meta 95 %', 'Meta 90 %']);
+  });
+
+  it('cuatro filas por unidad, con el nombre abarcándolas, «—» sin valor y el total en negrita', () => {
+    const [tabla] = tablas(documentoDelAcumulado(acumulado(), datos));
+    const cuerpo = tabla.table.body.slice(4);
+    expect(cuerpo.map((f) => f.map(texto))).toEqual([
+      ['San Marcos', 'Dosis', '1,300', '1,301'],
+      [null, 'Población', '1,450', '—'],
+      [null, 'Cobertura %', '89.7 %', '—'],
+      [null, 'Brecha', '78', '—'],
+      ['Total', 'Dosis', '1,300', '1,301'],
+      [null, 'Población', '1,450', '—'],
+      [null, 'Cobertura %', '89.7 %', '—'],
+      [null, 'Brecha', '78', '—'],
+    ]);
+    expect(cuerpo[0][0].rowSpan).toBe(4);
+    expect(cuerpo[4].every((celda) => !('text' in celda) || celda.bold)).toBe(true);
+  });
+
+  // Lo que ocupa la tabla en la hoja: cada columna con 8 de relleno y una línea de 0.5 entre columnas y a los lados.
+  const anchoTotal = (tabla) =>
+    tabla.table.widths.reduce((suma, w) => suma + w + 8, 0) + (tabla.table.widths.length + 1) * 0.5;
+  const ANCHO_UTIL = 792 - 2 * 30;
+
+  it('parte las columnas en tramos de hasta 11 (10 con «Municipio»), y con preliminar lleva la marca', () => {
+    expect(COLUMNAS_POR_TRAMO_ANUAL).toEqual({ conMunicipio: 10, sinMunicipio: 11 });
+    const once = [...deVacuna('HEXA', 5), ...deVacuna('POLIO', 6)];
+    expect(tablas(documentoDelAcumulado(acumulado({ columnas: once }), datos)).map((t) => t.table.widths.length))
+      .toEqual([2 + 11]);
+
+    const doce = [...deVacuna('HEXA', 6), ...deVacuna('POLIO', 6)];
+    const doc = documentoDelAcumulado(acumulado({ columnas: doce, preliminar: true }), datos);
+    expect(tablas(doc).map((t) => t.table.widths.length)).toEqual([2 + 6, 2 + 6]);
+    expect(doc.watermark).toMatchObject({ text: 'PRELIMINAR' });
+
+    const porDistrito = documentoDelAcumulado(acumulado({ columnas: doce, nivel: 'distrito' }), datos);
+    expect(tablas(porDistrito).map((t) => t.table.widths.length)).toEqual([3 + 6, 3 + 6]);
+  });
+
+  it('las columnas tienen ancho fijo (el nombre no se estira) y el tramo más ancho cabe en la hoja', () => {
+    const lleno = (nivel, n) => tablas(documentoDelAcumulado(acumulado({ nivel, columnas: deVacuna('HEXA', n) }), datos))[0];
+    const sinMunicipio = lleno('municipio', COLUMNAS_POR_TRAMO_ANUAL.sinMunicipio);
+    const conMunicipio = lleno('distrito', COLUMNAS_POR_TRAMO_ANUAL.conMunicipio);
+    for (const tabla of [sinMunicipio, conMunicipio]) {
+      expect(tabla.table.widths.every((w) => typeof w === 'number')).toBe(true);
+      expect(anchoTotal(tabla)).toBeLessThanOrEqual(ANCHO_UTIL);
+    }
+    expect(sinMunicipio.table.widths[0]).toBe(ANCHO_NOMBRE_ANUAL);
+    expect(lleno('municipio', 2).table.widths[0]).toBe(ANCHO_NOMBRE_ANUAL);
+    // Con una columna más ya no cabría: el límite aprovecha la hoja.
+    const unaMas = (tabla) => anchoTotal(tabla) + 40 + 8 + 0.5;
+    expect(unaMas(sinMunicipio)).toBeGreaterThan(ANCHO_UTIL);
+    expect(unaMas(conMunicipio)).toBeGreaterThan(ANCHO_UTIL);
+  });
+
+  it('pinta el encabezado de la vacuna y, en verde, la cobertura con brecha 0', () => {
+    const columnas = [columna('HEXA', 'D3', 'MENOR_1'), columna('BCG', 'UNICA')];
+    const cifras = {
+      dosis: [1450, 3], poblacion: [1450, null], cobertura: [100, null], brecha: [0, null],
+    };
+    const [tabla] = tablas(documentoDelAcumulado(acumulado({
+      columnas, filas: [{ id: 1, codigo: '1201', nombre: 'San Marcos', municipio: null, ...cifras }], total: cifras,
+    }), datos));
+    const [vacunas] = tabla.table.body;
+    expect(vacunas.find((c) => c.text === 'Hexavalente').fillColor).toBe('#dbeaf6');
+    const cobertura = tabla.table.body.slice(4).find((fila) => fila.some((c) => c.text === 'Cobertura %'));
+    expect(cobertura.find((c) => c.text === '100.0 %').fillColor).toBe('#e3f3e8');
+  });
+
+  it('se convierte en un PDF', async () => {
+    const bytes = await pdfDelAcumulado(acumulado({ nivel: 'distrito', filas: [{
+      ...acumulado().filas[0], nombre: 'Distrito 1', municipio: { id: 1, nombre: 'San Marcos' },
+    }] }), datos);
+    expect(bytes.subarray(0, 5).toString('latin1')).toBe('%PDF-');
   });
 });

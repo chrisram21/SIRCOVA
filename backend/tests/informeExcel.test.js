@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import ExcelJS from 'exceljs';
-import { FORMATO_CANTIDAD, libroDelInforme } from '../src/modulos/informes/informeExcel.service.js';
+import {
+  FORMATO_CANTIDAD, FORMATO_COBERTURA, libroDelAcumulado, libroDelInforme,
+} from '../src/modulos/informes/informeExcel.service.js';
 import { fechaDeGeneracion, textoRango, tituloDelInforme } from '../src/modulos/informes/textosInforme.js';
 
 // SPEC 64: el libro se arma con datos fijos y se vuelve a leer desde el archivo, como lo abriría Excel. Los textos
@@ -217,5 +219,101 @@ describe('libro de Excel de un informe (SPEC 64)', () => {
     expect(textoRango({ anio: 2026, mes: 8 }, { anio: 2026, mes: 8 })).toBe('Agosto de 2026');
     expect(textoRango({ anio: 2025, mes: 12 }, { anio: 2026, mes: 1 })).toBe('De diciembre de 2025 a enero de 2026');
     expect(fechaDeGeneracion(new Date('2027-01-01T05:30:00Z'))).toBe('31/12/2026 23:30');
+  });
+});
+
+// SPEC 66: el acumulado anual, con las mismas columnas y cuatro cifras por unidad.
+const acumuladoBase = (cambios = {}) => ({
+  informe: 'acumulado-anual',
+  nivel: 'municipio',
+  anio: 2026,
+  incluirAprobados: false,
+  columnas: [
+    { ...columna('HEXA', 'MENOR_1', 'D3'), meta: { valor: 95, indicador: 'COB_HEXA3' } },
+    { ...columna('HEXA', '1_A_5', 'R1'), meta: { valor: 90.5, indicador: null } },
+  ].map(({ valor, ...c }) => c),
+  filas: [
+    { id: 1, codigo: '1201', nombre: 'San Marcos', municipio: null,
+      dosis: [1300, 7], poblacion: [1450, null], cobertura: [89.7, null], brecha: [78, null] },
+  ],
+  total: { dosis: [1300, 7], poblacion: [1450, null], cobertura: [89.7, null], brecha: [78, null] },
+  mesesSinCerrar: [{ anio: 2026, mes: 11, estado: 'ABIERTO' }, { anio: 2026, mes: 12, estado: null }],
+  preliminar: false,
+  ...cambios,
+});
+
+async function leerAcumulado(informe, datos = datosBase()) {
+  const bytes = await libroDelAcumulado(informe, datos).xlsx.writeBuffer();
+  const libro = new ExcelJS.Workbook();
+  await libro.xlsx.load(bytes);
+  return libro.worksheets[0];
+}
+
+describe('libro de Excel del acumulado anual (SPEC 66)', () => {
+  it('lleva el título, el año y el aviso de los meses sin cerrar', async () => {
+    const hoja = await leerAcumulado(acumuladoBase());
+    expect(hoja.name).toBe('Acumulado anual');
+    expect(hoja.getCell(1, 1).value).toBe('Acumulado anual · Municipio');
+    expect(valorDe(hoja, 'Periodo')).toBe('Enero a diciembre de 2026');
+    expect(filaQueEmpieza(hoja, 'Agrupación')).toBeNull();
+    expect(avisos(hoja)).toEqual([
+      'Noviembre y diciembre de 2026 todavía no están cerrados y no suman en el acumulado. Marca «Incluir aprobados '
+        + 'sin cerrar» para verlos como preliminares.',
+    ]);
+  });
+
+  it('tiene cuatro filas de encabezado (la última con la meta) y cuatro filas por unidad', async () => {
+    const hoja = await leerAcumulado(acumuladoBase());
+    const encabezado = filaQueEmpieza(hoja, 'Municipio de residencia');
+    const n = encabezado.number;
+    expect(encabezado.getCell(2).value).toBe('Cifra');
+    expect(hoja.getRow(n + 2).getCell(3).value).toBe('D3');
+    expect([hoja.getRow(n + 3).getCell(3).value, hoja.getRow(n + 3).getCell(4).value]).toEqual(['Meta 95 %', 'Meta 90.5 %']);
+
+    const unidad = filaQueEmpieza(hoja, 'San Marcos').number;
+    const fila = (i) => [2, 3, 4].map((c) => hoja.getRow(unidad + i).getCell(c).value);
+    expect([0, 1, 2, 3].map(fila)).toEqual([
+      ['Dosis', 1300, 7], ['Población', 1450, '—'], ['Cobertura %', 89.7, '—'], ['Brecha', 78, '—'],
+    ]);
+    expect(hoja.getRow(unidad + 2).getCell(3).numFmt).toBe(FORMATO_COBERTURA);
+    expect(hoja.getRow(unidad).getCell(3).numFmt).toBe(FORMATO_CANTIDAD);
+    expect(hoja.model.merges).toEqual(expect.arrayContaining([`A${n}:A${n + 3}`, `A${unidad}:A${unidad + 3}`]));
+    expect(filaQueEmpieza(hoja, 'Total').getCell(2).value).toBe('Dosis');
+    expect(hoja.views[0]).toMatchObject({ xSplit: 2, ySplit: n + 3 });
+  });
+
+  it('colorea el encabezado y cada cifra con los colores del tema, y en verde lo que alcanza la meta', async () => {
+    const hoja = await leerAcumulado(acumuladoBase({
+      filas: [{ ...acumuladoBase().filas[0], brecha: [0, null], cobertura: [96.6, null] }],
+    }));
+    const fondo = (celda) => celda.fill?.fgColor?.argb ?? null;
+    const n = filaQueEmpieza(hoja, 'Municipio de residencia').number;
+    expect(fondo(hoja.getRow(n).getCell(3))).toBe('FFDBEAF6');
+    expect(fondo(hoja.getRow(n + 1).getCell(3))).toBe('FFEDF4FB');
+    expect(fondo(hoja.getRow(n + 3).getCell(3))).toBe('FFF0F4F8');
+
+    const unidad = filaQueEmpieza(hoja, 'San Marcos').number;
+    const tonos = (i) => [2, 3, 4].map((c) => fondo(hoja.getRow(unidad + i).getCell(c)));
+    expect(tonos(0)).toEqual([null, null, null]);
+    expect(tonos(1)).toEqual(['FFF0F4F8', 'FFF0F4F8', 'FFF0F4F8']);
+    expect(tonos(2)).toEqual(['FFEDF4FB', 'FFE3F3E8', 'FFEDF4FB']);
+    expect(tonos(3)).toEqual(['FFFFF5DD', 'FFE3F3E8', 'FFFFF5DD']);
+    expect(hoja.getRow(unidad + 2).getCell(3).font).toMatchObject({ bold: true, color: { argb: 'FF1E5B34' } });
+    const total = filaQueEmpieza(hoja, 'Total');
+    expect(total.getCell(1).font.bold).toBe(true);
+    expect(hoja.getRow(total.number + 3).getCell(2).font).toMatchObject({ bold: true, color: { argb: 'FF7A4A06' } });
+  });
+
+  it('por distrito lleva la columna Municipio, y con preliminar su marca', async () => {
+    const hoja = await leerAcumulado(acumuladoBase({
+      nivel: 'distrito',
+      preliminar: true,
+      incluirAprobados: true,
+      filas: [{ ...acumuladoBase().filas[0], nombre: 'Distrito 1', municipio: { id: 1, nombre: 'San Marcos' } }],
+    }));
+    expect(filaQueEmpieza(hoja, 'PRELIMINAR')).not.toBeNull();
+    const unidad = filaQueEmpieza(hoja, 'Distrito 1');
+    expect([unidad.getCell(2).value, unidad.getCell(3).value, unidad.getCell(4).value]).toEqual(['San Marcos', 'Dosis', 1300]);
+    expect(filaQueEmpieza(hoja, 'Distrito').getCell(3).value).toBe('Cifra');
   });
 });

@@ -35,3 +35,25 @@ export function descargarInformeExcel(pedido) {
 export function descargarInformePdf(pedido) {
   return descargar(rutaDelInforme('/informes/produccion/pdf', pedido))
 }
+
+// SPEC 66: el acumulado anual; anio como AAAA, sin desde, hasta, informe ni agrupacion.
+function rutaDelAcumulado(ruta, { anio, nivel, vacuna, redId, municipioIds, incluirAprobados, ddrissId }) {
+  return conConsulta(ruta, {
+    anio, nivel, vacuna, redId,
+    municipioIds: municipioIds?.length ? municipioIds.join(',') : undefined,
+    incluirAprobados: incluirAprobados ? true : undefined,
+    ddrissId,
+  })
+}
+
+export function obtenerAcumuladoAnual(pedido) {
+  return solicitar(rutaDelAcumulado('/informes/acumulado-anual', pedido))
+}
+
+export function descargarAcumuladoAnualExcel(pedido) {
+  return descargar(rutaDelAcumulado('/informes/acumulado-anual/excel', pedido))
+}
+
+export function descargarAcumuladoAnualPdf(pedido) {
+  return descargar(rutaDelAcumulado('/informes/acumulado-anual/pdf', pedido))
+}

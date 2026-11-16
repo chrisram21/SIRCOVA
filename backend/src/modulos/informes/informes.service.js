@@ -52,7 +52,7 @@ export async function opcionesDeInformes(usuario, query = {}) {
 
 // Una cantidad cae en la columna de su dosis y su grupo de edad (o su valor de la dimensión, al agrupar); sin grupo
 // de edad, en la de grupoEdad null.
-const llave = (dosisId, grupoEdad) => `${dosisId}|${grupoEdad ?? ''}`;
+export const llave = (dosisId, grupoEdad) => `${dosisId}|${grupoEdad ?? ''}`;
 export const llaveDeColumna = (columna) => llave(columna.dosis.id, columna.valor?.codigo ?? columna.seccion?.grupoEdad);
 
 const aColumna = (vacuna, seccion, valor, d) => ({
@@ -219,7 +219,7 @@ function leerMesDelRango(valor, nombre) {
 
 const numeroDeMes = ({ anio, mes }) => anio * 100 + mes;
 
-function leerIds(valor, nombre) {
+export function leerIds(valor, nombre) {
   if (valor === undefined) return null;
   if (!/^[1-9]\d*(,[1-9]\d*)*$/.test(valor)) {
     throw entradaInvalida(`${nombre} debe ser una lista de ids separados por comas.`);
@@ -227,6 +227,19 @@ function leerIds(valor, nombre) {
   const lista = valor.split(',').map(Number);
   if (new Set(lista).size !== lista.length) throw entradaInvalida(`${nombre} no puede repetir un id.`);
   return lista;
+}
+
+export function leerVacuna(query) {
+  if (query.vacuna !== undefined && !/^[A-Z0-9_]{1,20}$/.test(query.vacuna)) {
+    throw entradaInvalida('La vacuna debe ser un código de 1 a 20 letras mayúsculas, números o guiones bajos.');
+  }
+  return query.vacuna ?? null;
+}
+
+export function leerRedId(query) {
+  if (query.redId === undefined) return null;
+  if (!/^[1-9]\d*$/.test(query.redId)) throw entradaInvalida('redId debe ser un número entero positivo.');
+  return Number(query.redId);
 }
 
 function leerConsulta(query) {
@@ -241,19 +254,13 @@ function leerConsulta(query) {
   if (nivel === 'establecimiento' && query.informe === 'residencia') {
     throw entradaInvalida('El informe por municipio de residencia no tiene nivel establecimiento.');
   }
-  if (query.vacuna !== undefined && !/^[A-Z0-9_]{1,20}$/.test(query.vacuna)) {
-    throw entradaInvalida('La vacuna debe ser un código de 1 a 20 letras mayúsculas, números o guiones bajos.');
-  }
+  const vacuna = leerVacuna(query);
   const desde = leerMesDelRango(query.desde, 'desde');
   const hasta = leerMesDelRango(query.hasta, 'hasta');
   if (numeroDeMes(desde) > numeroDeMes(hasta)) {
     throw entradaInvalida('El mes inicial no puede ser posterior al mes final.');
   }
-  let redId = null;
-  if (query.redId !== undefined) {
-    if (!/^[1-9]\d*$/.test(query.redId)) throw entradaInvalida('redId debe ser un número entero positivo.');
-    redId = Number(query.redId);
-  }
+  const redId = leerRedId(query);
   if (query.agrupacion !== undefined && !/^[a-z][a-z0-9_]*$/.test(query.agrupacion)) {
     throw entradaInvalida('agrupacion debe ser el código de una dimensión.');
   }
@@ -262,7 +269,7 @@ function leerConsulta(query) {
     nivel,
     desde,
     hasta,
-    vacuna: query.vacuna ?? null,
+    vacuna,
     redId,
     municipioIds: leerIds(query.municipioIds, 'municipioIds'),
     incluirAprobados: leerBooleano(query, 'incluirAprobados') ?? false,
@@ -271,7 +278,7 @@ function leerConsulta(query) {
 }
 
 // La DDRISS con su departamento sede: la fila del nivel departamento.
-async function departamentoDeLaDdriss(ddrissId) {
+export async function departamentoDeLaDdriss(ddrissId) {
   const [[fila]] = await pool.query(
     `SELECT dep.id, dep.codigo_ine, dep.nombre FROM ddriss d JOIN departamento dep ON dep.id = d.departamento_id
       WHERE d.id = ?`,
@@ -294,7 +301,7 @@ async function mesesDelRango(ddrissId, desde, hasta) {
 }
 
 // Los municipios del recorte: los actuales de la red y, dentro de ellos, los elegidos; null = sin recorte.
-async function municipiosDelRecorte({ redId, municipioIds }, ddrissId) {
+export async function municipiosDelRecorte({ redId, municipioIds }, ddrissId) {
   const recorte = redId === null ? null : (await leerRedDeLaDdriss(redId, ddrissId)).municipioIds;
   if (municipioIds === null) return recorte;
   return recorte === null ? municipioIds : municipioIds.filter((m) => recorte.includes(m));
@@ -303,7 +310,7 @@ async function municipiosDelRecorte({ redId, municipioIds }, ddrissId) {
 // Una fila por establecimiento, municipio de la fila (de aplicación o de residencia), dosis y grupo de edad; con
 // agrupacion, por valor de esa dimensión en lugar del grupo de edad (las cantidades sin ella no entran).
 // residencia: solo procedencias del departamento de la DDRISS, como v_produccion_atribuida.
-async function leerProduccion({ ddrissId, informe, desde, hasta, vacunaId, incluirAprobados, agrupacion }) {
+export async function leerProduccion({ ddrissId, informe, desde, hasta, vacunaId, incluirAprobados, agrupacion }) {
   const estados = incluirAprobados ? ['APROBADO', 'CERRADO', 'RECTIFICACION'] : ['CERRADO', 'RECTIFICACION'];
   const municipio = informe === 'residencia' ? 'vp.municipio_procedencia_id' : 'vp.municipio_aplicacion_id';
   const condiciones = {
@@ -348,7 +355,7 @@ async function leerProduccion({ ddrissId, informe, desde, hasta, vacunaId, inclu
 }
 
 // Los activos del departamento sede sin el 9999, más los que tienen datos en el rango.
-async function universoDeMunicipios(ddrissId, conDatos) {
+export async function universoDeMunicipios(ddrissId, conDatos) {
   const [filas] = await pool.query(
     `SELECT m.id, m.codigo_ine, m.nombre FROM municipio m
       WHERE (m.activo = TRUE AND m.codigo_ine <> '9999'
@@ -394,7 +401,7 @@ async function distritosActivos(ddrissId) {
 
 // Las filas del nivel dentro del recorte, y a qué filas va cada cantidad (por distrito, un municipio con dos
 // distritos va a los dos; el total se suma aparte para no contarlo dos veces).
-async function filasDelNivel(nivel, { ddrissId, departamento, produccion, enRecorte, ceros }) {
+export async function filasDelNivel(nivel, { ddrissId, departamento, produccion, enRecorte, ceros }) {
   const fila = (unidad, extra = {}) => ({
     ...unidad, municipio: null, fueraDelConsolidado: false, ...extra, cantidades: ceros(),
   });
@@ -499,7 +506,7 @@ export async function informePorFila(usuario, query = {}) {
 // ---------------------------------------------------------------- Exportación a Excel y PDF (SPEC 64 y 65)
 
 // Los nombres del encabezado del libro: DDRISS, quien exporta, vacuna, red y municipios elegidos.
-async function datosDelEncabezado(usuario, consulta, ddrissId) {
+export async function datosDelEncabezado(usuario, consulta, ddrissId) {
   const [[[ddriss]], [[empleado]], [vacunas], red, [municipios]] = await Promise.all([
     pool.query('SELECT nombre FROM ddriss WHERE id = ?', [ddrissId]),
     pool.query(
@@ -530,6 +537,18 @@ const ARCHIVOS = {
   pdf: (informe, datos) => pdfDelInforme(informe, datos),
 };
 
+// La fila EXPORTAR de un informe (entidadId: su código), con los parámetros y el formato, sin cantidades.
+export function registrarExportacion(contexto, entidadId, valoresNuevos) {
+  return enTransaccion((conexion) => registrarBitacora(conexion, {
+    ...contexto,
+    modulo: MODULOS.REPORTES,
+    accion: ACCIONES.EXPORTAR,
+    entidad: 'informe',
+    entidadId,
+    valoresNuevos,
+  }));
+}
+
 // El mismo informe de informePorFila como archivo (formato: xlsx o pdf). Deja la fila EXPORTAR después de armarlo:
 // si la bitácora falla, no se entrega el archivo. contexto: contextoAuditoria(req).
 export async function exportarInforme(usuario, query, contexto, formato, ahora = new Date()) {
@@ -541,25 +560,18 @@ export async function exportarInforme(usuario, query, contexto, formato, ahora =
 
   const desde = aTextoDeMes(consulta.desde);
   const hasta = aTextoDeMes(consulta.hasta);
-  await enTransaccion((conexion) => registrarBitacora(conexion, {
-    ...contexto,
-    modulo: MODULOS.REPORTES,
-    accion: ACCIONES.EXPORTAR,
-    entidad: 'informe',
-    entidadId: consulta.informe,
-    valoresNuevos: {
-      formato,
-      desde,
-      hasta,
-      nivel: consulta.nivel,
-      vacuna: consulta.vacuna,
-      redId: consulta.redId,
-      municipioIds: consulta.municipioIds ?? [],
-      agrupacion: consulta.agrupacion,
-      incluirAprobados: consulta.incluirAprobados,
-      ddrissId,
-    },
-  }));
+  await registrarExportacion(contexto, consulta.informe, {
+    formato,
+    desde,
+    hasta,
+    nivel: consulta.nivel,
+    vacuna: consulta.vacuna,
+    redId: consulta.redId,
+    municipioIds: consulta.municipioIds ?? [],
+    agrupacion: consulta.agrupacion,
+    incluirAprobados: consulta.incluirAprobados,
+    ddrissId,
+  });
 
   const agrupacion = consulta.agrupacion ? `-por-${consulta.agrupacion}` : '';
   return { bytes, nombre: `informe-${consulta.informe}-${desde}-a-${hasta}${agrupacion}.${formato}` };

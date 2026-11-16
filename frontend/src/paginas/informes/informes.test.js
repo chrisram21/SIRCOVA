@@ -11,6 +11,14 @@ import {
   rangoPorDefecto,
   textoMesesSinCerrar,
   textoRango,
+  ACUMULADO,
+  aniosHabilitados,
+  anioPorDefecto,
+  esAcumulado,
+  textoAnio,
+  textoCifra,
+  textoCobertura,
+  textoMeta,
 } from './informes.js'
 
 // Del más reciente al más antiguo, como GET /informes/opciones.
@@ -46,6 +54,7 @@ describe('filtrosDeInforme', () => {
       informe: 'poblacion-propia',
       desde: { anio: 2026, mes: 2 },
       hasta: { anio: 2026, mes: 8 },
+      anio: 2026,
       nivel: 'municipio',
       vacuna: null,
       red: null,
@@ -62,6 +71,7 @@ describe('filtrosDeInforme', () => {
       informe: 'total',
       desde: { anio: 2025, mes: 12 },
       hasta: { anio: 2026, mes: 9 },
+      anio: 2026,
       nivel: 'distrito',
       vacuna: 'BCG',
       red: 3,
@@ -241,5 +251,56 @@ describe('textos del rango y de los meses sin cerrar', () => {
     )
     expect(avisoDeMeses(dos, false)).toMatch(/^Agosto y septiembre de 2026 todavía no están cerrados y no suman/)
     expect(avisoDeMeses([], false)).toBeNull()
+  })
+})
+
+describe('acumulado anual (SPEC 66)', () => {
+  it('es la cuarta opción de Informe y no tiene nivel establecimiento', () => {
+    expect(esAcumulado(ACUMULADO)).toBe(true)
+    expect(esAcumulado('residencia')).toBe(false)
+    expect(nivelPermitido(ACUMULADO, 'establecimiento')).toBe('municipio')
+    expect(nivelPermitido(ACUMULADO, 'distrito')).toBe('distrito')
+  })
+
+  it('el año por defecto es el último con un mes cerrado, o el último habilitado', () => {
+    expect(aniosHabilitados(MESES)).toEqual([2026, 2025])
+    expect(anioPorDefecto(MESES)).toBe(2026)
+    expect(anioPorDefecto([{ anio: 2027, mes: 1, estado: 'ABIERTO' }, { anio: 2026, mes: 12, estado: 'CERRADO' }]))
+      .toBe(2026)
+    expect(anioPorDefecto([{ anio: 2027, mes: 1, estado: 'ABIERTO' }])).toBe(2027)
+    expect(anioPorDefecto([])).toBeNull()
+  })
+
+  it('lee el año de la URL si está habilitado y sabe que pide el acumulado con informe y anio', () => {
+    const filtros = filtrosDeInforme(url('informe=acumulado-anual&anio=2025&nivel=establecimiento'), OPCIONES)
+    expect(filtros).toMatchObject({ informe: ACUMULADO, anio: 2025, nivel: 'municipio', generado: true })
+    expect(filtrosDeInforme(url('informe=acumulado-anual&anio=2030'), OPCIONES).anio).toBe(2026)
+    expect(filtrosDeInforme(url('informe=acumulado-anual&desde=2026-01&hasta=2026-08'), OPCIONES).generado).toBe(false)
+  })
+
+  it('«Generar» escribe anio en lugar de desde y hasta', () => {
+    const parametros = parametrosDeInforme({
+      informe: ACUMULADO, desde: { anio: 2026, mes: 1 }, hasta: { anio: 2026, mes: 8 }, anio: 2026,
+      nivel: 'distrito', vacuna: 'HEXA', red: null, municipios: [], aprobados: true,
+    })
+    expect(Object.fromEntries(parametros)).toEqual({
+      informe: ACUMULADO, anio: '2026', nivel: 'distrito', vacuna: 'HEXA', aprobados: 'si',
+    })
+  })
+
+  it('los textos del año, la meta, las cifras y el aviso son los del backend', () => {
+    expect(textoAnio(2026)).toBe('Enero a diciembre de 2026')
+    expect(textoMeta({ valor: 95 })).toBe('Meta 95 %')
+    expect(textoMeta({ valor: 90.5 })).toBe('Meta 90.5 %')
+    expect(textoCobertura(89.66)).toBe('89.7 %')
+    expect(textoCobertura(null)).toBe('—')
+    expect(textoCifra('dosis', 1300)).toBe('1,300')
+    expect(textoCifra('brecha', 0)).toBe('0')
+    expect(textoCifra('poblacion', null)).toBe('—')
+    expect(textoCifra('cobertura', 112)).toBe('112.0 %')
+    expect(avisoDeMeses([{ anio: 2026, mes: 11 }, { anio: 2026, mes: 12 }], false, 'el acumulado')).toBe(
+      'Noviembre y diciembre de 2026 todavía no están cerrados y no suman en el acumulado. Marca «Incluir aprobados '
+        + 'sin cerrar» para verlos como preliminares.',
+    )
   })
 })

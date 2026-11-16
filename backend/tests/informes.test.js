@@ -11,6 +11,7 @@ import {
   dimensionDeAgrupacion,
 } from '../src/modulos/informes/informes.service.js';
 import { documentoDelInforme } from '../src/modulos/informes/informePdf.service.js';
+import { acumuladoAnual } from '../src/modulos/informes/acumuladoAnual.service.js';
 import { claveCombinacion } from '../src/modulos/produccion/celdas.service.js';
 import { tokenDePrueba } from './sesionDePrueba.js';
 
@@ -95,6 +96,11 @@ async function limpiar() {
   await pool.query('DELETE FROM periodo WHERE anio IN (?)', [[ANIO - 1, ANIO]]);
   await pool.query('DELETE FROM ddriss WHERE codigo = ?', [DDRISS_PRUEBA]);
   await pool.query(
+    `DELETE po FROM poblacion_objetivo po JOIN municipio m ON m.id = po.municipio_id
+       JOIN departamento d ON d.id = m.departamento_id WHERE d.codigo_ine = ?`,
+    [DEPARTAMENTO_PRUEBA],
+  );
+  await pool.query(
     'DELETE m FROM municipio m JOIN departamento d ON d.id = m.departamento_id WHERE d.codigo_ine = ?',
     [DEPARTAMENTO_PRUEBA],
   );
@@ -102,6 +108,7 @@ async function limpiar() {
   await pool.query('DELETE d FROM dosis d JOIN vacuna v ON v.id = d.vacuna_id WHERE v.codigo IN (?)', [VACUNAS_PRUEBA]);
   await pool.query('DELETE FROM vacuna WHERE codigo IN (?)', [VACUNAS_PRUEBA]);
   await (await obtenerDb()).collection('esquemas_captura').deleteMany({ 'vacuna.codigo': { $in: VACUNAS_PRUEBA } });
+  await (await obtenerDb()).collection('configuracion_indicadores').deleteMany({ codigo: /^ZVT_SPEC66/ });
 }
 
 const seccion = (grupoEdad, titulo, orden, dosis) => ({
@@ -1280,6 +1287,364 @@ describe('GET /informes/produccion/pdf (SPEC 65)', () => {
         .parse(binario);
       expect(res.status, rol).toBe(200);
       expect(esPdf(res), rol).toBe(true);
+    }
+  });
+});
+
+// SPEC 66 (HU-49): el acumulado anual sobre los datos de 2086 de ZVT_INF62 (enero CERRADO, febrero EN_CIERRE, marzo
+// sin cierre_periodo). Población de 2086: Z801 con < 1 año y de 1 a < 6; Z802 solo con < 1 año.
+describe('acumuladoAnual: dosis, población y meses sin cerrar (SPEC 66)', () => {
+  const nacional = { rol: 'AUTORIDAD', ddrissId: null };
+  const anual = (consulta = {}) => acumuladoAnual(nacional, { ddrissId: String(ddrissId), anio: String(ANIO), ...consulta });
+  const SOLO_62 = { vacuna: 'ZVT_SPEC62' };
+  const fila = (informe, nombre) => informe.filas.find((f) => f.nombre === nombre);
+
+  beforeAll(async () => {
+    const [clasificaciones] = await pool.query(
+      "SELECT id, codigo FROM clasificacion_poblacion WHERE codigo IN ('MENOR_1', '1_A_5')",
+    );
+    const clasificacion = Object.fromEntries(clasificaciones.map((c) => [c.codigo, c.id]));
+    const POBLACION = [['Z801', 'MENOR_1', 100], ['Z801', '1_A_5', 400], ['Z802', 'MENOR_1', 50]];
+    await pool.query(
+      `INSERT INTO poblacion_objetivo (municipio_id, anio, clasificacion_poblacion_id, cantidad, fuente, registrado_por)
+       VALUES ?`,
+      [POBLACION.map(([ine, codigo, cantidad]) => [
+        ids.municipios[ine], ANIO, clasificacion[codigo], cantidad, 'vitest-spec66', usuarioId,
+      ])],
+    );
+  });
+
+  it('las columnas son las del esquema del último mes con cierre_periodo (febrero)', async () => {
+    const informe = await anual(SOLO_62);
+    expect(informe.columnas.map((c) => `${c.dosis.codigo}|${c.seccion?.grupoEdad}`)).toEqual([
+      'D1|MENOR_1', 'D2|MENOR_1', 'D1|1_A_5',
+    ]);
+  });
+
+  it('por municipio, las dosis cuadran con el informe por residencia de los meses del año', async () => {
+    const [informe, residencia] = await Promise.all([
+      anual(SOLO_62),
+      consultar('produccion', `informe=residencia&desde=${ANIO}-01&hasta=${ANIO}-02&vacuna=ZVT_SPEC62&ddrissId=${ddrissId}`),
+    ]);
+    expect(residencia.status, JSON.stringify(residencia.body)).toBe(200);
+    expect(informe.filas.map((f) => [f.nombre, f.dosis])).toEqual([
+      ['vitest-spec62-Z801', [32, 6, 5]],
+      ['vitest-spec62-Z802', [10, 0, 0]],
+    ]);
+    expect(informe.filas.map((f) => f.dosis)).toEqual(residencia.body.filas.map((f) => f.cantidades));
+    expect(informe.total.dosis).toEqual(residencia.body.total.cantidades);
+  });
+
+  it('la población es la del año y del grupo de edad de la columna; si falta, null, también en el total', async () => {
+    const informe = await anual(SOLO_62);
+    expect(fila(informe, 'vitest-spec62-Z801').poblacion).toEqual([100, 100, 400]);
+    expect(fila(informe, 'vitest-spec62-Z802').poblacion).toEqual([50, 50, null]);
+    expect(informe.total.poblacion).toEqual([150, 150, null]);
+  });
+
+  it('por distrito, cada uno usa la población de su municipio y «Sin distrito» la de los suyos', async () => {
+    const informe = await anual({ ...SOLO_62, nivel: 'distrito' });
+    expect(informe.filas.map((f) => [f.nombre, f.dosis, f.poblacion])).toEqual([
+      ['vitest-spec62 Distrito 1', [32, 6, 5], [100, 100, 400]],
+      ['vitest-spec62 Distrito 1b', [32, 6, 5], [100, 100, 400]],
+      ['Sin distrito', [10, 0, 0], [50, 50, null]],
+    ]);
+    expect(informe.total).toMatchObject({ dosis: [42, 6, 5], poblacion: [150, 150, null] });
+  });
+
+  it('por departamento, una fila con la suma de los municipios', async () => {
+    const informe = await anual({ ...SOLO_62, nivel: 'departamento' });
+    expect(informe.filas).toEqual([
+      expect.objectContaining({ codigo: DEPARTAMENTO_PRUEBA, dosis: [42, 6, 5], poblacion: [150, 150, null] }),
+    ]);
+  });
+
+  it('con una red, solo sus municipios en las filas y el total', async () => {
+    const informe = await anual({ ...SOLO_62, redId: String(ids.red) });
+    expect(informe.filas.map((f) => f.nombre)).toEqual(['vitest-spec62-Z802']);
+    expect(informe.total).toMatchObject({ dosis: [10, 0, 0], poblacion: [50, 50, null] });
+  });
+
+  it('los meses sin cerrar son los doce que no están CERRADO, con estado null sin cierre_periodo', async () => {
+    const informe = await anual(SOLO_62);
+    expect(informe.mesesSinCerrar).toEqual([
+      { anio: ANIO, mes: 2, estado: 'EN_CIERRE' },
+      ...[3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((mes) => ({ anio: ANIO, mes, estado: null })),
+    ]);
+    expect(informe.preliminar).toBe(false);
+  });
+
+  it('un APROBADO solo cuenta con incluirAprobados, que marca el informe como preliminar', async () => {
+    const informe = await anual({ ...SOLO_62, incluirAprobados: 'true' });
+    expect(fila(informe, 'vitest-spec62-Z802').dosis).toEqual([19, 0, 0]);
+    expect(informe.total.dosis).toEqual([51, 6, 5]);
+    expect(informe.preliminar).toBe(true);
+  });
+
+  it('400 sin anio, con un año inválido o con nivel establecimiento; 404 con un año sin meses', async () => {
+    await expect(acumuladoAnual(nacional, { ddrissId: String(ddrissId) })).rejects.toMatchObject({ status: 400 });
+    await expect(anual({ anio: '86' })).rejects.toMatchObject({ status: 400 });
+    await expect(anual({ nivel: 'establecimiento' })).rejects.toMatchObject({ status: 400 });
+    await expect(anual({ desde: `${ANIO}-01` })).rejects.toMatchObject({ status: 400 });
+    await expect(anual({ anio: String(ANIO + 4) })).rejects.toMatchObject({ status: 404, codigo: 'NO_ENCONTRADO' });
+    await expect(anual({ vacuna: 'ZVT_NO_EXISTE' })).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+// SPEC 66: metas, cobertura y brecha. Indicadores ZVT_SPEC66_* de ZVT_SPEC62 para la DDRISS ZVT_INF62: en D1 < 1 año
+// mandan dos COBERTURA (el primero por código, 90) sobre un BRECHA (80); D2 < 1 año solo tiene BRECHA (85); el de
+// D1 de 1 a < 6 filtra por sexo y no cuenta (queda 95).
+describe('acumuladoAnual: metas, cobertura y brecha (SPEC 66)', () => {
+  const nacional = { rol: 'AUTORIDAD', ddrissId: null };
+  const anual = (consulta = {}) => acumuladoAnual(nacional, {
+    ddrissId: String(ddrissId), anio: String(ANIO), vacuna: 'ZVT_SPEC62', ...consulta,
+  });
+  const indicadores = async () => (await obtenerDb()).collection('configuracion_indicadores');
+  const fecha = new Date();
+  const version = ({ codigo, numero = 1, tipo, dosis, clasificacion, filtros, meta, estado = 'VIGENTE' }) => ({
+    _id: new ObjectId(),
+    codigo,
+    version: new Int32(numero),
+    nombre: `vitest-spec66 ${codigo}`,
+    tipo_calculo: tipo,
+    aplica_a: [{
+      vacuna: 'ZVT_SPEC62', dosis, clasificacion_poblacion: clasificacion, ...(filtros ? { filtros_dimension: filtros } : {}),
+    }],
+    numerador: { fuente: 'PRODUCCION', estados_reporte: ['CERRADO'], atribucion: 'PROCEDENCIA', acumulado: 'ANUAL' },
+    denominador: { fuente: 'POBLACION_OBJETIVO', prorrateo: 'NINGUNO' },
+    meta: { valor: meta, unidad: 'PORCENTAJE', comparador: '>' },
+    niveles: ['MUNICIPIO', 'DEPARTAMENTO'],
+    periodicidad: 'MENSUAL',
+    alerta: { generar: false },
+    es_estimacion: false,
+    territorio: { nivel: 'DDRISS', ddriss_codigo: DDRISS_PRUEBA },
+    estado,
+    vigencia: { desde: fecha, hasta: null },
+    auditoria: {
+      creado_por: new Int32(1), creado_en: fecha, publicado_por: new Int32(1), publicado_en: fecha,
+      motivo_cambio: 'vitest-spec66',
+    },
+  });
+
+  beforeAll(async () => {
+    await (await indicadores()).insertMany([
+      version({ codigo: 'ZVT_SPEC66_BRE_D1', tipo: 'BRECHA', dosis: 'D1', clasificacion: 'MENOR_1', meta: 80,
+        filtros: { grupo_edad: ['MENOR_1'] } }),
+      version({ codigo: 'ZVT_SPEC66_COB_D1', tipo: 'COBERTURA', dosis: 'D1', clasificacion: 'MENOR_1', meta: 90,
+        filtros: { grupo_edad: ['MENOR_1'] } }),
+      version({ codigo: 'ZVT_SPEC66_COB_D1B', tipo: 'COBERTURA', dosis: 'D1', clasificacion: 'MENOR_1', meta: 70 }),
+      version({ codigo: 'ZVT_SPEC66_BRE_D2', tipo: 'BRECHA', dosis: 'D2', clasificacion: 'MENOR_1', meta: 85 }),
+      version({ codigo: 'ZVT_SPEC66_COB_SEXO', tipo: 'COBERTURA', dosis: 'D1', clasificacion: '1_A_5', meta: 50,
+        filtros: { sexo: ['F'] } }),
+    ]);
+  });
+
+  it('la meta de cada columna: COBERTURA sobre BRECHA, el primero por código, y 95 sin indicador que mida la columna', async () => {
+    const informe = await anual();
+    expect(informe.columnas.map((c) => c.meta)).toEqual([
+      { valor: 90, indicador: 'ZVT_SPEC66_COB_D1' },
+      { valor: 85, indicador: 'ZVT_SPEC66_BRE_D2' },
+      { valor: 95, indicador: null },
+    ]);
+  });
+
+  it('cobertura con un decimal y brecha contra la meta, mínimo 0; null sin población', async () => {
+    const informe = await anual();
+    const z801 = informe.filas.find((f) => f.nombre === 'vitest-spec62-Z801');
+    const z802 = informe.filas.find((f) => f.nombre === 'vitest-spec62-Z802');
+    expect(z801).toMatchObject({ cobertura: [32, 6, 1.3], brecha: [58, 79, 375] });
+    expect(z802).toMatchObject({ cobertura: [20, 0, null], brecha: [35, 43, null] });
+    expect(informe.total).toEqual({
+      dosis: [42, 6, 5], poblacion: [150, 150, null], cobertura: [28, 4, null], brecha: [93, 122, null],
+    });
+  });
+
+  it('la brecha del total sale de su población, no de la suma de las filas', async () => {
+    const informe = await anual({ nivel: 'distrito' });
+    const sumaDeFilas = informe.filas.reduce((suma, f) => suma + f.brecha[0], 0);
+    expect(sumaDeFilas).toBe(58 + 58 + 35);
+    expect(informe.total.brecha[0]).toBe(93);
+  });
+
+  it('una versión nueva del indicador cambia la meta y la brecha', async () => {
+    const coleccion = await indicadores();
+    await coleccion.updateOne({ codigo: 'ZVT_SPEC66_COB_D1', version: 1 }, { $set: { estado: 'HISTORICO' } });
+    await coleccion.insertOne(version({
+      codigo: 'ZVT_SPEC66_COB_D1', numero: 2, tipo: 'COBERTURA', dosis: 'D1', clasificacion: 'MENOR_1', meta: 60,
+    }));
+    const informe = await anual();
+    expect(informe.columnas[0].meta).toEqual({ valor: 60, indicador: 'ZVT_SPEC66_COB_D1' });
+    expect(informe.total.brecha[0]).toBe(48);
+  });
+
+  it('con población 0, cobertura y brecha son null', async () => {
+    const [[clasificacion]] = await pool.query("SELECT id FROM clasificacion_poblacion WHERE codigo = '1_A_5'");
+    await pool.query(
+      `INSERT INTO poblacion_objetivo (municipio_id, anio, clasificacion_poblacion_id, cantidad, fuente, registrado_por)
+       VALUES (?, ?, ?, 0, 'vitest-spec66', ?)`,
+      [ids.municipios.Z802, ANIO, clasificacion.id, usuarioId],
+    );
+    try {
+      const informe = await anual();
+      const z802 = informe.filas.find((f) => f.nombre === 'vitest-spec62-Z802');
+      // Solo la columna D1 de 1 a < 6 (meta 95): la prueba anterior cambió la meta de D1 < 1 año.
+      const tercera = (f) => [f.poblacion[2], f.cobertura[2], f.brecha[2]];
+      expect(tercera(z802)).toEqual([0, null, null]);
+      expect(tercera(informe.total)).toEqual([400, 1.3, 375]);
+    } finally {
+      await pool.query('DELETE FROM poblacion_objetivo WHERE municipio_id = ? AND anio = ? AND clasificacion_poblacion_id = ?', [
+        ids.municipios.Z802, ANIO, clasificacion.id,
+      ]);
+    }
+  });
+});
+
+describe('GET /informes/acumulado-anual (SPEC 66)', () => {
+  const anual = (consulta, token) => consultar('acumulado-anual', consulta, token);
+
+  it('responde el acumulado con la forma del contrato', async () => {
+    const res = await anual(`anio=${ANIO}&vacuna=ZVT_SPEC62&ddrissId=${ddrissId}`);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(Object.keys(res.body).sort()).toEqual([
+      'anio', 'columnas', 'filas', 'incluirAprobados', 'informe', 'mesesSinCerrar', 'nivel', 'preliminar', 'total',
+    ]);
+    expect(res.body).toMatchObject({ informe: 'acumulado-anual', nivel: 'municipio', anio: ANIO, incluirAprobados: false });
+    expect(Object.keys(res.body.columnas[0]).sort()).toEqual(['dosis', 'meta', 'seccion', 'vacuna']);
+    expect(Object.keys(res.body.filas[0]).sort()).toEqual([
+      'brecha', 'cobertura', 'codigo', 'dosis', 'id', 'municipio', 'nombre', 'poblacion',
+    ]);
+    expect(res.body.total.dosis).toEqual([42, 6, 5]);
+  });
+
+  it('400 con nivel establecimiento, un parámetro de otro informe o sin ddrissId (Autoridad nacional)', async () => {
+    for (const consulta of [
+      `anio=${ANIO}&nivel=establecimiento&ddrissId=${ddrissId}`,
+      `anio=${ANIO}&desde=${ANIO}-01&ddrissId=${ddrissId}`,
+      `ddrissId=${ddrissId}`,
+      `anio=${ANIO}`,
+    ]) {
+      const res = await anual(consulta);
+      expect(res.status, consulta).toBe(400);
+      expect(res.body.error.codigo, consulta).toBe('ENTRADA_INVALIDA');
+    }
+  });
+
+  it('404 con un año sin meses o una red de otra DDRISS', async () => {
+    const casos = [`anio=${ANIO + 4}&ddrissId=${ddrissId}`];
+    if (ids.redAjena) casos.push(`anio=${ANIO}&redId=${ids.redAjena}&ddrissId=${ddrissId}`);
+    for (const consulta of casos) {
+      const res = await anual(consulta);
+      expect(res.status, consulta).toBe(404);
+      expect(res.body.error.codigo, consulta).toBe('NO_ENCONTRADO');
+    }
+  });
+
+  it('el Revisor y Epidemiología consultan su DDRISS; con ddrissId, 400', async () => {
+    for (const rol of ['REVISOR', 'EPIDEMIOLOGIA']) {
+      const propia = await anual('anio=2026', cuentas[rol].token);
+      expect(propia.status, `${rol}: ${JSON.stringify(propia.body)}`).toBe(200);
+      const ajena = await anual(`anio=2026&ddrissId=${ddrissId}`, cuentas[rol].token);
+      expect(ajena.status, rol).toBe(400);
+    }
+  });
+
+  it('el Personal del establecimiento y el Administrador reciben 403', async () => {
+    for (const rol of ['ESTABLECIMIENTO', 'ADMINISTRADOR']) {
+      const res = await anual(`anio=${ANIO}`, cuentas[rol].token);
+      expect(res.status, rol).toBe(403);
+    }
+  });
+});
+
+describe('GET /informes/acumulado-anual/excel y /pdf (SPEC 66)', () => {
+  const binario = (res, listo) => {
+    const partes = [];
+    res.on('data', (parte) => partes.push(parte));
+    res.on('end', () => listo(null, Buffer.concat(partes)));
+  };
+  const descargar = (formato, consulta, token = cuentas.AUTORIDAD.token) =>
+    request(app)
+      .get(`/api/v1/informes/acumulado-anual/${formato}?${consulta}`)
+      .set('Authorization', `Bearer ${token}`)
+      .buffer(true)
+      .parse(binario);
+  const ultimaBitacora = async () => (await pool.query('SELECT COALESCE(MAX(id), 0) AS id FROM bitacora'))[0][0].id;
+  async function filasExportar(desdeId) {
+    const [filas] = await pool.query(
+      `SELECT modulo, entidad, entidad_id, valores_nuevos FROM bitacora
+        WHERE id > ? AND usuario_id = ? AND accion = 'EXPORTAR' ORDER BY id`,
+      [desdeId, cuentas.AUTORIDAD.id],
+    );
+    return filas.map((f) => ({
+      ...f,
+      valores_nuevos: typeof f.valores_nuevos === 'string' ? JSON.parse(f.valores_nuevos) : f.valores_nuevos,
+    }));
+  }
+  const consulta = () => `anio=${ANIO}&vacuna=ZVT_SPEC62&nivel=distrito&ddrissId=${ddrissId}`;
+
+  it('el Excel tiene las mismas cifras que el acumulado en pantalla', async () => {
+    const [archivo, pantalla] = await Promise.all([descargar('excel', consulta()), consultar('acumulado-anual', consulta())]);
+    expect(archivo.status).toBe(200);
+    expect(archivo.headers['content-disposition']).toBe(`attachment; filename="informe-acumulado-anual-${ANIO}.xlsx"`);
+    const libro = new ExcelJS.Workbook();
+    await libro.xlsx.load(archivo.body);
+    const hoja = libro.worksheets[0];
+
+    const leidas = [];
+    hoja.eachRow((fila) => {
+      if (fila.getCell(3).value !== 'Dosis') return;
+      const cuatro = [0, 1, 2, 3].map((i) => pantalla.body.columnas.map((_, c) => {
+        const valor = hoja.getRow(fila.number + i).getCell(4 + c).value;
+        return valor === '—' ? null : valor;
+      }));
+      leidas.push([fila.getCell(1).value, ...cuatro]);
+    });
+    const esperadas = [...pantalla.body.filas, { nombre: 'Total', ...pantalla.body.total }]
+      .map((f) => [f.nombre, f.dosis, f.poblacion, f.cobertura, f.brecha]);
+    expect(leidas).toEqual(esperadas);
+  });
+
+  it('el PDF es un PDF con el nombre del año', async () => {
+    const res = await descargar('pdf', consulta());
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/pdf/);
+    expect(res.headers['content-disposition']).toBe(`attachment; filename="informe-acumulado-anual-${ANIO}.pdf"`);
+    expect(res.body.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+  });
+
+  it('cada descarga deja una fila EXPORTAR con los parámetros y el formato, sin cantidades', async () => {
+    const antes = await ultimaBitacora();
+    await descargar('excel', `${consulta()}&redId=${ids.red}&incluirAprobados=true`);
+    await descargar('pdf', consulta());
+    const filas = await filasExportar(antes);
+    expect(filas).toHaveLength(2);
+    expect(filas[0]).toMatchObject({ modulo: 'REPORTES', entidad: 'informe', entidad_id: 'acumulado-anual' });
+    expect(filas[0].valores_nuevos).toEqual({
+      formato: 'xlsx', anio: ANIO, nivel: 'distrito', vacuna: 'ZVT_SPEC62', redId: ids.red, municipioIds: [],
+      incluirAprobados: true, ddrissId,
+    });
+    expect(filas[1].valores_nuevos).toMatchObject({ formato: 'pdf', incluirAprobados: false, redId: null });
+  });
+
+  it('responde los mismos 400 y 404 que el acumulado en pantalla, sin fila EXPORTAR', async () => {
+    const antes = await ultimaBitacora();
+    for (const [formato, consulta, estado] of [
+      ['excel', `anio=${ANIO}&nivel=establecimiento&ddrissId=${ddrissId}`, 400],
+      ['pdf', `ddrissId=${ddrissId}`, 400],
+      ['excel', `anio=${ANIO + 4}&ddrissId=${ddrissId}`, 404],
+    ]) {
+      const res = await consultar(`acumulado-anual/${formato}`, consulta);
+      expect(res.status, consulta).toBe(estado);
+    }
+    expect(await filasExportar(antes)).toEqual([]);
+  });
+
+  it('el Personal del establecimiento y el Administrador reciben 403', async () => {
+    for (const rol of ['ESTABLECIMIENTO', 'ADMINISTRADOR']) {
+      for (const formato of ['excel', 'pdf']) {
+        const res = await consultar(`acumulado-anual/${formato}`, `anio=${ANIO}`, cuentas[rol].token);
+        expect(res.status, `${rol} ${formato}`).toBe(403);
+      }
     }
   });
 });

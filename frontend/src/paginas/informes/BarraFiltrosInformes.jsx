@@ -5,10 +5,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import SelectorConBusqueda from '@/componentes/SelectorConBusqueda.jsx'
 import { MESES } from '@/lib/fechas.js'
 import { MenuMunicipios, Selector } from '@/paginas/indicadores/BarraFiltrosIndicadores.jsx'
-import { INFORMES, NIVELES, nivelPermitido } from './informes.js'
+import { INFORMES, NIVELES, aniosHabilitados, esAcumulado, nivelPermitido } from './informes.js'
 
 // SPEC 62: los filtros de «Informes». Cambiar un filtro no genera nada: el informe sale al pulsar «Generar», que
-// escribe los filtros en la URL. Elegir una red borra los municipios elegidos, y al revés.
+// escribe los filtros en la URL. Elegir una red borra los municipios elegidos, y al revés. Con el acumulado anual
+// (SPEC 66), un select «Año» toma el lugar de «Desde» y «Hasta».
 
 const TODAS = 'todas'
 
@@ -92,21 +93,36 @@ export default function BarraFiltrosInformes({ opciones, valores, alCambiar, alC
             className="sm:w-80"
           />
         ))}
-        <MesDelRango
-          nombre="desde"
-          etiqueta="Desde"
-          meses={meses}
-          valor={valores.desde}
-          alCambiar={(desde) => alCambiar({ desde })}
-          primero
-        />
-        <MesDelRango
-          nombre="hasta"
-          etiqueta="Hasta"
-          meses={meses}
-          valor={valores.hasta}
-          alCambiar={(hasta) => alCambiar({ hasta })}
-        />
+        {esAcumulado(valores.informe) ? (
+          conCampo('Año', (
+            <Selector
+              nombre="anio"
+              etiqueta="Año"
+              valor={String(valores.anio)}
+              alCambiar={(anio) => alCambiar({ anio: Number(anio) })}
+              opciones={aniosHabilitados(meses).map((a) => ({ valor: String(a), texto: String(a) }))}
+              className="w-24"
+            />
+          ))
+        ) : (
+          <>
+            <MesDelRango
+              nombre="desde"
+              etiqueta="Desde"
+              meses={meses}
+              valor={valores.desde}
+              alCambiar={(desde) => alCambiar({ desde })}
+              primero
+            />
+            <MesDelRango
+              nombre="hasta"
+              etiqueta="Hasta"
+              meses={meses}
+              valor={valores.hasta}
+              alCambiar={(hasta) => alCambiar({ hasta })}
+            />
+          </>
+        )}
       </div>
       {ayuda && <p className="-mt-2 text-sm text-muted-foreground">{ayuda}</p>}
 
