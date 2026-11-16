@@ -15,9 +15,9 @@ export async function acumuladoAnual(req, res) {
 }
 
 // formato: la extensión del archivo (xlsx o pdf); express pone su Content-Type.
-const enArchivo = (formato) => async (req, res) => {
+const enArchivo = (formato, exportar = informesService.exportarInforme) => async (req, res) => {
   const contexto = contextoAuditoria(req);
-  const { bytes, nombre } = await informesService.exportarInforme(req.usuario, req.query, contexto, formato);
+  const { bytes, nombre } = await exportar(req.usuario, req.query, contexto, formato);
   res.attachment(nombre);
   res.type(formato);
   res.send(bytes);
@@ -25,3 +25,5 @@ const enArchivo = (formato) => async (req, res) => {
 
 export const informeEnExcel = enArchivo('xlsx');
 export const informeEnPdf = enArchivo('pdf');
+export const acumuladoEnExcel = enArchivo('xlsx', acumuladoAnualService.exportarAcumuladoAnual);
+export const acumuladoEnPdf = enArchivo('pdf', acumuladoAnualService.exportarAcumuladoAnual);

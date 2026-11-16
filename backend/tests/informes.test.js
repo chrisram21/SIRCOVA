@@ -1555,3 +1555,96 @@ describe('GET /informes/acumulado-anual (SPEC 66)', () => {
     }
   });
 });
+
+describe('GET /informes/acumulado-anual/excel y /pdf (SPEC 66)', () => {
+  const binario = (res, listo) => {
+    const partes = [];
+    res.on('data', (parte) => partes.push(parte));
+    res.on('end', () => listo(null, Buffer.concat(partes)));
+  };
+  const descargar = (formato, consulta, token = cuentas.AUTORIDAD.token) =>
+    request(app)
+      .get(`/api/v1/informes/acumulado-anual/${formato}?${consulta}`)
+      .set('Authorization', `Bearer ${token}`)
+      .buffer(true)
+      .parse(binario);
+  const ultimaBitacora = async () => (await pool.query('SELECT COALESCE(MAX(id), 0) AS id FROM bitacora'))[0][0].id;
+  async function filasExportar(desdeId) {
+    const [filas] = await pool.query(
+      `SELECT modulo, entidad, entidad_id, valores_nuevos FROM bitacora
+        WHERE id > ? AND usuario_id = ? AND accion = 'EXPORTAR' ORDER BY id`,
+      [desdeId, cuentas.AUTORIDAD.id],
+    );
+    return filas.map((f) => ({
+      ...f,
+      valores_nuevos: typeof f.valores_nuevos === 'string' ? JSON.parse(f.valores_nuevos) : f.valores_nuevos,
+    }));
+  }
+  const consulta = () => `anio=${ANIO}&vacuna=ZVT_SPEC62&nivel=distrito&ddrissId=${ddrissId}`;
+
+  it('el Excel tiene las mismas cifras que el acumulado en pantalla', async () => {
+    const [archivo, pantalla] = await Promise.all([descargar('excel', consulta()), consultar('acumulado-anual', consulta())]);
+    expect(archivo.status).toBe(200);
+    expect(archivo.headers['content-disposition']).toBe(`attachment; filename="informe-acumulado-anual-${ANIO}.xlsx"`);
+    const libro = new ExcelJS.Workbook();
+    await libro.xlsx.load(archivo.body);
+    const hoja = libro.worksheets[0];
+
+    const leidas = [];
+    hoja.eachRow((fila) => {
+      if (fila.getCell(3).value !== 'Dosis') return;
+      const cuatro = [0, 1, 2, 3].map((i) => pantalla.body.columnas.map((_, c) => {
+        const valor = hoja.getRow(fila.number + i).getCell(4 + c).value;
+        return valor === '—' ? null : valor;
+      }));
+      leidas.push([fila.getCell(1).value, ...cuatro]);
+    });
+    const esperadas = [...pantalla.body.filas, { nombre: 'Total', ...pantalla.body.total }]
+      .map((f) => [f.nombre, f.dosis, f.poblacion, f.cobertura, f.brecha]);
+    expect(leidas).toEqual(esperadas);
+  });
+
+  it('el PDF es un PDF con el nombre del año', async () => {
+    const res = await descargar('pdf', consulta());
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/pdf/);
+    expect(res.headers['content-disposition']).toBe(`attachment; filename="informe-acumulado-anual-${ANIO}.pdf"`);
+    expect(res.body.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+  });
+
+  it('cada descarga deja una fila EXPORTAR con los parámetros y el formato, sin cantidades', async () => {
+    const antes = await ultimaBitacora();
+    await descargar('excel', `${consulta()}&redId=${ids.red}&incluirAprobados=true`);
+    await descargar('pdf', consulta());
+    const filas = await filasExportar(antes);
+    expect(filas).toHaveLength(2);
+    expect(filas[0]).toMatchObject({ modulo: 'REPORTES', entidad: 'informe', entidad_id: 'acumulado-anual' });
+    expect(filas[0].valores_nuevos).toEqual({
+      formato: 'xlsx', anio: ANIO, nivel: 'distrito', vacuna: 'ZVT_SPEC62', redId: ids.red, municipioIds: [],
+      incluirAprobados: true, ddrissId,
+    });
+    expect(filas[1].valores_nuevos).toMatchObject({ formato: 'pdf', incluirAprobados: false, redId: null });
+  });
+
+  it('responde los mismos 400 y 404 que el acumulado en pantalla, sin fila EXPORTAR', async () => {
+    const antes = await ultimaBitacora();
+    for (const [formato, consulta, estado] of [
+      ['excel', `anio=${ANIO}&nivel=establecimiento&ddrissId=${ddrissId}`, 400],
+      ['pdf', `ddrissId=${ddrissId}`, 400],
+      ['excel', `anio=${ANIO + 4}&ddrissId=${ddrissId}`, 404],
+    ]) {
+      const res = await consultar(`acumulado-anual/${formato}`, consulta);
+      expect(res.status, consulta).toBe(estado);
+    }
+    expect(await filasExportar(antes)).toEqual([]);
+  });
+
+  it('el Personal del establecimiento y el Administrador reciben 403', async () => {
+    for (const rol of ['ESTABLECIMIENTO', 'ADMINISTRADOR']) {
+      for (const formato of ['excel', 'pdf']) {
+        const res = await consultar(`acumulado-anual/${formato}`, `anio=${ANIO}`, cuentas[rol].token);
+        expect(res.status, `${rol} ${formato}`).toBe(403);
+      }
+    }
+  });
+});

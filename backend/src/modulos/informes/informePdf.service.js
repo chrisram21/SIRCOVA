@@ -1,8 +1,8 @@
 import path from 'node:path';
 import pdfmake from 'pdfmake';
 import {
-  lineasDelEncabezado, llevaMunicipio, nombreDeFila, textoFueraDelConsolidado, tituloDeLaFila, tituloDelInforme,
-  tramosDelEncabezado,
+  CIFRAS, lineasDelAcumulado, lineasDelEncabezado, llevaMunicipio, nombreDeFila, textoCifra, textoFueraDelConsolidado,
+  textoMeta, tituloDeLaFila, tituloDelInforme, tramosDelEncabezado,
 } from './textosInforme.js';
 
 // SPEC 65 (HU-48): el PDF de un informe de producción, en carta horizontal. Como el Excel, sale de la respuesta de
@@ -98,19 +98,16 @@ function tablaDelTramo(informe, { desde, hasta }, indice) {
   };
 }
 
-/** informe: la respuesta de informePorFila. datos: los de lineasDelEncabezado (textosInforme.js). */
-export function documentoDelInforme(informe, datos) {
-  const titulo = tituloDelInforme(informe);
-  const limite = llevaMunicipio(informe.nivel) ? COLUMNAS_POR_TRAMO.conMunicipio : COLUMNAS_POR_TRAMO.sinMunicipio;
-  const tramos = tramosDeColumnas(informe.columnas, limite);
-
+// Lo común a los PDF de informes (SPEC 65 y 66): hoja, fuente, marca de agua, pie, título, «PRELIMINAR» y las líneas
+// del encabezado antes de las tablas.
+function documento({ titulo, preliminar, generadoEn, lineas, tablas }) {
   return {
-    info: { title: titulo, creator: 'SIRCOVA', creationDate: datos.generadoEn },
+    info: { title: titulo, creator: 'SIRCOVA', creationDate: generadoEn },
     pageSize: 'LETTER',
     pageOrientation: 'landscape',
     pageMargins: 30,
     defaultStyle: { font: FUENTE, fontSize: 9 },
-    ...(informe.preliminar
+    ...(preliminar
       ? { watermark: { text: 'PRELIMINAR', color: '#888888', opacity: 0.12, bold: true } }
       : {}),
     footer: (pagina, paginas) => ({
@@ -119,23 +116,118 @@ export function documentoDelInforme(informe, datos) {
     pageBreakBefore: saltarAntesDelTramo,
     content: [
       { text: titulo, bold: true, fontSize: 14, margin: [0, 0, 0, 4] },
-      ...(informe.preliminar ? [{ text: 'PRELIMINAR', bold: true, margin: [0, 0, 0, 4] }] : []),
+      ...(preliminar ? [{ text: 'PRELIMINAR', bold: true, margin: [0, 0, 0, 4] }] : []),
       {
         layout: 'noBorders',
         table: {
           widths: ['auto', '*'],
-          body: lineasDelEncabezado(informe, datos).map(([etiqueta, valor]) => [{ text: etiqueta, bold: true }, valor]),
+          body: lineas.map(([etiqueta, valor]) => [{ text: etiqueta, bold: true }, valor]),
         },
       },
+      ...tablas,
+    ],
+  };
+}
+
+/** informe: la respuesta de informePorFila. datos: los de lineasDelEncabezado (textosInforme.js). */
+export function documentoDelInforme(informe, datos) {
+  const limite = llevaMunicipio(informe.nivel) ? COLUMNAS_POR_TRAMO.conMunicipio : COLUMNAS_POR_TRAMO.sinMunicipio;
+  const tramos = tramosDeColumnas(informe.columnas, limite);
+  return documento({
+    titulo: tituloDelInforme(informe),
+    preliminar: informe.preliminar,
+    generadoEn: datos.generadoEn,
+    lineas: lineasDelEncabezado(informe, datos),
+    tablas: [
       ...tramos.map((tramo, i) => tablaDelTramo(informe, tramo, i)),
       ...(informe.columnas.length > 0 && informe.dosisFueraDelConsolidado > 0
         ? [{ text: textoFueraDelConsolidado(informe.dosisFueraDelConsolidado), margin: [0, 8, 0, 0] }]
         : []),
     ],
-  };
+  });
 }
 
 // Los bytes del PDF.
 export function pdfDelInforme(informe, datos) {
   return pdfmake.createPdf(documentoDelInforme(informe, datos)).getBuffer();
+}
+
+// ---------------------------------------------------------------- Acumulado anual (SPEC 66, HU-49)
+
+// Con la columna «Cifra» caben dos columnas de cantidades menos que en el informe de producción.
+export const COLUMNAS_POR_TRAMO_ANUAL = { conMunicipio: 8, sinMunicipio: 10 };
+const ANCHO_CIFRA = 55;
+const FILAS_DE_ENCABEZADO_ANUAL = 4;
+
+function tablaDelTramoAnual(informe, { desde, hasta }, indice) {
+  const conMunicipio = llevaMunicipio(informe.nivel);
+  const columnas = informe.columnas.slice(desde, hasta);
+  const { vacunas, secciones } = tramosDelEncabezado(columnas);
+  const fijas = conMunicipio ? 3 : 2;
+  const centrado = { bold: true, alignment: 'center' };
+  const fija = (text) => ({ text, bold: true, rowSpan: FILAS_DE_ENCABEZADO_ANUAL });
+
+  const encabezado = [
+    [
+      fija(tituloDeLaFila(informe.nivel, informe.informe)),
+      ...(conMunicipio ? [fija('Municipio')] : []),
+      fija('Cifra'),
+      ...vacunas.flatMap((v) => abarcando({ ...centrado, text: v.nombre }, v.abarca)),
+    ],
+    [...vacias(fijas), ...secciones.flatMap((s) => abarcando({ ...centrado, text: s.titulo }, s.abarca))],
+    [...vacias(fijas), ...columnas.map((c) => ({ ...centrado, text: c.dosis.codigo }))],
+    [...vacias(fijas), ...columnas.map((c) => ({ ...centrado, text: textoMeta(c.meta) }))],
+  ];
+  // Cuatro filas por unidad; el nombre (y el municipio) abarcan las cuatro.
+  const unidad = (nombre, municipio, cifras, negrita = false) => CIFRAS.map(([clave, etiqueta], n) => [
+    ...(n === 0
+      ? [{ text: nombre, rowSpan: CIFRAS.length }, ...(conMunicipio ? [{ text: municipio, rowSpan: CIFRAS.length }] : [])]
+      : vacias(fijas - 1)),
+    etiqueta,
+    ...cifras[clave].slice(desde, hasta).map((v) => ({ text: textoCifra(clave, v), alignment: 'right' })),
+  ].map((celda) => {
+    const objeto = typeof celda === 'string' ? { text: celda } : celda;
+    return negrita && 'text' in objeto ? { ...objeto, bold: true } : objeto;
+  }));
+  const filas = informe.filas.flatMap((f) => unidad(f.nombre, f.municipio?.nombre ?? '', f));
+
+  return {
+    id: `tramo-${indice}`,
+    margin: [0, 12, 0, 0],
+    fontSize: 8,
+    table: {
+      headerRows: FILAS_DE_ENCABEZADO_ANUAL,
+      dontBreakRows: true,
+      widths: [
+        '*', ...(conMunicipio ? [ANCHO_MUNICIPIO] : []), ANCHO_CIFRA, ...columnas.map(() => ANCHO_CANTIDAD),
+      ],
+      body: [...encabezado, ...filas, ...unidad('Total', '', informe.total, true)],
+    },
+    layout: {
+      hLineWidth: () => 0.5,
+      vLineWidth: () => 0.5,
+      hLineColor: () => LINEA,
+      vLineColor: () => LINEA,
+      fillColor: (fila) => (fila < FILAS_DE_ENCABEZADO_ANUAL ? FONDO_ENCABEZADO : null),
+    },
+  };
+}
+
+/** informe: la respuesta de acumuladoAnual. datos: los de lineasDelAcumulado (textosInforme.js). */
+export function documentoDelAcumulado(informe, datos) {
+  const limite = llevaMunicipio(informe.nivel)
+    ? COLUMNAS_POR_TRAMO_ANUAL.conMunicipio
+    : COLUMNAS_POR_TRAMO_ANUAL.sinMunicipio;
+  const tramos = tramosDeColumnas(informe.columnas, limite);
+  return documento({
+    titulo: tituloDelInforme(informe),
+    preliminar: informe.preliminar,
+    generadoEn: datos.generadoEn,
+    lineas: lineasDelAcumulado(informe, datos),
+    tablas: tramos.map((tramo, i) => tablaDelTramoAnual(informe, tramo, i)),
+  });
+}
+
+export function pdfDelAcumulado(informe, datos) {
+  return pdfmake.createPdf(documentoDelAcumulado(informe, datos)).getBuffer();
 }

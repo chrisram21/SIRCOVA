@@ -5,9 +5,13 @@ import { codigoDdriss } from '../configuracion/esquemas.service.js';
 import { indicadoresQueAplican } from '../configuracion/indicadores.service.js';
 import { dosisQueFaltan } from '../indicadores/calculadores.js';
 import { ddrissDeLaConsulta } from '../indicadores/corridas.service.js';
+import { libroDelAcumulado } from './informeExcel.service.js';
+import { pdfDelAcumulado } from './informePdf.service.js';
 import {
   columnasDelInforme,
+  datosDelEncabezado,
   departamentoDeLaDdriss,
+  registrarExportacion,
   filasDelNivel,
   leerIds,
   leerProduccion,
@@ -188,4 +192,30 @@ export async function acumuladoAnual(usuario, query = {}) {
     mesesSinCerrar,
     preliminar: incluirAprobados && meses.some((m) => m.estado !== 'CERRADO'),
   };
+}
+
+const ARCHIVOS = {
+  xlsx: async (informe, datos) => Buffer.from(await libroDelAcumulado(informe, datos).xlsx.writeBuffer()),
+  pdf: (informe, datos) => pdfDelAcumulado(informe, datos),
+};
+
+// El acumulado como archivo (formato: xlsx o pdf), con su fila EXPORTAR después de armarlo, como exportarInforme.
+export async function exportarAcumuladoAnual(usuario, query, contexto, formato, ahora = new Date()) {
+  const informe = await acumuladoAnual(usuario, query);
+  const consulta = leerConsultaAnual(query);
+  const ddrissId = ddrissDeLaConsulta(usuario, query);
+  const datos = await datosDelEncabezado(usuario, consulta, ddrissId);
+  const bytes = await ARCHIVOS[formato](informe, { ...datos, generadoEn: ahora });
+
+  await registrarExportacion(contexto, 'acumulado-anual', {
+    formato,
+    anio: consulta.anio,
+    nivel: consulta.nivel,
+    vacuna: consulta.vacuna,
+    redId: consulta.redId,
+    municipioIds: consulta.municipioIds ?? [],
+    incluirAprobados: consulta.incluirAprobados,
+    ddrissId,
+  });
+  return { bytes, nombre: `informe-acumulado-anual-${consulta.anio}.${formato}` };
 }

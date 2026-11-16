@@ -7,6 +7,7 @@ export const NOMBRES_INFORME = {
   'poblacion-propia': 'Producción a la población propia',
   total: 'Producción total (incluye Migrantes)',
   residencia: 'Dosis por municipio de residencia',
+  'acumulado-anual': 'Acumulado anual',
 };
 export const NOMBRES_NIVEL = {
   departamento: 'Departamento', municipio: 'Municipio', distrito: 'Distrito', establecimiento: 'Establecimiento',
@@ -32,13 +33,14 @@ function textoMesesSinCerrar(meses) {
   return enumerar(meses.map(nombreDelMes));
 }
 
-function avisoDeMeses(mesesSinCerrar, preliminar) {
+// donde: «el informe» o «el acumulado» (SPEC 66).
+function avisoDeMeses(mesesSinCerrar, preliminar, donde = 'el informe') {
   if (mesesSinCerrar.length === 0) return null;
   const meses = textoMesesSinCerrar(mesesSinCerrar);
   const uno = mesesSinCerrar.length === 1;
   if (preliminar) return `Datos preliminares: ${meses} todavía no ${uno ? 'está cerrado' : 'están cerrados'}.`;
   return `${conMayuscula(meses)} todavía no ${uno ? 'está cerrado y no suma' : 'están cerrados y no suman'} `
-    + 'en el informe. Marca «Incluir aprobados sin cerrar» para verlos como preliminares.';
+    + `en ${donde}. Marca «Incluir aprobados sin cerrar» para verlos como preliminares.`;
 }
 
 function avisoDeAgrupacion({ agrupacion, columnas }, todasLasVacunas) {
@@ -61,7 +63,9 @@ export function tituloDelInforme({ informe, nivel, agrupacion }) {
 
 // El título de la columna de los nombres de las filas.
 export function tituloDeLaFila(nivel, informe) {
-  if (nivel === 'municipio') return informe === 'residencia' ? 'Municipio de residencia' : 'Municipio de aplicación';
+  if (nivel === 'municipio') {
+    return ['residencia', 'acumulado-anual'].includes(informe) ? 'Municipio de residencia' : 'Municipio de aplicación';
+  }
   return NOMBRES_NIVEL[nivel];
 }
 
@@ -122,4 +126,37 @@ export function tramosDelEncabezado(columnas) {
     ultima = identidad;
   });
   return { vacunas, secciones };
+}
+
+// ---------------------------------------------------------------- Acumulado anual (SPEC 66, HU-49)
+
+export const textoAnio = (anio) => `Enero a diciembre de ${anio}`;
+
+// Las cuatro filas de cada unidad, en orden: la clave de la respuesta y su nombre en la columna «Cifra».
+export const CIFRAS = [
+  ['dosis', 'Dosis'], ['poblacion', 'Población'], ['cobertura', 'Cobertura %'], ['brecha', 'Brecha'],
+];
+export const SIN_VALOR = '—';
+const formatoCobertura = new Intl.NumberFormat('es-GT', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const formatoMeta = new Intl.NumberFormat('es-GT', { maximumFractionDigits: 2 });
+
+export const textoMeta = (meta) => `Meta ${formatoMeta.format(meta.valor)} %`;
+
+// Una cifra como texto: «—» si es null, la cobertura con un decimal y «%», las demás enteras.
+export function textoCifra(clave, valor) {
+  if (valor === null) return SIN_VALOR;
+  return clave === 'cobertura' ? `${formatoCobertura.format(valor)} %` : formatoEntero.format(valor);
+}
+
+export function lineasDelAcumulado(informe, datos) {
+  return [
+    ['DDRISS', datos.ddriss],
+    ['Periodo', textoAnio(informe.anio)],
+    ['Vacuna', datos.vacuna ?? 'Todas las vacunas'],
+    ['Territorio', textoTerritorio(datos)],
+    ['Incluye aprobados sin cerrar', informe.incluirAprobados ? 'Sí' : 'No'],
+    ['Generado', `${fechaDeGeneracion(datos.generadoEn)} por ${datos.generadoPor}`],
+    ...[avisoDeMeses(informe.mesesSinCerrar, informe.preliminar, 'el acumulado')].filter(Boolean)
+      .map((aviso) => ['Aviso', aviso]),
+  ];
 }

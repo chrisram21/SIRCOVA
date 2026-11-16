@@ -1,7 +1,10 @@
 import {
   alPerderSesion, descargar, ErrorApi, ESPERA_MAXIMA_MS, leerUltimaPeticion, refrescar, solicitar,
 } from './cliente.js'
-import { descargarInformeExcel, descargarInformePdf } from './informes.js'
+import {
+  descargarAcumuladoAnualExcel, descargarAcumuladoAnualPdf, descargarInformeExcel, descargarInformePdf,
+  obtenerAcumuladoAnual,
+} from './informes.js'
 import { borrarSesion, guardarSesion, leerSesion, leerTokenGuardado } from './sesion.js'
 
 function crearToken(payload) {
@@ -437,5 +440,28 @@ describe('descargar un archivo (SPEC 64)', () => {
       informe: 'total', desde: '2026-01', hasta: '2026-08', redId: '3',
     })
     expect(nombre).toBe('informe-total-2026-01-a-2026-08.pdf')
+  })
+
+  test('obtenerAcumuladoAnual y sus descargas piden /informes/acumulado-anual con anio y los recortes', async () => {
+    guardarSesion(sesion)
+    fetch.mockImplementation((ruta) => Promise.resolve(
+      ruta.includes('/excel') || ruta.includes('/pdf')
+        ? respuestaArchivo('attachment; filename="informe-acumulado-anual-2026.xlsx"')
+        : respuestaJson(200, { informe: 'acumulado-anual' }),
+    ))
+    const pedido = { anio: 2026, nivel: 'distrito', municipioIds: [1, 4], incluirAprobados: false, ddrissId: 2 }
+
+    expect(await obtenerAcumuladoAnual(pedido)).toEqual({ informe: 'acumulado-anual' })
+    await descargarAcumuladoAnualExcel(pedido)
+    await descargarAcumuladoAnualPdf({ anio: 2026, incluirAprobados: true })
+    const urls = fetch.mock.calls.map(([ruta]) => new URL(ruta, 'http://localhost'))
+      .filter((u) => u.pathname.includes('/informes/acumulado-anual'))
+    expect(urls.map((u) => u.pathname.replace(/.*\/informes/, '/informes'))).toEqual([
+      '/informes/acumulado-anual', '/informes/acumulado-anual/excel', '/informes/acumulado-anual/pdf',
+    ])
+    expect(Object.fromEntries(urls[0].searchParams)).toEqual({
+      anio: '2026', nivel: 'distrito', municipioIds: '1,4', ddrissId: '2',
+    })
+    expect(Object.fromEntries(urls[2].searchParams)).toEqual({ anio: '2026', incluirAprobados: 'true' })
   })
 })

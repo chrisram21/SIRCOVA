@@ -174,7 +174,7 @@ Respuesta:
 - `filtrosDeInforme` y `parametrosDeInforme` aceptan `anio` y lo usan en lugar de `desde`/`hasta` con el acumulado anual.
 - `anioPorDefecto(meses)`.
 - `textoAnio(anio)` y el aviso de meses sin cerrar del acumulado, con el año.
-- `textoCobertura(valor)`: «85,0 %» o «—».
+- `textoCobertura(valor)`: «85.0 %» (con `es-GT`) o «—».
 
 ## Plan de implementación
 
@@ -242,6 +242,9 @@ Respuesta:
 - **Sí:** reutilizar `TablaInforme.jsx` con props nuevas y las funciones de `informes.service.js`. **No:** una tabla o un servicio copiado.
 - **Sí (agregado en la implementación, paso 2):** además de lo previsto, se exportan `llave`, `leerIds`, `departamentoDeLaDdriss`, `municipiosDelRecorte`, `leerProduccion`, `filasDelNivel`, `universoDeMunicipios` y `datosDelEncabezado`, y las revisiones de `vacuna` y `redId` pasan a `leerVacuna` y `leerRedId`, en el mismo orden dentro de `leerConsulta`.
 - **Sí (agregado en la implementación, paso 3, decidido con Chris):** las pruebas usan los datos de 2086 de `ZVT_INF62` (enero `CERRADO`, febrero `EN_CIERRE` con un `APROBADO`, marzo sin `cierre_periodo`, distritos y red) más su población de 2086. **No:** una DDRISS `ZVT_INF66` propia, que repetía unas 150 líneas de preparación.
+- **Sí (agregado en la implementación, paso 6):** la exportación va en `exportarAcumuladoAnual` de `acumuladoAnual.service.js` y no dentro de `exportarInforme`: `informes.service.js` importaría el servicio que ya lo importa a él. Lo común (la fila `EXPORTAR`) pasó a `registrarExportacion`, que usan los dos, y el controlador reutiliza `enArchivo(formato, exportar)`. En el PDF, lo común a los dos documentos (hoja, fuente, marca de agua, pie, título y encabezado) pasó a `documento`; `documentoDelInforme` arma lo mismo que antes.
+- **Sí (agregado en la implementación, paso 6):** la cobertura se escribe con `es-GT`, como los demás números del sistema: «89.7 %» (punto decimal, coma de miles). **No:** «85,0 %» como decía este spec, que en `es-GT` chocaría con la coma de los miles. En el Excel la cobertura es un número con formato `0.0` y los `null` son «—».
+- **Sí (agregado en la implementación, paso 6):** el PDF del acumulado lleva hasta 10 columnas de cantidades por tramo, u 8 por distrito (`COLUMNAS_POR_TRAMO_ANUAL`), dos menos que el informe de producción por la columna «Cifra». Por municipio, la columna de los nombres se llama «Municipio de residencia», como el informe por residencia.
 - **Sí (agregado en la implementación, paso 3):** los municipios de cada fila (para sumar su población) salen de los mismos `destinos` de `filasDelNivel` que reparten las dosis, aplicados a cada municipio del universo dentro del recorte. Una fila sin municipios tiene población `null`.
 
 ## Riesgos

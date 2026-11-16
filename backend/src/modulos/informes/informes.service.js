@@ -537,6 +537,18 @@ const ARCHIVOS = {
   pdf: (informe, datos) => pdfDelInforme(informe, datos),
 };
 
+// La fila EXPORTAR de un informe (entidadId: su código), con los parámetros y el formato, sin cantidades.
+export function registrarExportacion(contexto, entidadId, valoresNuevos) {
+  return enTransaccion((conexion) => registrarBitacora(conexion, {
+    ...contexto,
+    modulo: MODULOS.REPORTES,
+    accion: ACCIONES.EXPORTAR,
+    entidad: 'informe',
+    entidadId,
+    valoresNuevos,
+  }));
+}
+
 // El mismo informe de informePorFila como archivo (formato: xlsx o pdf). Deja la fila EXPORTAR después de armarlo:
 // si la bitácora falla, no se entrega el archivo. contexto: contextoAuditoria(req).
 export async function exportarInforme(usuario, query, contexto, formato, ahora = new Date()) {
@@ -548,25 +560,18 @@ export async function exportarInforme(usuario, query, contexto, formato, ahora =
 
   const desde = aTextoDeMes(consulta.desde);
   const hasta = aTextoDeMes(consulta.hasta);
-  await enTransaccion((conexion) => registrarBitacora(conexion, {
-    ...contexto,
-    modulo: MODULOS.REPORTES,
-    accion: ACCIONES.EXPORTAR,
-    entidad: 'informe',
-    entidadId: consulta.informe,
-    valoresNuevos: {
-      formato,
-      desde,
-      hasta,
-      nivel: consulta.nivel,
-      vacuna: consulta.vacuna,
-      redId: consulta.redId,
-      municipioIds: consulta.municipioIds ?? [],
-      agrupacion: consulta.agrupacion,
-      incluirAprobados: consulta.incluirAprobados,
-      ddrissId,
-    },
-  }));
+  await registrarExportacion(contexto, consulta.informe, {
+    formato,
+    desde,
+    hasta,
+    nivel: consulta.nivel,
+    vacuna: consulta.vacuna,
+    redId: consulta.redId,
+    municipioIds: consulta.municipioIds ?? [],
+    agrupacion: consulta.agrupacion,
+    incluirAprobados: consulta.incluirAprobados,
+    ddrissId,
+  });
 
   const agrupacion = consulta.agrupacion ? `-por-${consulta.agrupacion}` : '';
   return { bytes, nombre: `informe-${consulta.informe}-${desde}-a-${hasta}${agrupacion}.${formato}` };

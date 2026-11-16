@@ -19,7 +19,17 @@ export const INFORMES = [
     ayuda: 'Dosis atribuidas al municipio donde vive la persona, solo municipios del departamento. '
       + 'Es la base de la cobertura.',
   },
+  {
+    valor: 'acumulado-anual',
+    nombre: 'Acumulado anual',
+    ayuda: 'Dosis acumuladas de enero a diciembre por municipio de residencia, contra la población del año, con su '
+      + 'cobertura y su brecha.',
+  },
 ]
+
+// SPEC 66: el acumulado anual se pide por año y no tiene nivel establecimiento ni «Agrupar por».
+export const ACUMULADO = 'acumulado-anual'
+export const esAcumulado = (informe) => informe === ACUMULADO
 
 export const NIVELES = [
   { valor: 'departamento', nombre: 'Departamento' },
@@ -31,9 +41,9 @@ export const NIVELES = [
 const INFORME_POR_DEFECTO = 'poblacion-propia'
 const NIVEL_POR_DEFECTO = 'municipio'
 
-// El informe por residencia no tiene nivel establecimiento: pasa a municipio.
+// El informe por residencia y el acumulado anual no tienen nivel establecimiento: pasa a municipio.
 export const nivelPermitido = (informe, nivel) =>
-  (informe === 'residencia' && nivel === 'establecimiento' ? NIVEL_POR_DEFECTO : nivel)
+  ((informe === 'residencia' || esAcumulado(informe)) && nivel === 'establecimiento' ? NIVEL_POR_DEFECTO : nivel)
 
 export const aTextoDeMes = ({ anio, mes }) => `${anio}-${String(mes).padStart(2, '0')}`
 
@@ -54,6 +64,12 @@ export function rangoPorDefecto(meses) {
   return { desde: { anio: desde.anio, mes: desde.mes }, hasta: { anio: hasta.anio, mes: hasta.mes } }
 }
 
+// SPEC 66: los años de los meses habilitados, del más reciente al más antiguo.
+export const aniosHabilitados = (meses) => [...new Set(meses.map((m) => m.anio))]
+
+// El año por defecto del acumulado: el último con un mes cerrado, o el último habilitado.
+export const anioPorDefecto = (meses) => (meses.find((m) => m.estado === 'CERRADO') ?? meses[0])?.anio ?? null
+
 // Los filtros de la URL contra las opciones, con los valores por defecto. generado: la URL pide un informe.
 export function filtrosDeInforme(parametros, opciones) {
   const meses = opciones?.meses ?? []
@@ -67,6 +83,8 @@ export function filtrosDeInforme(parametros, opciones) {
     ? parametros.get('informe')
     : INFORME_POR_DEFECTO
   const nivel = NIVELES.some((n) => n.valor === parametros.get('nivel')) ? parametros.get('nivel') : NIVEL_POR_DEFECTO
+  const anioDeUrl = /^\d{4}$/.test(parametros.get('anio') ?? '') ? Number(parametros.get('anio')) : null
+  const anio = aniosHabilitados(meses).includes(anioDeUrl) ? anioDeUrl : anioPorDefecto(meses)
   const vacuna = parametros.get('vacuna')
   const existentes = new Set((opciones?.municipios ?? []).map((m) => m.id))
   const municipios = (parametros.get('municipios') ?? '').split(',').map(id).filter((m) => existentes.has(m))
@@ -75,21 +93,30 @@ export function filtrosDeInforme(parametros, opciones) {
     informe,
     desde,
     hasta,
+    anio,
     nivel: nivelPermitido(informe, nivel),
     vacuna: (opciones?.vacunas ?? []).some((v) => v.codigo === vacuna) ? vacuna : null,
     red: id(parametros.get('red')),
     municipios: [...new Set(municipios)],
     aprobados: parametros.get('aprobados') === 'si',
-    generado: ['informe', 'desde', 'hasta'].every((nombre) => parametros.has(nombre)),
+    generado: (esAcumulado(informe) ? ['informe', 'anio'] : ['informe', 'desde', 'hasta'])
+      .every((nombre) => parametros.has(nombre)),
   }
 }
 
-// Lo que «Generar» escribe en la URL: informe, desde y hasta siempre; lo demás solo si no es el valor por defecto.
-export function parametrosDeInforme({ informe, desde, hasta, nivel, vacuna, red, municipios, aprobados, ddriss }) {
+// Lo que «Generar» escribe en la URL: informe, desde y hasta siempre (en el acumulado, anio en su lugar); lo demás
+// solo si no es el valor por defecto.
+export function parametrosDeInforme({
+  informe, desde, hasta, anio, nivel, vacuna, red, municipios, aprobados, ddriss,
+}) {
   const parametros = new URLSearchParams()
   parametros.set('informe', informe)
-  parametros.set('desde', aTextoDeMes(desde))
-  parametros.set('hasta', aTextoDeMes(hasta))
+  if (esAcumulado(informe)) {
+    parametros.set('anio', String(anio))
+  } else {
+    parametros.set('desde', aTextoDeMes(desde))
+    parametros.set('hasta', aTextoDeMes(hasta))
+  }
   if (nivel !== NIVEL_POR_DEFECTO) parametros.set('nivel', nivel)
   if (vacuna) parametros.set('vacuna', vacuna)
   if (red) parametros.set('red', String(red))
@@ -166,8 +193,9 @@ export function avisoDeAgrupacion({ agrupacion, columnas }, todasLasVacunas) {
   return `Solo se muestran las vacunas que registran ${agrupacion.nombre}: ${enumerar(nombres)}.`
 }
 
-// El aviso encima de la tabla, o null si todos los meses del rango están cerrados.
-export function avisoDeMeses(mesesSinCerrar, preliminar) {
+// El aviso encima de la tabla, o null si todos los meses del rango están cerrados. donde: «el informe» o, en el
+// acumulado anual (SPEC 66), «el acumulado».
+export function avisoDeMeses(mesesSinCerrar, preliminar, donde = 'el informe') {
   if (mesesSinCerrar.length === 0) return null
   const meses = textoMesesSinCerrar(mesesSinCerrar)
   const uno = mesesSinCerrar.length === 1
@@ -175,5 +203,28 @@ export function avisoDeMeses(mesesSinCerrar, preliminar) {
     return `Datos preliminares: ${meses} todavía no ${uno ? 'está cerrado' : 'están cerrados'}.`
   }
   return `${conMayuscula(meses)} todavía no ${uno ? 'está cerrado y no suma' : 'están cerrados y no suman'} `
-    + 'en el informe. Marca «Incluir aprobados sin cerrar» para verlos como preliminares.'
+    + `en ${donde}. Marca «Incluir aprobados sin cerrar» para verlos como preliminares.`
+}
+
+// ---------------------------------------------------------------- Acumulado anual (SPEC 66, HU-49)
+// Los textos repiten los de backend/src/modulos/informes/textosInforme.js: un cambio va en los dos lados.
+
+export const textoAnio = (anio) => `Enero a diciembre de ${anio}`
+
+// Las cuatro filas de cada unidad, en orden: la clave de la respuesta y su nombre en la columna «Cifra».
+export const CIFRAS = [
+  ['dosis', 'Dosis'], ['poblacion', 'Población'], ['cobertura', 'Cobertura %'], ['brecha', 'Brecha'],
+]
+export const SIN_VALOR = '—'
+const formatoEntero = new Intl.NumberFormat('es-GT', { maximumFractionDigits: 0 })
+const formatoCobertura = new Intl.NumberFormat('es-GT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+const formatoMeta = new Intl.NumberFormat('es-GT', { maximumFractionDigits: 2 })
+
+export const textoMeta = (meta) => `Meta ${formatoMeta.format(meta.valor)} %`
+export const textoCobertura = (valor) => (valor === null ? SIN_VALOR : `${formatoCobertura.format(valor)} %`)
+
+// Una cifra como texto: «—» si es null, la cobertura con un decimal y «%», las demás enteras.
+export function textoCifra(clave, valor) {
+  if (clave === 'cobertura') return textoCobertura(valor)
+  return valor === null ? SIN_VALOR : formatoEntero.format(valor)
 }
