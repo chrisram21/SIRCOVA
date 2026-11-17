@@ -2,7 +2,7 @@
 numero: 71
 titulo: "HU-55 Historial de cambios de configuración"
 modulo: "Configuración"
-estado: "Borrador"
+estado: "Implementado"
 origen: "Historia de usuario"
 historias: ["[[HU-55]]"]
 archivo: "specs/configuracion/71-hu-55-historial-de-cambios-de-configuracion.md"
@@ -15,7 +15,7 @@ tags: ["spec", "modulo/configuracion", "origen/historia"]
 
 - **Spec completo:** [[specs/configuracion/71-hu-55-historial-de-cambios-de-configuracion|abrir el spec]]
 - **Módulo:** [[Módulo Configuración]]
-- **Estado:** Borrador
+- **Estado:** Implementado
 - **Origen:** Historia de usuario
 - **Historia:** [[HU-55]] Historial de cambios de configuración
 - **Texto del encabezado:** HU-55

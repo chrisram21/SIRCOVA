@@ -1,3 +1,4 @@
+import { seccionesDeducidas } from '@/componentes/formulario/armarFormulario.js'
 import { MODOS } from './EditorEsquema.jsx'
 
 export const GRUPOS = [
@@ -32,9 +33,23 @@ function porClave(listaA, listaB, clave) {
   ]
 }
 
+// Las secciones como las ve «Ver»: una versión publicada sin secciones (Hexavalente v1) las deduce del grupo de edad,
+// con el mismo código que guardaría el editor (el grupo de edad, o GENERAL); un borrador sin secciones no las tiene.
+function seccionesDe(esquema, catalogo) {
+  const guardadas = esquema.secciones ?? []
+  if (guardadas.length > 0 || esquema.estado === 'BORRADOR' || !esquema.dosis) return guardadas
+  const contenido = { dosis: esquema.dosis, desagregacion: esquema.desagregacion ?? [] }
+  return seccionesDeducidas(contenido, { nombre: esquema.vacuna?.nombre ?? '' }, catalogo).map((s, indice) => ({
+    ...s,
+    codigo: s.grupoEdad ?? 'GENERAL',
+    orden: indice + 1,
+  }))
+}
+
 // La diferencia de una versión «Desde» (a) a una «Hasta» (b), como las devuelve GET /esquemas-captura/{id}.
 export function compararEsquemas(a, b, dimensiones = []) {
   const n = nombres(dimensiones)
+  const catalogo = new Map(dimensiones.map((d) => [d.codigo, d]))
   const valores = (d) => d.valores.map((v) => n.valor(d.dimension, v)).join(', ')
   const textoDesagregacion = (lista) => {
     if (lista === null || lista === undefined) return 'General'
@@ -94,7 +109,7 @@ export function compararEsquemas(a, b, dimensiones = []) {
     }
   }
 
-  for (const [, x, y] of porClave(a.secciones ?? [], b.secciones ?? [], (s) => s.codigo)) {
+  for (const [, x, y] of porClave(seccionesDe(a, catalogo), seccionesDe(b, catalogo), (s) => s.codigo)) {
     if (!x) agregar('secciones', 'agregado', `Sección «${y.titulo}»`, undefined, y.dosis.join(', '))
     else if (!y) agregar('secciones', 'quitado', `Sección «${x.titulo}»`, x.dosis.join(', '), undefined)
     else {

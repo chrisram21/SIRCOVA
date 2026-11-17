@@ -34,4 +34,4 @@ tags: ["spec", "modulo/configuracion", "origen/historia"]
 
 - [[SPEC 33]] — Validación automática del reporte en borrador · *Implementado*
 - [[SPEC 43]] — Configurar indicadores por DDRISS, con versiones y activación · *Implementado*
-- [[SPEC 71]] — HU-55 Historial de cambios de configuración · *Borrador*
+- [[SPEC 71]] — HU-55 Historial de cambios de configuración · *Implementado*

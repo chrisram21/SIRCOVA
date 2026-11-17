@@ -38,4 +38,4 @@ tags: ["spec", "modulo/configuracion", "origen/historia"]
 - [[SPEC 50]] — Mapa territorial con semáforo · *Implementado*
 - [[SPEC 60]] — Redes en Indicadores · *Implementado*
 - [[SPEC 66]] — HU-49 Informe acumulado anual · *Implementado*
-- [[SPEC 71]] — HU-55 Historial de cambios de configuración · *Borrador*
+- [[SPEC 71]] — HU-55 Historial de cambios de configuración · *Implementado*

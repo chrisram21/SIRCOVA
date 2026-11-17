@@ -5,8 +5,8 @@ const DIMENSIONES = [
     codigo: 'grupo_edad',
     nombre: 'Grupo de edad',
     valores: [
-      { codigo: 'MENOR_1', etiqueta: '< 1 año' },
-      { codigo: '1_A_5', etiqueta: '1 a 5 años' },
+      { codigo: 'MENOR_1', etiqueta: '< 1 año', orden: 1 },
+      { codigo: '1_A_5', etiqueta: '1 a 5 años', orden: 2 },
     ],
   },
   {
@@ -140,15 +140,32 @@ test('una sección agregada, quitada o con título, orden o dosis cambiados', ()
     { grupo: 'secciones', tipo: 'cambiado', etiqueta: 'Dosis de «Menores de 1 año»', antes: 'D1', despues: 'D1, R1' },
     { grupo: 'secciones', tipo: 'agregado', etiqueta: 'Sección «1 a 5 años»', antes: undefined, despues: 'R1' },
   ])
-  expect(comparar({ secciones: [] })).toEqual([
+  // Un borrador sin secciones; una publicada las deduciría.
+  expect(comparar({ secciones: [], estado: 'BORRADOR' })).toEqual([
     { grupo: 'secciones', tipo: 'quitado', etiqueta: 'Sección «< 1 año»', antes: 'D1', despues: undefined },
   ])
 })
 
-test('una versión sin secciones (Hexavalente v1) cuenta como lista vacía', () => {
-  const viejo = base()
+// Como «Ver»: una publicada sin secciones (Hexavalente v1) las deduce, una por grupo de edad con las dosis que lo
+// admiten; R1 no se desagrega, así que no entra en ninguna.
+test('una versión publicada sin secciones (Hexavalente v1) se compara con las secciones deducidas', () => {
+  const viejo = base({ estado: 'HISTORICO' })
   delete viejo.secciones
   expect(compararEsquemas(viejo, base(), DIMENSIONES)).toEqual([
+    { grupo: 'secciones', tipo: 'quitado', etiqueta: 'Sección «1 a 5 años»', antes: 'D1', despues: undefined },
+  ])
+})
+
+test('sin grupo de edad, la sección deducida es una sola con el nombre de la vacuna y todas las dosis', () => {
+  const viejo = base({ estado: 'VIGENTE', vacuna: { nombre: 'Hexavalente' }, secciones: [] })
+  viejo.desagregacion = [base().desagregacion[1]]
+  const nuevo = base({ desagregacion: viejo.desagregacion, secciones: [] })
+  nuevo.secciones = [{ codigo: 'GENERAL', titulo: 'Hexavalente', orden: 1, grupoEdad: null, dosis: ['D1', 'R1'] }]
+  expect(compararEsquemas(viejo, nuevo, DIMENSIONES)).toEqual([])
+})
+
+test('un borrador sin secciones no las deduce', () => {
+  expect(compararEsquemas(base({ estado: 'BORRADOR', secciones: [] }), base(), DIMENSIONES)).toEqual([
     { grupo: 'secciones', tipo: 'agregado', etiqueta: 'Sección «< 1 año»', antes: undefined, despues: 'D1' },
   ])
 })

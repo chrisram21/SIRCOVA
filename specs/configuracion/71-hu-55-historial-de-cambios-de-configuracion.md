@@ -1,6 +1,6 @@
 # SPEC 71 — HU-55 Historial de cambios de configuración
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-55
 > **Origen:** historia
 > **Depende de:** SPEC 20, SPEC 30, SPEC 32, SPEC 43 y SPEC 70
@@ -200,19 +200,19 @@ El enlace es `enlaceBitacora(entidad, id)`: `/administracion/auditoria?entidad={
 
 ## Criterios de aceptación
 
-- [ ] `INDICADOR_CONFIG_CONSULTAR` está asignado al ADMINISTRADOR en el 05 y en la base de prueba, y el ADMINISTRADOR sigue sin `INDICADOR_CONFIG_EDITAR`.
-- [ ] El Administrador ve las versiones de cada esquema, regla e indicador con su fecha y su autor (historial de esquemas, `PanelHistorialRegla` y `PanelHistorialIndicador`).
-- [ ] En «Configuración de indicadores» el Administrador no ve acciones de edición, y publicar una versión le responde 403.
-- [ ] Cada fila del historial de esquemas, salvo la primera versión, tiene «Comparar», que abre la comparación con la versión anterior ya elegida.
-- [ ] La pantalla de comparación permite elegir cualquier par de versiones de la vacuna (borradores incluidos), guarda la elección en la URL y no ofrece comparar una versión consigo misma.
-- [ ] La comparación muestra los datos de las dos versiones y las diferencias de procedencia, desagregación, dosis, secciones e inclusión, agrupadas y marcadas como agregado, quitado o cambiado; sin diferencias, lo dice.
-- [ ] Con `BITACORA_CONSULTAR`, cada versión de esquema, regla e indicador enlaza a «Auditoría» filtrada por su entidad y su id en todo el historial; sin el permiso, el enlace no aparece.
-- [ ] «Auditoría» aparece al final del desplegable «Administración» y no en el primer nivel del menú; su pantalla abre en `/administracion/auditoria`, y `/auditoria` redirige a ella con sus filtros.
-- [ ] Las tarjetas del Inicio del Administrador y los «Ver en la bitácora» enlazan a `/administracion/auditoria`.
-- [ ] No cambia ningún endpoint de `backend/openapi.yaml` y la API arranca.
-- [ ] Los colores salen de las variables del tema y a 390 px la comparación no tiene desplazamiento horizontal.
-- [ ] Pasan las pruebas del backend de configuración de indicadores, `compararEsquemas.test.js`, `PaginaCompararEsquemas.test.jsx`, `PaginaHistorialEsquemas.test.jsx`, las de los paneles de historial, `PaginaConfigIndicadores.test.jsx`, `auditoria.test.js` (frontend), `RutaConPermiso.test.jsx`, `Layout.test.jsx`, `RedireccionRutaVieja.test.jsx`, `PaginaInicio.test.jsx` y la suite del frontend.
-- [ ] `node scripts/mapa-obsidian.mjs --revisar` dice que `mapa/` está al día.
+- [x] `INDICADOR_CONFIG_CONSULTAR` está asignado al ADMINISTRADOR en el 05 y en la base de prueba, y el ADMINISTRADOR sigue sin `INDICADOR_CONFIG_EDITAR`.
+- [x] El Administrador ve las versiones de cada esquema, regla e indicador con su fecha y su autor (historial de esquemas, `PanelHistorialRegla` y `PanelHistorialIndicador`).
+- [x] En «Configuración de indicadores» el Administrador no ve acciones de edición, y publicar una versión le responde 403.
+- [x] Cada fila del historial de esquemas, salvo la primera versión, tiene «Comparar», que abre la comparación con la versión anterior ya elegida.
+- [x] La pantalla de comparación permite elegir cualquier par de versiones de la vacuna (borradores incluidos), guarda la elección en la URL y no ofrece comparar una versión consigo misma.
+- [x] La comparación muestra los datos de las dos versiones y las diferencias de procedencia, desagregación, dosis, secciones e inclusión, agrupadas y marcadas como agregado, quitado o cambiado; sin diferencias, lo dice.
+- [x] Con `BITACORA_CONSULTAR`, cada versión de esquema, regla e indicador enlaza a «Auditoría» filtrada por su entidad y su id en todo el historial; sin el permiso, el enlace no aparece.
+- [x] «Auditoría» aparece al final del desplegable «Administración» y no en el primer nivel del menú; su pantalla abre en `/administracion/auditoria`, y `/auditoria` redirige a ella con sus filtros.
+- [x] Las tarjetas del Inicio del Administrador y los «Ver en la bitácora» enlazan a `/administracion/auditoria`.
+- [x] No cambia ningún endpoint de `backend/openapi.yaml` y la API arranca.
+- [x] Los colores salen de las variables del tema y a 390 px la comparación no tiene desplazamiento horizontal.
+- [x] Pasan las pruebas del backend de configuración de indicadores, `compararEsquemas.test.js`, `PaginaCompararEsquemas.test.jsx`, `PaginaHistorialEsquemas.test.jsx`, las de los paneles de historial, `PaginaConfigIndicadores.test.jsx`, `auditoria.test.js` (frontend), `RutaConPermiso.test.jsx`, `Layout.test.jsx`, `RedireccionRutaVieja.test.jsx`, `PaginaInicio.test.jsx` y la suite del frontend.
+- [x] `node scripts/mapa-obsidian.mjs --revisar` dice que `mapa/` está al día.
 
 ## Decisiones
 
@@ -233,6 +233,14 @@ El enlace es `enlaceBitacora(entidad, id)`: `/administracion/auditoria?entidad={
 - **Sí:** ruta `/administracion/auditoria`, con `/auditoria` redirigiendo a ella. Queda como los demás hijos y su miga sale bien, y los enlaces guardados siguen funcionando, como se hizo con `/configuracion` y `/usuarios`.
 - **No:** dejar `/auditoria`. Sería el único hijo de «Administración» con una ruta fuera de `/administracion`.
 - **Sí:** el spec en `configuracion`. Esquemas, reglas e indicadores configurables son de ese módulo (sección 7 de `AGENTS.md`).
+
+**Decididas al implementar (2026-11-16 y 2026-11-17):**
+
+- **Sí:** `compararEsquemas(a, b, dimensiones)` recibe el catálogo de `GET /dimensiones`. El documento solo trae los códigos de los valores; sin el catálogo, se muestran los códigos.
+- **Sí:** «Orden de las dimensiones» como diferencia de la desagregación. Ese orden cambia el formulario.
+- **Sí:** una versión publicada sin `secciones` (Hexavalente v1) se compara con las que deduce «Ver» (`seccionesDeducidas`, exportada de `armarFormulario.js`), con código = grupo de edad o `GENERAL`. Así la comparación cuadra con lo que se ve en «Ver». Decisión del equipo tras la verificación manual: antes salían las secciones de v2 como agregadas.
+- **Sí:** `MODOS` exportado de `EditorEsquema.jsx`, para que la comparación use las mismas etiquetas de la procedencia.
+- **Sí:** la pantalla «Auditoría» conserva su h1 «Bitácora del sistema». La prueba de los hijos de `RutaConPermiso.test.jsx` la admite con `TITULO_DE_PANTALLA` en vez de cambiar la pantalla.
 
 ## Riesgos
 
