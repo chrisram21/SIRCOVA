@@ -45,6 +45,7 @@ const HIJOS_ADMINISTRACION = [
   'Periodos',
   'Población',
   'Roles y permisos',
+  'Auditoría',
 ]
 
 function crearSesion({ permisos = [], rolNombre = 'Administrador' } = {}) {
@@ -103,14 +104,18 @@ test('una sesión sin permisos ve solo "Inicio"', () => {
   expect(opcionesVisibles()).toEqual(['Inicio'])
 })
 
-test('con INDICADOR_CONSULTAR y BITACORA_CONSULTAR ve Inicio, Indicadores y Auditoría', () => {
+// SPEC 71: «Auditoría» ya no es de primer nivel, sino el último hijo de «Administración».
+test('con INDICADOR_CONSULTAR y BITACORA_CONSULTAR ve Inicio, Indicadores y «Administración» con Auditoría', () => {
   abrir('/inicio', { permisos: ['INDICADOR_CONSULTAR', 'BITACORA_CONSULTAR'] })
 
-  expect(opcionesVisibles()).toEqual(['Inicio', 'Indicadores', 'Auditoría'])
+  expect(opcionesVisibles()).toEqual(['Inicio', 'Indicadores', 'Administración'])
   expect(menu().queryByRole('link', { name: 'Registro de producción' })).toBeNull()
+  fireEvent.click(padre())
+  expect(hijosVisibles()).toEqual(['Auditoría'])
+  expect(menu().getByRole('link', { name: 'Auditoría' }).getAttribute('href')).toBe('/administracion/auditoria')
 })
 
-test('con todos los permisos ve las 11 opciones en el orden de la tabla; «Administración» empieza plegada', () => {
+test('con todos los permisos ve las 10 opciones en el orden de la tabla; «Administración» empieza plegada', () => {
   abrir('/inicio', { permisos: TODOS_LOS_PERMISOS })
 
   expect(opcionesVisibles()).toEqual([
@@ -123,7 +128,6 @@ test('con todos los permisos ve las 11 opciones en el orden de la tabla; «Admin
     'Mapa territorial',
     'Informes',
     'Alertas',
-    'Auditoría',
     'Administración',
   ])
   expect(padre().getAttribute('aria-expanded')).toBe('false')
@@ -341,6 +345,13 @@ test('en un hijo, las migas dicen «Administración › Vacunas», con el hijo c
 
   expect(textoDeMigas()).toBe('AdministraciónVacunas')
   expect(migas().getByText('Vacunas').getAttribute('aria-current')).toBe('page')
+})
+
+test('en Auditoría, las migas dicen «Administración › Auditoría»', async () => {
+  abrir('/administracion/auditoria', { permisos: ['BITACORA_CONSULTAR'] })
+
+  expect(textoDeMigas()).toBe('AdministraciónAuditoría')
+  expect(migas().getByText('Auditoría').getAttribute('aria-current')).toBe('page')
 })
 
 test('en una subruta abierta desde la lista con filtros, la miga vuelve a la lista con ellos', () => {

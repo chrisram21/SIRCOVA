@@ -24,6 +24,7 @@ import {
   Users,
   UsersRound,
 } from 'lucide-react'
+import { RUTA_AUDITORIA } from '@/paginas/auditoria/auditoria.js'
 import PaginaInicio from '@/paginas/inicio/PaginaInicio.jsx'
 
 // Cada pantalla se descarga al entrar en ella (Layout la espera con Suspense); Inicio va incluida, porque es la primera.
@@ -156,14 +157,6 @@ const opcionesMenu = [
     permiso: 'ALERTA_CONSULTAR',
     icono: Bell,
     pagina: PaginaAlertas,
-  },
-  {
-    titulo: 'Auditoría',
-    descripcion: 'La bitácora de lo que se hace en el sistema.',
-    ruta: '/auditoria',
-    permiso: 'BITACORA_CONSULTAR',
-    icono: ScrollText,
-    pagina: PaginaAuditoria,
   },
   {
     titulo: 'Administración',
@@ -371,6 +364,15 @@ const opcionesMenu = [
         ruta: '/administracion/permisos',
         permisos: ['PERMISO_CONSULTAR'],
         icono: ShieldCheck,
+      },
+      // SPEC 71: se consulta poco, así que va al final de «Administración» y no en el primer nivel.
+      {
+        titulo: 'Auditoría',
+        descripcion: 'La bitácora de lo que se hace en el sistema.',
+        ruta: RUTA_AUDITORIA,
+        permisos: ['BITACORA_CONSULTAR'],
+        icono: ScrollText,
+        pagina: PaginaAuditoria,
       },
     ],
   },

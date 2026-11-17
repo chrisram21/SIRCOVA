@@ -6,8 +6,17 @@ const HIJOS = opcionesMenu.find((opcion) => opcion.ruta === RUTA_ADMINISTRACION)
 // El último segmento de cada hijo (/administracion/vacunas → vacunas), que era el valor de ?pestana= en /configuracion.
 const SECCIONES = new Set(HIJOS.map((hijo) => hijo.ruta.slice(RUTA_ADMINISTRACION.length + 1)))
 
-// Las rutas que usaban los enlaces guardados antes del SPEC 30, y /administracion, que no tiene pantalla propia.
-export const RUTAS_VIEJAS = ['/configuracion', '/configuracion/*', '/usuarios', '/usuarios/*', '/permisos', RUTA_ADMINISTRACION]
+// Las rutas que usaban los enlaces guardados antes del SPEC 30 (y /auditoria, antes del SPEC 71), y /administracion,
+// que no tiene pantalla propia.
+export const RUTAS_VIEJAS = [
+  '/configuracion',
+  '/configuracion/*',
+  '/usuarios',
+  '/usuarios/*',
+  '/permisos',
+  '/auditoria',
+  RUTA_ADMINISTRACION,
+]
 
 export function destinoDeRutaVieja(pathname, search, tienePermiso) {
   if (pathname === RUTA_ADMINISTRACION) return HIJOS.find((hijo) => puedeVer(hijo, tienePermiso))?.ruta ?? '/inicio'
