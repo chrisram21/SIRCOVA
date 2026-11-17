@@ -2,7 +2,7 @@
 numero: 69
 titulo: "HU-52 Consultar y atender alertas"
 modulo: "Plataforma"
-estado: "Aprobado"
+estado: "Implementado"
 origen: "Historia de usuario"
 historias: ["[[HU-52]]"]
 archivo: "specs/plataforma/69-hu-52-consultar-y-atender-alertas.md"
@@ -15,7 +15,7 @@ tags: ["spec", "modulo/plataforma", "origen/historia"]
 
 - **Spec completo:** [[specs/plataforma/69-hu-52-consultar-y-atender-alertas|abrir el spec]]
 - **Módulo:** [[Módulo Plataforma]]
-- **Estado:** Aprobado
+- **Estado:** Implementado
 - **Origen:** Historia de usuario
 - **Historia:** [[HU-52]] Consultar y atender alertas
 - **Texto del encabezado:** HU-52

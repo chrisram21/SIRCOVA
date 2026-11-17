@@ -15,4 +15,4 @@ Carpeta: `specs/plataforma/` · 6 specs · [[Inicio]]
 - [[SPEC 53]] — Ajustes menores de interfaz · *Implementado* · Corrección
 - [[SPEC 56]] — Pantalla de carga en las transiciones · *Implementado* · Corrección
 - [[SPEC 58]] — Límite de opciones en los combobox que crecen · *Implementado* · Corrección
-- [[SPEC 69]] — HU-52 Consultar y atender alertas · *Aprobado* · [[HU-52]]
+- [[SPEC 69]] — HU-52 Consultar y atender alertas · *Implementado* · [[HU-52]]

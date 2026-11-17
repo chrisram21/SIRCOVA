@@ -30,4 +30,4 @@ tags: ["spec", "modulo/indicadores", "origen/historia"]
 
 ## Lo usan
 
-- [[SPEC 69]] — HU-52 Consultar y atender alertas · *Aprobado*
+- [[SPEC 69]] — HU-52 Consultar y atender alertas · *Implementado*

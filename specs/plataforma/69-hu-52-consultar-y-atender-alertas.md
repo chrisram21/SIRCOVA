@@ -1,6 +1,6 @@
 # SPEC 69 — HU-52 Consultar y atender alertas
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-52
 > **Origen:** historia
 > **Depende de:** SPEC 06, SPEC 57, SPEC 67 y SPEC 68
@@ -164,21 +164,21 @@ Botón con el ícono `Bell` (lucide) a la derecha del `Encabezado`, con `aria-la
 
 ## Criterios de aceptación
 
-- [ ] `ALERTA_ATENDER` existe en el 05 y en la base de prueba, asignado solo a REVISOR, ESTABLECIMIENTO, EPIDEMIOLOGIA y ADMINISTRADOR; el ADMINISTRADOR tiene también `ALERTA_CONSULTAR` y la AUTORIDAD no tiene ninguno de los dos.
-- [ ] `GET /alertas` devuelve solo las alertas del rol del usuario dentro de su establecimiento o DDRISS, filtradas por `estado` (por defecto `ACTIVA`), `tipo` y `severidad`, paginadas, con `activas` que cuenta todas las activas sin filtros.
-- [ ] `GET /alertas` responde 400 con un parámetro o valor que no está en el contrato.
-- [ ] `POST /alertas/{id}/atender` guarda `ATENDIDA`, `atendida_por` y `atendida_en`, y deja su fila en la bitácora con el usuario.
-- [ ] Atender una alerta que no está activa responde 409; una fuera del rol o el ámbito del usuario, 404; sin `ALERTA_ATENDER`, 403.
-- [ ] Una alerta atendida no se vuelve a crear en la corrida siguiente de la tarea ni de los indicadores.
-- [ ] La pantalla «Alertas» lista las alertas con su severidad, filtra por estado, tipo y severidad con los filtros en la URL, y muestra en las atendidas quién y cuándo.
-- [ ] «Marcar como atendida» pide confirmación, solo aparece con `ALERTA_ATENDER` en alertas activas, y al confirmar actualiza la lista y la campana.
-- [ ] Cada alerta enlaza al reporte, al Registro o a «Indicadores» según sus datos y los permisos del usuario, y no muestra enlace si no tiene a dónde ir.
-- [ ] La campana del encabezado se ve solo con `ALERTA_CONSULTAR`, muestra el total de activas (crítica en `destructive`) y enlaza a `/alertas`.
-- [ ] La tarjeta de alertas del Inicio sigue mostrando el total, el desglose y la alerta de mayor severidad.
-- [ ] Los colores salen de las variables del tema y a 390 px la pantalla no tiene desplazamiento horizontal.
-- [ ] El contrato describe los dos endpoints y la API arranca.
-- [ ] Pasan `alertas.test.js`, `PaginaAlertas.test.jsx`, `TarjetaAlertas.test.jsx`, `Layout.test.jsx`, `RutaConPermiso.test.jsx` y la suite del frontend.
-- [ ] `node scripts/mapa-obsidian.mjs --revisar` dice que `mapa/` está al día.
+- [x] `ALERTA_ATENDER` existe en el 05 y en la base de prueba, asignado solo a REVISOR, ESTABLECIMIENTO, EPIDEMIOLOGIA y ADMINISTRADOR; el ADMINISTRADOR tiene también `ALERTA_CONSULTAR` y la AUTORIDAD no tiene ninguno de los dos.
+- [x] `GET /alertas` devuelve solo las alertas del rol del usuario dentro de su establecimiento o DDRISS, filtradas por `estado` (por defecto `ACTIVA`), `tipo` y `severidad`, paginadas, con `activas` que cuenta todas las activas sin filtros.
+- [x] `GET /alertas` responde 400 con un parámetro o valor que no está en el contrato.
+- [x] `POST /alertas/{id}/atender` guarda `ATENDIDA`, `atendida_por` y `atendida_en`, y deja su fila en la bitácora con el usuario.
+- [x] Atender una alerta que no está activa responde 409; una fuera del rol o el ámbito del usuario, 404; sin `ALERTA_ATENDER`, 403.
+- [x] Una alerta atendida no se vuelve a crear en la corrida siguiente de la tarea ni de los indicadores.
+- [x] La pantalla «Alertas» lista las alertas con su severidad, filtra por estado, tipo y severidad con los filtros en la URL, y muestra en las atendidas quién y cuándo.
+- [x] «Marcar como atendida» pide confirmación, solo aparece con `ALERTA_ATENDER` en alertas activas, y al confirmar actualiza la lista y la campana.
+- [x] Cada alerta enlaza al reporte, al Registro o a «Indicadores» según sus datos y los permisos del usuario, y no muestra enlace si no tiene a dónde ir.
+- [x] La campana del encabezado se ve solo con `ALERTA_CONSULTAR`, muestra el total de activas (crítica en `destructive`) y enlaza a `/alertas`.
+- [x] La tarjeta de alertas del Inicio sigue mostrando el total, el desglose y la alerta de mayor severidad.
+- [x] Los colores salen de las variables del tema y a 390 px la pantalla no tiene desplazamiento horizontal.
+- [x] El contrato describe los dos endpoints y la API arranca.
+- [x] Pasan `alertas.test.js`, `PaginaAlertas.test.jsx`, `TarjetaAlertas.test.jsx`, `Layout.test.jsx`, `RutaConPermiso.test.jsx` y la suite del frontend.
+- [x] `node scripts/mapa-obsidian.mjs --revisar` dice que `mapa/` está al día.
 
 ## Decisiones
 

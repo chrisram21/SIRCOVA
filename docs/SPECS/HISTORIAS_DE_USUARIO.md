@@ -1449,9 +1449,11 @@ Verificado contra la API real el 2026-11-08, con el build servido por `vite prev
 **Nota (2026-11-15, spec 68):** Epidemiología ya tiene `ALERTA_CONSULTAR` y ve en su tarjeta «Alertas activas» las alertas de cobertura y de calidad. Esas alertas (títulos «Municipio bajo la meta» y «Cobertura mayor al 100 %») no tienen `establecimiento_id` ni `reporte_id`: su enlace natural es el municipio y el resultado (`resultado_indicador_id`, de la corrida vigente del mes), por ejemplo a «Indicadores» del mes. Las crea, actualiza y descarta cada corrida no parcial, no la tarea horaria; una atendida a mano no se vuelve a crear. En la base de prueba hay 53 activas de agosto de 2026 (27 de Epidemiología y 26 del Revisor), además de las de ejemplo de la semilla.
 
 **Criterios de aceptación:**
-- [ ] Veo solo las alertas dirigidas a mi rol, dentro de mi establecimiento o DDRISS.
-- [ ] Puedo filtrar por tipo y estado.
-- [ ] Al marcar una alerta como atendida, se guarda quién y cuándo.
+- [x] Veo solo las alertas dirigidas a mi rol, dentro de mi establecimiento o DDRISS.
+- [x] Puedo filtrar por tipo y estado.
+- [x] Al marcar una alerta como atendida, se guarda quién y cuándo.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 69 a `main` (`specs/plataforma/69-hu-52-consultar-y-atender-alertas.md`). Pantalla «Alertas» (`/alertas`, permiso `ALERTA_CONSULTAR`, que recibe también el Administrador) con las alertas del rol del usuario en su establecimiento o DDRISS, filtros por estado (Activas por defecto, Atendidas, Descartadas o Todas), tipo y severidad en la URL, lista paginada, el desglose de activas y un enlace «Ver» según los datos y los permisos (al reporte en revisión, al Registro del mes o a «Indicadores» del mes, indicador y municipio). «Marcar como atendida» (permiso nuevo `ALERTA_ATENDER`: Revisor, Personal, Epidemiología y Administrador) pide confirmación y guarda quién y cuándo, con su bitácora; es definitivo, una alerta que ya no está activa responde 409 y la generación no la vuelve a crear. El ícono de la historia es una campana con el total de activas en el encabezado (en rojo si hay críticas), que enlaza a la pantalla y baja al atender. Endpoints `GET /alertas` (ahora con filtros y paginado, con `activas`) y `POST /alertas/{id}/atender`. Diferencias con la historia, decididas por el equipo: se agrega el filtro por severidad, se atiende de a una (sin acción para varias) y la Autoridad no recibe el permiso (todavía no hay alertas para ella). Verificada contra la API real el 2026-11-16 con el Revisor, el Personal de CS-1206, Epidemiología y el Administrador: el Revisor atendió una alerta de ejemplo de la semilla y la campana bajó de 73 a 72; cada rol vio solo las suyas, iguales a la base.
 
 #### HU-53. Registrar la bitácora de auditoría
 

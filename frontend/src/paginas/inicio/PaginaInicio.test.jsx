@@ -23,7 +23,7 @@ vi.mock('@/api/indicadores.js', () => ({
 }))
 vi.mock('@/api/revision.js', () => ({ obtenerAvance: vi.fn(), obtenerBandeja: vi.fn() }))
 vi.mock('@/api/rectificaciones.js', () => ({ listarRectificaciones: vi.fn() }))
-vi.mock('@/api/alertas.js', () => ({ listarAlertas: vi.fn() }))
+vi.mock('@/api/alertas.js', async (importarOriginal) => ({ ...(await importarOriginal()), listarAlertas: vi.fn() }))
 vi.mock('@/api/usuarios.js', () => ({ listarUsuarios: vi.fn() }))
 vi.mock('@/api/configuracion.js', () => ({ listarEsquemas: vi.fn() }))
 
@@ -408,7 +408,8 @@ describe('resumen por rol (SPEC 48)', () => {
     expect(within(principal).getByText('Crítica')).toBeTruthy()
     expect(within(principal).getByText(/^Tacaná: Avance de Hexavalente/)).toBeTruthy()
     expect(alertas.getByRole('link', { name: 'Ver alertas' }).getAttribute('href')).toBe('/alertas')
-    expect(listarAlertas).toHaveBeenCalledTimes(1)
+    // Una vez la tarjeta y otra la campana del encabezado (SPEC 69).
+    expect(listarAlertas).toHaveBeenCalledTimes(2)
     expect(screen.queryByText('Sin datos todavía')).toBeNull()
   })
 
