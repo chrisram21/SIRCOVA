@@ -6,5 +6,6 @@ import { requierePermiso } from '../../middlewares/permisos.js';
 const router = Router();
 
 router.get('/alertas', autenticar, requierePermiso('ALERTA_CONSULTAR'), alertasController.listarAlertas);
+router.post('/alertas/:id/atender', autenticar, requierePermiso('ALERTA_ATENDER'), alertasController.atenderAlerta);
 
 export default router;

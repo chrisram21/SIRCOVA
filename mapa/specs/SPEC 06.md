@@ -56,3 +56,4 @@ tags: ["spec", "modulo/plataforma", "origen/historia"]
 - [[SPEC 53]] — Ajustes menores de interfaz · *Implementado*
 - [[SPEC 56]] — Pantalla de carga en las transiciones · *Implementado*
 - [[SPEC 62]] — HU-45 Generar informes con filtros · *Implementado*
+- [[SPEC 69]] — HU-52 Consultar y atender alertas · *Implementado*

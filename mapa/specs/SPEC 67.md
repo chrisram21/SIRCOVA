@@ -31,3 +31,4 @@ tags: ["spec", "modulo/revision", "origen/historia"]
 ## Lo usan
 
 - [[SPEC 68]] — HU-51 Alertas de cobertura y de calidad · *Implementado*
+- [[SPEC 69]] — HU-52 Consultar y atender alertas · *Implementado*

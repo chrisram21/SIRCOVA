@@ -23,7 +23,7 @@ vi.mock('@/api/indicadores.js', () => ({
 }))
 vi.mock('@/api/revision.js', () => ({ obtenerAvance: vi.fn(), obtenerBandeja: vi.fn() }))
 vi.mock('@/api/rectificaciones.js', () => ({ listarRectificaciones: vi.fn() }))
-vi.mock('@/api/alertas.js', () => ({ listarAlertas: vi.fn() }))
+vi.mock('@/api/alertas.js', async (importarOriginal) => ({ ...(await importarOriginal()), listarAlertas: vi.fn() }))
 vi.mock('@/api/usuarios.js', () => ({ listarUsuarios: vi.fn() }))
 vi.mock('@/api/configuracion.js', () => ({ listarEsquemas: vi.fn() }))
 
@@ -202,7 +202,13 @@ describe('tarjetas con datos', () => {
     listarReportes.mockImplementation(async ({ periodoId }) => ({
       elementos: periodoId === 9 ? [{ id: 250, estado: 'EN_REVISION' }] : [],
     }))
-    listarAlertas.mockResolvedValue({ total: 0, porSeveridad: { CRITICA: 0, ADVERTENCIA: 0, INFO: 0 }, alertas: [] })
+    listarAlertas.mockResolvedValue({
+      elementos: [],
+      total: 0,
+      pagina: 1,
+      porPagina: 1,
+      activas: { total: 0, porSeveridad: { CRITICA: 0, ADVERTENCIA: 0, INFO: 0 } },
+    })
     abrirInicio({ rol: 'ESTABLECIMIENTO', permisos: ['PERIODO_CONSULTAR', 'REPORTE_CONSULTAR', 'ALERTA_CONSULTAR'] })
 
     const miReporte = within(tarjeta('Estado y fecha límite de mi reporte'))
@@ -369,8 +375,10 @@ describe('resumen por rol (SPEC 48)', () => {
     obtenerAvance.mockResolvedValue(AVANCE)
     listarAlertas.mockResolvedValue({
       total: 3,
-      porSeveridad: { CRITICA: 2, ADVERTENCIA: 1, INFO: 0 },
-      alertas: [
+      pagina: 1,
+      porPagina: 1,
+      activas: { total: 3, porSeveridad: { CRITICA: 2, ADVERTENCIA: 1, INFO: 0 } },
+      elementos: [
         {
           id: 41,
           tipo: 'COBERTURA_BAJO_META',
@@ -378,9 +386,14 @@ describe('resumen por rol (SPEC 48)', () => {
           titulo: 'Municipio bajo la meta',
           mensaje: 'Tacaná: Avance de Hexavalente 3.ª dosis (Hexavalente) en septiembre de 2026 quedó en 60.0 %.',
           generadaEn: '2026-10-27T06:00:00.000Z',
+          estado: 'ACTIVA',
           periodo: { id: 321, anio: 2026, mes: 9 },
+          municipio: { id: 27, nombre: 'Tacaná' },
           establecimiento: null,
           reporteId: null,
+          indicadorCodigo: 'AVANCE_HEXA3',
+          atendidaPor: null,
+          atendidaEn: null,
         },
       ],
     })
@@ -395,7 +408,8 @@ describe('resumen por rol (SPEC 48)', () => {
     expect(within(principal).getByText('Crítica')).toBeTruthy()
     expect(within(principal).getByText(/^Tacaná: Avance de Hexavalente/)).toBeTruthy()
     expect(alertas.getByRole('link', { name: 'Ver alertas' }).getAttribute('href')).toBe('/alertas')
-    expect(listarAlertas).toHaveBeenCalledTimes(1)
+    // Una vez la tarjeta y otra la campana del encabezado (SPEC 69).
+    expect(listarAlertas).toHaveBeenCalledTimes(2)
     expect(screen.queryByText('Sin datos todavía')).toBeNull()
   })
 

@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, MemoryRouter, Outlet, RouterProvider } from 'react-router-dom'
 import App from '@/App.jsx'
+import { EVENTO_ALERTAS_CAMBIARON, listarAlertas } from '@/api/alertas.js'
 import { cerrarSesion } from '@/api/auth.js'
 import { guardarSesion, leerSesion } from '@/api/sesion.js'
 import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
@@ -11,6 +12,11 @@ import Layout from './Layout.jsx'
 import opcionesMenu from './opcionesMenu.js'
 
 vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
+// La campana del encabezado cuenta las alertas; por defecto queda esperando, como las demás consultas.
+vi.mock('@/api/alertas.js', async (importarOriginal) => ({
+  ...(await importarOriginal()),
+  listarAlertas: vi.fn(() => new Promise(() => {})),
+}))
 
 const TODOS_LOS_PERMISOS = [
   ...new Set(
@@ -480,4 +486,85 @@ test('si POST /auth/logout falla, la sesión se cierra igual', async () => {
   expect(leerSesion()).toBeNull()
   expect(await screen.findByRole('heading', { name: 'Iniciar sesión' })).toBeTruthy()
   expect(screen.queryByRole('alert')).toBeNull()
+})
+
+describe('campana de alertas del encabezado', () => {
+  const activas = (total, porSeveridad) => ({
+    elementos: [],
+    total,
+    pagina: 1,
+    porPagina: 1,
+    activas: { total, porSeveridad },
+  })
+  const campana = (nombre) => screen.findByRole('link', { name: nombre })
+
+  afterEach(() => {
+    listarAlertas.mockReset()
+    listarAlertas.mockImplementation(() => new Promise(() => {}))
+  })
+
+  test('sin ALERTA_CONSULTAR no aparece ni consulta nada', () => {
+    abrir('/inicio', { permisos: ['INDICADOR_CONSULTAR'] })
+
+    expect(screen.queryByRole('link', { name: /^Alertas[: ]/ })).toBeNull()
+    expect(listarAlertas).not.toHaveBeenCalled()
+  })
+
+  test('con críticas muestra el total en destructive y enlaza a /alertas', async () => {
+    listarAlertas.mockResolvedValue(activas(12, { CRITICA: 2, ADVERTENCIA: 10, INFO: 0 }))
+    abrir('/inicio', { permisos: ['ALERTA_CONSULTAR'] })
+
+    const enlace = await campana('Alertas: 12 activas')
+    expect(enlace.getAttribute('href')).toBe('/alertas')
+    const insignia = within(enlace).getByText('12')
+    expect(insignia.getAttribute('data-variant')).toBe('destructive')
+    expect(listarAlertas).toHaveBeenCalledWith({ porPagina: 1 })
+  })
+
+  test('sin críticas la insignia es secundaria, y con una sola dice «activa»', async () => {
+    listarAlertas.mockResolvedValue(activas(1, { CRITICA: 0, ADVERTENCIA: 1, INFO: 0 }))
+    abrir('/inicio', { permisos: ['ALERTA_CONSULTAR'] })
+
+    const enlace = await campana('Alertas: 1 activa')
+    expect(within(enlace).getByText('1').getAttribute('data-variant')).toBe('secondary')
+  })
+
+  test('sin activas no lleva insignia', async () => {
+    listarAlertas.mockResolvedValue(activas(0, { CRITICA: 0, ADVERTENCIA: 0, INFO: 0 }))
+    abrir('/inicio', { permisos: ['ALERTA_CONSULTAR'] })
+
+    const enlace = await campana('Alertas: 0 activas')
+    expect(enlace.textContent).toBe('')
+  })
+
+  test('con más de 99 muestra «99+»', async () => {
+    listarAlertas.mockResolvedValue(activas(150, { CRITICA: 0, ADVERTENCIA: 150, INFO: 0 }))
+    abrir('/inicio', { permisos: ['ALERTA_CONSULTAR'] })
+
+    expect((await campana('Alertas: 150 activas')).textContent).toBe('99+')
+  })
+
+  test('si la consulta falla se ve sin insignia y sin error', async () => {
+    listarAlertas.mockRejectedValue(new Error('sin conexión'))
+    abrir('/inicio', { permisos: ['ALERTA_CONSULTAR'] })
+
+    await waitFor(() => expect(listarAlertas).toHaveBeenCalled())
+    const enlace = await campana('Alertas activas')
+    expect(enlace.textContent).toBe('')
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  test('vuelve a contar al cambiar de ruta y cuando se atiende una alerta', async () => {
+    listarAlertas.mockResolvedValue(activas(3, { CRITICA: 1, ADVERTENCIA: 2, INFO: 0 }))
+    abrir('/inicio', { permisos: ['ALERTA_CONSULTAR', 'INDICADOR_CONSULTAR'] })
+    await campana('Alertas: 3 activas')
+
+    fireEvent.click(menu().getByRole('link', { name: 'Indicadores' }))
+    await waitFor(() => expect(listarAlertas).toHaveBeenCalledTimes(2))
+
+    listarAlertas.mockResolvedValue(activas(2, { CRITICA: 0, ADVERTENCIA: 2, INFO: 0 }))
+    act(() => window.dispatchEvent(new Event(EVENTO_ALERTAS_CAMBIARON)))
+
+    expect(await campana('Alertas: 2 activas')).toBeTruthy()
+  })
 })

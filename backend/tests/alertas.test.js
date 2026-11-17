@@ -272,21 +272,54 @@ describe('generarAlertas', () => {
     const filas = await alertas('a.reporte_id = ?', [reportes.D2]);
     expect(filas.map((a) => a.estado)).toEqual(['DESCARTADA', 'ACTIVA']);
   });
+
+  it('atendida con POST /alertas/{id}/atender, la siguiente corrida no la vuelve a crear', async () => {
+    // La cuenta de la estadígrafa, con la DDRISS ficticia en el token (autenticar no compara la DDRISS).
+    const [[cuenta]] = await pool.query(
+      `SELECT u.id, e.establecimiento_id, e.municipio_id FROM usuario u JOIN empleado e ON e.id = u.empleado_id
+        WHERE u.nombre_usuario = 'estadigrafa'`,
+    );
+    const token = await tokenDePrueba(
+      cuenta.id,
+      {
+        rol: 'REVISOR',
+        permisos: ['ALERTA_ATENDER'],
+        ddrissId,
+        establecimientoId: cuenta.establecimiento_id,
+        municipioId: cuenta.municipio_id,
+      },
+      { expiresIn: '10m' },
+    );
+    const [activa] = await activas('a.reporte_id = ?', [reportes.D2]);
+    const res = await request(app)
+      .post(`/api/v1/alertas/${activa.id}/atender`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+
+    await correr('1998-03-08', new Date('1998-03-08T18:00:00.000Z'));
+
+    const filas = await alertas('a.reporte_id = ?', [reportes.D2]);
+    expect(filas.map((a) => a.estado)).toEqual(['DESCARTADA', 'ATENDIDA']);
+  });
 });
 
 // Las cuentas de la semilla son de la DDRISS 1, donde ya hay alertas reales: las de prueba van por SQL con el título
-// «vitest-hu50 …» y los totales se comparan con la base. ZVT_HU50B es otra DDRISS solo para el ámbito.
+// «vitest-hu50 …» y `generada_en` en 2099 (quedan primeras en su severidad), y los totales se comparan con la base.
+// ZVT_HU50B es otra DDRISS solo para el ámbito.
 describe('GET /alertas', () => {
   const PREFIJO = 'vitest-hu50';
   const DDRISS_OTRA = 'ZVT_HU50B';
+  const ATENDIDA_EN = new Date('2099-06-02T15:30:00.000Z');
   const ids = {};
   let estadigrafa;
   let personal;
+  let administrador;
   let sinPermiso;
 
   async function tokenDe(nombreUsuario) {
     const [[cuenta]] = await pool.query(
-      `SELECT u.id, r.codigo AS rol, u.rol_id, e.ddriss_id, e.establecimiento_id, e.municipio_id
+      `SELECT u.id, r.codigo AS rol, u.rol_id, e.ddriss_id, e.establecimiento_id, e.municipio_id,
+              CONCAT(e.nombres, ' ', e.apellidos) AS nombre
          FROM usuario u
          JOIN rol r ON r.id = u.rol_id
          JOIN empleado e ON e.id = u.empleado_id
@@ -309,7 +342,7 @@ describe('GET /alertas', () => {
       },
       { expiresIn: '10m' },
     );
-    return { token, ...cuenta };
+    return { token, permisos: permisos.map((p) => p.codigo), ...cuenta };
   }
 
   async function limpiarEndpoint() {
@@ -318,27 +351,43 @@ describe('GET /alertas', () => {
   }
 
   async function insertar(clave, datos) {
-    const { rol, severidad = 'ADVERTENCIA', estado = 'ACTIVA', ddriss = 1, establecimiento = null, generada } = datos;
+    const {
+      rol,
+      tipo = 'PROCESO',
+      severidad = 'ADVERTENCIA',
+      estado = 'ACTIVA',
+      ddriss = 1,
+      establecimiento = null,
+      generada,
+      atendidaPor = null,
+    } = datos;
+    const atendida = atendidaPor ? segundos(ATENDIDA_EN) : null;
     const [creada] = await pool.query(
       `INSERT INTO alerta (tipo, severidad, titulo, mensaje, ddriss_id, establecimiento_id, rol_destino_id, estado,
-                           generada_en)
-       SELECT 'PROCESO', ?, ?, 'Mensaje de prueba.', ?, ?, id, ?, FROM_UNIXTIME(?) FROM rol WHERE codigo = ?`,
-      [severidad, `${PREFIJO} ${clave}`, ddriss, establecimiento, estado, segundos(generada), rol],
+                           atendida_por, atendida_en, generada_en)
+       SELECT ?, ?, ?, 'Mensaje de prueba.', ?, ?, id, ?, ?, FROM_UNIXTIME(?), FROM_UNIXTIME(?)
+         FROM rol WHERE codigo = ?`,
+      [tipo, severidad, `${PREFIJO} ${clave}`, ddriss, establecimiento, estado, atendidaPor, atendida,
+        segundos(generada), rol],
     );
     ids[clave] = creada.insertId;
   }
 
   // Lo que la API debería contar para una cuenta, leído de la base con el mismo filtro.
-  async function activasEnLaBase(rol, condicion, valores) {
+  async function contarEnLaBase(rol, condicion, valores) {
     const [filas] = await pool.query(
       `SELECT a.severidad, COUNT(*) AS n FROM alerta a JOIN rol r ON r.id = a.rol_destino_id
-        WHERE a.estado = 'ACTIVA' AND r.codigo = ? AND ${condicion} GROUP BY a.severidad`,
+        WHERE r.codigo = ? AND ${condicion} GROUP BY a.severidad`,
       [rol, ...valores],
     );
     const porSeveridad = { CRITICA: 0, ADVERTENCIA: 0, INFO: 0 };
     for (const f of filas) porSeveridad[f.severidad] = Number(f.n);
     return porSeveridad;
   }
+  const sumar = (porSeveridad) => porSeveridad.CRITICA + porSeveridad.ADVERTENCIA + porSeveridad.INFO;
+  const activasDelRevisor = () =>
+    contarEnLaBase('REVISOR', "a.estado = 'ACTIVA' AND a.ddriss_id = ?", [estadigrafa.ddriss_id]);
+  const deLaPrueba = (res) => res.body.elementos.filter((a) => a.titulo.startsWith(PREFIJO)).map((a) => a.id);
 
   const listar = (credencial, consulta = {}) =>
     request(app).get('/api/v1/alertas').query(consulta).set('Authorization', `Bearer ${credencial.token}`);
@@ -356,8 +405,8 @@ describe('GET /alertas', () => {
         ORDER BY u.id
         LIMIT 1`,
     );
-    [estadigrafa, personal, sinPermiso] = await Promise.all(
-      ['estadigrafa', 'cs1201', cuentaSinPermiso.nombre_usuario].map(tokenDe),
+    [estadigrafa, personal, administrador, sinPermiso] = await Promise.all(
+      ['estadigrafa', 'cs1201', 'admin.prueba', cuentaSinPermiso.nombre_usuario].map(tokenDe),
     );
     const [[otroEstablecimiento]] = await pool.query("SELECT id FROM establecimiento WHERE codigo = 'CS-1202'");
     const [otra] = await pool.query(
@@ -370,10 +419,21 @@ describe('GET /alertas', () => {
     const antes = new Date('2099-05-01T12:00:00.000Z');
     const propio = personal.establecimiento_id;
     await insertar('revisor-critica', { rol: 'REVISOR', severidad: 'CRITICA', generada: reciente });
-    await insertar('revisor-info', { rol: 'REVISOR', severidad: 'INFO', generada: reciente });
+    await insertar('revisor-info', { rol: 'REVISOR', tipo: 'CALIDAD', severidad: 'INFO', generada: reciente });
     await insertar('revisor-advertencia-antigua', { rol: 'REVISOR', generada: antes });
     await insertar('revisor-advertencia-reciente', { rol: 'REVISOR', generada: reciente });
-    await insertar('revisor-atendida', { rol: 'REVISOR', estado: 'ATENDIDA', generada: reciente });
+    await insertar('revisor-calidad-critica', {
+      rol: 'REVISOR',
+      tipo: 'CALIDAD',
+      severidad: 'CRITICA',
+      generada: antes,
+    });
+    await insertar('revisor-atendida', {
+      rol: 'REVISOR',
+      estado: 'ATENDIDA',
+      generada: reciente,
+      atendidaPor: estadigrafa.id,
+    });
     await insertar('revisor-descartada', { rol: 'REVISOR', estado: 'DESCARTADA', generada: reciente });
     await insertar('revisor-otra-ddriss', { rol: 'REVISOR', ddriss: otra.insertId, generada: reciente });
     await insertar('admin', { rol: 'ADMINISTRADOR', generada: reciente });
@@ -387,71 +447,266 @@ describe('GET /alertas', () => {
 
   afterAll(limpiarEndpoint, 60000);
 
-  it('el Revisor ve las activas de su DDRISS y su rol, por severidad y de la más nueva a la más vieja', async () => {
+  it('sin parámetros, el Revisor ve 20 activas de su DDRISS y su rol, por severidad y de la más nueva', async () => {
     const res = await listar(estadigrafa);
 
     expect(res.status).toBe(200);
-    // La DDRISS 1 puede tener más de 50 activas: la INFO de la prueba puede quedar fuera del corte.
-    const deLaPrueba = res.body.alertas.filter((a) => a.titulo.startsWith(PREFIJO)).map((a) => a.id);
+    expect(res.body.elementos.every((a) => a.estado === 'ACTIVA')).toBe(true);
+    // La DDRISS 1 tiene más de 20 activas: la INFO de la prueba puede quedar fuera de la primera página.
     const esperadas = [
       ids['revisor-critica'],
+      ids['revisor-calidad-critica'],
       ids['revisor-advertencia-reciente'],
       ids['revisor-advertencia-antigua'],
       ids['revisor-info'],
     ];
-    expect(deLaPrueba.length).toBeGreaterThanOrEqual(1);
-    expect(deLaPrueba).toEqual(esperadas.slice(0, deLaPrueba.length));
+    const vistas = deLaPrueba(res);
+    expect(vistas.length).toBeGreaterThanOrEqual(1);
+    expect(vistas).toEqual(esperadas.slice(0, vistas.length));
     const rango = { CRITICA: 0, ADVERTENCIA: 1, INFO: 2 };
-    const orden = res.body.alertas.map((a) => [rango[a.severidad], -Date.parse(a.generadaEn)]);
+    const orden = res.body.elementos.map((a) => [rango[a.severidad], -Date.parse(a.generadaEn)]);
     expect(orden).toEqual([...orden].sort((x, y) => x[0] - y[0] || x[1] - y[1]));
 
-    const porSeveridad = await activasEnLaBase('REVISOR', 'a.ddriss_id = ?', [estadigrafa.ddriss_id]);
-    const total = porSeveridad.CRITICA + porSeveridad.ADVERTENCIA + porSeveridad.INFO;
-    expect(res.body.porSeveridad).toEqual(porSeveridad);
-    expect(res.body.total).toBe(total);
-    expect(res.body.alertas).toHaveLength(Math.min(total, 50));
+    const porSeveridad = await activasDelRevisor();
+    expect(res.body).toMatchObject({ total: sumar(porSeveridad), pagina: 1, porPagina: 20 });
+    expect(res.body.activas).toEqual({ total: sumar(porSeveridad), porSeveridad });
+    expect(res.body.elementos).toHaveLength(Math.min(sumar(porSeveridad), 20));
   });
 
-  it('cada alerta trae sus campos, con periodo y establecimiento en null si no los tiene', async () => {
-    const res = await listar(estadigrafa);
+  it('cada alerta trae sus campos, con los que no tiene en null', async () => {
+    const res = await listar(estadigrafa, { severidad: 'CRITICA', tipo: 'PROCESO' });
 
-    expect(res.body.alertas.find((a) => a.id === ids['revisor-critica'])).toEqual({
+    expect(res.body.elementos.find((a) => a.id === ids['revisor-critica'])).toEqual({
       id: ids['revisor-critica'],
       tipo: 'PROCESO',
       severidad: 'CRITICA',
       titulo: `${PREFIJO} revisor-critica`,
       mensaje: 'Mensaje de prueba.',
+      estado: 'ACTIVA',
       generadaEn: '2099-06-01T12:00:00.000Z',
       periodo: null,
+      municipio: null,
       establecimiento: null,
       reporteId: null,
+      indicadorCodigo: null,
+      atendidaPor: null,
+      atendidaEn: null,
     });
+  });
+
+  it('estado=ATENDIDA trae quién y cuándo, y estado=TODAS las tres', async () => {
+    const atendidas = await listar(estadigrafa, { estado: 'ATENDIDA', severidad: 'ADVERTENCIA' });
+    expect(atendidas.status).toBe(200);
+    expect(atendidas.body.elementos.every((a) => a.estado === 'ATENDIDA')).toBe(true);
+    expect(atendidas.body.elementos[0]).toMatchObject({
+      id: ids['revisor-atendida'],
+      atendidaPor: { usuarioId: estadigrafa.id, nombre: estadigrafa.nombre },
+      atendidaEn: ATENDIDA_EN.toISOString(),
+    });
+
+    const todas = await listar(estadigrafa, { estado: 'TODAS', severidad: 'ADVERTENCIA', porPagina: 100 });
+    const vistas = deLaPrueba(todas);
+    for (const clave of ['revisor-atendida', 'revisor-descartada', 'revisor-advertencia-reciente']) {
+      expect(vistas).toContain(ids[clave]);
+    }
+    const enLaBase = await contarEnLaBase('REVISOR', 'a.ddriss_id = ?', [estadigrafa.ddriss_id]);
+    expect(todas.body.total).toBe(enLaBase.ADVERTENCIA);
+  });
+
+  it('tipo y severidad se combinan, y total cuenta las filtradas mientras activas no cambia', async () => {
+    const res = await listar(estadigrafa, { tipo: 'CALIDAD', severidad: 'CRITICA' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.elementos.every((a) => a.tipo === 'CALIDAD' && a.severidad === 'CRITICA')).toBe(true);
+    expect(deLaPrueba(res)).toEqual([ids['revisor-calidad-critica']]);
+    const [[{ n }]] = await pool.query(
+      `SELECT COUNT(*) AS n FROM alerta a JOIN rol r ON r.id = a.rol_destino_id
+        WHERE r.codigo = 'REVISOR' AND a.ddriss_id = ? AND a.estado = 'ACTIVA'
+          AND a.tipo = 'CALIDAD' AND a.severidad = 'CRITICA'`,
+      [estadigrafa.ddriss_id],
+    );
+    expect(res.body.total).toBe(Number(n));
+    const porSeveridad = await activasDelRevisor();
+    expect(res.body.activas).toEqual({ total: sumar(porSeveridad), porSeveridad });
+  });
+
+  it('pagina y porPagina recorren la lista, y una página fuera de rango viene vacía', async () => {
+    const primera = await listar(estadigrafa, { porPagina: 2 });
+    const segunda = await listar(estadigrafa, { porPagina: 2, pagina: 2 });
+
+    expect(primera.body.elementos.map((a) => a.id)).toEqual([ids['revisor-critica'], ids['revisor-calidad-critica']]);
+    expect(segunda.body).toMatchObject({ pagina: 2, porPagina: 2, total: primera.body.total });
+    expect(segunda.body.elementos).toHaveLength(Math.min(2, primera.body.total - 2));
+    expect(segunda.body.elementos.map((a) => a.id)).not.toContain(ids['revisor-critica']);
+
+    const fuera = await listar(estadigrafa, { pagina: 100000 });
+    expect(fuera.status).toBe(200);
+    expect(fuera.body.elementos).toEqual([]);
+    expect(fuera.body.total).toBe(primera.body.total);
   });
 
   it('el Personal del establecimiento ve solo las de su establecimiento', async () => {
-    const res = await listar(personal);
+    const res = await listar(personal, { porPagina: 100 });
 
     expect(res.status).toBe(200);
-    expect(res.body.alertas.filter((a) => a.titulo.startsWith(PREFIJO)).map((a) => a.id)).toEqual([
-      ids['personal-propio'],
-    ]);
-    expect(res.body.alertas.every((a) => a.establecimiento?.id === personal.establecimiento_id)).toBe(true);
-    const porSeveridad = await activasEnLaBase('ESTABLECIMIENTO', 'a.establecimiento_id = ?', [
+    expect(deLaPrueba(res)).toEqual([ids['personal-propio']]);
+    expect(res.body.elementos.every((a) => a.establecimiento?.id === personal.establecimiento_id)).toBe(true);
+    const porSeveridad = await contarEnLaBase('ESTABLECIMIENTO', "a.estado = 'ACTIVA' AND a.establecimiento_id = ?", [
       personal.establecimiento_id,
     ]);
-    expect(res.body.porSeveridad).toEqual(porSeveridad);
+    expect(res.body.activas.porSeveridad).toEqual(porSeveridad);
   });
 
-  it('responde 400 con un parámetro, 401 sin sesión y 403 sin ALERTA_CONSULTAR', async () => {
-    const conParametro = await listar(estadigrafa, { estado: 'ACTIVA' });
-    expect(conParametro.status).toBe(400);
-    expect(conParametro.body.error).toEqual({
-      codigo: 'ENTRADA_INVALIDA',
-      mensaje: 'Parámetro no permitido: estado.',
+  it('el Administrador ve las suyas y no las del Revisor', async () => {
+    const res = await listar(administrador, { estado: 'TODAS', porPagina: 100 });
+
+    expect(res.status).toBe(200);
+    expect(deLaPrueba(res)).toEqual([ids.admin]);
+    const porSeveridad = await contarEnLaBase('ADMINISTRADOR', "a.estado = 'ACTIVA' AND a.ddriss_id = ?", [
+      administrador.ddriss_id,
+    ]);
+    expect(res.body.activas.porSeveridad).toEqual(porSeveridad);
+  });
+
+  it('responde 400 con un valor fuera de la lista, porPagina=101 o un parámetro desconocido', async () => {
+    const casos = [
+      [{ estado: 'PENDIENTE' }, 'El estado debe ser ACTIVA, ATENDIDA, DESCARTADA o TODAS.'],
+      [{ tipo: 'OTRO' }, 'El tipo debe ser REPORTE_PENDIENTE, CALIDAD, COBERTURA_BAJO_META, PROCESO.'],
+      [{ severidad: 'ALTA' }, 'La severidad debe ser CRITICA, ADVERTENCIA o INFO.'],
+      [{ porPagina: '101' }, 'porPagina debe ser un número entero entre 1 y 100.'],
+      [{ pagina: '0' }, 'pagina debe ser un número entero mayor o igual a 1.'],
+      [{ municipio: '1' }, 'Parámetro no permitido: municipio.'],
+    ];
+    for (const [consulta, mensaje] of casos) {
+      const res = await listar(estadigrafa, consulta);
+      expect(res.status).toBe(400);
+      expect(res.body.error).toEqual({ codigo: 'ENTRADA_INVALIDA', mensaje });
+    }
+    const repetido = await request(app)
+      .get('/api/v1/alertas?estado=ACTIVA&estado=TODAS')
+      .set('Authorization', `Bearer ${estadigrafa.token}`);
+    expect(repetido.status).toBe(400);
+  });
+
+  it('responde 401 sin sesión y 403 sin ALERTA_CONSULTAR', async () => {
+    expect((await request(app).get('/api/v1/alertas')).status).toBe(401);
+    expect(sinPermiso.rol).toBe('AUTORIDAD');
+    expect((await listar(sinPermiso)).status).toBe(403);
+  });
+
+  describe('POST /alertas/{id}/atender', () => {
+    const atender = (credencial, id, cuerpo) => {
+      const solicitud = request(app)
+        .post(`/api/v1/alertas/${id}/atender`)
+        .set('Authorization', `Bearer ${credencial.token}`);
+      return cuerpo === undefined ? solicitud : solicitud.send(cuerpo);
+    };
+
+    beforeAll(async () => {
+      const reciente = new Date('2099-06-01T12:00:00.000Z');
+      await insertar('atender-revisor', { rol: 'REVISOR', generada: reciente });
+      await insertar('atender-personal', {
+        rol: 'ESTABLECIMIENTO',
+        establecimiento: personal.establecimiento_id,
+        generada: reciente,
+      });
+    }, 60000);
+
+    it('atiende una activa: guarda quién y cuándo y deja su bitácora con el usuario', async () => {
+      const antes = Date.now();
+      const res = await atender(estadigrafa, ids['atender-revisor']);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        id: ids['atender-revisor'],
+        estado: 'ATENDIDA',
+        atendidaPor: { usuarioId: estadigrafa.id, nombre: estadigrafa.nombre },
+      });
+      const [[fila]] = await pool.query(
+        'SELECT estado, atendida_por, UNIX_TIMESTAMP(atendida_en) AS atendida FROM alerta WHERE id = ?',
+        [ids['atender-revisor']],
+      );
+      expect(fila).toMatchObject({ estado: 'ATENDIDA', atendida_por: estadigrafa.id });
+      expect(new Date(Number(fila.atendida) * 1000).toISOString()).toBe(res.body.atendidaEn);
+      expect(Number(fila.atendida) * 1000).toBeGreaterThan(antes - 5 * 60 * 1000);
+
+      const [bitacora] = await pool.query(
+        `SELECT usuario_id, modulo, valores_anteriores, valores_nuevos FROM bitacora
+          WHERE entidad = 'alerta' AND accion = 'ACTUALIZAR' AND entidad_id = ?`,
+        [String(ids['atender-revisor'])],
+      );
+      expect(bitacora).toEqual([
+        {
+          usuario_id: estadigrafa.id,
+          modulo: 'REVISION',
+          valores_anteriores: { estado: 'ACTIVA' },
+          valores_nuevos: { estado: 'ATENDIDA', atendidaPor: estadigrafa.id, atendidaEn: res.body.atendidaEn },
+        },
+      ]);
     });
 
-    expect((await request(app).get('/api/v1/alertas')).status).toBe(401);
+    it('el Personal del establecimiento atiende las de su establecimiento', async () => {
+      const res = await atender(personal, ids['atender-personal']);
 
-    expect((await listar(sinPermiso)).status).toBe(403);
+      expect(res.status).toBe(200);
+      expect(res.body.atendidaPor.usuarioId).toBe(personal.id);
+    });
+
+    it('responde 409 si ya está atendida o descartada', async () => {
+      for (const clave of ['atender-revisor', 'revisor-descartada']) {
+        const res = await atender(estadigrafa, ids[clave]);
+        expect(res.status).toBe(409);
+        expect(res.body.error).toEqual({ codigo: 'ALERTA_NO_ACTIVA', mensaje: 'La alerta ya no está activa.' });
+      }
+      const [[descartada]] = await pool.query('SELECT estado, atendida_por FROM alerta WHERE id = ?', [
+        ids['revisor-descartada'],
+      ]);
+      expect(descartada).toEqual({ estado: 'DESCARTADA', atendida_por: null });
+    });
+
+    it('responde 404 si es de otro rol, otra DDRISS u otro establecimiento, o no existe', async () => {
+      const casos = [
+        [estadigrafa, ids.admin],
+        [estadigrafa, ids['revisor-otra-ddriss']],
+        [estadigrafa, ids['personal-propio']],
+        [personal, ids['personal-otro']],
+        [estadigrafa, 999999999],
+        [estadigrafa, 'abc'],
+      ];
+      for (const [credencial, id] of casos) {
+        const res = await atender(credencial, id);
+        expect(res.status).toBe(404);
+        expect(res.body.error.codigo).toBe('NO_ENCONTRADO');
+      }
+      const [filas] = await pool.query('SELECT estado FROM alerta WHERE id IN (?)', [
+        [ids.admin, ids['revisor-otra-ddriss'], ids['personal-propio'], ids['personal-otro']],
+      ]);
+      expect(filas.every((f) => f.estado === 'ACTIVA')).toBe(true);
+    });
+
+    it('responde 400 con cuerpo, 401 sin sesión y 403 sin ALERTA_ATENDER', async () => {
+      const conCuerpo = await atender(estadigrafa, ids['revisor-critica'], { nota: 'revisada' });
+      expect(conCuerpo.status).toBe(400);
+      expect(conCuerpo.body.error).toEqual({ codigo: 'ENTRADA_INVALIDA', mensaje: 'Campo no permitido: nota.' });
+
+      expect((await request(app).post(`/api/v1/alertas/${ids['revisor-critica']}/atender`)).status).toBe(401);
+
+      // La estadígrafa con ALERTA_CONSULTAR y sin ALERTA_ATENDER.
+      const soloConsulta = await tokenDePrueba(
+        estadigrafa.id,
+        {
+          rol: estadigrafa.rol,
+          permisos: estadigrafa.permisos.filter((p) => p !== 'ALERTA_ATENDER'),
+          ddrissId: estadigrafa.ddriss_id,
+          establecimientoId: estadigrafa.establecimiento_id,
+          municipioId: estadigrafa.municipio_id,
+        },
+        { expiresIn: '10m' },
+      );
+      expect((await atender({ token: soloConsulta }, ids['revisor-critica'])).status).toBe(403);
+
+      const [[fila]] = await pool.query('SELECT estado FROM alerta WHERE id = ?', [ids['revisor-critica']]);
+      expect(fila.estado).toBe('ACTIVA');
+    });
   });
 });
