@@ -54,6 +54,7 @@ const PaginaConfigIndicadores = lazy(() => import('@/paginas/configuracion/Pagin
 const PaginaIndicadores = lazy(() => import('@/paginas/indicadores/PaginaIndicadores.jsx'))
 const PaginaMapa = lazy(() => import('@/paginas/mapa/PaginaMapa.jsx'))
 const PaginaInformes = lazy(() => import('@/paginas/informes/PaginaInformes.jsx'))
+const PaginaAlertas = lazy(() => import('@/paginas/alertas/PaginaAlertas.jsx'))
 const PaginaEditarUsuario = lazy(() => import('@/paginas/usuarios/PaginaEditarUsuario.jsx'))
 const PaginaRegistrarPersonal = lazy(() => import('@/paginas/usuarios/PaginaRegistrarPersonal.jsx'))
 const PaginaUsuarios = lazy(() => import('@/paginas/usuarios/PaginaUsuarios.jsx'))
@@ -152,6 +153,7 @@ const opcionesMenu = [
     ruta: '/alertas',
     permiso: 'ALERTA_CONSULTAR',
     icono: Bell,
+    pagina: PaginaAlertas,
   },
   {
     titulo: 'Auditoría',

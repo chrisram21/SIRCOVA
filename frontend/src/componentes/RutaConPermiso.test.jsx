@@ -15,6 +15,7 @@ vi.mock('@/api/usuarios.js', pendientes)
 vi.mock('@/api/catalogos.js', pendientes)
 vi.mock('@/api/configuracion.js', pendientes)
 vi.mock('@/api/informes.js', pendientes)
+vi.mock('@/api/alertas.js', pendientes)
 
 function crearSesion(permisos) {
   const codificar = (objeto) => btoa(JSON.stringify(objeto)).replace(/=+$/, '')
@@ -50,12 +51,13 @@ beforeEach(() => {
   sessionStorage.clear()
 })
 
-// /alertas sigue en construcción (sin pagina en opcionesMenu.js): su página es la de «En construcción».
-test('con el permiso, /alertas muestra su página', () => {
+// SPEC 69: /alertas ya tiene su pantalla, que muestra sus esqueletos mientras pide la lista.
+test('con el permiso, /alertas muestra las alertas', async () => {
   abrir('/alertas', ['ALERTA_CONSULTAR'])
 
+  expect(await screen.findByLabelText('Cargando alertas', {}, ESPERA_LAZY)).toBeTruthy()
   expect(screen.getByRole('heading', { name: 'Alertas' })).toBeTruthy()
-  expect(enConstruccion()).toBeTruthy()
+  expect(enConstruccion()).toBeNull()
 })
 
 // SPEC 62: /informes ya tiene su pantalla, que abre con la pantalla de carga mientras piden sus opciones.
