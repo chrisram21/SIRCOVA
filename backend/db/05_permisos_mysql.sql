@@ -194,6 +194,10 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
 INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('ALERTA_CONSULTAR',          'REVISION',                'Consultar las alertas activas dirigidas a su rol en su ámbito');
 
+-- SPEC 69 (HU-52): atender las alertas
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('ALERTA_ATENDER',            'REVISION',                'Marcar como atendidas las alertas dirigidas a su rol en su ámbito');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -421,6 +425,17 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'EPIDEMIOLOGIA'
    AND p.codigo = 'ALERTA_CONSULTAR';
+
+-- SPEC 69 (HU-52): el Administrador ve sus alertas «Rectificaciones frecuentes», y quien consulta sus alertas las atiende
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'ADMINISTRADOR'
+   AND p.codigo = 'ALERTA_CONSULTAR';
+
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo IN ('REVISOR', 'ESTABLECIMIENTO', 'EPIDEMIOLOGIA', 'ADMINISTRADOR')
+   AND p.codigo = 'ALERTA_ATENDER';
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

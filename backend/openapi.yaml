@@ -5798,12 +5798,17 @@ paths:
   /alertas:
     get:
       tags: [Alertas y auditoría]
-      summary: Alertas activas para el rol y el ámbito del usuario
+      summary: Alertas del rol y el ámbito del usuario, con filtros y paginadas
       description: |
-        Las alertas `ACTIVA` cuyo `rol_destino_id` es el rol del usuario y que están en su ámbito: con DDRISS, las
-        de su DDRISS; el Personal del establecimiento, las de su establecimiento; sin DDRISS (Autoridad nacional),
-        todas. Ordenadas por severidad (`CRITICA`, `ADVERTENCIA`, `INFO`) y después de la más reciente a la más
-        antigua; la lista trae hasta 50. `total` y `porSeveridad` cuentan todas las activas, aunque la lista se corte.
+        Las alertas cuyo `rol_destino_id` es el rol del usuario y que están en su ámbito: con DDRISS, las de su
+        DDRISS; el Personal del establecimiento, las de su establecimiento; sin DDRISS (Autoridad nacional), todas.
+        Por defecto solo las `ACTIVA`; `estado=TODAS` trae también las atendidas y las descartadas. Ordenadas por
+        severidad (`CRITICA`, `ADVERTENCIA`, `INFO`) y después de la más reciente a la más antigua.
+
+        Es un listado paginado con la forma común (`elementos`, `total`, `pagina`, `porPagina`): `total` cuenta las
+        que cumplen los filtros, y una página fuera de rango responde 200 con `elementos` vacío. Además, `activas`
+        cuenta todas las activas del usuario sin aplicar los filtros (la campana del encabezado y la tarjeta del
+        Inicio la leen con `porPagina=1`).
 
         Las genera y las descarta una tarea del backend que corre al arrancar y cada hora (SPEC 67): fecha límite
         próxima, reporte sin enviar al vencer la fecha y reporte sin revisar por más de 3 días. Las que ya no aplican
@@ -5814,25 +5819,82 @@ paths:
         municipio en la franja roja del semáforo) y «Cobertura mayor al 100 %» (`CALIDAD`, `ADVERTENCIA`). Una corrida
         nueva del mismo mes actualiza el mensaje de las activas y descarta las que ya no aplican.
 
-        Este endpoint no escribe nada ni deja bitácora. No admite parámetros: uno cualquiera responde 400
-        `ENTRADA_INVALIDA` (los filtros por tipo y estado llegan con HU-52). Tienen el permiso el Revisor, el Personal
-        del establecimiento y Epidemiología.
+        Una alerta atendida (`POST /alertas/{id}/atender`) o descartada no se vuelve a crear: la generación busca
+        duplicados en cualquier estado.
+
+        Este endpoint no escribe nada ni deja bitácora. Un parámetro desconocido o repetido, o un valor fuera de la
+        lista, responde 400 `ENTRADA_INVALIDA`. Tienen el permiso el Revisor, el Personal del establecimiento,
+        Epidemiología y el Administrador.
       x-permiso: ALERTA_CONSULTAR
+      parameters:
+        - name: estado
+          in: query
+          description: "`TODAS` no filtra por estado"
+          schema: { type: string, enum: [ACTIVA, ATENDIDA, DESCARTADA, TODAS], default: ACTIVA }
+        - name: tipo
+          in: query
+          description: Sin el parámetro, todos los tipos
+          schema: { type: string, enum: [REPORTE_PENDIENTE, CALIDAD, COBERTURA_BAJO_META, PROCESO] }
+        - name: severidad
+          in: query
+          description: Sin el parámetro, todas las severidades
+          schema: { type: string, enum: [CRITICA, ADVERTENCIA, INFO] }
+        - { $ref: "#/components/parameters/Pagina" }
+        - { $ref: "#/components/parameters/PorPagina" }
       responses:
         "200":
-          description: Las alertas activas del usuario
+          description: Una página de las alertas del usuario
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ListaAlertas" }
+              schema: { $ref: "#/components/schemas/PaginaAlertas" }
         "400":
-          description: La solicitud trae un parámetro
+          description: Un parámetro desconocido o repetido, o un valor fuera de la lista
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
               example:
-                error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: estado." }
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "El estado debe ser ACTIVA, ATENDIDA, DESCARTADA o TODAS." }
         "401": { $ref: "#/components/responses/NoAutenticado" }
         "403": { $ref: "#/components/responses/SinPermiso" }
+
+  /alertas/{id}/atender:
+    post:
+      tags: [Alertas y auditoría]
+      summary: Marcar una alerta como atendida
+      description: |
+        Pasa una alerta `ACTIVA` del rol y el ámbito del usuario (los mismos de `GET /alertas`) a `ATENDIDA`, con
+        `atendida_por` (el usuario) y `atendida_en` (ahora). Es definitivo: no hay endpoint para reactivarla, y la
+        generación no vuelve a crearla. Va sin cuerpo; uno con campos responde 400.
+
+        Deja en la bitácora una fila `ACTUALIZAR` de `alerta` (módulo `REVISION`) con el estado anterior y el nuevo.
+        Si la alerta ya no está activa (atendida en otra pestaña o descartada por la tarea en ese momento), responde
+        409 sin cambiar nada. Una alerta de otro rol, de otro ámbito o que no existe responde 404.
+      x-permiso: ALERTA_ATENDER
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: La alerta atendida
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Alerta" }
+        "400":
+          description: La solicitud trae un cuerpo con campos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: nota." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
+        "409":
+          description: La alerta ya no está activa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ALERTA_NO_ACTIVA, mensaje: La alerta ya no está activa. }
 
   /auditoria/bitacora:
     get:
@@ -9900,7 +9962,9 @@ components:
     Alerta:
       type: object
       description: Una alerta de la tabla `alerta`
-      required: [id, tipo, severidad, titulo, mensaje, generadaEn, periodo, establecimiento, reporteId]
+      required:
+        [id, tipo, severidad, titulo, mensaje, estado, generadaEn, periodo, municipio, establecimiento, reporteId,
+         indicadorCodigo, atendidaPor, atendidaEn]
       properties:
         id: { type: integer, example: 41 }
         tipo: { type: string, enum: [REPORTE_PENDIENTE, CALIDAD, COBERTURA_BAJO_META, PROCESO], example: REPORTE_PENDIENTE }
@@ -9914,6 +9978,7 @@ components:
         mensaje:
           type: string
           example: CS-1209 C/S Ocós no envió el reporte de octubre de 2026; la fecha límite fue el 05/11/2026.
+        estado: { type: string, enum: [ACTIVA, ATENDIDA, DESCARTADA], example: ACTIVA }
         generadaEn: { type: string, format: date-time, example: "2026-11-06T06:00:12.000Z" }
         periodo:
           type: object
@@ -9924,10 +9989,18 @@ components:
             id: { type: integer, example: 322 }
             anio: { type: integer, example: 2026 }
             mes: { type: integer, minimum: 1, maximum: 12, example: 10 }
+        municipio:
+          type: object
+          nullable: true
+          description: El municipio al que se refiere; `null` si la alerta es de toda la DDRISS
+          required: [id, nombre]
+          properties:
+            id: { type: integer, example: 25 }
+            nombre: { type: string, example: Ocós }
         establecimiento:
           type: object
           nullable: true
-          description: El establecimiento al que se refiere; `null` si la alerta es de toda la DDRISS
+          description: El establecimiento al que se refiere; `null` si la alerta es de toda la DDRISS o de un municipio
           required: [id, codigo, nombre]
           properties:
             id: { type: integer, example: 9 }
@@ -9938,26 +10011,55 @@ components:
           nullable: true
           description: El reporte al que se refiere; `null` si no hay (por ejemplo, un establecimiento que no lo creó)
           example: null
-
-    ListaAlertas:
-      type: object
-      description: Respuesta de `GET /alertas`
-      required: [total, porSeveridad, alertas]
-      properties:
-        total: { type: integer, minimum: 0, description: Todas las alertas activas del usuario, example: 12 }
-        porSeveridad:
+        indicadorCodigo:
+          type: string
+          nullable: true
+          description: |
+            El indicador del resultado al que se refiere (alertas de cobertura y de calidad, SPEC 68); `null` en las
+            demás
+          example: null
+        atendidaPor:
           type: object
-          description: Las alertas activas de cada severidad (siempre las tres claves)
-          required: [CRITICA, ADVERTENCIA, INFO]
+          nullable: true
+          description: Quién la marcó como atendida; `null` si no está `ATENDIDA`
+          required: [usuarioId, nombre]
           properties:
-            CRITICA: { type: integer, minimum: 0, example: 9 }
-            ADVERTENCIA: { type: integer, minimum: 0, example: 2 }
-            INFO: { type: integer, minimum: 0, example: 1 }
-        alertas:
+            usuarioId: { type: integer, example: 4 }
+            nombre: { type: string, description: Nombres y apellidos del empleado, example: María López }
+        atendidaEn:
+          type: string
+          format: date-time
+          nullable: true
+          description: Cuándo se marcó como atendida; `null` si no está `ATENDIDA`
+          example: null
+
+    PaginaAlertas:
+      type: object
+      description: |
+        Respuesta de `GET /alertas`: la forma común de los listados paginados (`PaginaUsuarios`) más `activas`
+      required: [elementos, total, pagina, porPagina, activas]
+      properties:
+        elementos:
           type: array
-          maxItems: 50
-          description: Las primeras 50, por severidad y de la más reciente a la más antigua
+          description: Las de esta página, por severidad y de la más reciente a la más antigua
           items: { $ref: "#/components/schemas/Alerta" }
+        total: { type: integer, minimum: 0, description: Todas las que cumplen los filtros, sin paginar, example: 37 }
+        pagina: { type: integer, minimum: 1, example: 1 }
+        porPagina: { type: integer, minimum: 1, maximum: 100, example: 20 }
+        activas:
+          type: object
+          description: Todas las alertas activas del usuario, sin aplicar los filtros
+          required: [total, porSeveridad]
+          properties:
+            total: { type: integer, minimum: 0, example: 47 }
+            porSeveridad:
+              type: object
+              description: Las activas de cada severidad (siempre las tres claves)
+              required: [CRITICA, ADVERTENCIA, INFO]
+              properties:
+                CRITICA: { type: integer, minimum: 0, example: 39 }
+                ADVERTENCIA: { type: integer, minimum: 0, example: 8 }
+                INFO: { type: integer, minimum: 0, example: 0 }
 
     CorridaDeCierre:
       type: object

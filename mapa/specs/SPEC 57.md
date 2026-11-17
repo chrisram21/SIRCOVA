@@ -28,3 +28,4 @@ tags: ["spec", "modulo/revision", "origen/correccion"]
 ## Lo usan
 
 - [[SPEC 67]] — HU-50 Alertas de reportes pendientes y de proceso · *Implementado*
+- [[SPEC 69]] — HU-52 Consultar y atender alertas · *Aprobado*
