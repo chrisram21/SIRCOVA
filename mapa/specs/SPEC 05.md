@@ -59,3 +59,4 @@ tags: ["spec", "modulo/acceso-y-seguridad", "origen/historia"]
 - [[SPEC 57]] — Control de rectificaciones por establecimiento · *Implementado*
 - [[SPEC 59]] — Catálogo de redes de municipios · *Implementado*
 - [[SPEC 64]] — HU-47 Exportar informes a Excel · *Implementado*
+- [[SPEC 70]] — HU-54 Consultar la auditoría · *Implementado*

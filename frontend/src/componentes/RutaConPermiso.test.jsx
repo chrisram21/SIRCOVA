@@ -60,6 +60,22 @@ test('con el permiso, /alertas muestra las alertas', async () => {
   expect(enConstruccion()).toBeNull()
 })
 
+// SPEC 70: /auditoria ya tiene su pantalla, que muestra sus esqueletos mientras pide la bitácora.
+test('con el permiso, /auditoria muestra la bitácora', async () => {
+  abrir('/auditoria', ['BITACORA_CONSULTAR'])
+
+  expect(await screen.findByLabelText('Cargando la bitácora', {}, ESPERA_LAZY)).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'Bitácora del sistema' })).toBeTruthy()
+  expect(enConstruccion()).toBeNull()
+})
+
+test('sin el permiso, /auditoria lleva a /inicio', () => {
+  abrir('/auditoria', ['USUARIO_CONSULTAR'])
+
+  expect(screen.queryByRole('heading', { name: 'Bitácora del sistema' })).toBeNull()
+  expect(screen.getByText('Usuarios activos')).toBeTruthy()
+})
+
 // SPEC 62: /informes ya tiene su pantalla, que abre con la pantalla de carga mientras piden sus opciones.
 test('con el permiso, /informes muestra los informes', async () => {
   abrir('/informes', ['INFORME_CONSULTAR'])

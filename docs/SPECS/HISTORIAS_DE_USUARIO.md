@@ -1486,9 +1486,17 @@ Verificado contra la API real el 2026-11-08, con el build servido por `vite prev
 **Nota (2026-11-05, spec 48):** el Inicio del Administrador tiene «Cambios en catálogos» y «Actividad de la bitácora» en «Sin datos todavía»: esperan `GET /auditoria/bitacora`. Para llenarlas, agregar su `Datos` y sus `permisos` en `paginas/inicio/roles/InicioAdministrador.jsx`.
 
 **Criterios de aceptación:**
-- [ ] Puedo combinar filtros por usuario, rango de fechas, acción y módulo.
-- [ ] Puedo ver el detalle de un registro con sus valores anteriores y nuevos.
-- [ ] Puedo exportar el resultado a Excel.
+- [x] Puedo combinar filtros por usuario, rango de fechas, acción y módulo.
+- [x] Puedo ver el detalle de un registro con sus valores anteriores y nuevos.
+- [x] Puedo exportar el resultado a Excel.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 70 a `main` (`specs/acceso-y-seguridad/70-hu-54-consultar-auditoria.md`). Pantalla «Auditoría» (`/auditoria`, permiso nuevo `BITACORA_CONSULTAR` del módulo `SISTEMA`, solo para el Administrador) con la bitácora de su DDRISS: filtros por fechas (los últimos 30 días por defecto, o todo el historial), usuario (con búsqueda), módulo, acción y elemento afectado (entidad e id), aplicados con «Aplicar» y guardados en la URL, chips de filtros activos, accesos rápidos («Hoy», «Últimos 7 días», «Solo rectificaciones»), el resumen sobre la tabla (registros, usuarios y rectificaciones), lista paginada y cada registro desplegable a una tabla campo · valor anterior · valor nuevo con la IP y el agente. «Exportar resultados» descarga lo filtrado como .xlsx (`GET /auditoria/bitacora/excel`, hasta 10,000 filas) y deja su fila `EXPORTAR` en la bitácora. El Inicio del Administrador ya llena «Actividad de la bitácora» y «Cambios en catálogos» (los últimos 7 días). Diferencias con la historia y el mockup, decididas por el equipo:
+
+- La tabla `bitacora` no guarda la DDRISS: se deduce del autor de cada fila (y de la cuenta contra la que fue un intento fallido). Las filas automáticas y los intentos con nombres que no existen no los ve nadie; no se agregó `ddriss_id` al modelo.
+- «Elemento afectado» filtra por tabla o colección y su id exacto, no por texto libre (municipio, reporte o catálogo), y la tabla no arma textos como «Reporte agosto 2026, Malacatán» ni «En revisión → Aprobado»: el detalle muestra los campos que cambiaron.
+- Solo Excel, sin PDF. Consultar la bitácora no deja registro; exportarla, sí.
+
+Verificado contra la API real el 2026-11-16, como `admin.prueba`: «Actividad de la bitácora» dio 3,270 registros de 14 usuarios y 370 accesos fallidos o denegados, y «Cambios en catálogos», 208, los mismos que la pantalla y que una consulta SQL escrita aparte (1,263 intentos fallidos en todo el historial; 568 filas automáticas y 215 intentos sin cuenta fuera del alcance). Con usuario, módulo, acción, entidad e id combinados aparece el cambio de estado del reporte 255 de la semilla (`EN_REVISION` → `CORRECCION_SOLICITADA`). El Excel de los 1,263 intentos fallidos se descargó con su encabezado y dejó su fila `EXPORTAR`; sin filtros responde «El resultado tiene 27,905 registros; acote los filtros…». Como Revisor, «Auditoría» no está en el menú y `/auditoria` lleva al Inicio. A 390 px no hay desplazamiento horizontal.
 
 #### HU-55. Historial de cambios de configuración
 

@@ -4,6 +4,7 @@ import { FileSpreadsheet, FileText, TriangleAlert } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { guardarArchivo } from '@/lib/archivos.js'
 import { cn } from '@/lib/utils'
 import { listarDdriss, listarRedes } from '@/api/catalogos.js'
 import { mensajeDeError } from '@/api/cliente.js'
@@ -36,18 +37,6 @@ const POR_SECCION = 'seccion'
 
 const CLASES_AVISO =
   'flex items-start gap-2 rounded-md bg-advertencia px-3 py-2 text-sm text-advertencia-foreground'
-
-// El navegador guarda el archivo con un enlace temporal.
-function guardarArchivo(blob, nombre) {
-  const url = URL.createObjectURL(blob)
-  const enlace = document.createElement('a')
-  enlace.href = url
-  enlace.download = nombre
-  document.body.append(enlace)
-  enlace.click()
-  enlace.remove()
-  URL.revokeObjectURL(url)
-}
 
 const EXPORTACIONES = {
   xlsx: {

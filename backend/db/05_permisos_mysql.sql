@@ -29,6 +29,7 @@
 --        RECTIFICACION            (SPEC 40, HU-32)
 --        INDICADORES              (SPEC 44, HU-36)
 --        REPORTES                 (SPEC 62, HU-45)
+--        SISTEMA                  (SPEC 70, HU-54)
 --    - Un código no se borra ni se renombra (regla 6 de AGENTS.md).
 --    - Asignaciones y retiros siempre por códigos, nunca por ids.
 --
@@ -197,6 +198,10 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
 -- SPEC 69 (HU-52): atender las alertas
 INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('ALERTA_ATENDER',            'REVISION',                'Marcar como atendidas las alertas dirigidas a su rol en su ámbito');
+
+-- SPEC 70 (HU-54): consultar la bitácora
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('BITACORA_CONSULTAR',        'SISTEMA',                 'Consultar y exportar la bitácora de auditoría de su DDRISS');
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
@@ -436,6 +441,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo IN ('REVISOR', 'ESTABLECIMIENTO', 'EPIDEMIOLOGIA', 'ADMINISTRADOR')
    AND p.codigo = 'ALERTA_ATENDER';
+
+-- SPEC 70 (HU-54): solo el Administrador consulta y exporta la bitácora
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'ADMINISTRADOR'
+   AND p.codigo = 'BITACORA_CONSULTAR';
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas

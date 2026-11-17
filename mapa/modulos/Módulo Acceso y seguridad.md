@@ -6,7 +6,7 @@ tags: ["modulo", "modulo/acceso-y-seguridad"]
 
 > [!info] Nota generada por `scripts/mapa-obsidian.mjs`: no la edites a mano, se reescribe.
 
-Carpeta: `specs/acceso-y-seguridad/` · 9 specs · [[Inicio]]
+Carpeta: `specs/acceso-y-seguridad/` · 10 specs · [[Inicio]]
 
 ## Specs
 
@@ -19,3 +19,4 @@ Carpeta: `specs/acceso-y-seguridad/` · 9 specs · [[Inicio]]
 - [[SPEC 10]] — Seguridad de cuentas: desbloquear, restablecer contraseña y contraseña temporal generada · *Implementado* · [[HU-62]], [[HU-63]]
 - [[SPEC 27]] — Sesiones en el servidor (backend) · *Implementado* · Ajuste de una HU
 - [[SPEC 28]] — Sesiones en el frontend · *Implementado* · Ajuste de una HU
+- [[SPEC 70]] — HU-54 Consultar la auditoría · *Implementado* · [[HU-54]]

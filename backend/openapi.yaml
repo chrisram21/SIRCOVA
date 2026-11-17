@@ -5899,17 +5899,117 @@ paths:
   /auditoria/bitacora:
     get:
       tags: [Alertas y auditoría]
-      summary: Consultar la bitácora (solo lectura; no existe endpoint para modificarla)
+      summary: Consultar la bitácora de la DDRISS, con filtros y paginada (SPEC 70, HU-54)
+      description: |
+        Solo lectura: no existe endpoint para modificar ni borrar la bitácora.
+
+        **Alcance.** La tabla `bitacora` no guarda la DDRISS; se deduce del autor. Se ven las filas cuyo `usuario_id`
+        es de un empleado de la DDRISS del usuario, y los intentos de inicio de sesión fallidos (`usuario_id` nulo)
+        cuyo `nombre_usuario_intento` es el nombre de usuario de una cuenta de su DDRISS. Las filas automáticas (sin
+        usuario ni intento) y las de otras DDRISS no se ven. Un usuario sin DDRISS recibe la lista vacía.
+
+        **Filtros.** Se combinan entre sí. `desde` y `hasta` son días de Guatemala e incluyen los extremos; sin ellos
+        no hay límite de fechas (el rango de 30 días por defecto lo pone la pantalla). `usuarioId` trae también los
+        intentos fallidos contra esa cuenta; uno de otra DDRISS da la lista vacía. `accion` no se limita a las
+        acciones actuales del backend, para poder filtrar valores antiguos (`CERRAR_PERIODO`, `AUTORIZAR`).
+
+        Es un listado paginado con la forma común (`elementos`, `total`, `pagina`, `porPagina`), del más reciente al
+        más antiguo (`fecha` y `id` descendentes); una página fuera de rango responde 200 con `elementos` vacío.
+        `resumen` cuenta sobre todas las filas filtradas, no solo la página.
+
+        Consultar no deja bitácora. Un parámetro desconocido o repetido, o un valor con otro formato, responde 400
+        `ENTRADA_INVALIDA`. Solo el Administrador tiene el permiso.
+      x-permiso: BITACORA_CONSULTAR
       parameters:
-        - { name: desde, in: query, schema: { type: string, format: date } }
-        - { name: hasta, in: query, schema: { type: string, format: date } }
-        - { name: usuarioId, in: query, schema: { type: integer } }
-        - { name: modulo, in: query, schema: { type: string } }
-        - { name: accion, in: query, schema: { type: string } }
+        - { $ref: "#/components/parameters/BitacoraDesde" }
+        - { $ref: "#/components/parameters/BitacoraHasta" }
+        - { $ref: "#/components/parameters/BitacoraUsuarioId" }
+        - { $ref: "#/components/parameters/BitacoraModulo" }
+        - { $ref: "#/components/parameters/BitacoraAccion" }
+        - { $ref: "#/components/parameters/BitacoraEntidad" }
+        - { $ref: "#/components/parameters/BitacoraEntidadId" }
         - { $ref: "#/components/parameters/Pagina" }
         - { $ref: "#/components/parameters/PorPagina" }
       responses:
-        "200": { description: Lista paginada de registros de bitácora }
+        "200":
+          description: Una página de la bitácora de la DDRISS
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaginaBitacora" }
+        "400": { $ref: "#/components/responses/BitacoraEntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+
+  /auditoria/bitacora/opciones:
+    get:
+      tags: [Alertas y auditoría]
+      summary: Opciones de los filtros de la bitácora (SPEC 70, HU-54)
+      description: |
+        Para los filtros de la pantalla «Auditoría»: los usuarios de la DDRISS del usuario (activos e inactivos, por
+        nombre), los módulos de la bitácora y las acciones y entidades distintas que aparecen en las filas de su
+        alcance (el mismo de `GET /auditoria/bitacora`), en orden alfabético. No admite parámetros: uno responde 400.
+      x-permiso: BITACORA_CONSULTAR
+      responses:
+        "200":
+          description: Las opciones de los filtros
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OpcionesBitacora" }
+        "400": { $ref: "#/components/responses/BitacoraEntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+
+  /auditoria/bitacora/excel:
+    get:
+      tags: [Alertas y auditoría]
+      summary: Descargar la bitácora filtrada como archivo de Excel (SPEC 70, HU-54)
+      description: |
+        Las mismas filas de `GET /auditoria/bitacora` con los mismos filtros, el mismo permiso y el mismo alcance,
+        todas (sin `pagina` ni `porPagina`), como un libro .xlsx armado con ExcelJS. Si pasan de 10,000, responde 422
+        `DEMASIADAS_FILAS` sin armar el archivo.
+
+        Una sola hoja, «Bitácora»:
+        - **Encabezado:** el título, la DDRISS, los filtros aplicados y la fecha y hora de generación (Guatemala) con
+          el nombre de quien lo generó.
+        - **Tabla:** Fecha y hora (Guatemala), Usuario (en un intento fallido, «Intento: {nombre tecleado}»), Rol,
+          Módulo, Acción, Entidad, Id, Valores anteriores, Valores nuevos, IP y Agente. Módulo y acción con las mismas
+          etiquetas en español que la pantalla; los valores como JSON en una línea.
+
+        Cada descarga correcta deja una fila `EXPORTAR` del módulo `SISTEMA` en la bitácora (`entidad` `bitacora`),
+        con los filtros, `formato: xlsx` y el número de filas en `valoresNuevos`. Un error no la deja.
+      x-permiso: BITACORA_CONSULTAR
+      parameters:
+        - { $ref: "#/components/parameters/BitacoraDesde" }
+        - { $ref: "#/components/parameters/BitacoraHasta" }
+        - { $ref: "#/components/parameters/BitacoraUsuarioId" }
+        - { $ref: "#/components/parameters/BitacoraModulo" }
+        - { $ref: "#/components/parameters/BitacoraAccion" }
+        - { $ref: "#/components/parameters/BitacoraEntidad" }
+        - { $ref: "#/components/parameters/BitacoraEntidadId" }
+      responses:
+        "200":
+          description: El libro de Excel de la bitácora filtrada
+          headers:
+            Content-Disposition:
+              description: |
+                `attachment; filename="bitacora-{AAAA-MM-DD}.xlsx"`, con el día de la generación en Guatemala. El
+                frontend lo lee gracias a `Access-Control-Expose-Headers`.
+              schema: { type: string, example: 'attachment; filename="bitacora-2026-11-16.xlsx"' }
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/BitacoraEntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "422":
+          description: El resultado pasa de 10,000 filas
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error:
+                  codigo: DEMASIADAS_FILAS
+                  mensaje: El resultado tiene 12,480 registros; acote los filtros para exportar 10,000 o menos.
 
 components:
   securitySchemes:
@@ -5989,6 +6089,42 @@ components:
       name: porPagina
       in: query
       schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+    BitacoraDesde:
+      name: desde
+      in: query
+      description: Primer día (de Guatemala) incluido; no puede ser posterior a `hasta`. Sin él, sin límite
+      schema: { type: string, format: date, example: "2026-10-01" }
+    BitacoraHasta:
+      name: hasta
+      in: query
+      description: Último día (de Guatemala) incluido. Sin él, sin límite
+      schema: { type: string, format: date, example: "2026-10-31" }
+    BitacoraUsuarioId:
+      name: usuarioId
+      in: query
+      description: Las filas de esa cuenta y los intentos fallidos contra ella; una de otra DDRISS da la lista vacía
+      schema: { type: integer, minimum: 1, example: 2 }
+    BitacoraModulo:
+      name: modulo
+      in: query
+      schema:
+        type: string
+        enum: [USUARIOS, CONFIGURACION, PRODUCCION, REVISION, RECTIFICACION, INDICADORES, REPORTES, SISTEMA]
+    BitacoraAccion:
+      name: accion
+      in: query
+      description: Una acción exacta; no se limita a las actuales del backend
+      schema: { type: string, pattern: "^[A-Z_]{1,40}$", example: CAMBIO_ESTADO }
+    BitacoraEntidad:
+      name: entidad
+      in: query
+      description: Una o varias tablas o colecciones separadas por comas
+      schema: { type: string, pattern: "^[a-z_]{1,60}(,[a-z_]{1,60})*$", example: "vacuna,dosis" }
+    BitacoraEntidadId:
+      name: entidadId
+      in: query
+      description: El id del elemento, igual exacto (número de MySQL u ObjectId de MongoDB)
+      schema: { type: string, minLength: 1, maxLength: 40, example: "255" }
     InformeTipo:
       name: informe
       in: query
@@ -6062,6 +6198,13 @@ components:
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+    BitacoraEntradaInvalida:
+      description: Un parámetro desconocido o repetido, o un valor con otro formato (o `desde` posterior a `hasta`)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: ENTRADA_INVALIDA, mensaje: La fecha desde no puede ser posterior a la fecha hasta. }
     CodificacionNoAdmitida:
       description: El cuerpo llegó comprimido (`Content-Encoding` distinto de `identity`)
       content:
@@ -10060,6 +10203,122 @@ components:
                 CRITICA: { type: integer, minimum: 0, example: 39 }
                 ADVERTENCIA: { type: integer, minimum: 0, example: 8 }
                 INFO: { type: integer, minimum: 0, example: 0 }
+
+    UsuarioDeBitacora:
+      type: object
+      description: La cuenta autora de una fila de la bitácora, con el nombre de su empleado y su rol actual
+      required: [id, nombreUsuario, nombre, rol]
+      properties:
+        id: { type: integer, example: 2 }
+        nombreUsuario: { type: string, example: estadigrafa }
+        nombre: { type: string, example: María López }
+        rol:
+          type: object
+          required: [codigo, nombre]
+          properties:
+            codigo: { type: string, example: REVISOR }
+            nombre: { type: string, example: Revisor }
+
+    RegistroBitacora:
+      type: object
+      description: Una fila de la tabla `bitacora`
+      required:
+        [id, fecha, usuario, nombreUsuarioIntento, modulo, accion, entidad, entidadId, valoresAnteriores,
+         valoresNuevos, ipOrigen, agenteUsuario]
+      properties:
+        id: { type: integer, example: 9123 }
+        fecha: { type: string, format: date-time, example: "2026-10-07T22:42:10.512Z" }
+        usuario:
+          description: "`null` en un intento de inicio de sesión fallido"
+          allOf: [{ $ref: "#/components/schemas/UsuarioDeBitacora" }]
+          nullable: true
+        nombreUsuarioIntento:
+          type: string
+          nullable: true
+          description: Lo que se tecleó en un intento fallido; `null` en las demás
+          example: null
+        modulo:
+          type: string
+          enum: [USUARIOS, CONFIGURACION, PRODUCCION, REVISION, RECTIFICACION, INDICADORES, REPORTES, SISTEMA]
+          example: REVISION
+        accion: { type: string, example: CAMBIO_ESTADO }
+        entidad: { type: string, description: Tabla de MySQL o colección de MongoDB, example: reporte_produccion }
+        entidadId: { type: string, nullable: true, example: "255" }
+        valoresAnteriores:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: Al actualizar, solo los campos que cambiaron; sin contraseñas, hashes ni tokens
+          example: { estado: EN_REVISION }
+        valoresNuevos:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: Al crear, el objeto creado; al actualizar, solo los campos que cambiaron
+          example: { estado: APROBADO }
+        ipOrigen: { type: string, nullable: true, example: 10.0.0.21 }
+        agenteUsuario: { type: string, nullable: true, example: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
+
+    PaginaBitacora:
+      type: object
+      description: |
+        Respuesta de `GET /auditoria/bitacora`: la forma común de los listados paginados (`PaginaUsuarios`) más
+        `resumen`
+      required: [elementos, total, pagina, porPagina, resumen]
+      properties:
+        elementos:
+          type: array
+          description: Las de esta página, de la más reciente a la más antigua
+          items: { $ref: "#/components/schemas/RegistroBitacora" }
+        total: { type: integer, minimum: 0, description: Todas las que cumplen los filtros, sin paginar, example: 248 }
+        pagina: { type: integer, minimum: 1, example: 1 }
+        porPagina: { type: integer, minimum: 1, maximum: 100, example: 10 }
+        resumen:
+          type: object
+          description: Sobre todas las filas filtradas
+          required: [usuarios, rectificaciones, accesosFallidos]
+          properties:
+            usuarios:
+              type: integer
+              minimum: 0
+              description: Cuentas distintas (los intentos fallidos no cuentan)
+              example: 14
+            rectificaciones: { type: integer, minimum: 0, description: Filas del módulo `RECTIFICACION`, example: 3 }
+            accesosFallidos:
+              type: integer
+              minimum: 0
+              description: Filas `LOGIN_FALLIDO`, `CUENTA_BLOQUEADA` y `ACCESO_DENEGADO`
+              example: 5
+
+    OpcionesBitacora:
+      type: object
+      description: Respuesta de `GET /auditoria/bitacora/opciones`
+      required: [usuarios, modulos, acciones, entidades]
+      properties:
+        usuarios:
+          type: array
+          description: Las cuentas de la DDRISS, activas e inactivas, por nombre
+          items:
+            allOf:
+              - { $ref: "#/components/schemas/UsuarioDeBitacora" }
+              - type: object
+                required: [activo]
+                properties:
+                  activo: { type: boolean, example: true }
+        modulos:
+          type: array
+          items: { type: string }
+          example: [USUARIOS, CONFIGURACION, PRODUCCION, REVISION, RECTIFICACION, INDICADORES, REPORTES, SISTEMA]
+        acciones:
+          type: array
+          description: Las distintas de las filas del alcance, en orden alfabético
+          items: { type: string }
+          example: [ACCESO_DENEGADO, ACTUALIZAR, CAMBIO_ESTADO, LOGIN_OK]
+        entidades:
+          type: array
+          description: Las distintas de las filas del alcance, en orden alfabético
+          items: { type: string }
+          example: [alerta, cierre_periodo, esquemas_captura, reporte_produccion, usuario]
 
     CorridaDeCierre:
       type: object
