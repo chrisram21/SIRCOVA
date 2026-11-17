@@ -76,6 +76,26 @@ test('sin el permiso, /auditoria lleva a /inicio', () => {
   expect(screen.getByText('Usuarios activos')).toBeTruthy()
 })
 
+// SPEC 71: …/historial/:vacunaId/comparar no la toma la subruta /administracion/esquemas/:id.
+test('con ESQUEMA_CONSULTAR, la comparación de esquemas abre su pantalla', async () => {
+  abrir('/administracion/esquemas/historial/2/comparar?a=v-1&b=v-2', [
+    'CONFIGURACION_CONSULTAR',
+    'ESQUEMA_CONSULTAR',
+    'VACUNA_CONSULTAR',
+    'DIMENSION_CONSULTAR',
+  ])
+
+  expect(await screen.findByLabelText('Cargando versiones', {}, ESPERA_LAZY)).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'Comparar versiones' })).toBeTruthy()
+})
+
+test('sin ESQUEMA_CONSULTAR, la comparación de esquemas lleva a /inicio', () => {
+  abrir('/administracion/esquemas/historial/2/comparar', ['USUARIO_CONSULTAR'])
+
+  expect(screen.queryByRole('heading', { name: 'Comparar versiones' })).toBeNull()
+  expect(screen.getByText('Usuarios activos')).toBeTruthy()
+})
+
 // SPEC 62: /informes ya tiene su pantalla, que abre con la pantalla de carga mientras piden sus opciones.
 test('con el permiso, /informes muestra los informes', async () => {
   abrir('/informes', ['INFORME_CONSULTAR'])

@@ -39,7 +39,7 @@ export const contenidoDe = (esquema) => ({
 
 export const RUTA_ESQUEMAS = '/administracion/esquemas'
 
-const MODOS = [
+export const MODOS = [
   { valor: 'MUNICIPIO_DETALLADO', etiqueta: 'Por municipio de procedencia' },
   { valor: 'PROPIO_Y_OTROS', etiqueta: 'Propio y otros, como el 5C' },
 ]

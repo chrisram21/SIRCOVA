@@ -48,6 +48,7 @@ const PaginaEditarDimension = lazy(() => import('@/paginas/configuracion/PaginaE
 const PaginaRegistrarEsquema = lazy(() => import('@/paginas/configuracion/PaginaRegistrarEsquema.jsx'))
 const PaginaEditarEsquema = lazy(() => import('@/paginas/configuracion/PaginaEditarEsquema.jsx'))
 const PaginaHistorialEsquemas = lazy(() => import('@/paginas/configuracion/PaginaHistorialEsquemas.jsx'))
+const PaginaCompararEsquemas = lazy(() => import('@/paginas/configuracion/PaginaCompararEsquemas.jsx'))
 const PaginaVerEsquema = lazy(() => import('@/paginas/configuracion/PaginaVerEsquema.jsx'))
 const PaginaReglas = lazy(() => import('@/paginas/configuracion/PaginaReglas.jsx'))
 const PaginaConfigIndicadores = lazy(() => import('@/paginas/configuracion/PaginaConfigIndicadores.jsx'))
@@ -315,6 +316,12 @@ const opcionesMenu = [
             ruta: '/administracion/esquemas/historial/:vacunaId',
             permiso: 'ESQUEMA_CONSULTAR',
             pagina: PaginaHistorialEsquemas,
+          },
+          {
+            titulo: 'Comparar versiones de esquema',
+            ruta: '/administracion/esquemas/historial/:vacunaId/comparar',
+            permiso: 'ESQUEMA_CONSULTAR',
+            pagina: PaginaCompararEsquemas,
           },
           {
             titulo: 'Versión de esquema',
