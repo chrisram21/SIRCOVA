@@ -13,8 +13,22 @@ const alerta = (id, severidad, mensaje) => ({
   mensaje,
   generadaEn: '2026-11-06T06:00:00.000Z',
   periodo: { id: 322, anio: 2026, mes: 10 },
+  estado: 'ACTIVA',
+  municipio: null,
   establecimiento: null,
   reporteId: null,
+  indicadorCodigo: null,
+  atendidaPor: null,
+  atendidaEn: null,
+})
+
+// La forma de GET /alertas: la página pedida y las activas sin filtros.
+const respuesta = (porSeveridad, elementos) => ({
+  elementos,
+  total: porSeveridad.CRITICA + porSeveridad.ADVERTENCIA + porSeveridad.INFO,
+  pagina: 1,
+  porPagina: 1,
+  activas: { total: porSeveridad.CRITICA + porSeveridad.ADVERTENCIA + porSeveridad.INFO, porSeveridad },
 })
 
 const abrir = () =>
@@ -28,17 +42,10 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-test('muestra el total, el desglose sin ceros, solo la primera alerta y el enlace a las alertas', async () => {
+test('pide solo la primera activa y muestra el total, el desglose sin ceros y el enlace a las alertas', async () => {
   // La API ya las ordena por severidad y, en la misma severidad, de la más reciente a la más antigua.
-  listarAlertas.mockResolvedValue({
-    total: 12,
-    porSeveridad: { CRITICA: 9, ADVERTENCIA: 3, INFO: 0 },
-    alertas: [
-      alerta(1, 'CRITICA', 'CS-1209 no envió el reporte de octubre.'),
-      alerta(2, 'CRITICA', 'CS-1210 no envió el reporte de octubre.'),
-      alerta(3, 'ADVERTENCIA', 'El reporte de CS-1219 lleva 38 días enviado.'),
-    ],
-  })
+  const primera = alerta(1, 'CRITICA', 'CS-1209 no envió el reporte de octubre.')
+  listarAlertas.mockResolvedValue(respuesta({ CRITICA: 9, ADVERTENCIA: 3, INFO: 0 }, [primera]))
   abrir()
 
   const principal = await screen.findByRole('group', { name: 'Alerta más importante' })
@@ -46,13 +53,12 @@ test('muestra el total, el desglose sin ceros, solo la primera alerta y el enlac
   expect(screen.getByText('9 críticas, 3 advertencias')).toBeTruthy()
   expect(within(principal).getByText('Crítica')).toBeTruthy()
   expect(within(principal).getByText('CS-1209 no envió el reporte de octubre.')).toBeTruthy()
-  expect(screen.queryByText('CS-1210 no envió el reporte de octubre.')).toBeNull()
-  expect(screen.queryByText('El reporte de CS-1219 lleva 38 días enviado.')).toBeNull()
   expect(screen.getByRole('link', { name: 'Ver alertas' }).getAttribute('href')).toBe('/alertas')
+  expect(listarAlertas).toHaveBeenCalledWith({ porPagina: 1 })
 })
 
 test('sin alertas dice que no hay alertas activas y conserva el enlace', async () => {
-  listarAlertas.mockResolvedValue({ total: 0, porSeveridad: { CRITICA: 0, ADVERTENCIA: 0, INFO: 0 }, alertas: [] })
+  listarAlertas.mockResolvedValue(respuesta({ CRITICA: 0, ADVERTENCIA: 0, INFO: 0 }, []))
   abrir()
 
   expect(await screen.findByText('No hay alertas activas.')).toBeTruthy()
@@ -62,11 +68,9 @@ test('sin alertas dice que no hay alertas activas y conserva el enlace', async (
 
 test('si falla muestra el error y reintenta', async () => {
   listarAlertas.mockRejectedValueOnce(new Error('Sin conexión.'))
-  listarAlertas.mockResolvedValueOnce({
-    total: 1,
-    porSeveridad: { CRITICA: 0, ADVERTENCIA: 0, INFO: 1 },
-    alertas: [alerta(5, 'INFO', 'Octubre vence el 10/11/2026.')],
-  })
+  listarAlertas.mockResolvedValueOnce(
+    respuesta({ CRITICA: 0, ADVERTENCIA: 0, INFO: 1 }, [alerta(5, 'INFO', 'Octubre vence el 10/11/2026.')]),
+  )
   abrir()
 
   fireEvent.click(await screen.findByRole('button', { name: 'Reintentar' }))

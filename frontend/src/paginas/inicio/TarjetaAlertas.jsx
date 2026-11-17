@@ -35,12 +35,14 @@ export function InsigniaSeveridad({ severidad }) {
 }
 
 // Solo la más importante, para que mida como las demás tarjetas: la API ya las ordena por severidad y, en la misma
-// severidad, de la más reciente a la más antigua. «Ver alertas» abre la pantalla de HU-52.
+// severidad, de la más reciente a la más antigua.
+const primeraActiva = () => listarAlertas({ porPagina: 1 })
+
 export default function TarjetaAlertas({ titulo, tono }) {
-  const consulta = useConsulta(listarAlertas)
+  const consulta = useConsulta(primeraActiva)
   return (
     <TarjetaResumen titulo={titulo} tono={tono} consulta={consulta} enlace={{ a: '/alertas', texto: 'Ver alertas' }}>
-      {({ total, porSeveridad, alertas: [principal] }) => {
+      {({ activas: { total, porSeveridad }, elementos: [principal] }) => {
         if (total === 0) return <p className="text-sm text-muted-foreground">No hay alertas activas.</p>
         return (
           <>
