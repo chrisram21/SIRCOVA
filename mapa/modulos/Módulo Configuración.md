@@ -6,7 +6,7 @@ tags: ["modulo", "modulo/configuracion"]
 
 > [!info] Nota generada por `scripts/mapa-obsidian.mjs`: no la edites a mano, se reescribe.
 
-Carpeta: `specs/configuracion/` · 7 specs · [[Inicio]]
+Carpeta: `specs/configuracion/` · 8 specs · [[Inicio]]
 
 ## Specs
 
@@ -17,3 +17,4 @@ Carpeta: `specs/configuracion/` · 7 specs · [[Inicio]]
 - [[SPEC 30]] — Publicar con vista previa y menú «Administración» · *Implementado* · Ajuste de una HU
 - [[SPEC 32]] — Reglas de validación por DDRISS, con versiones y activación · *Implementado* · [[HU-24]]
 - [[SPEC 43]] — Configurar indicadores por DDRISS, con versiones y activación · *Implementado* · [[HU-35]]
+- [[SPEC 71]] — HU-55 Historial de cambios de configuración · *Borrador* · [[HU-55]]

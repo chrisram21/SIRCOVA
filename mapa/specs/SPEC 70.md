@@ -30,4 +30,4 @@ tags: ["spec", "modulo/acceso-y-seguridad", "origen/historia"]
 
 ## Lo usan
 
-Ningún spec depende de este todavía.
+- [[SPEC 71]] — HU-55 Historial de cambios de configuración · *Borrador*
