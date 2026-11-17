@@ -35,3 +35,4 @@ tags: ["spec", "modulo/indicadores", "origen/historia"]
 - [[SPEC 50]] — Mapa territorial con semáforo · *Implementado*
 - [[SPEC 67]] — HU-50 Alertas de reportes pendientes y de proceso · *Implementado*
 - [[SPEC 68]] — HU-51 Alertas de cobertura y de calidad · *Implementado*
+- [[SPEC 70]] — HU-54 Consultar la auditoría · *Implementado*

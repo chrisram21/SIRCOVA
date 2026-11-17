@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import App from '@/App.jsx'
+import { listarBitacora } from '@/api/auditoria.js'
 import { listarDdriss, listarPeriodos } from '@/api/catalogos.js'
 import { listarEsquemas } from '@/api/configuracion.js'
 import { listarCorridas, listarResultados } from '@/api/indicadores.js'
@@ -26,6 +27,7 @@ vi.mock('@/api/rectificaciones.js', () => ({ listarRectificaciones: vi.fn() }))
 vi.mock('@/api/alertas.js', async (importarOriginal) => ({ ...(await importarOriginal()), listarAlertas: vi.fn() }))
 vi.mock('@/api/usuarios.js', () => ({ listarUsuarios: vi.fn() }))
 vi.mock('@/api/configuracion.js', () => ({ listarEsquemas: vi.fn() }))
+vi.mock('@/api/auditoria.js', () => ({ listarBitacora: vi.fn() }))
 
 const TARJETAS_POR_ROL = {
   ESTABLECIMIENTO: [
@@ -96,6 +98,7 @@ beforeEach(() => {
     obtenerAvance,
     obtenerBandeja,
     listarRectificaciones,
+    listarBitacora,
   ]
   for (const consulta of consultas) {
     consulta.mockReset()
@@ -263,6 +266,85 @@ describe('tarjetas con datos', () => {
     expect((await esquemas.findByText('de 2')).parentElement.textContent).toBe('1 de 2')
     expect(esquemas.getByText('1 sin esquema vigente · 2 borradores por publicar')).toBeTruthy()
     expect(esquemas.getByRole('link', { name: 'Ver esquemas' }).getAttribute('href')).toBe('/administracion/esquemas')
+  })
+
+  describe('ADMINISTRADOR y la bitácora (SPEC 70)', () => {
+    const CATALOGOS = 'vacuna,dosis,establecimiento,distrito_salud,red,periodo,poblacion_objetivo'
+    const pagina = (total, elementos = [], resumen = {}) => ({
+      elementos,
+      total,
+      pagina: 1,
+      porPagina: 1,
+      resumen: { usuarios: 0, rectificaciones: 0, accesosFallidos: 0, ...resumen },
+    })
+
+    beforeEach(() => {
+      // 06:00 del 16 de noviembre en Guatemala: los últimos 7 días van del 10 al 16.
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-11-16T12:00:00.000Z'))
+    })
+
+    test('ve la actividad de 7 días con los accesos fallidos y el último cambio en catálogos', async () => {
+      listarBitacora.mockImplementation(async ({ modulo }) =>
+        modulo === 'CONFIGURACION'
+          ? pagina(3, [{ accion: 'ACTUALIZAR', entidad: 'poblacion_objetivo', fecha: '2026-11-15T22:40:00.000Z' }])
+          : pagina(27, [], { usuarios: 5, accesosFallidos: 2 }),
+      )
+      abrirInicio({ rol: 'ADMINISTRADOR', permisos: ['BITACORA_CONSULTAR'] })
+
+      const actividad = within(tarjeta('Actividad de la bitácora'))
+      expect(await actividad.findByText('27')).toBeTruthy()
+      expect(actividad.getByText('registros en los últimos 7 días · 5 usuarios')).toBeTruthy()
+      expect(actividad.getByText('2 accesos fallidos o denegados')).toBeTruthy()
+      expect(actividad.getByRole('link', { name: 'Ver bitácora' }).getAttribute('href')).toBe(
+        '/auditoria?desde=2026-11-10&hasta=2026-11-16',
+      )
+      expect(listarBitacora).toHaveBeenCalledWith({ desde: '2026-11-10', hasta: '2026-11-16', porPagina: 1 })
+
+      const catalogos = within(tarjeta('Cambios en catálogos'))
+      expect(await catalogos.findByText('3')).toBeTruthy()
+      expect(catalogos.getByText('cambios en los últimos 7 días')).toBeTruthy()
+      expect(catalogos.getByText(/^Último:/).textContent).toBe(
+        'Último: Edición de población objetivo · 15/11/2026 16:40',
+      )
+      const enlace = new URL(catalogos.getByRole('link', { name: 'Ver cambios' }).getAttribute('href'), 'http://x')
+      expect(enlace.pathname).toBe('/auditoria')
+      expect(Object.fromEntries(enlace.searchParams)).toEqual({
+        desde: '2026-11-10',
+        hasta: '2026-11-16',
+        modulo: 'CONFIGURACION',
+        entidad: CATALOGOS,
+      })
+      expect(listarBitacora).toHaveBeenCalledWith({
+        desde: '2026-11-10',
+        hasta: '2026-11-16',
+        modulo: 'CONFIGURACION',
+        entidad: CATALOGOS,
+        porPagina: 1,
+      })
+      expect(screen.getAllByText('Sin datos todavía')).toHaveLength(2)
+    })
+
+    test('sin cambios ni accesos fallidos lo dice, sin el aviso', async () => {
+      listarBitacora.mockImplementation(async ({ modulo }) =>
+        modulo === 'CONFIGURACION' ? pagina(0) : pagina(1, [], { usuarios: 1 }),
+      )
+      abrirInicio({ rol: 'ADMINISTRADOR', permisos: ['BITACORA_CONSULTAR'] })
+
+      const catalogos = within(tarjeta('Cambios en catálogos'))
+      expect(await catalogos.findByText('Sin cambios en los últimos 7 días')).toBeTruthy()
+      expect(catalogos.queryByText(/^Último:/)).toBeNull()
+      const actividad = within(tarjeta('Actividad de la bitácora'))
+      expect(await actividad.findByText('registro en los últimos 7 días · 1 usuario')).toBeTruthy()
+      expect(actividad.queryByText(/accesos? fallidos?/)).toBeNull()
+    })
+
+    test('sin BITACORA_CONSULTAR quedan sin datos y no se pide la bitácora', () => {
+      abrirInicio({ rol: 'ADMINISTRADOR', permisos: ['USUARIO_CONSULTAR'] })
+
+      expect(screen.getAllByText('Sin datos todavía')).toHaveLength(3)
+      expect(listarBitacora).not.toHaveBeenCalled()
+    })
   })
 
   test('REVISOR ve cuántos meses tiene abiertos y el plazo del más antiguo', async () => {

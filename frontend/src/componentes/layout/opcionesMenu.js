@@ -55,6 +55,7 @@ const PaginaIndicadores = lazy(() => import('@/paginas/indicadores/PaginaIndicad
 const PaginaMapa = lazy(() => import('@/paginas/mapa/PaginaMapa.jsx'))
 const PaginaInformes = lazy(() => import('@/paginas/informes/PaginaInformes.jsx'))
 const PaginaAlertas = lazy(() => import('@/paginas/alertas/PaginaAlertas.jsx'))
+const PaginaAuditoria = lazy(() => import('@/paginas/auditoria/PaginaAuditoria.jsx'))
 const PaginaEditarUsuario = lazy(() => import('@/paginas/usuarios/PaginaEditarUsuario.jsx'))
 const PaginaRegistrarPersonal = lazy(() => import('@/paginas/usuarios/PaginaRegistrarPersonal.jsx'))
 const PaginaUsuarios = lazy(() => import('@/paginas/usuarios/PaginaUsuarios.jsx'))
@@ -161,6 +162,7 @@ const opcionesMenu = [
     ruta: '/auditoria',
     permiso: 'BITACORA_CONSULTAR',
     icono: ScrollText,
+    pagina: PaginaAuditoria,
   },
   {
     titulo: 'Administración',

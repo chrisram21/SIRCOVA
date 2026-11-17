@@ -57,3 +57,4 @@ tags: ["spec", "modulo/acceso-y-seguridad", "origen/historia"]
 - [[SPEC 44]] — Calcular la cobertura y el avance contra la meta del mes · *Implementado*
 - [[SPEC 59]] — Catálogo de redes de municipios · *Implementado*
 - [[SPEC 62]] — HU-45 Generar informes con filtros · *Implementado*
+- [[SPEC 70]] — HU-54 Consultar la auditoría · *Implementado*
