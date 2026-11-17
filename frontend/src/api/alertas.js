@@ -12,7 +12,12 @@ export function listarAlertas({ estado, tipo, severidad, pagina, porPagina } = {
   return solicitar(texto ? `/alertas?${texto}` : '/alertas')
 }
 
+// Lo escucha la campana del encabezado para volver a contar las activas.
+export const EVENTO_ALERTAS_CAMBIARON = 'sircova:alertas-cambiaron'
+
 // Definitivo: responde 409 si la alerta ya no está activa.
-export function atenderAlerta(id) {
-  return solicitar(`/alertas/${id}/atender`, { metodo: 'POST' })
+export async function atenderAlerta(id) {
+  const alerta = await solicitar(`/alertas/${id}/atender`, { metodo: 'POST' })
+  window.dispatchEvent(new Event(EVENTO_ALERTAS_CAMBIARON))
+  return alerta
 }

@@ -11,6 +11,8 @@ import {
 } from '@/components/ui/breadcrumb'
 import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
+import { useSesion } from '@/componentes/ProveedorSesion.jsx'
+import CampanaAlertas from './CampanaAlertas.jsx'
 import { tituloDeRuta, ubicarRuta } from './ubicarRuta.js'
 
 // Dónde está el usuario: el padre del menú (sin enlace, no tiene pantalla), la opción y, en una subruta, el enlace para
@@ -34,6 +36,7 @@ const FECHA_LARGA = new Intl.DateTimeFormat('es-GT', { weekday: 'long', day: 'nu
 
 export default function Encabezado() {
   const { pathname, state } = useLocation()
+  const { tienePermiso } = useSesion()
   const migas = migasDe(pathname, state?.volverA)
 
   return (
@@ -64,10 +67,13 @@ export default function Encabezado() {
           </Breadcrumb>
         </>
       )}
-      <p className="ml-auto hidden items-center gap-2 rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground md:flex">
-        <CalendarDays className="size-3.5" aria-hidden="true" />
-        <span className="first-letter:uppercase">{FECHA_LARGA.format(new Date())}</span>
-      </p>
+      <div className="ml-auto flex items-center gap-2">
+        <p className="hidden items-center gap-2 rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground md:flex">
+          <CalendarDays className="size-3.5" aria-hidden="true" />
+          <span className="first-letter:uppercase">{FECHA_LARGA.format(new Date())}</span>
+        </p>
+        {tienePermiso('ALERTA_CONSULTAR') && <CampanaAlertas />}
+      </div>
     </header>
   )
 }
