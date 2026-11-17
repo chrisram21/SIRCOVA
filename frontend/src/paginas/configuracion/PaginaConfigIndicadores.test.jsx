@@ -360,6 +360,7 @@ test('el historial muestra las versiones y la desactivación', async () => {
   expect(versiones[0].textContent).toMatch(/Desactivada el .+ por epidemiologia: Se usa el nacional/)
   expect(versiones[1].textContent).toContain('Nacional')
   expect(versiones[1].textContent).not.toContain('Desactivada')
+  expect(panel.queryByRole('link', { name: /en la bitácora$/ })).toBeNull()
 })
 
 // SPEC 71 (HU-55): el Administrador consulta los indicadores y su historial; sus permisos de editar otras
@@ -377,4 +378,8 @@ test('el Administrador ve la lista y el historial, sin acciones de edición', as
   fireEvent.click(menu.getByRole('menuitem', { name: 'Historial' }))
   const panel = within(await screen.findByRole('dialog', { name: 'Historial de Cobertura de Hexavalente 3' }))
   expect((await panel.findAllByRole('listitem'))[0].textContent).toContain('Versión 1')
+  // Con BITACORA_CONSULTAR, la versión enlaza a sus registros de la bitácora.
+  expect(panel.getByRole('link', { name: 'Ver la versión 1 en la bitácora' }).getAttribute('href')).toBe(
+    `/administracion/auditoria?entidad=configuracion_indicadores&entidadId=${COB.id}&desde=&hasta=`,
+  )
 })

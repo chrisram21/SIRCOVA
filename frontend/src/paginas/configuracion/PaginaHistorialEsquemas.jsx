@@ -10,6 +10,7 @@ import { ErrorApi, mensajeDeError } from '@/api/cliente.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
+import { enlaceBitacora } from '@/paginas/auditoria/auditoria.js'
 import { versionAnterior } from './compararEsquemas.js'
 import { aDiaMesAnio } from './DialogoPublicarEsquema.jsx'
 import { RUTA_ESQUEMAS } from './EditorEsquema.jsx'
@@ -168,7 +169,7 @@ export default function PaginaHistorialEsquemas() {
                               {verBitacora && (
                                 <Button asChild variant="ghost" size="sm">
                                   <Link
-                                    to={`/administracion/auditoria?entidad=esquemas_captura&entidadId=${v.id}&desde=&hasta=`}
+                                    to={enlaceBitacora('esquemas_captura', v.id)}
                                     aria-label={`Ver la versión ${v.version} en la bitácora`}
                                   >
                                     Ver en la bitácora

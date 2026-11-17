@@ -316,4 +316,24 @@ test('el historial muestra las versiones y la desactivación', async () => {
   expect(versiones[1].textContent).toContain('Exceso permitido (%)20')
   expect(versiones[1].textContent).toContain('Semilla')
   expect(versiones[1].textContent).not.toContain('Desactivada')
+  expect(panel.queryByRole('link', { name: /en la bitácora$/ })).toBeNull()
+})
+
+// SPEC 71 (HU-55)
+test('con BITACORA_CONSULTAR, cada versión del historial enlaza a sus registros de la bitácora', async () => {
+  historialRegla.mockResolvedValue([
+    { ...SECUENCIA_PROPIA, desactivacion: null },
+    { ...SECUENCIA_NACIONAL, desactivacion: null },
+  ])
+  await abrir([...TODOS, 'BITACORA_CONSULTAR'])
+
+  const menu = await abrirAcciones('SECUENCIA_DOSIS')
+  fireEvent.click(menu.getByRole('menuitem', { name: 'Historial' }))
+  const panel = within(await screen.findByRole('dialog', { name: 'Historial de Coherencia entre dosis' }))
+  const enlace = await panel.findByRole('link', { name: 'Ver la versión 2 en la bitácora' })
+
+  expect(enlace.getAttribute('href')).toBe(
+    `/administracion/auditoria?entidad=reglas_validacion&entidadId=${SECUENCIA_PROPIA.id}&desde=&hasta=`,
+  )
+  expect(panel.getAllByRole('link', { name: /en la bitácora$/ })).toHaveLength(2)
 })

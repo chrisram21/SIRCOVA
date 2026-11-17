@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { historialRegla } from '@/api/configuracion.js'
 import { mensajeDeError } from '@/api/cliente.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
+import { useSesion } from '@/componentes/ProveedorSesion.jsx'
+import { enlaceBitacora } from '@/paginas/auditoria/auditoria.js'
 import { InsigniaSeveridad, territorioDeRegla, vacunasDeRegla } from './presentacionRegla.jsx'
 import { TIPOS_REGLA } from './tiposRegla.js'
 
@@ -17,7 +21,7 @@ const fechaHora = (iso) => FECHA_HORA.format(new Date(iso))
 
 const textoParametro = (valor) => (typeof valor === 'boolean' ? (valor ? 'Sí' : 'No') : String(valor))
 
-function Version({ version }) {
+function Version({ version, verBitacora }) {
   const parametros = TIPOS_REGLA[version.tipo]?.parametros ?? []
   const { desactivacion } = version
   return (
@@ -56,6 +60,16 @@ function Version({ version }) {
           {desactivacion.motivo}
         </p>
       )}
+      {verBitacora && (
+        <Button asChild variant="link" size="sm" className="h-auto self-start p-0 text-enlace">
+          <Link
+            to={enlaceBitacora('reglas_validacion', version.id)}
+            aria-label={`Ver la versión ${version.version} en la bitácora`}
+          >
+            Ver en la bitácora
+          </Link>
+        </Button>
+      )}
     </li>
   )
 }
@@ -64,6 +78,7 @@ export default function PanelHistorialRegla({ codigo, nombre, alCerrar }) {
   const [versiones, setVersiones] = useState(null)
   const [error, setError] = useState(null)
   const [intento, setIntento] = useState(0)
+  const verBitacora = useSesion().tienePermiso('BITACORA_CONSULTAR')
 
   useEffect(() => {
     let vigente = true
@@ -106,7 +121,7 @@ export default function PanelHistorialRegla({ codigo, nombre, alCerrar }) {
           ) : (
             <ol aria-label="Versiones" className="flex flex-col gap-3">
               {versiones.map((version) => (
-                <Version key={version.id} version={version} />
+                <Version key={version.id} version={version} verBitacora={verBitacora} />
               ))}
             </ol>
           )}
