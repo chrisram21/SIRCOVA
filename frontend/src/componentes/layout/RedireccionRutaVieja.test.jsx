@@ -31,6 +31,8 @@ describe('destinoDeRutaVieja', () => {
     ['/usuarios', '?estado=ACTIVA&pagina=2', '/administracion/usuarios?estado=ACTIVA&pagina=2'],
     ['/usuarios/5/editar', '', '/administracion/usuarios/5/editar'],
     ['/permisos', '', '/administracion/permisos'],
+    ['/auditoria', '', '/administracion/auditoria'],
+    ['/auditoria', '?desde=&hasta=&modulo=RECTIFICACION', '/administracion/auditoria?desde=&hasta=&modulo=RECTIFICACION'],
   ])('%s%s → %s', (pathname, search, destino) => {
     expect(destinoDeRutaVieja(pathname, search, todos)).toBe(destino)
   })
@@ -39,6 +41,7 @@ describe('destinoDeRutaVieja', () => {
     expect(destinoDeRutaVieja('/administracion', '', todos)).toBe('/administracion/usuarios')
     expect(destinoDeRutaVieja('/administracion', '', conPermisos(REVISOR))).toBe('/administracion/vacunas')
     expect(destinoDeRutaVieja('/administracion', '', conPermisos(['VACUNA_CONSULTAR']))).toBe('/inicio')
+    expect(destinoDeRutaVieja('/administracion', '', conPermisos(['BITACORA_CONSULTAR']))).toBe('/administracion/auditoria')
   })
 })
 
@@ -91,6 +94,20 @@ test('/usuarios sin USUARIO_CONSULTAR termina en /inicio', () => {
 
 test('/administracion sin ningún hijo visible termina en /inicio', () => {
   abrir('/administracion', ['REPORTE_CONSULTAR', 'VACUNA_CONSULTAR'])
+
+  expect(ubicacion()).toBe('/inicio')
+})
+
+// SPEC 71: «Auditoría» pasó a /administracion/auditoria; los enlaces guardados a /auditoria conservan sus filtros.
+test('/auditoria con sus filtros abre la bitácora en /administracion/auditoria', async () => {
+  abrir('/auditoria?modulo=RECTIFICACION', ['BITACORA_CONSULTAR'])
+
+  expect(await screen.findByRole('heading', { name: 'Bitácora del sistema' }, { timeout: 5000 })).toBeTruthy()
+  expect(ubicacion()).toBe('/administracion/auditoria?modulo=RECTIFICACION')
+})
+
+test('/auditoria sin BITACORA_CONSULTAR termina en /inicio', () => {
+  abrir('/auditoria', REVISOR)
 
   expect(ubicacion()).toBe('/inicio')
 })

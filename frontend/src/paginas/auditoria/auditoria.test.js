@@ -1,6 +1,7 @@
 import {
   chipsDe,
   consultaDe,
+  enlaceBitacora,
   etiquetaAccion,
   etiquetaEntidad,
   filasDeCambios,
@@ -176,4 +177,12 @@ describe('detalle y etiquetas', () => {
     expect(grupoDe({ modulo: 'CONFIGURACION', accion: 'ACTUALIZAR' })).toBe('configuracion')
     expect(grupoDe({ modulo: 'PRODUCCION', accion: 'ACTUALIZAR' })).toBe('edicion')
   })
+})
+
+// SPEC 71 (HU-55)
+test('enlaceBitacora filtra por la entidad y el id en todo el historial', () => {
+  expect(enlaceBitacora('reglas_validacion', '6721a0c1a2b3c4d5e6f70901')).toBe(
+    '/administracion/auditoria?entidad=reglas_validacion&entidadId=6721a0c1a2b3c4d5e6f70901&desde=&hasta=',
+  )
+  expect(new URL(enlaceBitacora('esquemas_captura', 'a&b'), 'http://x').searchParams.get('entidadId')).toBe('a&b')
 })

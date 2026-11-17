@@ -40,6 +40,7 @@ tags: ["spec", "modulo/configuracion", "origen/ajuste"]
 - [[SPEC 32]] — Reglas de validación por DDRISS, con versiones y activación · *Implementado*
 - [[SPEC 43]] — Configurar indicadores por DDRISS, con versiones y activación · *Implementado*
 - [[SPEC 59]] — Catálogo de redes de municipios · *Implementado*
+- [[SPEC 71]] — HU-55 Historial de cambios de configuración · *Implementado*
 
 ## Documentos relacionados
 

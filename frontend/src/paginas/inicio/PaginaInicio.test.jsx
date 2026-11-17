@@ -159,7 +159,8 @@ const titulosDeAccesos = () =>
 test('los hijos de «Administración» van como accesos propios, en su lugar, y no hay un acceso al padre', () => {
   abrirInicio({ permisos: ['BITACORA_CONSULTAR', 'USUARIO_CONSULTAR', 'CONFIGURACION_CONSULTAR', 'VACUNA_CONSULTAR'] })
 
-  expect(titulosDeAccesos()).toEqual(['Auditoría', 'Usuarios', 'Vacunas'])
+  // SPEC 71: Auditoría es el último hijo de «Administración».
+  expect(titulosDeAccesos()).toEqual(['Usuarios', 'Vacunas', 'Auditoría'])
   const vacunas = screen.getByRole('link', { name: /^Vacunas/ })
   expect(vacunas.getAttribute('href')).toBe('/administracion/vacunas')
   expect(vacunas.textContent).toContain('Las vacunas y sus dosis.')
@@ -297,7 +298,7 @@ describe('tarjetas con datos', () => {
       expect(actividad.getByText('registros en los últimos 7 días · 5 usuarios')).toBeTruthy()
       expect(actividad.getByText('2 accesos fallidos o denegados')).toBeTruthy()
       expect(actividad.getByRole('link', { name: 'Ver bitácora' }).getAttribute('href')).toBe(
-        '/auditoria?desde=2026-11-10&hasta=2026-11-16',
+        '/administracion/auditoria?desde=2026-11-10&hasta=2026-11-16',
       )
       expect(listarBitacora).toHaveBeenCalledWith({ desde: '2026-11-10', hasta: '2026-11-16', porPagina: 1 })
 
@@ -308,7 +309,7 @@ describe('tarjetas con datos', () => {
         'Último: Edición de población objetivo · 15/11/2026 16:40',
       )
       const enlace = new URL(catalogos.getByRole('link', { name: 'Ver cambios' }).getAttribute('href'), 'http://x')
-      expect(enlace.pathname).toBe('/auditoria')
+      expect(enlace.pathname).toBe('/administracion/auditoria')
       expect(Object.fromEntries(enlace.searchParams)).toEqual({
         desde: '2026-11-10',
         hasta: '2026-11-16',

@@ -9,6 +9,9 @@ import { historialEsquemas } from '@/api/configuracion.js'
 import { ErrorApi, mensajeDeError } from '@/api/cliente.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
+import { useSesion } from '@/componentes/ProveedorSesion.jsx'
+import { enlaceBitacora } from '@/paginas/auditoria/auditoria.js'
+import { versionAnterior } from './compararEsquemas.js'
 import { aDiaMesAnio } from './DialogoPublicarEsquema.jsx'
 import { RUTA_ESQUEMAS } from './EditorEsquema.jsx'
 import { territorioDe } from './PaginaEsquemas.jsx'
@@ -40,6 +43,8 @@ export function textoPublicacion({ publicadoEn, publicadoPor }) {
 export default function PaginaHistorialEsquemas() {
   const { vacunaId } = useParams()
   const { state } = useLocation()
+  const { tienePermiso } = useSesion()
+  const verBitacora = tienePermiso('BITACORA_CONSULTAR')
   // Los filtros de la lista de esquemas, para volver a ella con los mismos.
   const filtros = state?.volverA ?? ''
   const volverA = `${RUTA_ESQUEMAS}${filtros}`
@@ -126,32 +131,56 @@ export default function PaginaHistorialEsquemas() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {historial.versiones.map((v) => (
-                      <TableRow key={v.id}>
-                        <TableCell className="font-medium">{v.version}</TableCell>
-                        <TableCell>{territorioDe(v.territorio)}</TableCell>
-                        <TableCell>
-                          <Badge variant={ESTADOS[v.estado].variante}>{ESTADOS[v.estado].etiqueta}</Badge>
-                        </TableCell>
-                        <TableCell>{textoVigencia(v.vigencia)}</TableCell>
-                        <TableCell>{textoPublicacion(v)}</TableCell>
-                        <TableCell className="max-w-72 whitespace-normal">{v.motivoCambio ?? '—'}</TableCell>
-                        <TableCell className="text-right">{v.reportes}</TableCell>
-                        <TableCell>
-                          <div className="flex justify-end">
-                            <Button asChild variant="outline" size="sm">
-                              <Link
-                                to={`/administracion/esquemas/${v.id}`}
-                                state={{ volverA: filtros }}
-                                aria-label={`Ver la versión ${v.version}`}
-                              >
-                                Ver
-                              </Link>
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {historial.versiones.map((v) => {
+                      const anterior = versionAnterior(historial.versiones, v.id)
+                      return (
+                        <TableRow key={v.id}>
+                          <TableCell className="font-medium">{v.version}</TableCell>
+                          <TableCell>{territorioDe(v.territorio)}</TableCell>
+                          <TableCell>
+                            <Badge variant={ESTADOS[v.estado].variante}>{ESTADOS[v.estado].etiqueta}</Badge>
+                          </TableCell>
+                          <TableCell>{textoVigencia(v.vigencia)}</TableCell>
+                          <TableCell>{textoPublicacion(v)}</TableCell>
+                          <TableCell className="max-w-72 whitespace-normal">{v.motivoCambio ?? '—'}</TableCell>
+                          <TableCell className="text-right">{v.reportes}</TableCell>
+                          <TableCell>
+                            <div className="flex justify-end gap-2">
+                              <Button asChild variant="outline" size="sm">
+                                <Link
+                                  to={`/administracion/esquemas/${v.id}`}
+                                  state={{ volverA: filtros }}
+                                  aria-label={`Ver la versión ${v.version}`}
+                                >
+                                  Ver
+                                </Link>
+                              </Button>
+                              {anterior && (
+                                <Button asChild variant="outline" size="sm">
+                                  <Link
+                                    to={`${RUTA_ESQUEMAS}/historial/${vacunaId}/comparar?a=${anterior.id}&b=${v.id}`}
+                                    state={{ volverA: filtros }}
+                                    aria-label={`Comparar la versión ${v.version} con la ${anterior.version}`}
+                                  >
+                                    Comparar
+                                  </Link>
+                                </Button>
+                              )}
+                              {verBitacora && (
+                                <Button asChild variant="ghost" size="sm">
+                                  <Link
+                                    to={enlaceBitacora('esquemas_captura', v.id)}
+                                    aria-label={`Ver la versión ${v.version} en la bitácora`}
+                                  >
+                                    Ver en la bitácora
+                                  </Link>
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               </div>

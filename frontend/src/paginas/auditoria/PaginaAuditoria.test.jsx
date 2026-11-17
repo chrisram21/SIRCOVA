@@ -100,12 +100,12 @@ function crearSesion() {
   }
 }
 
-async function montar(url = '/auditoria') {
+async function montar(url = '/administracion/auditoria') {
   guardarSesion(crearSesion())
   const router = createMemoryRouter(
     [
       {
-        path: '/auditoria',
+        path: '/administracion/auditoria',
         element: (
           <ProveedorSesion>
             <PaginaAuditoria />
@@ -246,7 +246,7 @@ test('desde posterior a hasta no se aplica', async () => {
 })
 
 test('quitar un chip lo saca de la URL; quitar la fecha deja todo el historial', async () => {
-  const router = await montar('/auditoria?desde=2026-10-01&hasta=2026-10-31&accion=CAMBIO_ESTADO&entidadId=255')
+  const router = await montar('/administracion/auditoria?desde=2026-10-01&hasta=2026-10-31&accion=CAMBIO_ESTADO&entidadId=255')
 
   fireEvent.click(screen.getByRole('button', { name: 'Quitar Elemento: #255' }))
   await waitFor(() =>
@@ -262,7 +262,7 @@ test('quitar un chip lo saca de la URL; quitar la fecha deja todo el historial',
 })
 
 test('los accesos rápidos y «Limpiar» cambian la URL de inmediato', async () => {
-  const router = await montar('/auditoria?desde=&hasta=&usuario=2&pagina=3')
+  const router = await montar('/administracion/auditoria?desde=&hasta=&usuario=2&pagina=3')
 
   fireEvent.click(screen.getByRole('button', { name: 'Hoy' }))
   await waitFor(() => expect(busqueda(router)).toEqual({ desde: HOY, hasta: HOY, usuario: '2' }))
@@ -299,7 +299,7 @@ test('cada registro se expande a sus cambios por campo, con la IP y el agente', 
 })
 
 test('cambiar las filas por página vuelve a la página 1', async () => {
-  const router = await montar('/auditoria?desde=&hasta=&pagina=2')
+  const router = await montar('/administracion/auditoria?desde=&hasta=&pagina=2')
 
   fireEvent.change(nativo('porPagina'), { target: { value: '20' } })
 
@@ -322,7 +322,7 @@ describe('exportar', () => {
   test('descarga el Excel con los filtros aplicados', async () => {
     const blob = new Blob(['xlsx'])
     descargarBitacoraExcel.mockResolvedValue({ blob, nombre: 'bitacora-2026-11-16.xlsx' })
-    await montar('/auditoria?desde=2026-10-01&hasta=&modulo=USUARIOS&pagina=2')
+    await montar('/administracion/auditoria?desde=2026-10-01&hasta=&modulo=USUARIOS&pagina=2')
 
     fireEvent.click(screen.getByRole('button', { name: 'Exportar resultados' }))
 

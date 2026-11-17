@@ -24,6 +24,7 @@ import {
   Users,
   UsersRound,
 } from 'lucide-react'
+import { RUTA_AUDITORIA } from '@/paginas/auditoria/auditoria.js'
 import PaginaInicio from '@/paginas/inicio/PaginaInicio.jsx'
 
 // Cada pantalla se descarga al entrar en ella (Layout la espera con Suspense); Inicio va incluida, porque es la primera.
@@ -48,6 +49,7 @@ const PaginaEditarDimension = lazy(() => import('@/paginas/configuracion/PaginaE
 const PaginaRegistrarEsquema = lazy(() => import('@/paginas/configuracion/PaginaRegistrarEsquema.jsx'))
 const PaginaEditarEsquema = lazy(() => import('@/paginas/configuracion/PaginaEditarEsquema.jsx'))
 const PaginaHistorialEsquemas = lazy(() => import('@/paginas/configuracion/PaginaHistorialEsquemas.jsx'))
+const PaginaCompararEsquemas = lazy(() => import('@/paginas/configuracion/PaginaCompararEsquemas.jsx'))
 const PaginaVerEsquema = lazy(() => import('@/paginas/configuracion/PaginaVerEsquema.jsx'))
 const PaginaReglas = lazy(() => import('@/paginas/configuracion/PaginaReglas.jsx'))
 const PaginaConfigIndicadores = lazy(() => import('@/paginas/configuracion/PaginaConfigIndicadores.jsx'))
@@ -155,14 +157,6 @@ const opcionesMenu = [
     permiso: 'ALERTA_CONSULTAR',
     icono: Bell,
     pagina: PaginaAlertas,
-  },
-  {
-    titulo: 'Auditoría',
-    descripcion: 'La bitácora de lo que se hace en el sistema.',
-    ruta: '/auditoria',
-    permiso: 'BITACORA_CONSULTAR',
-    icono: ScrollText,
-    pagina: PaginaAuditoria,
   },
   {
     titulo: 'Administración',
@@ -317,6 +311,12 @@ const opcionesMenu = [
             pagina: PaginaHistorialEsquemas,
           },
           {
+            titulo: 'Comparar versiones de esquema',
+            ruta: '/administracion/esquemas/historial/:vacunaId/comparar',
+            permiso: 'ESQUEMA_CONSULTAR',
+            pagina: PaginaCompararEsquemas,
+          },
+          {
             titulo: 'Versión de esquema',
             ruta: '/administracion/esquemas/:id',
             permiso: 'ESQUEMA_CONSULTAR',
@@ -364,6 +364,15 @@ const opcionesMenu = [
         ruta: '/administracion/permisos',
         permisos: ['PERMISO_CONSULTAR'],
         icono: ShieldCheck,
+      },
+      // SPEC 71: se consulta poco, así que va al final de «Administración» y no en el primer nivel.
+      {
+        titulo: 'Auditoría',
+        descripcion: 'La bitácora de lo que se hace en el sistema.',
+        ruta: RUTA_AUDITORIA,
+        permisos: ['BITACORA_CONSULTAR'],
+        icono: ScrollText,
+        pagina: PaginaAuditoria,
       },
     ],
   },

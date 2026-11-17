@@ -448,6 +448,12 @@ SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'ADMINISTRADOR'
    AND p.codigo = 'BITACORA_CONSULTAR';
 
+-- SPEC 71 (HU-55): el Administrador consulta los indicadores y su historial, sin editarlos
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'ADMINISTRADOR'
+   AND p.codigo = 'INDICADOR_CONFIG_CONSULTAR';
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas
 -- -----------------------------------------------------------------------------

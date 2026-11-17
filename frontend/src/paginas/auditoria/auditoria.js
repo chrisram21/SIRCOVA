@@ -3,6 +3,14 @@ import { aDiaMesAnio } from '@/lib/fechas.js'
 // SPEC 70 (HU-54): etiquetas y funciones puras de la pantalla «Auditoría». ETIQUETAS_MODULO y ETIQUETAS_ACCION repiten
 // las de backend/src/modulos/auditoria/textosBitacora.js (el Excel): un cambio va en los dos lados.
 
+// SPEC 71: «Auditoría» es un hijo de «Administración»; /auditoria redirige aquí (RedireccionRutaVieja).
+export const RUTA_AUDITORIA = '/administracion/auditoria'
+
+// Los registros de la bitácora de un elemento (una versión de esquema, regla o indicador) en todo el historial.
+export function enlaceBitacora(entidad, id) {
+  return `${RUTA_AUDITORIA}?${new URLSearchParams({ entidad, entidadId: id, desde: '', hasta: '' })}`
+}
+
 export const ETIQUETAS_MODULO = {
   USUARIOS: 'Usuarios',
   CONFIGURACION: 'Configuración',

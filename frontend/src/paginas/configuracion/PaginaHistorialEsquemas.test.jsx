@@ -2,8 +2,11 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { historialEsquemas } from '@/api/configuracion.js'
 import { ErrorApi } from '@/api/cliente.js'
+import { guardarSesion } from '@/api/sesion.js'
+import { ProveedorSesion } from '@/componentes/ProveedorSesion.jsx'
 import PaginaHistorialEsquemas from './PaginaHistorialEsquemas.jsx'
 
+vi.mock('@/api/auth.js', () => ({ iniciarSesion: vi.fn(), cerrarSesion: vi.fn() }))
 vi.mock('@/api/configuracion.js', () => ({ historialEsquemas: vi.fn() }))
 
 const NACIONAL = { nivel: 'NACIONAL', ddrissCodigo: null }
@@ -43,19 +46,39 @@ function Ubicacion() {
   return <output data-testid="ubicacion">{`${pathname}${search}|${state?.volverA ?? ''}`}</output>
 }
 
-function montar(vacunaId = '2') {
+const CONSULTAR = ['CONFIGURACION_CONSULTAR', 'ESQUEMA_CONSULTAR', 'VACUNA_CONSULTAR', 'DIMENSION_CONSULTAR']
+
+function crearSesion(permisos) {
+  const codificar = (objeto) => btoa(JSON.stringify(objeto)).replace(/=+$/, '')
+  const exp = Math.floor(Date.now() / 1000) + 3600
+  return {
+    token: `${codificar({ alg: 'HS256', typ: 'JWT' })}.${codificar({ sub: '1', exp })}.firma`,
+    usuario: {
+      id: 1,
+      nombreUsuario: 'admin.prueba',
+      rol: 'ADMINISTRADOR',
+      permisos,
+      empleado: { nombres: 'Ana', apellidos: 'Pérez', ddrissId: 1, establecimientoId: null, municipioId: null },
+    },
+  }
+}
+
+function montar(vacunaId = '2', permisos = CONSULTAR) {
+  guardarSesion(crearSesion(permisos))
   render(
-    <MemoryRouter initialEntries={[{ pathname: `/administracion/esquemas/historial/${vacunaId}`, state: { volverA: '' } }]}>
-      <Routes>
-        <Route path="/administracion/esquemas/historial/:vacunaId" element={<PaginaHistorialEsquemas />} />
-        <Route path="*" element={<Ubicacion />} />
-      </Routes>
-    </MemoryRouter>,
+    <ProveedorSesion>
+      <MemoryRouter initialEntries={[{ pathname: `/administracion/esquemas/historial/${vacunaId}`, state: { volverA: '' } }]}>
+        <Routes>
+          <Route path="/administracion/esquemas/historial/:vacunaId" element={<PaginaHistorialEsquemas />} />
+          <Route path="*" element={<Ubicacion />} />
+        </Routes>
+      </MemoryRouter>
+    </ProveedorSesion>,
   )
 }
 
-async function abrir(vacunaId) {
-  montar(vacunaId)
+async function abrir(vacunaId, permisos) {
+  montar(vacunaId, permisos)
   await waitFor(() => expect(screen.queryByLabelText('Cargando historial')).toBeNull())
 }
 
@@ -73,8 +96,8 @@ test('muestra las versiones con su estado, su vigencia, su publicación y sus re
   expect(historialEsquemas).toHaveBeenCalledWith('2')
   expect(screen.getByRole('heading', { name: 'Historial de Hexavalente' })).toBeTruthy()
   expect(filas().map(textos)).toEqual([
-    ['3', 'DDRISS_SM', 'Borrador', '—', '—', '—', '0', 'Ver'],
-    ['2', 'Nacional', 'Vigente', 'Desde 01/10/2026', '30/09/2026 · admin.prueba', 'Se agrega la sección de 1 a < 6 años.', '0', 'Ver'],
+    ['3', 'DDRISS_SM', 'Borrador', '—', '—', '—', '0', 'VerComparar'],
+    ['2', 'Nacional', 'Vigente', 'Desde 01/10/2026', '30/09/2026 · admin.prueba', 'Se agrega la sección de 1 a < 6 años.', '0', 'VerComparar'],
     ['1', 'Nacional', 'Histórica', '01/01/2026 – 30/09/2026', '—', '—', '6', 'Ver'],
   ])
 })
@@ -123,4 +146,36 @@ test('"Volver" regresa a la pestaña de la que se llegó', async () => {
   fireEvent.click(screen.getByRole('link', { name: 'Volver' }))
 
   await waitFor(() => expect(screen.getByTestId('ubicacion').textContent).toBe('/administracion/esquemas|'))
+})
+
+// SPEC 71 (HU-55)
+test('«Comparar» abre la comparación con la versión anterior, salvo en la primera versión', async () => {
+  await abrir()
+
+  expect(screen.getByRole('link', { name: 'Comparar la versión 3 con la 2' }).getAttribute('href')).toBe(
+    '/administracion/esquemas/historial/2/comparar?a=v-2&b=b-3',
+  )
+  expect(screen.getByRole('link', { name: 'Comparar la versión 2 con la 1' }).getAttribute('href')).toBe(
+    '/administracion/esquemas/historial/2/comparar?a=v-1&b=v-2',
+  )
+  expect(screen.queryByRole('link', { name: /^Comparar la versión 1 / })).toBeNull()
+
+  fireEvent.click(screen.getByRole('link', { name: 'Comparar la versión 2 con la 1' }))
+  await waitFor(() =>
+    expect(screen.getByTestId('ubicacion').textContent).toBe('/administracion/esquemas/historial/2/comparar?a=v-1&b=v-2|'),
+  )
+})
+
+test('con BITACORA_CONSULTAR, cada versión enlaza a sus registros de la bitácora', async () => {
+  await abrir('2', [...CONSULTAR, 'BITACORA_CONSULTAR'])
+
+  expect(screen.getByRole('link', { name: 'Ver la versión 1 en la bitácora' }).getAttribute('href')).toBe(
+    '/administracion/auditoria?entidad=esquemas_captura&entidadId=v-1&desde=&hasta=',
+  )
+  expect(screen.getAllByRole('link', { name: /en la bitácora$/ })).toHaveLength(3)
+})
+
+test('sin BITACORA_CONSULTAR no aparece «Ver en la bitácora»', async () => {
+  await abrir()
+  expect(screen.queryByRole('link', { name: /en la bitácora$/ })).toBeNull()
 })

@@ -21,7 +21,8 @@ const producto = (dimensiones) =>
 
 // Las versiones anteriores a la v0.4 del modelo no tienen secciones (Hexavalente v1): se arma una por valor de
 // grupo_edad, en el orden del catálogo, con las dosis que lo admiten; sin grupo_edad, una sola con todas las dosis.
-function seccionesDeducidas(contenido, vacuna, catalogo) {
+// catalogo: Map del código de cada dimensión a la de GET /dimensiones. También lo usa la comparación (SPEC 71).
+export function seccionesDeducidas(contenido, vacuna, catalogo) {
   const efectiva = (d) => d.desagregacion ?? contenido.desagregacion
   const edadesDe = (d) => efectiva(d).find((x) => x.dimension === GRUPO_EDAD)?.valores ?? []
   if (!contenido.desagregacion.some((x) => x.dimension === GRUPO_EDAD)) {

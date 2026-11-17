@@ -360,4 +360,26 @@ test('el historial muestra las versiones y la desactivación', async () => {
   expect(versiones[0].textContent).toMatch(/Desactivada el .+ por epidemiologia: Se usa el nacional/)
   expect(versiones[1].textContent).toContain('Nacional')
   expect(versiones[1].textContent).not.toContain('Desactivada')
+  expect(panel.queryByRole('link', { name: /en la bitácora$/ })).toBeNull()
+})
+
+// SPEC 71 (HU-55): el Administrador consulta los indicadores y su historial; sus permisos de editar otras
+// configuraciones no le abren la edición de los indicadores.
+test('el Administrador ve la lista y el historial, sin acciones de edición', async () => {
+  historialIndicador.mockResolvedValue([{ ...COB, desactivacion: null }])
+  await abrir([...CONSULTAR, 'REGLA_CONSULTAR', 'REGLA_CREAR', 'REGLA_EDITAR', 'ESQUEMA_PUBLICAR', 'BITACORA_CONSULTAR'])
+
+  expect(screen.queryByRole('button', { name: 'Nuevo indicador' })).toBeNull()
+  for (const codigo of ['COB_HEXA3', 'AVANCE_HEXA3', 'DES_HEXA1_3', 'BRECHA_SPR1']) {
+    expect(await opciones(codigo)).toEqual(['Historial'])
+  }
+
+  const menu = await abrirAcciones('COB_HEXA3')
+  fireEvent.click(menu.getByRole('menuitem', { name: 'Historial' }))
+  const panel = within(await screen.findByRole('dialog', { name: 'Historial de Cobertura de Hexavalente 3' }))
+  expect((await panel.findAllByRole('listitem'))[0].textContent).toContain('Versión 1')
+  // Con BITACORA_CONSULTAR, la versión enlaza a sus registros de la bitácora.
+  expect(panel.getByRole('link', { name: 'Ver la versión 1 en la bitácora' }).getAttribute('href')).toBe(
+    `/administracion/auditoria?entidad=configuracion_indicadores&entidadId=${COB.id}&desde=&hasta=`,
+  )
 })

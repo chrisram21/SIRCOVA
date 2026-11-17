@@ -60,19 +60,39 @@ test('con el permiso, /alertas muestra las alertas', async () => {
   expect(enConstruccion()).toBeNull()
 })
 
-// SPEC 70: /auditoria ya tiene su pantalla, que muestra sus esqueletos mientras pide la bitácora.
-test('con el permiso, /auditoria muestra la bitácora', async () => {
-  abrir('/auditoria', ['BITACORA_CONSULTAR'])
+// SPEC 70: «Auditoría» muestra sus esqueletos mientras pide la bitácora; desde el SPEC 71, en /administracion/auditoria.
+test('con el permiso, /administracion/auditoria muestra la bitácora', async () => {
+  abrir('/administracion/auditoria', ['BITACORA_CONSULTAR'])
 
   expect(await screen.findByLabelText('Cargando la bitácora', {}, ESPERA_LAZY)).toBeTruthy()
   expect(screen.getByRole('heading', { name: 'Bitácora del sistema' })).toBeTruthy()
   expect(enConstruccion()).toBeNull()
 })
 
-test('sin el permiso, /auditoria lleva a /inicio', () => {
-  abrir('/auditoria', ['USUARIO_CONSULTAR'])
+test('sin el permiso, /administracion/auditoria lleva a /inicio', () => {
+  abrir('/administracion/auditoria', ['USUARIO_CONSULTAR'])
 
   expect(screen.queryByRole('heading', { name: 'Bitácora del sistema' })).toBeNull()
+  expect(screen.getByText('Usuarios activos')).toBeTruthy()
+})
+
+// SPEC 71: …/historial/:vacunaId/comparar no la toma la subruta /administracion/esquemas/:id.
+test('con ESQUEMA_CONSULTAR, la comparación de esquemas abre su pantalla', async () => {
+  abrir('/administracion/esquemas/historial/2/comparar?a=v-1&b=v-2', [
+    'CONFIGURACION_CONSULTAR',
+    'ESQUEMA_CONSULTAR',
+    'VACUNA_CONSULTAR',
+    'DIMENSION_CONSULTAR',
+  ])
+
+  expect(await screen.findByLabelText('Cargando versiones', {}, ESPERA_LAZY)).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'Comparar versiones' })).toBeTruthy()
+})
+
+test('sin ESQUEMA_CONSULTAR, la comparación de esquemas lleva a /inicio', () => {
+  abrir('/administracion/esquemas/historial/2/comparar', ['USUARIO_CONSULTAR'])
+
+  expect(screen.queryByRole('heading', { name: 'Comparar versiones' })).toBeNull()
   expect(screen.getByText('Usuarios activos')).toBeTruthy()
 })
 
@@ -144,11 +164,14 @@ const HIJOS = opcionesMenu
   .flatMap((opcion) => opcion.hijos ?? [])
   .filter((hijo) => hijo.pagina)
   .map((hijo) => [hijo.titulo, hijo.ruta, hijo.permisos])
+// El título de la pantalla cuando no es el de la opción: Auditoría pasó a ser hijo en el SPEC 71 y conserva el suyo.
+const TITULO_DE_PANTALLA = { Auditoría: 'Bitácora del sistema' }
 
 test.each(HIJOS)('con sus permisos, %s muestra su pantalla con el antetítulo «Administración»', async (titulo, ruta, permisos) => {
   abrir(ruta, permisos)
 
-  expect(await screen.findByRole('heading', { level: 1, name: titulo }, ESPERA_LAZY)).toBeTruthy()
+  const nombre = TITULO_DE_PANTALLA[titulo] ?? titulo
+  expect(await screen.findByRole('heading', { level: 1, name: nombre }, ESPERA_LAZY)).toBeTruthy()
   expect(screen.getAllByText('Administración').length).toBeGreaterThan(0)
 })
 

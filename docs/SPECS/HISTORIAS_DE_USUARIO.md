@@ -1509,8 +1509,16 @@ Verificado contra la API real el 2026-11-16, como `admin.prueba`: «Actividad de
 **Cómo se hará:** Consulta de las versiones guardadas en MongoDB junto con sus registros en la bitácora.
 
 **Criterios de aceptación:**
-- [ ] Veo la lista de versiones de cada esquema, regla o indicador con fecha y autor.
-- [ ] Puedo comparar dos versiones de un esquema.
+- [x] Veo la lista de versiones de cada esquema, regla o indicador con fecha y autor.
+- [x] Puedo comparar dos versiones de un esquema.
+
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 71 a `main` (`specs/configuracion/71-hu-55-historial-de-cambios-de-configuracion.md`). Se ampliaron los historiales que ya existían, sin pantalla unificada ni endpoints nuevos. El Administrador tiene ahora `INDICADOR_CONFIG_CONSULTAR` (solo consulta, sin `INDICADOR_CONFIG_EDITAR`): ve «Configuración de indicadores» y el historial de cada indicador sin acciones de edición. En el historial de esquemas, cada versión salvo la primera tiene «Comparar», que abre `/administracion/esquemas/historial/{vacuna}/comparar?a=&b=` con la anterior ya elegida: dos selectores para elegir cualquier par de versiones de la vacuna (borradores incluidos), los datos de las dos (territorio, estado, vigencia, publicación y motivo) y la lista de diferencias de la captura (procedencia, desagregación, dosis, secciones e inclusión en reportes nuevos), marcadas como agregado, quitado o cambiado. Con `BITACORA_CONSULTAR`, cada versión de esquema, regla e indicador enlaza a sus registros en «Auditoría», que pasó del primer nivel del menú al final de «Administración» (`/administracion/auditoria`; `/auditoria` redirige con sus filtros).
+
+- La comparación es solo de esquemas; reglas e indicadores muestran el contenido de cada versión en su historial.
+- Una versión publicada sin secciones (Hexavalente v1) se compara con las secciones que deduce «Ver».
+- Las versiones de la semilla se insertaron sin bitácora: su «Ver en la bitácora» abre la Auditoría vacía.
+
+Verificado contra la API real el 2026-11-16, como `admin.prueba` y `revisor2`: Hexavalente v1 → v2 muestra el cambio de procedencia, el grupo de edad «De 1 a < 6 años» agregado y las secciones, igual que los documentos de MongoDB; v1 → v3 (borrador) agrega las etiquetas de D1 a D3. La bitácora de la regla RANGO_01 v3 trae su reactivación y su desactivación. El Revisor compara pero no ve «Ver en la bitácora» ni «Auditoría». A 390 px no hay desplazamiento horizontal.
 
 ### Fase final (13/11 – 30/11): Despliegue, pruebas y entrega (tareas)
 

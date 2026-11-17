@@ -3,6 +3,7 @@ import { listarEsquemas } from '@/api/configuracion.js'
 import { listarUsuarios } from '@/api/usuarios.js'
 import {
   ENTIDADES_CATALOGO,
+  RUTA_AUDITORIA,
   consultaDe,
   etiquetaAccion,
   etiquetaEntidad,
@@ -76,7 +77,7 @@ const DIAS_RECIENTES = 7
 const FILTRO_CATALOGOS = { modulo: 'CONFIGURACION', entidad: ENTIDADES_CATALOGO.join(',') }
 
 const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`
-const enlaceAuditoria = (filtros) => `/auditoria?${consultaDe(filtros)}`
+const enlaceAuditoria = (filtros) => `${RUTA_AUDITORIA}?${consultaDe(filtros)}`
 
 async function consultarActividad() {
   const rango = ultimosDias(DIAS_RECIENTES)
