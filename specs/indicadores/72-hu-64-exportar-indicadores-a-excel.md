@@ -128,7 +128,7 @@ Después, una fila vacía y la tabla.
 - Lo que la pantalla muestra como «—» queda como celda vacía.
 - «Dosis que faltan» es solo el número; donde la pantalla escribe «0 (+N de excedente)», el excedente va en una columna «Excedente» después de «Dosis que faltan» (Brecha ya la tiene).
 - «Cumple» y «¿Llega a la meta?» van como «Sí» o «No».
-- La celda del indicador lleva el relleno del semáforo de su `color` (verde, amarillo, rojo), con los hex de `textosIndicadores.js`, que repiten los `--semaforo-*` de `index.css`.
+- La celda del indicador lleva el relleno del semáforo de su `color` (verde, amarillo, rojo), con los hex de `textosIndicadores.js`, que repiten los colores de las insignias de la tabla (`CLASES_COLOR` de `InsigniaValor.jsx`: `--exito`, `--advertencia` y `--destructive` al 10 % de `index.css`), no los `--semaforo-*` de las gráficas y el mapa (decidido al implementar, 2026-11-17).
 - Donde la pantalla muestra la marca de más del 100 % (Cobertura, Avance, Brecha y Redes), una columna «Más del 100 %» con «Sí» en esas filas, o una nota de celda en Redes, donde cada celda es un indicador distinto.
 - La fila de total («Total de la DDRISS» o «Total de la red») va en negrita, donde la pantalla la pone.
 - **Redes:** dos filas de encabezado, el grupo de población combinado sobre sus trazadoras y la etiqueta de cada trazadora (`etiquetaTrazadora`); municipios de la red por nombre y la fila «Total de la red» al final.
@@ -215,7 +215,7 @@ Después, una fila vacía y la tabla.
 | Riesgo | Mitigación |
 |---|---|
 | El recorte y las columnas del backend se desalinean de los del frontend con el tiempo. | Las pruebas comparan, con los mismos datos, lo que dan las dos versiones; una nota en el `CLAUDE.md` del módulo dice que un cambio va en los dos lados. |
-| Los colores del semáforo del Excel no coinciden con el tema. | Los hex de `textosIndicadores.js` se copian de `--semaforo-*` de `index.css`, con la misma nota de «un cambio va en los dos lados» que el SPEC 66. |
+| Los colores del semáforo del Excel no coinciden con el tema. | Los hex de `textosIndicadores.js` se copian de los colores de las insignias de la tabla (`--exito`, `--advertencia`, `--destructive` de `index.css`), con la misma nota de «un cambio va en los dos lados» que el SPEC 66. |
 | El porcentaje como fracción confunde si alguien lee la celda sin formato. | El formato `0.0%` va en cada celda, y la prueba manual comprueba cómo se ve al abrir el archivo. |
 | La fecha de generación sale corrida 6 h (nota de `mysql2` y Aiven). | Se calcula en Node con la zona `America/Guatemala`, como en el SPEC 64. |
 | Un rol sin `INDICADOR_CONSULTAR` llega a la ruta. | El 403 y su `ACCESO_DENEGADO` son los de `requierePermiso`, y hay una prueba con una cuenta de ese rol. |
