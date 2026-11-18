@@ -25,14 +25,43 @@ export async function embeber(textos) {
   return embeddings;
 }
 
+const OPCIONES_MODELO = { temperature: 0.2, num_ctx: 8192 };
+
 export async function conversar(mensajes, { herramientas } = {}) {
   const respuesta = await pedir('/api/chat', {
     model: MODELO_CHAT,
     messages: mensajes,
     tools: herramientas,
     stream: false,
-    options: { temperature: 0.2, num_ctx: 8192 },
+    options: OPCIONES_MODELO,
   });
   const { message } = await respuesta.json();
   return message;
+}
+
+
+export async function conversarEnStreaming(mensajes, alRecibir) {
+  const respuesta = await pedir('/api/chat', {
+    model: MODELO_CHAT,
+    messages: mensajes,
+    stream: true,
+    options: OPCIONES_MODELO,
+  });
+
+  const mensaje = { role: 'assistant', content: '' };
+  const decodificador = new TextDecoder();
+  let pendiente = '';
+  for await (const bytes of respuesta.body) {
+    pendiente += decodificador.decode(bytes, { stream: true });
+    const lineas = pendiente.split('\n');
+    pendiente = lineas.pop();
+    for (const linea of lineas.filter((l) => l.trim())) {
+      const { message } = JSON.parse(linea);
+      if (message?.content) {
+        mensaje.content += message.content;
+        alRecibir(message.content);
+      }
+    }
+  }
+  return mensaje;
 }

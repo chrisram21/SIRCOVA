@@ -1,11 +1,13 @@
 // Asistente de consola con RAG sobre la documentación de SIRCOVA.
-// Uso: node scripts/asistente/preguntar.js "pregunta"   (sin pregunta abre un modo interactivo)
+// Uso: node scripts/asistente/preguntar.js [--ver-trozos] "pregunta"   (sin pregunta abre un modo interactivo)
+// --ver-trozos muestra cada trozo del streaming en su propia línea, con los milisegundos desde que se preguntó.
 import readline from 'node:readline/promises';
 import { buscar } from './rag.js';
-import { conversar, MODELO_CHAT } from './ollama.js';
+import { conversar, conversarEnStreaming, MODELO_CHAT } from './ollama.js';
 import { HERRAMIENTAS, ejecutarHerramienta } from './herramientas.js';
 
-const MAXIMO_RONDAS_HERRAMIENTAS = 3;
+const argumentos = process.argv.slice(2);
+const verTrozos = argumentos.includes('--ver-trozos');
 const hoy = new Date().toLocaleDateString('es-GT', { day: 'numeric', month: 'long', year: 'numeric' });
 
 const SYSTEM_PROMPT = `Eres el asistente de SIRCOVA, el sistema web de producción de vacunación de la DDRISS San Marcos (MSPAS, Guatemala).
@@ -33,22 +35,34 @@ async function responder(pregunta) {
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: `CONTEXTO:\n${armarContexto(fragmentos)}\n\nPREGUNTA: ${pregunta}` },
   ];
-  let respuesta = await conversar(mensajes, { herramientas: HERRAMIENTAS });
-  for (let ronda = 0; respuesta.tool_calls?.length && ronda < MAXIMO_RONDAS_HERRAMIENTAS; ronda++) {
-    mensajes.push(respuesta);
-    for (const { function: llamada } of respuesta.tool_calls) {
+  const inicio = Date.now();
+  let trozos = 0;
+  const alRecibir = (texto) => {
+    if (trozos++ === 0) console.log(`\n[${MODELO_CHAT}] (streaming)`);
+    if (verTrozos) console.log(`  [trozo ${trozos} · +${Date.now() - inicio} ms] ${JSON.stringify(texto)}`);
+    else process.stdout.write(texto);
+  };
+
+  // Primera llamada sin streaming: solo decide si hace falta la herramienta. La respuesta final va en streaming.
+  const decision = await conversar(mensajes, { herramientas: HERRAMIENTAS });
+  if (decision.tool_calls?.length) {
+    // Con datos de la herramienta no hace falta la documentación, y sus fragmentos sobre cobertura
+    // hacían que el modelo aplicara la regla del tema prohibido a preguntas de reportes.
+    mensajes[1] = { role: 'user', content: `PREGUNTA: ${pregunta}` };
+    mensajes.push(decision);
+    for (const { function: llamada } of decision.tool_calls) {
       console.log(`\n[herramienta] ${llamada.name}(${JSON.stringify(llamada.arguments)})`);
       const resultado = await ejecutarHerramienta(llamada.name, llamada.arguments);
       console.log(`[herramienta] resultado: ${JSON.stringify(resultado)}`);
       mensajes.push({ role: 'tool', tool_name: llamada.name, content: JSON.stringify(resultado) });
     }
-    respuesta = await conversar(mensajes, { herramientas: HERRAMIENTAS });
   }
-  console.log(`\n[${MODELO_CHAT}]\n${respuesta.content}\n`);
+  await conversarEnStreaming(mensajes, alRecibir);
+  console.log(`\n\n(${trozos} trozos en ${Date.now() - inicio} ms)\n`);
 }
 
 async function principal() {
-  const pregunta = process.argv.slice(2).join(' ').trim();
+  const pregunta = argumentos.filter((a) => a !== '--ver-trozos').join(' ').trim();
   if (pregunta) return responder(pregunta);
 
   const consola = readline.createInterface({ input: process.stdin, output: process.stdout });

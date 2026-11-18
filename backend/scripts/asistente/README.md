@@ -31,3 +31,11 @@ node --env-file=.env scripts/asistente/preguntar.js "¿Cuántos reportes hay en 
 ```
 
 La consola muestra `[herramienta] …` con los argumentos que eligió el modelo y el resultado de la consulta.
+
+## Streaming
+
+Una primera llamada sin streaming decide si hace falta la herramienta; la respuesta final se pide con `stream: true` (`conversarEnStreaming` en `ollama.js`) y cada trozo se escribe en la consola en cuanto llega. Con `--ver-trozos` cada trozo sale en su propia línea con los milisegundos transcurridos:
+
+```bash
+node --env-file=.env scripts/asistente/preguntar.js --ver-trozos "¿Qué hace la estadígrafa en el sistema?"
+```
