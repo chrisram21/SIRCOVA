@@ -162,3 +162,6 @@ vite.config.ts.timestamp-*
 .obsidian/*
 !.obsidian/app.json
 !.obsidian/graph.json
+
+# Índice del RAG de la práctica del asistente (se genera con scripts/asistente/indexar.js)
+backend/scripts/asistente/indice-rag.json

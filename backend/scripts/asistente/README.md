@@ -1,0 +1,23 @@
+# Asistente SIRCOVA (práctica de agentes con Ollama)
+
+Práctica extracurricular: un agente de consola con RAG sobre la documentación del proyecto. No forma parte del sistema, no tiene interfaz y **no escribe en ninguna base de datos**.
+
+## Requisitos
+
+- Ollama abierto en `http://localhost:11434` con los modelos `llama3.2:3b` (chat) y `bge-m3` (embeddings):
+  `ollama pull llama3.2:3b` y `ollama pull bge-m3`.
+- Se pueden cambiar con `OLLAMA_URL`, `OLLAMA_MODELO` y `OLLAMA_MODELO_EMBEDDINGS`.
+
+## Uso (desde `backend/`)
+
+```bash
+node scripts/asistente/indexar.js                       # crea indice-rag.json (una vez)
+node scripts/asistente/preguntar.js "¿Qué roles tiene el sistema?"
+node scripts/asistente/preguntar.js                     # modo interactivo
+```
+
+## Cómo funciona
+
+1. `indexar.js` parte en fragmentos el contexto del proyecto, las historias de usuario y la descripción de las pantallas, calcula sus embeddings con `bge-m3` y los guarda en `indice-rag.json` (ignorado por git).
+2. `rag.js` calcula el embedding de la pregunta y devuelve los 4 fragmentos más parecidos (similitud coseno).
+3. `preguntar.js` arma el system prompt con esos fragmentos y llama a `/api/chat` de Ollama.
