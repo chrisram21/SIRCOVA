@@ -31,3 +31,4 @@ tags: ["spec", "modulo/informes", "origen/historia"]
 - [[SPEC 65]] — HU-48 Exportar informes a PDF · *Implementado*
 - [[SPEC 66]] — HU-49 Informe acumulado anual · *Implementado*
 - [[SPEC 70]] — HU-54 Consultar la auditoría · *Implementado*
+- [[SPEC 72]] — HU-64 Exportar Indicadores a Excel · *Implementado*

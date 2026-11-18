@@ -90,7 +90,7 @@ function leerEntero(valor, mensaje, minimo, maximo) {
   return Number(valor);
 }
 
-function leerIds(valor, nombre) {
+export function leerIds(valor, nombre) {
   if (valor === undefined) return null;
   if (!/^[1-9]\d*(,[1-9]\d*)*$/.test(valor)) {
     throw entradaInvalida(`${nombre} debe ser una lista de ids separados por comas.`);
@@ -100,7 +100,7 @@ function leerIds(valor, nombre) {
   return lista;
 }
 
-function leerConsulta(query) {
+export function leerConsulta(query) {
   revisarParametros(query, [
     'anio', 'mes', 'acumulado', 'agrupar', 'vacuna', 'distritoId', 'redId', 'municipioIds', 'establecimientoIds',
     'ddrissId',

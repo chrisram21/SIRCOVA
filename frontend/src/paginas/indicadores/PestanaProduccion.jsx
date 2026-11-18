@@ -2,18 +2,20 @@ import { useEffect, useState } from 'react'
 import { TriangleAlert } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { mensajeDeError } from '@/api/cliente.js'
-import { obtenerOpcionesProduccion, obtenerProduccion } from '@/api/indicadores.js'
+import { descargarProduccionExcel, obtenerOpcionesProduccion, obtenerProduccion } from '@/api/indicadores.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import PantallaCargaSesion, { usePrimeraCarga } from '@/componentes/PantallaCargaSesion.jsx'
 import { BarraFiltrosProduccion } from './BarraFiltrosIndicadores.jsx'
+import { BotonExportarExcel, useExportarExcel } from './ExportarExcel.jsx'
 import GraficaProduccion from './GraficaProduccion.jsx'
 import { establecimientosVisibles, filtrosDeProduccion, mesDeProduccion, textoPreliminar } from './produccion.js'
 import TablaProduccion from './TablaProduccion.jsx'
 
 // SPEC 61: la pestaña «Producción» de Indicadores. No depende de la corrida: carga sus opciones y la producción
 // del rango. Comparte con las demás pestañas año, mes, DDRISS, red, distrito y municipios de la URL (filtros), y
-// agrega agrupar, periodo, establecimientos y vacuna=todas, que cambia sin tocar lo demás.
+// agrega agrupar, periodo, establecimientos y vacuna=todas, que cambia sin tocar lo demás. SPEC 72: «Exportar Excel»
+// pide el archivo con el mismo pedido que la tabla.
 
 const AYUDA = 'Dosis aplicadas por el municipio o establecimiento, sin importar la residencia de la persona. '
   + 'Incluye Migrantes.'
@@ -105,6 +107,12 @@ export default function PestanaProduccion({
     }
   }, [clave, intentoProduccion])
 
+  const exportacion = useExportarExcel()
+  const { limpiar: limpiarExportar } = exportacion
+  useEffect(() => {
+    limpiarExportar()
+  }, [clave])
+
   const sinMeses = opciones?.meses.length === 0
   const primeraCarga = usePrimeraCarga(
     Boolean(sinDdriss || errorOpciones || sinMeses || produccion || errorProduccion),
@@ -139,7 +147,17 @@ export default function PestanaProduccion({
     <>
       {primeraCarga && <PantallaCargaSesion etiqueta="Cargando la producción" inmediata fondo="borroso" />}
       <section hidden={primeraCarga} className="flex flex-col gap-6 p-6 contain-inline-size">
-        <EncabezadoPagina antetitulo="Indicadores" titulo={titulo} descripcion={AYUDA} />
+        <EncabezadoPagina
+          antetitulo="Indicadores"
+          titulo={titulo}
+          descripcion={AYUDA}
+          acciones={produccion && !errorProduccion && (
+            <BotonExportarExcel
+              exportando={exportacion.exportando}
+              alExportar={() => exportacion.exportar(() => descargarProduccionExcel(JSON.parse(clave)))}
+            />
+          )}
+        />
 
         {avisos}
 
@@ -200,6 +218,7 @@ export default function PestanaProduccion({
               </p>
             )}
             <GraficaProduccion produccion={produccion} />
+            {exportacion.error && <AvisoError>No se pudo exportar: {exportacion.error}</AvisoError>}
             <TablaProduccion produccion={produccion} />
           </>
         )}

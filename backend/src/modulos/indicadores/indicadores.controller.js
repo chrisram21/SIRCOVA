@@ -1,5 +1,7 @@
 import * as corridasService from './corridas.service.js';
+import * as exportacionService from './exportacion.service.js';
 import * as produccionService from './produccion.service.js';
+import { contextoAuditoria } from '../auditoria/auditoria.service.js';
 
 export async function crearCorrida(req, res) {
   res.status(201).json(await corridasService.crearCorrida(req.body, req));
@@ -32,3 +34,14 @@ export async function opcionesDeProduccion(req, res) {
 export async function produccionPorFila(req, res) {
   res.json(await produccionService.produccionPorFila(req.usuario, req.query));
 }
+
+// SPEC 72: el nombre del archivo viaja en Content-Disposition (cors lo expone desde el SPEC 64).
+const enExcel = (exportar) => async (req, res) => {
+  const { bytes, nombre } = await exportar(req.usuario, req.query, contextoAuditoria(req));
+  res.attachment(nombre);
+  res.type('xlsx');
+  res.send(bytes);
+};
+
+export const resultadosEnExcel = enExcel(exportacionService.exportarResultados);
+export const produccionEnExcel = enExcel(exportacionService.exportarProduccion);

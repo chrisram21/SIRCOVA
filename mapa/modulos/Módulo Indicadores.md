@@ -6,7 +6,7 @@ tags: ["modulo", "modulo/indicadores"]
 
 > [!info] Nota generada por `scripts/mapa-obsidian.mjs`: no la edites a mano, se reescribe.
 
-Carpeta: `specs/indicadores/` · 14 specs · [[Inicio]]
+Carpeta: `specs/indicadores/` · 15 specs · [[Inicio]]
 
 ## Specs
 
@@ -24,3 +24,4 @@ Carpeta: `specs/indicadores/` · 14 specs · [[Inicio]]
 - [[SPEC 60]] — Redes en Indicadores · *Implementado* · Retroalimentación
 - [[SPEC 61]] — Pestaña «Producción» en Indicadores · *Implementado* · Retroalimentación
 - [[SPEC 68]] — HU-51 Alertas de cobertura y de calidad · *Implementado* · [[HU-51]]
+- [[SPEC 72]] — HU-64 Exportar Indicadores a Excel · *Implementado* · [[HU-64]]

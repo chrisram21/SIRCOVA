@@ -1,4 +1,4 @@
-import { solicitar } from './cliente.js'
+import { descargar, solicitar } from './cliente.js'
 
 // SPEC 44: corridas del motor de indicadores y sus resultados. Sin caché: cada corrida cambia lo que se ve.
 
@@ -47,13 +47,32 @@ export function obtenerOpcionesProduccion({ ddrissId } = {}) {
   return solicitar(conConsulta('/indicadores/produccion/opciones', { ddrissId }))
 }
 
-// SPEC 61: las dosis aplicadas por municipio de aplicación o por establecimiento. Las listas van separadas por comas.
-export function obtenerProduccion({
+const lista = (ids) => (ids?.length ? ids.join(',') : undefined)
+
+function rutaDeProduccion(ruta, {
   anio, mes, acumulado, agrupar, vacuna, distritoId, redId, municipioIds, establecimientoIds, ddrissId,
 }) {
-  const lista = (ids) => (ids?.length ? ids.join(',') : undefined)
-  return solicitar(conConsulta('/indicadores/produccion', {
+  return conConsulta(ruta, {
     anio, mes, acumulado, agrupar, vacuna, distritoId, redId,
     municipioIds: lista(municipioIds), establecimientoIds: lista(establecimientoIds), ddrissId,
+  })
+}
+
+// SPEC 61: las dosis aplicadas por municipio de aplicación o por establecimiento. Las listas van separadas por comas.
+export function obtenerProduccion(pedido) {
+  return solicitar(rutaDeProduccion('/indicadores/produccion', pedido))
+}
+
+// SPEC 72: la tabla de una pestaña de indicadores (o de Redes) como .xlsx; devuelve { blob, nombre }. La pantalla
+// manda lo que ya resolvió: el indicador que se ve, la red de la pestaña o del filtro, y el distrito y los municipios
+// aceptados.
+export function descargarIndicadoresExcel({ anio, mes, vista, indicador, redId, distritoId, municipioIds, ddrissId }) {
+  return descargar(conConsulta('/indicadores/resultados/excel', {
+    anio, mes, vista, indicador, redId, distritoId, municipioIds: lista(municipioIds), ddrissId,
   }))
+}
+
+// SPEC 72: la pestaña «Producción» como .xlsx, con los mismos parámetros que obtenerProduccion.
+export function descargarProduccionExcel(pedido) {
+  return descargar(rutaDeProduccion('/indicadores/produccion/excel', pedido))
 }

@@ -32,3 +32,4 @@ tags: ["spec", "modulo/indicadores", "origen/correccion"]
 
 - [[SPEC 60]] — Redes en Indicadores · *Implementado*
 - [[SPEC 61]] — Pestaña «Producción» en Indicadores · *Implementado*
+- [[SPEC 72]] — HU-64 Exportar Indicadores a Excel · *Implementado*

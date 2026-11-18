@@ -31,3 +31,4 @@ tags: ["spec", "modulo/indicadores", "origen/retroalimentacion"]
 ## Lo usan
 
 - [[SPEC 62]] — HU-45 Generar informes con filtros · *Implementado*
+- [[SPEC 72]] — HU-64 Exportar Indicadores a Excel · *Implementado*
