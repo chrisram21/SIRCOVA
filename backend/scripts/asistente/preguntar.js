@@ -3,10 +3,16 @@
 import readline from 'node:readline/promises';
 import { buscar } from './rag.js';
 import { conversar, MODELO_CHAT } from './ollama.js';
+import { HERRAMIENTAS, ejecutarHerramienta } from './herramientas.js';
+
+const MAXIMO_RONDAS_HERRAMIENTAS = 3;
+const hoy = new Date().toLocaleDateString('es-GT', { day: 'numeric', month: 'long', year: 'numeric' });
 
 const SYSTEM_PROMPT = `Eres el asistente de SIRCOVA, el sistema web de producción de vacunación de la DDRISS San Marcos (MSPAS, Guatemala).
+Hoy es ${hoy}.
 Respondes siempre en español, de forma breve y clara.
-Usa solo la información del CONTEXTO que se te entrega; si no está ahí, di que no tienes esa información.
+Para preguntas sobre cómo funciona el sistema, usa solo la información del CONTEXTO; si no está ahí, di que no tienes esa información.
+Para preguntas sobre cuántos reportes hay o en qué estado están en un mes, llama a la herramienta consultar_reportes_por_estado y responde con sus datos, sin inventar cifras.
 El sistema maneja solo datos agregados: nunca pidas ni inventes datos de pacientes.`;
 
 function armarContexto(fragmentos) {
@@ -22,7 +28,17 @@ async function responder(pregunta) {
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: `CONTEXTO:\n${armarContexto(fragmentos)}\n\nPREGUNTA: ${pregunta}` },
   ];
-  const respuesta = await conversar(mensajes);
+  let respuesta = await conversar(mensajes, { herramientas: HERRAMIENTAS });
+  for (let ronda = 0; respuesta.tool_calls?.length && ronda < MAXIMO_RONDAS_HERRAMIENTAS; ronda++) {
+    mensajes.push(respuesta);
+    for (const { function: llamada } of respuesta.tool_calls) {
+      console.log(`\n[herramienta] ${llamada.name}(${JSON.stringify(llamada.arguments)})`);
+      const resultado = await ejecutarHerramienta(llamada.name, llamada.arguments);
+      console.log(`[herramienta] resultado: ${JSON.stringify(resultado)}`);
+      mensajes.push({ role: 'tool', tool_name: llamada.name, content: JSON.stringify(resultado) });
+    }
+    respuesta = await conversar(mensajes, { herramientas: HERRAMIENTAS });
+  }
   console.log(`\n[${MODELO_CHAT}]\n${respuesta.content}\n`);
 }
 

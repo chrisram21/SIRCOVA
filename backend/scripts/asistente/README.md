@@ -21,3 +21,13 @@ node scripts/asistente/preguntar.js                     # modo interactivo
 1. `indexar.js` parte en fragmentos el contexto del proyecto, las historias de usuario y la descripción de las pantallas, calcula sus embeddings con `bge-m3` y los guarda en `indice-rag.json` (ignorado por git).
 2. `rag.js` calcula el embedding de la pregunta y devuelve los 4 fragmentos más parecidos (similitud coseno).
 3. `preguntar.js` arma el system prompt con esos fragmentos y llama a `/api/chat` de Ollama.
+
+## Herramienta con datos reales
+
+`herramientas.js` define `consultar_reportes_por_estado(anio, mes)`, que cuenta los reportes de la DDRISS (`ASISTENTE_DDRISS`, por defecto `DDRISS_SM`) por estado en un mes. Lee MySQL con las credenciales de `backend/.env`, en una transacción `READ ONLY`: no escribe nada. Por eso se corre con `--env-file`:
+
+```bash
+node --env-file=.env scripts/asistente/preguntar.js "¿Cuántos reportes hay en cada estado en septiembre de 2026?"
+```
+
+La consola muestra `[herramienta] …` con los argumentos que eligió el modelo y el resultado de la consulta.
