@@ -5231,6 +5231,108 @@ paths:
               example:
                 error: { codigo: NO_ENCONTRADO, mensaje: La red no existe. }
 
+  /indicadores/resultados/excel:
+    get:
+      tags: [Indicadores]
+      summary: Descargar la tabla de una pestaña de «Indicadores» como archivo de Excel (SPEC 72, HU-64)
+      description: |
+        La tabla que se ve en una pestaña de «Indicadores» (Avance, Brecha, Cobertura, Deserción, Proyección o
+        Redes), como un libro .xlsx armado con ExcelJS. Lee la corrida vigente de la DDRISS, el año y el mes con la
+        misma función que `GET /indicadores/resultados` (con `redId`, también la fila «Total de la red») y recorta
+        las filas como la pantalla:
+
+        - **Indicador** (todas las vistas salvo `redes`): solo las filas de `indicador`, que debe estar en la corrida
+          y ser del tipo de la `vista` (`avance` = `AVANCE_META_MES`, `brecha` = `BRECHA`, `cobertura` = `COBERTURA`,
+          `desercion` = `DESERCION`, `proyeccion` = `PROYECCION`).
+        - **Territorio:** con `redId`, los municipios actuales de la red y su fila «Total de la red»; si no, con
+          `distritoId`, el municipio del distrito, o con `municipioIds`, esos municipios, más la fila «Total de la
+          DDRISS»; sin nada, todos los municipios de la corrida y la fila «Total de la DDRISS». Con `redId` se
+          ignoran `distritoId` y `municipioIds` (la red manda, como en la pantalla).
+        - **`redes`:** `redId` es obligatorio y `indicador` no se usa. Una columna por trazadora de la red, con su
+          cobertura anual (`COBERTURA` con prorrateo `NINGUNO`) de la corrida, agrupadas por grupo de población;
+          una fila por municipio de la red, por nombre, y la fila «Total de la red».
+
+        El frontend manda lo que la pantalla ya resolvió (el indicador elegido, la red de la pestaña, el distrito y
+        los municipios aceptados), no la URL tal cual.
+
+        Una sola hoja, con el nombre de la pestaña:
+        - **Encabezado:** el título de la pantalla, «PRELIMINAR» si `corrida.parcial`, la DDRISS, el mes de corte
+          (y los meses sin cerrar si es parcial), el indicador (nombre y código, salvo en `redes`), el territorio,
+          la fecha y hora de generación (Guatemala) con el nombre de quien lo generó, y los mismos avisos que la
+          pantalla.
+        - **Tabla:** las columnas de la tabla de la pantalla en su orden. Cantidades como números con formato
+          `#,##0` (ritmo mensual, `#,##0.0`); porcentajes como fracción con formato `0.0%`; celda vacía donde la
+          pantalla pone «—»; el excedente en su columna «Excedente»; «Cumple» y «¿Llega a la meta?» como «Sí» o
+          «No»; la celda del indicador con el relleno del semáforo de su `color`; una columna «Más del 100 %» donde
+          la pantalla pone la marca (en `redes`, una nota en la celda); la fila de total en negrita; el encabezado
+          de la tabla y su primera columna fijos. En `redes`, dos filas de encabezado (grupo de población combinado
+          sobre sus trazadoras, y la trazadora).
+
+        Cada descarga correcta deja una fila `EXPORTAR` del módulo `INDICADORES` en la bitácora (`entidad`
+        `indicador`, `entidadId` el código del indicador o `red-{redId}` en `redes`), con `formato: xlsx`, la
+        `vista`, el año, el mes, la corrida, la DDRISS y el territorio en `valoresNuevos`, sin cantidades. Un error
+        no la deja.
+      x-permiso: INDICADOR_CONSULTAR
+      parameters:
+        - { name: anio, in: query, required: true, schema: { type: integer, minimum: 2000, maximum: 2100, example: 2026 } }
+        - { name: mes, in: query, required: true, schema: { type: integer, minimum: 1, maximum: 12, example: 8 } }
+        - name: vista
+          in: query
+          required: true
+          description: La pestaña que se exporta
+          schema: { type: string, enum: [avance, brecha, cobertura, desercion, proyeccion, redes], example: cobertura }
+        - name: indicador
+          in: query
+          description: El indicador que se ve; obligatorio salvo en `redes`, donde no se acepta
+          schema: { type: string, pattern: "^[A-Z0-9_]{1,40}$", example: COB_HEXA3 }
+        - name: redId
+          in: query
+          description: En `redes`, la red de la pestaña (obligatoria); en las demás, la red del filtro
+          schema: { type: integer, minimum: 1, example: 1 }
+        - name: distritoId
+          in: query
+          description: Recorta al municipio del distrito; se ignora con `redId`
+          schema: { type: integer, minimum: 1, example: 3 }
+        - name: municipioIds
+          in: query
+          description: Ids separados por comas, sin repetir; se ignora con `redId`
+          schema: { type: string, pattern: "^[1-9][0-9]*(,[1-9][0-9]*)*$", example: "1,4" }
+        - { $ref: "#/components/parameters/DdrissIdAutoridad" }
+      responses:
+        "200":
+          description: El libro de Excel de la pestaña
+          headers:
+            Content-Disposition:
+              description: |
+                `attachment; filename="indicadores-{vista}-{indicador}-{anio}-{mes}.xlsx"` (mes con dos dígitos); en
+                `redes`, `indicadores-redes-red-{redId}-{anio}-{mes}.xlsx`. El frontend lo lee gracias a
+                `Access-Control-Expose-Headers`.
+              schema: { type: string, example: 'attachment; filename="indicadores-cobertura-COB_HEXA3-2026-08.xlsx"' }
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        "400":
+          description: |
+            Un parámetro falta, no es válido, es desconocido o está repetido, una lista repite un id, falta
+            `indicador` (o viene en `redes`), el indicador no está en la corrida o no es del tipo de la `vista`, falta
+            `redId` en `redes`, o falta `ddrissId` (Autoridad nacional)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: El indicador no es de la pestaña elegida. }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404":
+          description: |
+            No hay corrida vigente de la DDRISS para el año y el mes, o la red o el distrito no existen, están
+            inactivos o son de otra DDRISS
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: NO_ENCONTRADO, mensaje: No hay indicadores calculados para ese mes. }
+
   /indicadores/serie:
     get:
       tags: [Indicadores]
@@ -5371,39 +5473,15 @@ paths:
         Es una lectura: no deja bitácora. `ddrissId`, como en `GET /indicadores/corridas`.
       x-permiso: INDICADOR_CONSULTAR
       parameters:
-        - { name: anio, in: query, required: true, schema: { type: integer, minimum: 2000, maximum: 2100, example: 2026 } }
-        - name: mes
-          in: query
-          required: true
-          description: Mes de corte
-          schema: { type: integer, minimum: 1, maximum: 12, example: 8 }
-        - name: acumulado
-          in: query
-          description: "`true`: de enero al mes de corte; `false`: solo el mes de corte"
-          schema: { type: boolean, default: true }
-        - name: agrupar
-          in: query
-          schema: { type: string, enum: [municipio, establecimiento], default: municipio }
-        - name: vacuna
-          in: query
-          description: Código de la vacuna; sin él, todas las vacunas
-          schema: { type: string, pattern: "^[A-Z0-9_]{1,20}$", example: HEXA }
-        - name: distritoId
-          in: query
-          description: Recorta al municipio del distrito; no se combina con `redId`
-          schema: { type: integer, minimum: 1, example: 3 }
-        - name: redId
-          in: query
-          description: Recorta a los municipios actuales de la red; no se combina con `distritoId`
-          schema: { type: integer, minimum: 1, example: 1 }
-        - name: municipioIds
-          in: query
-          description: Ids separados por comas, sin repetir
-          schema: { type: string, pattern: "^[1-9][0-9]*(,[1-9][0-9]*)*$", example: "1,4" }
-        - name: establecimientoIds
-          in: query
-          description: Ids separados por comas, sin repetir
-          schema: { type: string, pattern: "^[1-9][0-9]*(,[1-9][0-9]*)*$", example: "31,40" }
+        - { $ref: "#/components/parameters/ProduccionAnio" }
+        - { $ref: "#/components/parameters/ProduccionMes" }
+        - { $ref: "#/components/parameters/ProduccionAcumulado" }
+        - { $ref: "#/components/parameters/ProduccionAgrupar" }
+        - { $ref: "#/components/parameters/ProduccionVacuna" }
+        - { $ref: "#/components/parameters/ProduccionDistritoId" }
+        - { $ref: "#/components/parameters/ProduccionRedId" }
+        - { $ref: "#/components/parameters/ProduccionMunicipioIds" }
+        - { $ref: "#/components/parameters/ProduccionEstablecimientoIds" }
         - { $ref: "#/components/parameters/DdrissIdAutoridad" }
       responses:
         "200":
@@ -5411,26 +5489,62 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ProduccionAplicada" }
-        "400":
-          description: |
-            Un parámetro falta, no es válido, es desconocido o está repetido, una lista repite un id, vienen
-            `distritoId` y `redId`, o falta `ddrissId` (Autoridad nacional)
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Error" }
-              example:
-                error: { codigo: ENTRADA_INVALIDA, mensaje: El distrito y la red no se combinan. }
+        "400": { $ref: "#/components/responses/ProduccionEntradaInvalida" }
         "401": { $ref: "#/components/responses/NoAutenticado" }
         "403": { $ref: "#/components/responses/SinPermiso" }
-        "404":
-          description: |
-            La vacuna no existe; el distrito o la red no existen, están inactivos o son de otra DDRISS; o el mes de
-            corte no está habilitado en la DDRISS
+        "404": { $ref: "#/components/responses/ProduccionNoEncontrado" }
+
+  /indicadores/produccion/excel:
+    get:
+      tags: [Indicadores]
+      summary: Descargar la pestaña «Producción» como archivo de Excel (SPEC 72, HU-64)
+      description: |
+        La misma producción de `GET /indicadores/produccion`, con los mismos parámetros, el mismo permiso, el mismo
+        ámbito y los mismos errores, como un libro .xlsx armado con ExcelJS. El libro sale de la misma respuesta que
+        la pantalla, así que sus cantidades son las mismas.
+
+        Una sola hoja, «Producción»:
+        - **Encabezado:** el título de la pestaña, «PRELIMINAR» si `preliminar`, la DDRISS, el periodo (el mes de
+          corte, o de enero al mes de corte con `acumulado`), la vacuna, el territorio (distrito, red,
+          municipios o todos), la fecha y hora de generación (Guatemala) con el nombre de quien lo generó, y los
+          mismos avisos que la pantalla (meses sin cerrar).
+        - **Tabla:** las columnas de la tabla de la pantalla (municipio de aplicación o establecimiento, una por
+          dosis con `vacuna`, población propia, otros municipios y total) con el encabezado y la primera columna
+          fijos, las cantidades como números con formato `#,##0`, la marca de las filas `fueraDelConsolidado`, la
+          fila «Total» y, si hay `dosisFueraDelConsolidado`, la línea que lo explica.
+
+        Cada descarga correcta deja una fila `EXPORTAR` del módulo `INDICADORES` en la bitácora (`entidad`
+        `indicador`, `entidadId` `produccion`), con los parámetros y `formato: xlsx` en `valoresNuevos`, sin
+        cantidades. Un error no la deja.
+      x-permiso: INDICADOR_CONSULTAR
+      parameters:
+        - { $ref: "#/components/parameters/ProduccionAnio" }
+        - { $ref: "#/components/parameters/ProduccionMes" }
+        - { $ref: "#/components/parameters/ProduccionAcumulado" }
+        - { $ref: "#/components/parameters/ProduccionAgrupar" }
+        - { $ref: "#/components/parameters/ProduccionVacuna" }
+        - { $ref: "#/components/parameters/ProduccionDistritoId" }
+        - { $ref: "#/components/parameters/ProduccionRedId" }
+        - { $ref: "#/components/parameters/ProduccionMunicipioIds" }
+        - { $ref: "#/components/parameters/ProduccionEstablecimientoIds" }
+        - { $ref: "#/components/parameters/DdrissIdAutoridad" }
+      responses:
+        "200":
+          description: El libro de Excel de la producción
+          headers:
+            Content-Disposition:
+              description: |
+                `attachment; filename="indicadores-produccion-{anio}-{mes}.xlsx"` (mes con dos dígitos), con
+                `-acumulado` antes de la extensión si `acumulado`. El frontend lo lee gracias a
+                `Access-Control-Expose-Headers`.
+              schema: { type: string, example: 'attachment; filename="indicadores-produccion-2026-08-acumulado.xlsx"' }
           content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Error" }
-              example:
-                error: { codigo: NO_ENCONTRADO, mensaje: La red no existe. }
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/ProduccionEntradaInvalida" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/ProduccionNoEncontrado" }
 
   # ---------------------------------------------------------------- Informes
   /informes/opciones:
@@ -6125,6 +6239,51 @@ components:
       in: query
       description: El id del elemento, igual exacto (número de MySQL u ObjectId de MongoDB)
       schema: { type: string, minLength: 1, maxLength: 40, example: "255" }
+    ProduccionAnio:
+      name: anio
+      in: query
+      required: true
+      schema: { type: integer, minimum: 2000, maximum: 2100, example: 2026 }
+    ProduccionMes:
+      name: mes
+      in: query
+      required: true
+      description: Mes de corte
+      schema: { type: integer, minimum: 1, maximum: 12, example: 8 }
+    ProduccionAcumulado:
+      name: acumulado
+      in: query
+      description: "`true`: de enero al mes de corte; `false`: solo el mes de corte"
+      schema: { type: boolean, default: true }
+    ProduccionAgrupar:
+      name: agrupar
+      in: query
+      schema: { type: string, enum: [municipio, establecimiento], default: municipio }
+    ProduccionVacuna:
+      name: vacuna
+      in: query
+      description: Código de la vacuna; sin él, todas las vacunas
+      schema: { type: string, pattern: "^[A-Z0-9_]{1,20}$", example: HEXA }
+    ProduccionDistritoId:
+      name: distritoId
+      in: query
+      description: Recorta al municipio del distrito; no se combina con `redId`
+      schema: { type: integer, minimum: 1, example: 3 }
+    ProduccionRedId:
+      name: redId
+      in: query
+      description: Recorta a los municipios actuales de la red; no se combina con `distritoId`
+      schema: { type: integer, minimum: 1, example: 1 }
+    ProduccionMunicipioIds:
+      name: municipioIds
+      in: query
+      description: Ids separados por comas, sin repetir
+      schema: { type: string, pattern: "^[1-9][0-9]*(,[1-9][0-9]*)*$", example: "1,4" }
+    ProduccionEstablecimientoIds:
+      name: establecimientoIds
+      in: query
+      description: Ids separados por comas, sin repetir
+      schema: { type: string, pattern: "^[1-9][0-9]*(,[1-9][0-9]*)*$", example: "31,40" }
     InformeTipo:
       name: informe
       in: query
@@ -6274,6 +6433,24 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
           example:
             error: { codigo: CAMBIO_CONTRASENA_REQUERIDO, mensaje: Debe cambiar su contraseña temporal antes de continuar. }
+    ProduccionEntradaInvalida:
+      description: |
+        Un parámetro falta, no es válido, es desconocido o está repetido, una lista repite un id, vienen
+        `distritoId` y `redId`, o falta `ddrissId` (Autoridad nacional)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: ENTRADA_INVALIDA, mensaje: El distrito y la red no se combinan. }
+    ProduccionNoEncontrado:
+      description: |
+        La vacuna no existe; el distrito o la red no existen, están inactivos o son de otra DDRISS; o el mes de
+        corte no está habilitado en la DDRISS
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: NO_ENCONTRADO, mensaje: La red no existe. }
     InformeEntradaInvalida:
       description: |
         Un parámetro falta, no es válido, es desconocido o está repetido, una lista repite un id, `desde` es
