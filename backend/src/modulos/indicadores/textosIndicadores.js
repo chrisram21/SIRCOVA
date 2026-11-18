@@ -130,11 +130,12 @@ export function textoPeriodoDeProduccion({ anio, mes, acumulado }) {
 }
 
 // territorio: { red: { nombre } | null, distrito: { nombre } | null, municipios: [nombres] }. La red manda; los
-// municipios elegidos están dentro del distrito, así que lo nombran mejor.
+// municipios elegidos están dentro del distrito, así que lo nombran mejor. Los nombres ya dicen «Red No. 1» o
+// «Distrito de Salud Ayutla»: no llevan prefijo.
 export function textoTerritorio({ red = null, distrito = null, municipios = [] }) {
-  if (red) return `Red ${red.nombre}`;
+  if (red) return red.nombre;
   if (municipios.length) return municipios.join(', ');
-  if (distrito) return `Distrito ${distrito.nombre}`;
+  if (distrito) return distrito.nombre;
   return 'Todos los municipios';
 }
 

@@ -3,8 +3,8 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { listarDdriss, listarDistritos, listarPeriodos, listarRedes } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
 import {
-  calcularIndicadores, listarCorridas, listarResultados, obtenerMesesCalculados, obtenerOpcionesProduccion,
-  obtenerProduccion, obtenerSerie,
+  calcularIndicadores, descargarIndicadoresExcel, descargarProduccionExcel, listarCorridas, listarResultados,
+  obtenerMesesCalculados, obtenerOpcionesProduccion, obtenerProduccion, obtenerSerie,
 } from '@/api/indicadores.js'
 import { guardarSesion } from '@/api/sesion.js'
 import { RETRASO_MS } from '@/componentes/PantallaCargaSesion.jsx'
@@ -23,6 +23,8 @@ vi.mock('@/api/indicadores.js', () => ({
   obtenerMesesCalculados: vi.fn(),
   obtenerOpcionesProduccion: vi.fn(),
   obtenerProduccion: vi.fn(),
+  descargarIndicadoresExcel: vi.fn(),
+  descargarProduccionExcel: vi.fn(),
 }))
 
 // Hoy fijo: el mes por defecto es octubre de 2026.
@@ -1341,5 +1343,134 @@ describe('pestaña «Producción» (SPEC 61)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
     expect(await screen.findByText('Dosis por municipio de aplicación')).toBeTruthy()
     expect(obtenerProduccion).toHaveBeenCalledTimes(2)
+  })
+
+  // SPEC 72: el archivo sale con el mismo pedido que la tabla.
+  test('«Exportar Excel» aparece con la tabla y pide el archivo con el mismo pedido', async () => {
+    let responder
+    obtenerProduccion.mockReturnValueOnce(new Promise((resolver) => { responder = resolver }))
+    descargarProduccionExcel.mockResolvedValue({ blob: new Blob(['PK']), nombre: 'indicadores-produccion.xlsx' })
+    URL.createObjectURL = vi.fn(() => 'blob:produccion')
+    URL.revokeObjectURL = vi.fn()
+    const clic = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    await montar({ url: URL_PRODUCCION })
+    await waitFor(() => expect(obtenerProduccion).toHaveBeenCalled())
+    expect(screen.queryByRole('button', { name: 'Exportar Excel' })).toBeNull()
+
+    responder(PRODUCCION)
+    fireEvent.click(await screen.findByRole('button', { name: 'Exportar Excel' }))
+    await waitFor(() => expect(clic).toHaveBeenCalledTimes(1))
+    expect(descargarProduccionExcel).toHaveBeenCalledWith(PEDIDO)
+    clic.mockRestore()
+  })
+})
+
+describe('«Exportar Excel» (SPEC 72)', () => {
+  const ARCHIVO = { blob: new Blob(['PK']), nombre: 'indicadores-avance-AVANCE_HEXA3-2026-10.xlsx' }
+  const PEDIDO = {
+    anio: 2026, mes: 10, vista: 'avance', indicador: 'AVANCE_HEXA3', redId: undefined, distritoId: undefined,
+    municipioIds: [], ddrissId: undefined,
+  }
+  const boton = () => screen.queryByRole('button', { name: /Exportar Excel|Exportando…/ })
+  const RED = {
+    id: 3,
+    codigo: 'RED_01',
+    nombre: 'Red No. 1',
+    activo: true,
+    ddriss: { id: 1, codigo: 'DDRISS_SM', nombre: 'DDRISS San Marcos' },
+    municipios: [{ id: 9, codigoIne: '1209', nombre: 'Tajumulco' }],
+    trazadoras: [],
+  }
+  let descargados
+
+  beforeEach(() => {
+    descargarIndicadoresExcel.mockResolvedValue(ARCHIVO)
+    descargados = []
+    URL.createObjectURL = vi.fn(() => 'blob:indicadores')
+    URL.revokeObjectURL = vi.fn()
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function guardar() {
+      descargados.push({ href: this.href, nombre: this.download })
+    })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  test('va a la derecha del título, junto a «Calcular indicadores», y guarda el archivo con su nombre', async () => {
+    await montar()
+    await screen.findByText('Total de la DDRISS')
+    const acciones = [...boton().parentElement.querySelectorAll('button')].map((b) => b.textContent)
+    expect(acciones).toEqual(['Exportar Excel', 'Calcular indicadores'])
+
+    fireEvent.click(boton())
+    await waitFor(() => expect(descargados).toEqual([{ href: 'blob:indicadores', nombre: ARCHIVO.nombre }]))
+    expect(descargarIndicadoresExcel).toHaveBeenCalledWith(PEDIDO)
+  })
+
+  test('manda el indicador elegido, el distrito y los municipios que la pantalla aceptó', async () => {
+    listarDistritos.mockResolvedValue([
+      { id: 32, codigo: 'DS-1209', nombre: 'Distrito Tajumulco', municipioId: 9, activo: true },
+    ])
+    // El municipio 1 no es del distrito: la pantalla no lo acepta y el archivo tampoco lo pide.
+    await montar({
+      url: '/indicadores?vista=brecha&distrito=32&municipios=9,1',
+      permisos: ['INDICADOR_CONSULTAR', 'DISTRITO_CONSULTAR'],
+    })
+    await screen.findByText('Total de la DDRISS')
+    await waitFor(() => expect(document.querySelector('select[name="distrito"]')).not.toBeNull())
+    fireEvent.click(boton())
+    await waitFor(() => expect(descargarIndicadoresExcel).toHaveBeenCalledWith({
+      ...PEDIDO, vista: 'brecha', indicador: 'BRECHA_HEXA3', distritoId: 32, municipioIds: [9],
+    }))
+  })
+
+  test('con red manda la red y no el distrito ni los municipios; en «Redes», la red de la pestaña', async () => {
+    listarRedes.mockResolvedValue([RED])
+    const permisos = ['INDICADOR_CONSULTAR', 'RED_CONSULTAR']
+    const router = await montar({ url: '/indicadores?vista=cobertura&red=3&municipios=9', permisos })
+    await screen.findByText('Tajumulco')
+    fireEvent.click(boton())
+    await waitFor(() => expect(descargarIndicadoresExcel).toHaveBeenLastCalledWith({
+      ...PEDIDO, vista: 'cobertura', indicador: 'COB_HEXA3', redId: 3,
+    }))
+
+    await router.navigate('/indicadores?anio=2026&mes=10&vista=redes')
+    await waitFor(() => expect(titulo()).toBe('Cobertura de la Red No. 1'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Exportar Excel' }))
+    await waitFor(() => expect(descargarIndicadoresExcel).toHaveBeenLastCalledWith({
+      ...PEDIDO, vista: 'redes', indicador: undefined, redId: 3,
+    }))
+  })
+
+  test('no aparece sin corrida ni en una pestaña con aviso', async () => {
+    listarResultados.mockResolvedValue({ corrida: null, resultados: [] })
+    const router = await montar()
+    await screen.findByText('Este mes todavía no tiene indicadores calculados.')
+    expect(boton()).toBeNull()
+
+    listarResultados.mockResolvedValue({
+      corrida: corrida(), resultados: RESULTADOS.filter((r) => r.tipoCalculo !== 'DESERCION'),
+    })
+    await router.navigate('/indicadores?anio=2026&mes=9&vista=desercion')
+    await screen.findByText('La corrida no tiene un indicador de deserción entre dosis de Hexavalente.')
+    expect(boton()).toBeNull()
+  })
+
+  test('mientras descarga dice «Exportando…» y, si falla, avisa encima de la tabla', async () => {
+    let fallar
+    descargarIndicadoresExcel.mockReturnValueOnce(new Promise((_, rechazar) => { fallar = rechazar }))
+    await montar({ permisos: ['INDICADOR_CONSULTAR'] })
+    await screen.findByText('Total de la DDRISS')
+    fireEvent.click(boton())
+
+    expect((await screen.findByRole('button', { name: 'Exportando…' })).disabled).toBe(true)
+    fallar(new ErrorApi(404, 'NO_ENCONTRADO', 'No hay indicadores calculados para ese mes.'))
+    const aviso = await screen.findByText(/No se pudo exportar: No hay indicadores calculados para ese mes\./)
+    expect((await screen.findByRole('button', { name: 'Exportar Excel' })).disabled).toBe(false)
+    expect(descargados).toEqual([])
+    // Encima de la tabla.
+    const tablaDeResultados = screen.getAllByRole('table').at(-1)
+    expect(aviso.compareDocumentPosition(tablaDeResultados) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })

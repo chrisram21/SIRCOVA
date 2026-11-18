@@ -10,7 +10,9 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { listarDdriss, listarDistritos, listarRedes } from '@/api/catalogos.js'
 import { mensajeDeError } from '@/api/cliente.js'
-import { listarCorridas, listarResultados, obtenerMesesCalculados } from '@/api/indicadores.js'
+import {
+  descargarIndicadoresExcel, listarCorridas, listarResultados, obtenerMesesCalculados,
+} from '@/api/indicadores.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import PantallaCargaSesion, { usePrimeraCarga } from '@/componentes/PantallaCargaSesion.jsx'
@@ -19,6 +21,7 @@ import { MESES, mesAnterior } from '@/lib/fechas.js'
 import { cn } from '@/lib/utils'
 import BarraFiltrosIndicadores, { Selector } from './BarraFiltrosIndicadores.jsx'
 import DialogoCalcularIndicadores, { avisoDeMesesSinCerrar } from './DialogoCalcularIndicadores.jsx'
+import { BotonExportarExcel, useExportarExcel } from './ExportarExcel.jsx'
 import GraficasRed from './GraficasRed.jsx'
 import InsigniaCumple from './InsigniaCumple.jsx'
 import InsigniaValor from './InsigniaValor.jsx'
@@ -52,6 +55,8 @@ import { columnasDeLaRed, redElegida } from './tablaRed.js'
 // pestaña (vista), que elige qué tipo de indicador se mira. SPEC 60, la red (red), que recorta a sus municipios y
 // pide a la API la fila «Total de la red». SPEC 61, la pestaña «Producción» (PestanaProduccion.jsx), que no usa
 // la corrida; sus filtros propios (agrupar, periodo, establecimientos) se conservan en la URL al pasar por las demás.
+// SPEC 72, «Exportar Excel», que pide la tabla que se ve con lo que la pantalla ya resolvió (indicador, red, distrito y
+// municipios), no la URL tal cual.
 
 const ANIOS_HACIA_ATRAS = 6
 const MOTIVOS = {
@@ -313,6 +318,7 @@ export default function PaginaIndicadores({ hoy }) {
   const [calculados, setCalculados] = useState(null)
   const [errorCalculados, setErrorCalculados] = useState(null)
   const [intentoCalculados, setIntentoCalculados] = useState(0)
+  const exportacion = useExportarExcel()
 
   const filtros = filtrosDeUrl(parametros, hoy)
   const ddrissId = nacional ? (filtros.ddriss ?? ddriss?.[0]?.id) : undefined
@@ -460,6 +466,32 @@ export default function PaginaIndicadores({ hoy }) {
   let titulo = corrida && vacuna ? `${VISTAS[vista].etiqueta} de ${vacunaNombre}` : 'Indicadores'
   if (enRedes) titulo = redDeLaPestana ? `Cobertura de la ${redDeLaPestana.nombre}` : 'Redes'
 
+  // Solo con la tabla a la vista: una pestaña con aviso (sin indicador, sin corrida, sin redes) no exporta.
+  const hayTabla = Boolean(corrida) && conResultados.length > 0
+    && (enRedes ? Boolean(redDeLaPestana) : indicador !== null && resultados.length > 0)
+  const exportar = () => exportacion.exportar(() => descargarIndicadoresExcel({
+    anio: filtros.anio,
+    mes: filtros.mes,
+    vista,
+    indicador: enRedes ? undefined : indicador.codigo,
+    redId: redPedida?.id,
+    distritoId: distrito?.id,
+    municipioIds: elegidos.map((m) => m.id),
+    ddrissId,
+  }))
+  const acciones = (hayTabla || (puedeCalcular && !nacional)) && (
+    <>
+      {hayTabla && <BotonExportarExcel exportando={exportacion.exportando} alExportar={exportar} />}
+      {puedeCalcular && !nacional && <Button onClick={() => setCalculando(true)}>Calcular indicadores</Button>}
+    </>
+  )
+  const avisoExportar = exportacion.error && <AvisoError>No se pudo exportar: {exportacion.error}</AvisoError>
+  const { limpiar: limpiarExportar } = exportacion
+  // El error de una exportación anterior no es de la tabla de otro mes, pestaña o indicador.
+  useEffect(() => {
+    limpiarExportar()
+  }, [clave, vista, indicador?.codigo])
+
   const pestanas = (
     <PestanasIndicadores
       vista={vista}
@@ -509,7 +541,7 @@ export default function PaginaIndicadores({ hoy }) {
           antetitulo="Indicadores"
           titulo={titulo}
           descripcion={`Dosis acumuladas de enero a ${MESES[filtros.mes - 1]} de ${filtros.anio}, por municipio de residencia.`}
-          acciones={puedeCalcular && !nacional && <Button onClick={() => setCalculando(true)}>Calcular indicadores</Button>}
+          acciones={acciones}
         />
 
         {avisosCatalogos}
@@ -607,6 +639,7 @@ export default function PaginaIndicadores({ hoy }) {
                     />
                     {redDeLaPestana && (
                       <>
+                        {avisoExportar}
                         <GraficasRed
                           key={redDeLaPestana.id}
                           red={redDeLaPestana}
@@ -617,6 +650,7 @@ export default function PaginaIndicadores({ hoy }) {
                         <TablaRed red={redDeLaPestana} columnas={columnasRed} resultados={todos} mes={corrida.mesHasta} />
                       </>
                     )}
+                    {!enRedes && avisoExportar}
                     {enRedes ? null : indicador?.tipoCalculo === 'BRECHA' ? (
                       <TablaBrecha resultados={resultados} />
                     ) : indicador?.tipoCalculo === 'DESERCION' ? (

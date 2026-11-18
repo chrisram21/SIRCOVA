@@ -268,9 +268,9 @@ describe('libro de Excel de una pestaña de indicadores (SPEC 72)', () => {
   it('el territorio dice la red, el distrito o los municipios', async () => {
     const conTerritorio = async (territorio) =>
       valorDe(await releer(cobertura({}, { ...DATOS, territorio })), 'Territorio');
-    expect(await conTerritorio({ distrito: { nombre: 'Malacatán' } })).toBe('Distrito Malacatán');
+    expect(await conTerritorio({ distrito: { nombre: 'Distrito de Salud Malacatán' } })).toBe('Distrito de Salud Malacatán');
     expect(await conTerritorio({ municipios: ['San Marcos', 'Tacaná'] })).toBe('San Marcos, Tacaná');
-    expect(await conTerritorio({ red: { nombre: 'Red No. 1' }, distrito: { nombre: 'X' } })).toBe('Red Red No. 1');
+    expect(await conTerritorio({ red: { nombre: 'Red No. 1' }, distrito: { nombre: 'X' } })).toBe('Red No. 1');
   });
 
   it('las columnas van en el orden de la pantalla, con números, porcentajes, Sí/No y colores', async () => {
@@ -834,7 +834,7 @@ describe('GET /indicadores/resultados/excel y /indicadores/produccion/excel (SPE
       };
     };
     expect(await tabla(`distritoId=${ids.distrito}`)).toEqual({
-      filas: ['Total de la DDRISS', 'vitest-hu72-Z903'], territorio: 'Distrito vitest-hu72 D1',
+      filas: ['Total de la DDRISS', 'vitest-hu72-Z903'], territorio: 'vitest-hu72 D1',
     });
     expect(await tabla(`municipioIds=${municipios.Z902},${municipios.Z901}`)).toEqual({
       filas: ['Total de la DDRISS', 'vitest-hu72-Z901', 'vitest-hu72-Z902'],
@@ -842,7 +842,7 @@ describe('GET /indicadores/resultados/excel y /indicadores/produccion/excel (SPE
     });
     // La red manda sobre el distrito, como en la pantalla.
     expect(await tabla(`redId=${ids.red}&distritoId=${ids.distrito}`)).toEqual({
-      filas: ['Total de la red', 'vitest-hu72-Z901', 'vitest-hu72-Z902'], territorio: 'Red vitest-hu72 Red A',
+      filas: ['Total de la red', 'vitest-hu72-Z901', 'vitest-hu72-Z902'], territorio: 'vitest-hu72 Red A',
     });
   });
 

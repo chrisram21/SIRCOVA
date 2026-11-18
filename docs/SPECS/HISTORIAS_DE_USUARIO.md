@@ -1675,10 +1675,12 @@ Verificado contra la API real el 2026-11-16, como `admin.prueba` y `revisor2`: H
 
 **Origen (2026-11-12, spec 64):** el «Exportar Excel» de `Indicadores.html` quedó fuera del SPEC 49 (HU-41), y la HU-47 solo exporta «Informes». Nota del SPEC 49: los filtros de esa pantalla ya están en la URL (`anio`, `mes`, `ddriss`, `vacuna`, `indicador`, `distrito`, `municipios`, y `vista` desde el SPEC 54) y pueden pasar tal cual al endpoint que genere el archivo. El de HU-47 (`backend/src/modulos/informes/informeExcel.service.js` y `descargar` de `frontend/src/api/cliente.js`) sirve de modelo.
 
+**Avance:** criterios cumplidos; queda terminada al integrar el spec 72 a `main` (`specs/indicadores/72-hu-64-exportar-indicadores-a-excel.md`). Las siete pestañas (Avance, Brecha, Cobertura, Deserción, Proyección, Redes y Producción) tienen «Exportar Excel» junto al título, solo con la tabla a la vista. Dos rutas con `INDICADOR_CONSULTAR`, sin permiso nuevo: `GET /indicadores/resultados/excel` (`vista`, el indicador que se ve, red, distrito y municipios, que la pantalla manda ya resueltos) y `GET /indicadores/produccion/excel` (los parámetros de `GET /indicadores/produccion`). El backend recorta y ordena las filas como la pantalla (`tablaIndicadores.js`) y arma una hoja con ExcelJS: encabezado con título, DDRISS, mes de corte, indicador, territorio, fecha y quién lo generó, «PRELIMINAR» y los avisos de la pantalla; cantidades como números, porcentajes como fracción con formato de porcentaje, el excedente y «Más del 100 %» en su columna, «Sí»/«No» y el color de las insignias de la tabla. Cada descarga deja `EXPORTAR` del módulo `INDICADORES`, sin cantidades. **Diferencia con el mockup:** `Indicadores.html` muestra «Exportar PDF»; la historia pide Excel y el PDF de Indicadores queda fuera, sin historia por ahora. Verificada contra la API real el 2026-11-17 con Epidemiología: once archivos de Hexavalente (las siete pestañas en agosto de 2026, Cobertura con un distrito y con dos municipios, Brecha con la Red No. 1 y Avance de septiembre, parcial, con «PRELIMINAR») coinciden celda por celda con la tabla en pantalla (1381 celdas), y cada descarga dejó su fila `EXPORTAR`. En la prueba se vio que «Territorio» repetía la palabra («Red Red No. 1»): ahora lleva el nombre de la red o del distrito tal cual.
+
 **Criterios de aceptación:**
-- [ ] El archivo trae la tabla de la pestaña elegida con los mismos filtros que la pantalla.
-- [ ] Incluye encabezado con título, corrida (mes de corte) y fecha de generación, y la leyenda «PRELIMINAR» si la corrida es parcial (`Corrida.parcial`).
-- [ ] Los números se exportan como números, no como texto.
+- [x] El archivo trae la tabla de la pestaña elegida con los mismos filtros que la pantalla.
+- [x] Incluye encabezado con título, corrida (mes de corte) y fecha de generación, y la leyenda «PRELIMINAR» si la corrida es parcial (`Corrida.parcial`).
+- [x] Los números se exportan como números, no como texto.
 
 ## 6. Notas y pendientes
 

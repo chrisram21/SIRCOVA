@@ -1,6 +1,6 @@
 # SPEC 72 — HU-64 Exportar Indicadores a Excel
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Historia:** HU-64
 > **Origen:** historia
 > **Depende de:** SPEC 49, SPEC 54, SPEC 55, SPEC 60, SPEC 61 y SPEC 64
@@ -110,12 +110,12 @@ Una hoja con el nombre de la pestaña («Cobertura», «Redes», «Producción»
 
 | Fila | Contenido |
 |---|---|
-| 1 | El título de la pantalla («Cobertura de Hexavalente», «Red {nombre}», «Producción…»), en negrita |
+| 1 | El título de la pantalla («Cobertura de Hexavalente», «Cobertura de la {red}», «Producción de {vacuna}»), en negrita |
 | 2 | «PRELIMINAR», en negrita, solo si `corrida.parcial` (en Producción, si algún mes del rango no está cerrado, con la regla de su pestaña) |
 | — | DDRISS: su nombre |
 | — | Corrida: «Mes de corte: agosto de 2026» (`corrida.mesHasta`) y, si es parcial, los meses sin cerrar, como el aviso de la pantalla |
 | — | Indicador: su nombre y código (no en Redes ni Producción) |
-| — | Territorio: «Red {nombre}», «Distrito {nombre}», los municipios elegidos separados por comas, o «Todos los municipios» |
+| — | Territorio: el nombre de la red o del distrito tal cual («Red No. 1», «Distrito de Salud Ayutla»: ya traen la palabra, decidido en la prueba manual), los municipios elegidos separados por comas, o «Todos los municipios» |
 | — | Generado: fecha y hora de Guatemala (`DD/MM/AAAA HH:mm`) y el nombre del empleado |
 | — | Avisos: los mismos de la pantalla, con el mismo texto (más del 100 %, «Sin indicador de cobertura anual para: …», lo esperado al mes en Redes, las notas al pie de las tablas) |
 
@@ -184,17 +184,17 @@ Después, una fila vacía y la tabla.
 
 ## Criterios de aceptación
 
-- [ ] Cada una de las siete pestañas, con su tabla cargada, muestra «Exportar Excel» junto al título, que descarga un .xlsx con el nombre que define este spec.
-- [ ] El archivo trae la tabla de la pestaña elegida con los mismos filtros que la pantalla: cada número coincide con el que se ve, con distrito, con municipios, con red y sin filtro.
-- [ ] El encabezado trae el título, la DDRISS, el mes de corte de la corrida, el territorio, la fecha y hora de generación y quién lo generó.
-- [ ] Con una corrida parcial el archivo lleva «PRELIMINAR», y los avisos de la pantalla aparecen con el mismo texto.
-- [ ] Las cantidades y los porcentajes son números de Excel (una suma o un promedio funcionan sobre ellos), con separador de miles y formato de porcentaje.
-- [ ] La celda del indicador lleva el color del semáforo, «Cumple» dice «Sí» o «No», el excedente y la marca de más del 100 % tienen su columna, y los encabezados quedan fijos.
-- [ ] Cada descarga correcta deja una fila `EXPORTAR` del módulo `INDICADORES` con los parámetros, sin cantidades. Un 400 o un 404 no la deja.
-- [ ] Los dos endpoints piden `INDICADOR_CONSULTAR` y respetan la DDRISS del usuario, igual que sus endpoints de datos.
-- [ ] La pantalla no cambia fuera del botón: el recorte, los filtros y las gráficas siguen igual (sus pruebas pasan sin cambios).
-- [ ] El avance de HU-64 está en `HISTORIAS_DE_USUARIO.md` y el mapa está al día.
-- [ ] Las pruebas del backend que tocan los archivos cambiados y la suite del frontend pasan.
+- [x] Cada una de las siete pestañas, con su tabla cargada, muestra «Exportar Excel» junto al título, que descarga un .xlsx con el nombre que define este spec.
+- [x] El archivo trae la tabla de la pestaña elegida con los mismos filtros que la pantalla: cada número coincide con el que se ve, con distrito, con municipios, con red y sin filtro.
+- [x] El encabezado trae el título, la DDRISS, el mes de corte de la corrida, el territorio, la fecha y hora de generación y quién lo generó.
+- [x] Con una corrida parcial el archivo lleva «PRELIMINAR», y los avisos de la pantalla aparecen con el mismo texto.
+- [x] Las cantidades y los porcentajes son números de Excel (una suma o un promedio funcionan sobre ellos), con separador de miles y formato de porcentaje.
+- [x] La celda del indicador lleva el color del semáforo, «Cumple» dice «Sí» o «No», el excedente y la marca de más del 100 % tienen su columna, y los encabezados quedan fijos.
+- [x] Cada descarga correcta deja una fila `EXPORTAR` del módulo `INDICADORES` con los parámetros, sin cantidades. Un 400 o un 404 no la deja.
+- [x] Los dos endpoints piden `INDICADOR_CONSULTAR` y respetan la DDRISS del usuario, igual que sus endpoints de datos.
+- [x] La pantalla no cambia fuera del botón: el recorte, los filtros y las gráficas siguen igual (sus pruebas pasan sin cambios).
+- [x] El avance de HU-64 está en `HISTORIAS_DE_USUARIO.md` y el mapa está al día.
+- [x] Las pruebas del backend que tocan los archivos cambiados y la suite del frontend pasan.
 
 ## Decisiones
 
