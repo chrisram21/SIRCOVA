@@ -24,4 +24,4 @@ Carpeta: `specs/indicadores/` · 15 specs · [[Inicio]]
 - [[SPEC 60]] — Redes en Indicadores · *Implementado* · Retroalimentación
 - [[SPEC 61]] — Pestaña «Producción» en Indicadores · *Implementado* · Retroalimentación
 - [[SPEC 68]] — HU-51 Alertas de cobertura y de calidad · *Implementado* · [[HU-51]]
-- [[SPEC 72]] — HU-64 Exportar Indicadores a Excel · *Aprobado* · [[HU-64]]
+- [[SPEC 72]] — HU-64 Exportar Indicadores a Excel · *Implementado* · [[HU-64]]

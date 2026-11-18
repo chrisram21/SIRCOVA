@@ -6,7 +6,7 @@ tags: ["inicio"]
 
 > [!info] Nota generada por `scripts/mapa-obsidian.mjs`: no la edites a mano, se reescribe.
 
-72 specs · 57 de 64 historias con spec · 1 Aprobado · 71 Implementado
+72 specs · 57 de 64 historias con spec · 72 Implementado
 
 Primera vez aquí: [[Cómo usar el mapa]].
 

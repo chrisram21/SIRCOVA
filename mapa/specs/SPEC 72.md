@@ -2,7 +2,7 @@
 numero: 72
 titulo: "HU-64 Exportar Indicadores a Excel"
 modulo: "Indicadores"
-estado: "Aprobado"
+estado: "Implementado"
 origen: "Historia de usuario"
 historias: ["[[HU-64]]"]
 archivo: "specs/indicadores/72-hu-64-exportar-indicadores-a-excel.md"
@@ -15,7 +15,7 @@ tags: ["spec", "modulo/indicadores", "origen/historia"]
 
 - **Spec completo:** [[specs/indicadores/72-hu-64-exportar-indicadores-a-excel|abrir el spec]]
 - **Módulo:** [[Módulo Indicadores]]
-- **Estado:** Aprobado
+- **Estado:** Implementado
 - **Origen:** Historia de usuario
 - **Historia:** [[HU-64]] Exportar Indicadores a Excel
 - **Texto del encabezado:** HU-64
