@@ -141,6 +141,38 @@ test('cambiar un filtro sin pulsar «Generar» no cambia la URL ni el informe', 
   expect(obtenerInforme).toHaveBeenCalledTimes(1)
 })
 
+describe('«Filtros sin aplicar» (SPEC 75)', () => {
+  const SIN_APLICAR = 'Filtros sin aplicar'
+  const botonGenerar = () => screen.getByRole('button', { name: 'Generar' })
+
+  test('no se ve al entrar; aparece al cambiar un filtro y se va al generar', async () => {
+    montar()
+    await screen.findByText(SIN_GENERAR)
+    expect(screen.queryByText(SIN_APLICAR)).toBeNull()
+    expect(botonGenerar().className).not.toContain('bg-cambio-pendiente')
+
+    elegir('nivel', 'distrito')
+    const aviso = screen.getByText(SIN_APLICAR)
+    expect(botonGenerar().className).toContain('bg-cambio-pendiente')
+    expect(botonGenerar().getAttribute('aria-describedby')).toBe(aviso.id)
+
+    generar()
+    await screen.findByRole('heading', { level: 2 })
+    expect(screen.queryByText(SIN_APLICAR)).toBeNull()
+    expect(botonGenerar().className).not.toContain('bg-cambio-pendiente')
+  })
+
+  test('cambiar un filtro y volver a dejarlo igual no lo muestra', async () => {
+    montar({ url: '/informes?informe=total&desde=2026-02&hasta=2026-08' })
+    await screen.findAllByText('1,234')
+
+    elegir('hasta-mes', '7')
+    expect(screen.getByText(SIN_APLICAR)).toBeTruthy()
+    elegir('hasta-mes', '8')
+    expect(screen.queryByText(SIN_APLICAR)).toBeNull()
+  })
+})
+
 test('con el informe por residencia, el nivel Establecimiento pasa a Municipio', async () => {
   const router = montar()
   await screen.findByText(SIN_GENERAR)

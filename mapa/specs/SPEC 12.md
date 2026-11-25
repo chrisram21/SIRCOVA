@@ -40,3 +40,4 @@ tags: ["spec", "modulo/usuarios", "origen/historia"]
 - [[SPEC 40]] — Solicitar una rectificación · *Implementado*
 - [[SPEC 41]] — Resolver una rectificación · *Implementado*
 - [[SPEC 58]] — Límite de opciones en los combobox que crecen · *Implementado*
+- [[SPEC 75]] — Ajustes de diseño: marcas de dimensiones, tabla de Usuarios, filtros sin aplicar y formularios centrados · *Implementado*

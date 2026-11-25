@@ -9,6 +9,7 @@ import { ErrorApi, mensajeDeError } from '@/api/cliente.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
+import ContenedorFormulario from '@/componentes/ContenedorFormulario.jsx'
 import EditorEsquema, { cargarReferencias, contenidoDe, RUTA_ESQUEMAS } from './EditorEsquema.jsx'
 import { ESTADOS, textoPublicacion, textoVigencia } from './PaginaHistorialEsquemas.jsx'
 import { territorioDe } from './PaginaEsquemas.jsx'
@@ -67,7 +68,7 @@ export default function PaginaVerEsquema() {
   const origen = esquema?.basadoEn ? `Basado en la versión ${esquema.basadoEn.version} nacional` : 'Esquema nuevo'
 
   return (
-    <section className="flex max-w-5xl flex-col gap-6 p-6">
+    <ContenedorFormulario ancho="5xl">
       <EncabezadoPagina
         antetitulo="Administración"
         titulo={esquema ? `${esquema.vacuna.nombre} · versión ${esquema.version}` : 'Versión del esquema'}
@@ -157,6 +158,6 @@ export default function PaginaVerEsquema() {
           )}
         </>
       )}
-    </section>
+    </ContenedorFormulario>
   )
 }

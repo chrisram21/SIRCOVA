@@ -264,6 +264,14 @@ describe('dimensión RANGO_EDAD', () => {
     expect(insignias('MENOR_1')).toEqual(['Activo', 'En uso'])
   })
 
+  test('al enfocar "Sin población" se ve su Tooltip', async () => {
+    await abrir(EDAD)
+
+    fireEvent.focus(within(filaDe('2_4')).getByText('Sin población'))
+    const ayuda = 'No tiene población objetivo: se registran sus dosis, pero no se calcula su cobertura.'
+    expect((await screen.findAllByText(ayuda)).length).toBeGreaterThan(0)
+  })
+
   test('el Dialog ofrece los grupos disponibles, sugiere la etiqueta y valida mínimo < máximo', async () => {
     agregarValorDimension.mockResolvedValue({
       ...EDAD,

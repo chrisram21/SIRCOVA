@@ -48,6 +48,7 @@ import { mensajeDeError } from '@/api/cliente.js'
 import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
+import ContenedorFormulario from '@/componentes/ContenedorFormulario.jsx'
 import { LARGOS, validarDescripcionVacuna, validarNombreDosis, validarNombreVacuna } from '@/validaciones/campos.js'
 import { Campo, CampoTexto } from '../usuarios/CamposEmpleado.jsx'
 import { MENSAJE_ORDEN, ORDEN_INFORME_MAXIMO, validarOrdenInforme } from './FormularioVacuna.jsx'
@@ -454,7 +455,7 @@ export default function PaginaEditarVacuna() {
   }
 
   return (
-    <section className="flex max-w-4xl flex-col gap-6 p-6">
+    <ContenedorFormulario ancho="4xl">
       <EncabezadoPagina antetitulo="Administración" titulo="Editar vacuna" volverA={volverA} />
 
       {errorCarga && <AvisoError onReintentar={reintentarCarga}>No se pudo cargar la vacuna: {errorCarga}</AvisoError>}
@@ -601,6 +602,6 @@ export default function PaginaEditarVacuna() {
       )}
 
       <AvisoCambiosSinGuardar bloqueo={bloqueo} descripcion="Si sale ahora, se pierden los cambios de la vacuna." />
-    </section>
+    </ContenedorFormulario>
   )
 }

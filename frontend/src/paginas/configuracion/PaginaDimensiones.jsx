@@ -24,6 +24,7 @@ import { mensajeDeError } from '@/api/cliente.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
+import MarcaDimension from './MarcaDimension.jsx'
 
 // Radix Select no acepta '' como valor de una opción; "todas" equivale a no filtrar.
 const TODAS = 'todas'
@@ -198,8 +199,8 @@ function ContenidoDimensiones() {
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
-                            {d.activa ? <Badge variant="secondary">Activa</Badge> : <Badge variant="outline">Inactiva</Badge>}
-                            {d.enUso && <Badge variant="outline">En uso</Badge>}
+                            <MarcaDimension de="dimension" marca={d.activa ? 'activo' : 'inactivo'} />
+                            {d.enUso && <MarcaDimension de="dimension" marca="enUso" />}
                           </div>
                         </TableCell>
                         {puedeEditar && (

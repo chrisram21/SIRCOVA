@@ -31,3 +31,4 @@ tags: ["spec", "modulo/acceso-y-seguridad", "origen/historia"]
 ## Lo usan
 
 - [[SPEC 71]] — HU-55 Historial de cambios de configuración · *Implementado*
+- [[SPEC 75]] — Ajustes de diseño: marcas de dimensiones, tabla de Usuarios, filtros sin aplicar y formularios centrados · *Implementado*

@@ -207,6 +207,35 @@ test('los filtros solo pasan a la URL y a la consulta al aplicar', async () => {
   expect(screen.getByText('Acción: Cierre de periodo')).toBeTruthy()
 })
 
+describe('«Filtros sin aplicar» (SPEC 75)', () => {
+  const SIN_APLICAR = 'Filtros sin aplicar'
+  const botonAplicar = () => screen.getByRole('button', { name: 'Aplicar' })
+
+  test('no se ve al entrar; aparece al cambiar un filtro y se va al aplicar', async () => {
+    await montar()
+    expect(screen.queryByText(SIN_APLICAR)).toBeNull()
+    expect(botonAplicar().className).not.toContain('bg-cambio-pendiente')
+
+    fireEvent.change(nativo('modulo'), { target: { value: 'REVISION' } })
+    const aviso = screen.getByText(SIN_APLICAR)
+    expect(botonAplicar().className).toContain('bg-cambio-pendiente')
+    expect(botonAplicar().getAttribute('aria-describedby')).toBe(aviso.id)
+
+    fireEvent.click(botonAplicar())
+    await waitFor(() => expect(screen.queryByText(SIN_APLICAR)).toBeNull())
+    expect(botonAplicar().className).not.toContain('bg-cambio-pendiente')
+  })
+
+  test('cambiar un filtro y volver a dejarlo igual no lo muestra', async () => {
+    await montar()
+
+    fireEvent.change(nativo('modulo'), { target: { value: 'REVISION' } })
+    expect(screen.getByText(SIN_APLICAR)).toBeTruthy()
+    fireEvent.change(nativo('modulo'), { target: { value: 'todos' } })
+    expect(screen.queryByText(SIN_APLICAR)).toBeNull()
+  })
+})
+
 test('el usuario se elige con búsqueda y viaja como usuarioId', async () => {
   const router = await montar()
 

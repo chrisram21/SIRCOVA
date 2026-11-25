@@ -10,6 +10,7 @@ import { historialEsquemas, listarDimensiones, obtenerEsquema } from '@/api/conf
 import { ErrorApi, mensajeDeError } from '@/api/cliente.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
+import ContenedorFormulario from '@/componentes/ContenedorFormulario.jsx'
 import { GRUPOS, compararEsquemas, versionAnterior } from './compararEsquemas.js'
 import { RUTA_ESQUEMAS } from './EditorEsquema.jsx'
 import { ESTADOS, textoPublicacion, textoVigencia } from './PaginaHistorialEsquemas.jsx'
@@ -193,7 +194,7 @@ export default function PaginaCompararEsquemas() {
   const vacuna = base?.historial.vacuna
 
   return (
-    <section className="flex max-w-6xl flex-col gap-6 p-6">
+    <ContenedorFormulario ancho="6xl">
       <EncabezadoPagina
         antetitulo="Administración"
         titulo="Comparar versiones"
@@ -286,6 +287,6 @@ export default function PaginaCompararEsquemas() {
           )}
         </>
       )}
-    </section>
+    </ContenedorFormulario>
   )
 }

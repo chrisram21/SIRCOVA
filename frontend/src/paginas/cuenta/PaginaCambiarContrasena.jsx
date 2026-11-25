@@ -12,6 +12,7 @@ import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import CampoContrasena from '@/componentes/contrasena/CampoContrasena.jsx'
 import MedidorContrasena from '@/componentes/contrasena/MedidorContrasena.jsx'
 import { cargarEvaluador } from '@/componentes/contrasena/politicaContrasena.js'
+import ContenedorFormulario from '@/componentes/ContenedorFormulario.jsx'
 
 const MOTIVO_IGUAL = 'Debe ser distinta de la actual.'
 
@@ -203,7 +204,7 @@ export default function PaginaCambiarContrasena({ obligatoria = false }) {
   }
 
   return (
-    <section className="flex max-w-xl flex-col gap-6 p-6">
+    <ContenedorFormulario ancho="xl">
       <EncabezadoPagina
         titulo="Cambiar contraseña"
         descripcion="Después del cambio, deberá iniciar sesión con la contraseña nueva."
@@ -211,6 +212,6 @@ export default function PaginaCambiarContrasena({ obligatoria = false }) {
       <Card>
         <CardContent>{formulario}</CardContent>
       </Card>
-    </section>
+    </ContenedorFormulario>
   )
 }

@@ -10,6 +10,7 @@ import { ErrorApi, mensajeDeError } from '@/api/cliente.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
+import ContenedorFormulario from '@/componentes/ContenedorFormulario.jsx'
 import { enlaceBitacora } from '@/paginas/auditoria/auditoria.js'
 import { versionAnterior } from './compararEsquemas.js'
 import { aDiaMesAnio } from './DialogoPublicarEsquema.jsx'
@@ -75,7 +76,7 @@ export default function PaginaHistorialEsquemas() {
   }, [vacunaId])
 
   return (
-    <section className="flex max-w-6xl flex-col gap-6 p-6">
+    <ContenedorFormulario ancho="6xl">
       <EncabezadoPagina
         antetitulo="Administración"
         titulo={historial ? `Historial de ${historial.vacuna.nombre}` : 'Historial del esquema'}
@@ -188,6 +189,6 @@ export default function PaginaHistorialEsquemas() {
           </CardContent>
         </Card>
       )}
-    </section>
+    </ContenedorFormulario>
   )
 }

@@ -137,6 +137,11 @@ export default function PaginaInformes() {
   const deUrl = filtrosDeInforme(parametros, opciones)
   const agrupacion = agrupacionDeUrl(parametros, opciones)
   const valores = borrador ?? deUrl
+  // SPEC 75: el orden en que se eligen vacunas o municipios no es un cambio; la agrupación se aplica sola.
+  const firma = (f) =>
+    parametrosDeInforme({ ...f, vacunas: [...f.vacunas].sort(), municipios: [...f.municipios].sort((a, b) => a - b) })
+      .toString()
+  const filtrosSinAplicar = borrador !== null && firma(borrador) !== firma(deUrl)
   const opcionesRed = redes?.filter((r) => r.municipios.length > 0) ?? null
   // Una red de la URL espera a las redes para saber si existe; si no está, se ignora.
   const esperandoRedes = deUrl.red !== null && puedeVerRedes && redes === null && !errorRedes
@@ -284,6 +289,7 @@ export default function PaginaInformes() {
               alCambiar={(cambios) => setBorrador({ ...valores, ...cambios })}
               alCambiarDdriss={(nuevo) => setParametros({ ddriss: String(nuevo) })}
               alGenerar={generar}
+              filtrosSinAplicar={filtrosSinAplicar}
             />
           )
         )}

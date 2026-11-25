@@ -9,6 +9,7 @@ import { cambiarRol, editarEmpleado, listarRoles, obtenerUsuario } from '@/api/u
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
+import ContenedorFormulario from '@/componentes/ContenedorFormulario.jsx'
 import CamposEmpleado, {
   AvisoSalida,
   CampoSeleccion,
@@ -114,7 +115,7 @@ export default function PaginaEditarUsuario() {
 
   if (cuenta && !cuenta.activo) {
     return (
-      <section className="flex max-w-3xl flex-col gap-6 p-6">
+      <ContenedorFormulario ancho="3xl">
         <EncabezadoPagina antetitulo="Administración" titulo="Editar usuario" />
         <AvisoError>La cuenta {cuenta.nombreUsuario} está desactivada; restáurela para editarla.</AvisoError>
         <div>
@@ -122,7 +123,7 @@ export default function PaginaEditarUsuario() {
             <Link to={volverA}>Volver a Usuarios</Link>
           </Button>
         </div>
-      </section>
+      </ContenedorFormulario>
     )
   }
 
@@ -202,7 +203,7 @@ export default function PaginaEditarUsuario() {
   const deshabilitado = catalogos === null || guardando
 
   return (
-    <section className="flex max-w-3xl flex-col gap-6 p-6">
+    <ContenedorFormulario ancho="3xl">
       <EncabezadoPagina
         antetitulo="Administración"
         titulo="Editar usuario"
@@ -289,6 +290,6 @@ export default function PaginaEditarUsuario() {
       {formulario && (
         <AvisoSalida hayCambios={hayCambios} descripcion="Si sale ahora, se pierden los cambios que no guardó." />
       )}
-    </section>
+    </ContenedorFormulario>
   )
 }
