@@ -1360,7 +1360,9 @@ Verificado contra la API real el 2026-11-08, con el build servido por `vite prev
 |---|---|---|---|
 | Epidemiología / Autoridad | 3 | S5 | Christian Ramírez |
 
-**Cómo se hará:** Generación de PDF en el backend con pdfmake, con la fuente IBM Plex Sans para que se vea como la aplicación.
+**Cómo se hará:** Generación de PDF en el backend con pdfmake, con la fuente Lato y el diseño de la plantilla `docs/mockups/SIRCOVA_informe_poblacion_propia_v2.pdf`.
+
+**Nota (2026-11-24, corrección del diseño del PDF):** el PDF sigue la plantilla `docs/mockups/SIRCOVA_informe_poblacion_propia_v2.pdf` y usa Lato (Regular y Bold en `backend/src/modulos/informes/fuentes/`, licencia OFL) en lugar de IBM Plex Sans. Cada página repite el encabezado: SIRCOVA, el Ministerio y la DDRISS; el nombre del informe con el título de sus filas, el período («Enero – agosto de 2026») y la etiqueta «PRELIMINAR» si corresponde; la franja de filtros (vacuna, territorio, agrupación, si incluye aprobados) y los avisos. Cada bloque de vacunas va en su propia página («Bloque de vacunas 01 / 06»), con el encabezado de la tabla en azul marino, filas alternadas y el «TOTAL» en marino; el pie lleva SIRCOVA, la fecha de generación con quién lo generó y la página. El acumulado anual (HU-49) usa el mismo diseño y no parte un municipio entre páginas. Lo que dice «Avance» sobre la fuente, el encabezado y el pie describe la versión del 2026-11-13.
 
 **Nota (2026-11-09, spec 55):** si los datos del informe salen de una corrida parcial (`Corrida.parcial`), el archivo lleva la leyenda «PRELIMINAR», como la marca de agua de las gráficas y del mapa.
 

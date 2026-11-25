@@ -5726,19 +5726,20 @@ paths:
       description: |
         El mismo informe de `GET /informes/produccion`, con los mismos parámetros (también `agrupacion`), el mismo
         permiso, el mismo ámbito y los mismos errores que `GET /informes/produccion/excel`, como un PDF armado con
-        pdfmake en IBM Plex Sans. Sale de la misma respuesta que la pantalla, así que sus cantidades son las mismas.
+        pdfmake en Lato, con el diseño de `docs/mockups/SIRCOVA_informe_poblacion_propia_v2.pdf`. Sale de la misma
+        respuesta que la pantalla, así que sus cantidades son las mismas.
 
         - **Hoja:** carta horizontal.
-        - **Primera página:** el mismo encabezado que el Excel (título, «PRELIMINAR» si `preliminar`, DDRISS,
-          periodo, vacuna, territorio, agrupación, si incluye aprobados sin cerrar, fecha y hora de generación con
-          quien lo generó, y los avisos de la pantalla).
+        - **Encabezado de cada página:** SIRCOVA, el Ministerio y la DDRISS; el nombre del informe con el título de
+          sus filas, la etiqueta «PRELIMINAR» si `preliminar` y el periodo; una franja con los filtros (vacuna,
+          territorio, agrupación, si incluye aprobados sin cerrar) y, debajo, los avisos de la pantalla.
         - **Marca de agua:** con `preliminar`, «PRELIMINAR» en diagonal en todas las páginas.
-        - **Pie:** el título y «Página {n} de {total}» en cada página.
-        - **Tabla en tramos:** cada tramo junta vacunas seguidas sin partir ninguna, hasta 12 columnas (10 por
-          establecimiento y por distrito, que llevan «Municipio»); tiene todas las filas y su «Total», y repite sus
-          tres filas de encabezado (vacuna, sección o valor de la dimensión, dosis) si sigue en otra página. Las
-          filas `fueraDelConsolidado` llevan «(no suma en el consolidado)» y, si hay `dosisFueraDelConsolidado`,
-          una línea lo explica al final. Con `columnas` vacío, solo el encabezado.
+        - **Pie:** SIRCOVA, la fecha y hora de generación con quien lo generó y «Página {n} de {total}».
+        - **Bloques de vacunas:** uno por página. Cada bloque junta vacunas seguidas sin partir ninguna, hasta 12
+          columnas (10 por establecimiento y por distrito, que llevan «Municipio»); tiene todas las filas y su
+          «TOTAL», y repite sus tres filas de encabezado (vacuna, sección o valor de la dimensión, dosis) si sigue en
+          otra página. Las filas `fueraDelConsolidado` llevan «(no suma en el consolidado)» y, si hay
+          `dosisFueraDelConsolidado`, una línea lo explica al final. Con `columnas` vacío, solo el encabezado.
 
         Cada descarga correcta deja una fila `EXPORTAR` del módulo `REPORTES` en la bitácora, como el Excel, con
         `formato: pdf` en `valoresNuevos`. Un error no la deja.
@@ -5875,10 +5876,11 @@ paths:
       summary: Descargar el acumulado anual como PDF (SPEC 66, HU-49)
       description: |
         El mismo informe de `GET /informes/acumulado-anual`, con los mismos parámetros, permiso, ámbito y errores,
-        como un PDF de pdfmake con la hoja, la fuente, la marca de agua «PRELIMINAR», el pie y los tramos de
-        columnas de `GET /informes/produccion/pdf`. Cada tramo repite sus cuatro filas de encabezado (vacuna,
-        sección, dosis y meta) y lleva las columnas del nombre y «Cifra», con las cuatro filas por unidad y las del
-        «Total»; las celdas `null` salen «—».
+        como un PDF de pdfmake con la hoja, la fuente, el encabezado, la marca de agua «PRELIMINAR», el pie y los
+        bloques de vacunas de `GET /informes/produccion/pdf`. Cada bloque lleva sus cuatro filas de encabezado
+        (vacuna, sección, dosis y meta) y las columnas del nombre y «Cifra», con las cuatro filas por unidad y las
+        del «TOTAL»; las celdas `null` salen «—». Una unidad no se parte entre páginas: si no caben todas, el bloque
+        sigue en la página siguiente.
 
         Cada descarga correcta deja una fila `EXPORTAR` del módulo `REPORTES` en la bitácora, como el Excel, con
         `formato: pdf` en `valoresNuevos`. Un error no la deja.
