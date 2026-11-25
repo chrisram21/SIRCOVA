@@ -51,19 +51,30 @@ async function leerHoja(informe, datos = datosBase()) {
   const bytes = await libroDelInforme(informe, datos).xlsx.writeBuffer();
   const libro = new ExcelJS.Workbook();
   await libro.xlsx.load(bytes);
-  return libro.worksheets[0];
+  return libro.worksheets.at(-1);
 }
 
+// El libro tiene dos hojas (plantillaExcel.js): «Información» y la de los datos, con la tabla desde la fila 1. Las
+// pruebas reciben la de los datos (o «Información» si no hay tabla) y leen el encabezado con info(hoja): marca e
+// institución, rótulo en A5, título en A6, subtítulo en A7, la DDRISS y el periodo en la última celda con texto de
+// las filas 3 y 6, y el recuadro de filtros desde la fila 9.
+const info = (hoja) => hoja.workbook.getWorksheet('Información');
+const PRIMERA_DEL_RECUADRO = 9;
+const ultimoTexto = (hoja, n) => {
+  let texto = null;
+  info(hoja).getRow(n).eachCell((celda) => { if (celda.text) texto = celda.text; });
+  return texto;
+};
 // La primera fila de la hoja cuya columna A tiene ese texto, o null.
 const filaQueEmpieza = (hoja, texto) => {
   let encontrada = null;
   hoja.eachRow((fila) => { if (!encontrada && fila.getCell(1).value === texto) encontrada = fila; });
   return encontrada;
 };
-const valorDe = (hoja, etiqueta) => filaQueEmpieza(hoja, etiqueta)?.getCell(2).value;
+const valorDe = (hoja, etiqueta) => filaQueEmpieza(info(hoja), etiqueta)?.getCell(2).value;
 const avisos = (hoja) => {
   const lista = [];
-  hoja.eachRow((fila) => { if (fila.getCell(1).value === 'Aviso') lista.push(fila.getCell(2).value); });
+  info(hoja).eachRow((fila) => { if (fila.getCell(1).value === 'Aviso') lista.push(fila.getCell(2).value); });
   return lista;
 };
 const rangosCombinados = (hoja) => hoja.model.merges;
@@ -72,18 +83,58 @@ describe('libro de Excel de un informe (SPEC 64)', () => {
   it('pone el título, los filtros y la fecha de generación en el encabezado', async () => {
     const hoja = await leerHoja(informeBase());
 
-    expect(hoja.name).toBe('Población propia');
-    expect(hoja.getCell('A1').value).toBe('Producción a la población propia · Municipio');
-    expect(hoja.getCell('A1').font.bold).toBe(true);
-    expect(valorDe(hoja, 'DDRISS')).toBe('DDRISS San Marcos');
-    expect(valorDe(hoja, 'Periodo')).toBe('De enero de 2026 a agosto de 2026');
+    expect(hoja.workbook.worksheets.map((h) => h.name)).toEqual(['Información', 'Población propia']);
+    expect(info(hoja).getCell('A1').value).toBe('SIRCOVA');
+    expect(info(hoja).getCell('A2').value).toBe('Informes de vacunación');
+    expect(info(hoja).getCell('A5').text).toBe('PRODUCCIÓN DE VACUNACIÓN');
+    expect(info(hoja).getCell('A6').value).toBe('Producción a la población propia');
+    expect(info(hoja).getCell('A6').font.bold).toBe(true);
+    expect(info(hoja).getCell('A7').value).toBe('Municipio de aplicación');
+    expect(ultimoTexto(hoja, 1)).toBe('Ministerio de Salud Pública y Asistencia Social');
+    expect(ultimoTexto(hoja, 3)).toBe('San Marcos');
+    expect(ultimoTexto(hoja, 6)).toBe('De enero de 2026 a agosto de 2026');
+    // La DDRISS y el periodo van arriba, no en el recuadro.
+    expect(valorDe(hoja, 'DDRISS')).toBeUndefined();
+    expect(valorDe(hoja, 'Periodo')).toBeUndefined();
+    expect(info(hoja).getCell(PRIMERA_DEL_RECUADRO, 1).value).toBe('Vacuna');
+    // Dos filas debajo de las cinco del recuadro, el enlace a la hoja de los datos.
+    expect(info(hoja).getCell(PRIMERA_DEL_RECUADRO + 6, 1).value)
+      .toMatchObject({ text: 'Ver los datos en la hoja «Población propia»', hyperlink: "#'Población propia'!A1" });
     expect(valorDe(hoja, 'Vacuna')).toBe('Todas las vacunas');
     expect(valorDe(hoja, 'Territorio')).toBe('Todos los municipios');
     expect(valorDe(hoja, 'Agrupación')).toBe('Sección del 5C');
     expect(valorDe(hoja, 'Incluye aprobados sin cerrar')).toBe('No');
     expect(valorDe(hoja, 'Generado')).toBe('12/11/2026 14:05 por Ana López');
-    expect(filaQueEmpieza(hoja, 'PRELIMINAR')).toBeNull();
+    expect(info(hoja).getCell('A5').text).not.toContain('PRELIMINAR');
     expect(avisos(hoja)).toEqual([]);
+  });
+
+  it('pinta la tabla como la plantilla desde la fila 1 y deja la hoja lista para imprimir', async () => {
+    const hoja = await leerHoja(informeBase());
+    const fondo = (celda) => celda.fill?.fgColor?.argb ?? null;
+    const n = filaQueEmpieza(hoja, 'Municipio de aplicación').number;
+
+    expect(n).toBe(1);
+    expect(fondo(hoja.getCell(n, 1))).toBe('FF1F3B57');
+    expect(fondo(hoja.getCell(n, 2))).toBe('FF2D5F86');
+    expect(hoja.getCell(n, 2).font.color.argb).toBe('FFFFFFFF');
+    expect(fondo(hoja.getCell(n + 2, 2))).toBe('FFDCE8F3');
+    // Filas alternadas: la primera sin fondo, la segunda en gris azulado; el total en marino con letra blanca.
+    expect(fondo(filaQueEmpieza(hoja, 'San Marcos').getCell(2))).toBeNull();
+    expect(fondo(filaQueEmpieza(hoja, 'San Pedro').getCell(2))).toBe('FFF2F6FA');
+    const total = filaQueEmpieza(hoja, 'Total');
+    expect(fondo(total.getCell(3))).toBe('FF1F3B57');
+    expect(total.getCell(3).font).toMatchObject({ bold: true, color: { argb: 'FFFFFFFF' } });
+    // Un cero va en gris.
+    expect(filaQueEmpieza(hoja, 'San Marcos').getCell(4).font.color.argb).toBe('FF8593A1');
+    expect(fondo(info(hoja).getCell(PRIMERA_DEL_RECUADRO, 2))).toBe('FFE6EEF6');
+
+    // Solo el encabezado de la tabla y la columna de nombres quedan fijos.
+    expect(hoja.views[0]).toMatchObject({ state: 'frozen', xSplit: 1, ySplit: 3, showGridLines: false });
+    expect(hoja.pageSetup).toMatchObject({ orientation: 'landscape', fitToWidth: 1, printTitlesRow: '1:3' });
+    expect(hoja.headerFooter.oddHeader).toContain('SIRCOVA · Producción a la población propia · Municipio');
+    expect(hoja.headerFooter.oddFooter).toContain('Página &P de &N');
+    expect(info(hoja).views[0]).toMatchObject({ showGridLines: false });
   });
 
   it('nombra la vacuna, la red o los municipios del filtro y la agrupación', async () => {
@@ -99,7 +150,7 @@ describe('libro de Excel de un informe (SPEC 64)', () => {
       total: { cantidades: [14] },
     });
     const conMunicipios = await leerHoja(informe, datosBase({ municipios: ['San Marcos', 'San Pedro'] }));
-    expect(conMunicipios.getCell('A1').value).toBe('Producción a la población propia · Municipio · por Sexo');
+    expect(info(conMunicipios).getCell('A7').value).toBe('Municipio de aplicación · por Sexo');
     expect(valorDe(conMunicipios, 'Territorio')).toBe('San Marcos, San Pedro');
     expect(valorDe(conMunicipios, 'Agrupación')).toBe('Sexo');
     expect(valorDe(conMunicipios, 'Incluye aprobados sin cerrar')).toBe('Sí');
@@ -112,12 +163,12 @@ describe('libro de Excel de un informe (SPEC 64)', () => {
       preliminar: true,
       mesesSinCerrar: [{ anio: 2026, mes: 7, estado: 'EN_CIERRE' }, { anio: 2026, mes: 8, estado: 'ABIERTO' }],
     }));
-    expect(preliminar.getCell('A2').value).toBe('PRELIMINAR');
-    expect(preliminar.getCell('A2').font.bold).toBe(true);
+    expect(info(preliminar).getCell('A5').text).toBe('PRODUCCIÓN DE VACUNACIÓN    PRELIMINAR ');
+    expect(info(preliminar).getCell('A5').value.richText.at(-1).font.bold).toBe(true);
     expect(avisos(preliminar)).toEqual(['Datos preliminares: julio y agosto de 2026 todavía no están cerrados.']);
 
     const sinCasilla = await leerHoja(informeBase({ mesesSinCerrar: [{ anio: 2026, mes: 8, estado: 'EN_CIERRE' }] }));
-    expect(filaQueEmpieza(sinCasilla, 'PRELIMINAR')).toBeNull();
+    expect(info(sinCasilla).getCell('A5').text).not.toContain('PRELIMINAR');
     expect(avisos(sinCasilla)).toEqual([
       'Agosto de 2026 todavía no está cerrado y no suma en el informe. '
         + 'Marca «Incluir aprobados sin cerrar» para verlos como preliminares.',
@@ -208,8 +259,8 @@ describe('libro de Excel de un informe (SPEC 64)', () => {
     }));
 
     expect(avisos(hoja)).toEqual(['Ninguna vacuna de este informe registra Pueblo de pertenencia.']);
-    expect(filaQueEmpieza(hoja, 'Municipio de aplicación')).toBeNull();
-    expect(filaQueEmpieza(hoja, 'Total')).toBeNull();
+    // Sin tabla, solo la hoja «Información», sin el enlace a los datos.
+    expect(hoja.workbook.worksheets.map((h) => h.name)).toEqual(['Información']);
     expect(hoja.getCell(hoja.rowCount, 1).value).toBe('Aviso');
   });
 
@@ -246,16 +297,18 @@ async function leerAcumulado(informe, datos = datosBase()) {
   const bytes = await libroDelAcumulado(informe, datos).xlsx.writeBuffer();
   const libro = new ExcelJS.Workbook();
   await libro.xlsx.load(bytes);
-  return libro.worksheets[0];
+  return libro.worksheets.at(-1);
 }
 
 describe('libro de Excel del acumulado anual (SPEC 66)', () => {
   it('lleva el título, el año y el aviso de los meses sin cerrar', async () => {
     const hoja = await leerAcumulado(acumuladoBase());
     expect(hoja.name).toBe('Acumulado anual');
-    expect(hoja.getCell(1, 1).value).toBe('Acumulado anual · Municipio');
-    expect(valorDe(hoja, 'Periodo')).toBe('Enero a diciembre de 2026');
-    expect(filaQueEmpieza(hoja, 'Agrupación')).toBeNull();
+    expect(info(hoja).getCell('A5').text).toBe('COBERTURA DE VACUNACIÓN');
+    expect(info(hoja).getCell('A6').value).toBe('Acumulado anual');
+    expect(info(hoja).getCell('A7').value).toBe('Municipio de residencia');
+    expect(ultimoTexto(hoja, 6)).toBe('Enero a diciembre de 2026');
+    expect(valorDe(hoja, 'Agrupación')).toBeUndefined();
     expect(avisos(hoja)).toEqual([
       'Noviembre y diciembre de 2026 todavía no están cerrados y no suman en el acumulado. Marca «Incluir aprobados '
         + 'sin cerrar» para verlos como preliminares.',
@@ -282,14 +335,15 @@ describe('libro de Excel del acumulado anual (SPEC 66)', () => {
     expect(hoja.views[0]).toMatchObject({ xSplit: 2, ySplit: n + 3 });
   });
 
-  it('colorea el encabezado y cada cifra con los colores del tema, y en verde lo que alcanza la meta', async () => {
+  it('pinta el encabezado como la plantilla, las cifras con los colores del tema y en verde la meta', async () => {
     const hoja = await leerAcumulado(acumuladoBase({
       filas: [{ ...acumuladoBase().filas[0], brecha: [0, null], cobertura: [96.6, null] }],
     }));
     const fondo = (celda) => celda.fill?.fgColor?.argb ?? null;
     const n = filaQueEmpieza(hoja, 'Municipio de residencia').number;
-    expect(fondo(hoja.getRow(n).getCell(3))).toBe('FFDBEAF6');
-    expect(fondo(hoja.getRow(n + 1).getCell(3))).toBe('FFEDF4FB');
+    expect(fondo(hoja.getRow(n).getCell(1))).toBe('FF1F3B57');
+    expect(fondo(hoja.getRow(n).getCell(3))).toBe('FF2D5F86');
+    expect(fondo(hoja.getRow(n + 1).getCell(3))).toBe('FFDCE8F3');
     expect(fondo(hoja.getRow(n + 3).getCell(3))).toBe('FFF0F4F8');
 
     const unidad = filaQueEmpieza(hoja, 'San Marcos').number;
@@ -300,7 +354,8 @@ describe('libro de Excel del acumulado anual (SPEC 66)', () => {
     expect(tonos(3)).toEqual(['FFFFF5DD', 'FFE3F3E8', 'FFFFF5DD']);
     expect(hoja.getRow(unidad + 2).getCell(3).font).toMatchObject({ bold: true, color: { argb: 'FF1E5B34' } });
     const total = filaQueEmpieza(hoja, 'Total');
-    expect(total.getCell(1).font.bold).toBe(true);
+    expect(total.getCell(1).font).toMatchObject({ bold: true, color: { argb: 'FFFFFFFF' } });
+    expect(fondo(total.getCell(1))).toBe('FF1F3B57');
     expect(hoja.getRow(total.number + 3).getCell(2).font).toMatchObject({ bold: true, color: { argb: 'FF7A4A06' } });
   });
 
@@ -311,7 +366,7 @@ describe('libro de Excel del acumulado anual (SPEC 66)', () => {
       incluirAprobados: true,
       filas: [{ ...acumuladoBase().filas[0], nombre: 'Distrito 1', municipio: { id: 1, nombre: 'San Marcos' } }],
     }));
-    expect(filaQueEmpieza(hoja, 'PRELIMINAR')).not.toBeNull();
+    expect(info(hoja).getCell('A5').text).toContain('PRELIMINAR');
     const unidad = filaQueEmpieza(hoja, 'Distrito 1');
     expect([unidad.getCell(2).value, unidad.getCell(3).value, unidad.getCell(4).value]).toEqual(['San Marcos', 'Dosis', 1300]);
     expect(filaQueEmpieza(hoja, 'Distrito').getCell(3).value).toBe('Cifra');

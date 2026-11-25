@@ -325,24 +325,33 @@ describe('GET /auditoria/bitacora/excel', () => {
   async function hojaDe(respuesta) {
     const libro = new ExcelJS.Workbook();
     await libro.xlsx.load(respuesta.body);
-    return libro.worksheets[0];
+    return libro.getWorksheet('Bitácora');
   }
 
   // Una celda vacía se lee como null o undefined: se compara como ''.
   const valores = (fila, columnas = COLUMNAS.length) =>
     Array.from({ length: columnas }, (_, i) => fila.getCell(i + 1).value ?? '');
 
-  // El encabezado como { etiqueta: valor }, hasta la fila vacía; y las filas de datos después de los títulos.
+  // El libro tiene dos hojas (plantillaExcel.js): «Información» y «Bitácora», con los títulos en la fila 1.
+  const info = (hoja) => hoja.workbook.getWorksheet('Información');
+  // La última celda con texto de una fila de «Información»: la DDRISS (fila 3) y las fechas (fila 6).
+  const ultimoTexto = (hoja, n) => {
+    let texto = null;
+    info(hoja).getRow(n).eachCell((celda) => { if (celda.text) texto = celda.text; });
+    return texto;
+  };
+
+  // El encabezado como { etiqueta: valor }: la DDRISS y las fechas de arriba y el recuadro de filtros, que empieza en
+  // la fila 9 de «Información» y llega hasta la fila vacía; y los títulos y las filas de datos de «Bitácora».
   function partesDe(hoja) {
-    const encabezado = {};
-    let numero = 2;
-    for (; hoja.getRow(numero).cellCount > 0; numero += 1) {
-      const [etiqueta, valor] = valores(hoja.getRow(numero), 2);
+    const encabezado = { DDRISS: ultimoTexto(hoja, 3), Fechas: ultimoTexto(hoja, 6) };
+    for (let numero = 9; info(hoja).getRow(numero).cellCount > 0; numero += 1) {
+      const [etiqueta, valor] = valores(info(hoja).getRow(numero), 2);
       encabezado[etiqueta] = valor;
     }
-    const titulos = valores(hoja.getRow(numero + 1));
+    const titulos = valores(hoja.getRow(1));
     const datos = [];
-    for (let n = numero + 2; n <= hoja.rowCount; n += 1) datos.push(valores(hoja.getRow(n)));
+    for (let n = 2; n <= hoja.rowCount; n += 1) datos.push(valores(hoja.getRow(n)));
     return { encabezado, titulos, datos };
   }
 
@@ -369,7 +378,11 @@ describe('GET /auditoria/bitacora/excel', () => {
     const hoja = await hojaDe(respuesta);
     const { encabezado, titulos, datos } = partesDe(hoja);
     expect(hoja.name).toBe('Bitácora');
-    expect(hoja.getCell('A1').value).toBe('Bitácora del sistema');
+    expect(hoja.workbook.worksheets.map((h) => h.name)).toEqual(['Información', 'Bitácora']);
+    expect(info(hoja).getCell('A1').value).toBe('SIRCOVA');
+    expect(info(hoja).getCell('A6').value).toBe('Bitácora del sistema');
+    expect(hoja.autoFilter).toBeTruthy();
+    expect(hoja.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
     expect(encabezado).toMatchObject({
       DDRISS: 'vitest-hu54 (permanente)',
       Fechas: 'Todo el historial',

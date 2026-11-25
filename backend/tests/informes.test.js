@@ -969,7 +969,7 @@ describe('GET /informes/produccion/excel (SPEC 64)', () => {
   async function hojaDe(res) {
     const libro = new ExcelJS.Workbook();
     await libro.xlsx.load(res.body);
-    return libro.worksheets[0];
+    return libro.worksheets.at(-1);
   }
 
   // Las cantidades de cada fila de datos del archivo (y del «Total»), por su nombre y, si lo hay, su municipio.
@@ -1053,13 +1053,18 @@ describe('GET /informes/produccion/excel (SPEC 64)', () => {
     const res = await descargar(
       `informe=total&desde=${ANIO}-01&hasta=${ANIO}-02&redId=${ids.red}&vacuna=ZVT_SPEC62&incluirAprobados=true`,
     );
-    const hoja = await hojaDe(res);
+    // El encabezado va en la hoja «Información» (plantillaExcel.js): título en A6 y subtítulo en A7, «PRELIMINAR»
+    // junto al rótulo de A5, la DDRISS en la última celda con texto de la fila 3 y los filtros desde la fila 9.
+    const hoja = (await hojaDe(res)).workbook.getWorksheet('Información');
     const valores = new Map();
     hoja.eachRow((fila) => valores.set(fila.getCell(1).value, fila.getCell(2).value));
 
-    expect(hoja.getCell('A1').value).toBe('Producción total (incluye Migrantes) · Municipio');
-    expect(hoja.getCell('A2').value).toBe('PRELIMINAR');
-    expect(valores.get('DDRISS')).toBe('vitest-spec62');
+    let ddriss = null;
+    hoja.getRow(3).eachCell((celda) => { if (celda.text) ddriss = celda.text; });
+    expect(hoja.getCell('A6').value).toBe('Producción total (incluye Migrantes)');
+    expect(hoja.getCell('A7').value).toBe('Municipio de aplicación');
+    expect(hoja.getCell('A5').text).toContain('PRELIMINAR');
+    expect(ddriss).toBe('vitest-spec62');
     expect(valores.get('Vacuna')).toBe('vitest-spec62 ZVT_SPEC62');
     expect(valores.get('Territorio')).toBe('Red vitest-spec62 Red');
     expect(valores.get('Generado')).toMatch(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2} por /);
@@ -1141,7 +1146,7 @@ describe('GET /informes/produccion/excel (SPEC 64)', () => {
         .buffer(true)
         .parse(binario);
       expect(res.status, rol).toBe(200);
-      expect((await hojaDe(res)).getCell('A1').value).toBe('Producción total (incluye Migrantes) · Departamento');
+      expect((await hojaDe(res)).workbook.getWorksheet('Información').getCell('A7').value).toBe('Departamento');
     }
   });
 });
@@ -1194,7 +1199,9 @@ describe('GET /informes/produccion/pdf (SPEC 65)', () => {
 
       const informe = pantalla.body;
       const fijas = ['establecimiento', 'distrito'].includes(informe.nivel) ? 2 : 1;
-      const tramos = documentoDelInforme(informe, DATOS).content.filter((n) => n.id?.startsWith('tramo-'));
+      // Cada bloque del PDF lleva su rótulo y, al final, la tabla del tramo.
+      const tramos = documentoDelInforme(informe, DATOS).content.filter((n) => n.id?.startsWith('tramo-'))
+        .map((bloque) => bloque.stack.at(-1));
       // Cada fila del informe (y el «Total») es la unión, en orden, de sus pedazos en los tramos.
       const unidas = [...informe.filas, informe.total].map((_, k) =>
         tramos.flatMap((t) => t.table.body[3 + k].slice(fijas).map(texto)));
@@ -1588,7 +1595,7 @@ describe('GET /informes/acumulado-anual/excel y /pdf (SPEC 66)', () => {
     expect(archivo.headers['content-disposition']).toBe(`attachment; filename="informe-acumulado-anual-${ANIO}.xlsx"`);
     const libro = new ExcelJS.Workbook();
     await libro.xlsx.load(archivo.body);
-    const hoja = libro.worksheets[0];
+    const hoja = libro.worksheets.at(-1);
 
     const leidas = [];
     hoja.eachRow((fila) => {

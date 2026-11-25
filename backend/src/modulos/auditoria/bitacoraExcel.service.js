@@ -1,8 +1,10 @@
 import ExcelJS from 'exceljs';
 import { etiquetaAccion, etiquetaModulo, fechaYHora } from './textosBitacora.js';
+import { hojaDeInformacion, pintarTabla, prepararHojaDeDatos } from '../informes/plantillaExcel.js';
 
 // SPEC 70 (HU-54): el libro .xlsx de la bitácora filtrada. Recibe los registros en la forma de GET /auditoria/bitacora
-// y no consulta nada.
+// y no consulta nada. El aspecto sale de plantillaExcel.js, común con los informes: la hoja «Información» y la de
+// los registros.
 
 export const COLUMNAS = [
   { titulo: 'Fecha y hora', ancho: 20, valor: (r) => fechaYHora(new Date(r.fecha)) },
@@ -22,30 +24,36 @@ const aJson = (valor) => (valor == null ? '' : JSON.stringify(valor));
 
 /**
  * registros: los elementos de GET /auditoria/bitacora, ya ordenados. datos: { ddriss, generadoPor, generadoEn (Date),
- * filtros: [[etiqueta, valor]] }.
+ * filtros: [[etiqueta, valor]] }; el de «Fechas» va arriba a la derecha como periodo.
  */
 export function libroDeBitacora(registros, datos) {
   const libro = new ExcelJS.Workbook();
   libro.creator = 'SIRCOVA';
   libro.created = datos.generadoEn;
+  const generado = `${fechaYHora(datos.generadoEn)} por ${datos.generadoPor}`;
+  const titulo = 'Bitácora del sistema';
+  hojaDeInformacion(libro, {
+    marca: 'Auditoría del sistema',
+    rotulo: 'AUDITORÍA',
+    titulo,
+    lineas: [
+      ['DDRISS', datos.ddriss],
+      ...datos.filtros,
+      ['Registros', registros.length],
+      ['Generado', generado],
+    ],
+    periodo: 'Fechas',
+    hojaDeDatos: 'Bitácora',
+  });
+
   const hoja = libro.addWorksheet('Bitácora');
-
-  hoja.addRow(['Bitácora del sistema']).font = { bold: true, size: 14 };
-  const encabezado = [
-    ['DDRISS', datos.ddriss],
-    ...datos.filtros,
-    ['Registros', registros.length],
-    ['Generado', `${fechaYHora(datos.generadoEn)} por ${datos.generadoPor}`],
-  ];
-  for (const [etiqueta, valor] of encabezado) hoja.addRow([etiqueta, valor]).getCell(1).font = { bold: true };
-
-  hoja.addRow([]);
-  const titulos = hoja.addRow(COLUMNAS.map((c) => c.titulo));
-  titulos.font = { bold: true };
-  for (const registro of registros) hoja.addRow(COLUMNAS.map((c) => c.valor(registro)));
-
   COLUMNAS.forEach((c, i) => { hoja.getColumn(i + 1).width = c.ancho; });
-  hoja.autoFilter = { from: { row: titulos.number, column: 1 }, to: { row: titulos.number, column: COLUMNAS.length } };
-  hoja.views = [{ state: 'frozen', ySplit: titulos.number }];
+  hoja.addRow(COLUMNAS.map((c) => c.titulo)).alignment = { vertical: 'middle', wrapText: true };
+  for (const registro of registros) {
+    hoja.addRow(COLUMNAS.map((c) => c.valor(registro))).alignment = { vertical: 'top' };
+  }
+  pintarTabla(hoja, { desde: 1, filasEncabezado: 1, hasta: hoja.rowCount, columnas: COLUMNAS.length });
+  hoja.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: COLUMNAS.length } };
+  prepararHojaDeDatos(hoja, { filasEncabezado: 1, titulo, generado });
   return libro;
 }

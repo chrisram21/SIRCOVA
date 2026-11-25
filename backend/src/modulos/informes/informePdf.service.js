@@ -2,8 +2,8 @@ import path from 'node:path';
 import pdfmake from 'pdfmake';
 import { NOMBRES_MES } from '../produccion/validacion.service.js';
 import {
-  CIFRAS, COLORES, NOMBRES_INFORME, lineasDelAcumulado, lineasDelEncabezado, llevaMunicipio, nombreDeFila, textoCifra,
-  textoFueraDelConsolidado, textoMeta, tituloDeLaFila, tituloDelInforme, tonoDeCifra, tramosDelEncabezado,
+  CIFRAS, COLORES, NOMBRES_INFORME, TINTA, lineasDelAcumulado, lineasDelEncabezado, llevaMunicipio, nombreDeFila,
+  textoCifra, textoFueraDelConsolidado, textoMeta, tituloDeLaFila, tituloDelInforme, tonoDeCifra, tramosDelEncabezado,
 } from './textosInforme.js';
 
 // SPEC 65 (HU-48) y 66 (HU-49): el PDF de un informe de producción y del acumulado anual, en carta horizontal, con
@@ -23,24 +23,6 @@ pdfmake.setFonts({
 });
 pdfmake.setUrlAccessPolicy(() => false);
 pdfmake.setLocalAccessPolicy((ruta) => path.resolve(ruta).startsWith(FUENTES));
-
-// Los colores de la plantilla, propios del PDF (no son del tema de la pantalla).
-const TINTA = {
-  marino: '#1f3b57',
-  marinoMedio: '#2d5f86',
-  acento: '#3b8cc2',
-  acentoTexto: '#2a78ad',
-  banda: '#e6eef6',
-  subencabezado: '#dce8f3',
-  cebra: '#f2f6fa',
-  linea: '#c3d1df',
-  lineaFuerte: '#8ea5bc',
-  lineaEncabezado: '#5f84a6',
-  texto: '#1f2d3a',
-  gris: '#5b6b7b',
-  cero: '#8593a1',
-  blanco: '#ffffff',
-};
 
 // Carta horizontal: 792 × 612. El encabezado de cada página ocupa el margen superior, que crece con los avisos.
 const MARGEN_LADO = 26;

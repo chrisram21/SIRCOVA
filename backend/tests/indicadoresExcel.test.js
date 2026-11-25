@@ -206,7 +206,7 @@ const resultado = (indicadorCodigo, municipio, cambios = {}) => ({
 async function releer(libro) {
   const otro = new ExcelJS.Workbook();
   await otro.xlsx.load(await libro.xlsx.writeBuffer());
-  return otro.worksheets[0];
+  return otro.worksheets.at(-1);
 }
 // La n-ésima fila cuya columna A tiene ese texto, o null.
 const filaQueEmpieza = (hoja, texto, n = 1) => {
@@ -214,10 +214,21 @@ const filaQueEmpieza = (hoja, texto, n = 1) => {
   hoja.eachRow((fila) => { if (fila.getCell(1).value === texto) encontradas.push(fila); });
   return encontradas[n - 1] ?? null;
 };
-const valorDe = (hoja, etiqueta) => filaQueEmpieza(hoja, etiqueta)?.getCell(2).value;
+// El libro tiene dos hojas (plantillaExcel.js): «Información» y la de los datos, con la tabla desde la fila 1; las
+// pruebas reciben la de los datos. En «Información» van el título en A6, el rótulo (con «PRELIMINAR») en A5, la
+// DDRISS y el mes de corte o periodo en la última celda con texto de las filas 3 y 6, y el recuadro de filtros.
+const info = (hoja) => hoja.workbook.getWorksheet('Información');
+const valorDe = (hoja, etiqueta) => filaQueEmpieza(info(hoja), etiqueta)?.getCell(2).value;
+const ultimoTexto = (hoja, n) => {
+  let texto = null;
+  info(hoja).getRow(n).eachCell((celda) => { if (celda.text) texto = celda.text; });
+  return texto;
+};
+const tituloDe = (hoja) => info(hoja).getCell('A6').value;
+const esPreliminar = (hoja) => info(hoja).getCell('A5').text.includes('PRELIMINAR');
 const avisosDe = (hoja) => {
   const lista = [];
-  hoja.eachRow((fila) => { if (fila.getCell(1).value === 'Aviso') lista.push(fila.getCell(2).value); });
+  info(hoja).eachRow((fila) => { if (fila.getCell(1).value === 'Aviso') lista.push(fila.getCell(2).value); });
   return lista;
 };
 const valores = (fila) => fila.values.slice(1);
@@ -245,11 +256,23 @@ describe('libro de Excel de una pestaña de indicadores (SPEC 72)', () => {
   it('pone el título, el mes de corte, el indicador, el territorio y la fecha en el encabezado', async () => {
     const hoja = await releer(cobertura());
     expect(hoja.name).toBe('Cobertura');
-    expect(hoja.getCell('A1').value).toBe('Cobertura de Hexavalente');
-    expect(hoja.getCell('A1').font.bold).toBe(true);
-    expect(filaQueEmpieza(hoja, 'PRELIMINAR')).toBeNull();
-    expect(valorDe(hoja, 'DDRISS')).toBe('DDRISS San Marcos');
-    expect(valorDe(hoja, 'Mes de corte')).toBe('Agosto de 2026');
+    expect(hoja.workbook.worksheets.map((h) => h.name)).toEqual(['Información', 'Cobertura']);
+    expect(info(hoja).getCell('A1').value).toBe('SIRCOVA');
+    expect(info(hoja).getCell('A5').text).toBe('INDICADORES DE VACUNACIÓN');
+    expect(tituloDe(hoja)).toBe('Cobertura de Hexavalente');
+    expect(info(hoja).getCell('A6').font.bold).toBe(true);
+    expect(esPreliminar(hoja)).toBe(false);
+    expect(ultimoTexto(hoja, 3)).toBe('San Marcos');
+    expect(ultimoTexto(hoja, 5)).toBe('MES DE CORTE');
+    expect(ultimoTexto(hoja, 6)).toBe('Agosto de 2026');
+    expect(valorDe(hoja, 'DDRISS')).toBeUndefined();
+    expect(valorDe(hoja, 'Mes de corte')).toBeUndefined();
+    const titulos = filaQueEmpieza(hoja, 'Municipio');
+    expect(titulos.number).toBe(1);
+    expect(fondo(titulos.getCell(1))).toBe('FF1F3B57');
+    expect(hoja.views[0]).toMatchObject({ state: 'frozen', xSplit: 1, ySplit: 1, showGridLines: false });
+    expect(hoja.pageSetup).toMatchObject({ orientation: 'landscape', fitToWidth: 1, printTitlesRow: '1:1' });
+    expect(hoja.headerFooter.oddHeader).toContain('SIRCOVA · Cobertura de Hexavalente');
     expect(valorDe(hoja, 'Indicador')).toBe('Cobertura HEXA 3 (COB_HEXA3)');
     expect(valorDe(hoja, 'Territorio')).toBe('Todos los municipios');
     expect(valorDe(hoja, 'Generado')).toBe('17/11/2026 14:05 por Ana López');
@@ -260,7 +283,7 @@ describe('libro de Excel de una pestaña de indicadores (SPEC 72)', () => {
 
   it('con una corrida parcial lleva «PRELIMINAR» y el aviso de los meses sin cerrar', async () => {
     const hoja = await releer(cobertura({ corrida: { ...CORRIDA, parcial: true, mesesSinCerrar: [7, 8] } }));
-    expect(hoja.getCell('A2').value).toBe('PRELIMINAR');
+    expect(esPreliminar(hoja)).toBe(true);
     expect(avisosDe(hoja)[0])
       .toBe('Cálculo parcial. Julio y agosto no están cerrados: solo se cuentan los reportes ya cerrados.');
   });
@@ -310,7 +333,7 @@ describe('libro de Excel de una pestaña de indicadores (SPEC 72)', () => {
     const hoja = await releer(libroDeIndicador({
       vista: 'avance', corrida: CORRIDA, resultados: filas, indicador: indicadorDe('AV_HEXA3', 'AVANCE_META_MES', null),
     }, DATOS));
-    expect(hoja.getCell('A1').value).toBe('Avance de Hexavalente');
+    expect(tituloDe(hoja)).toBe('Avance de Hexavalente');
     expect(valorDe(hoja, 'Indicador')).toBe('AV_HEXA3 (AV_HEXA3)');
     expect(valores(filaQueEmpieza(hoja, 'Municipio'))).toEqual(['Municipio', 'Dosis acumuladas', 'Meta del mes',
       'Dosis que faltan', 'Excedente', 'Meta', 'Avance', 'Cumple', 'Más del 100 %']);
@@ -348,7 +371,8 @@ describe('libro de Excel de una pestaña de indicadores (SPEC 72)', () => {
       'Dosis que faltan', 'Cumple', 'Más del 100 %']);
     expect(valores(hoja.getRow(titulos.number + 1))).toEqual(['Total de la DDRISS', 853, 950, 0, 40, 'No']);
     expect(fondo(hoja.getRow(titulos.number + 1).getCell(5))).toBe(argbDe('amarillo'));
-    expect(fondo(hoja.getRow(titulos.number + 1).getCell(4))).toBeNull();
+    // Sin tono, la celda del total va en marino, como en la plantilla.
+    expect(fondo(hoja.getRow(titulos.number + 1).getCell(4))).toBe('FF1F3B57');
     expect(fondo(hoja.getRow(titulos.number + 2).getCell(4))).toBe(argbDe('verde'));
     expect(hoja.getRow(titulos.number + 3).getCell(3).value).toBe('Sin población');
     expect(avisosDe(hoja)).toContain(
@@ -387,7 +411,7 @@ describe('libro de Excel de una pestaña de indicadores (SPEC 72)', () => {
     expect(valores(titulos)).toEqual(['Municipio', 'Dosis acumuladas', 'Ritmo mensual', 'Dosis proyectadas a diciembre',
       'Población', 'Dosis que faltarían', 'Meta (>)', 'Cobertura proyectada', '¿Llega a la meta?']);
     expect(fondo(titulos.getCell(3))).toBe(argbDe('estimada'));
-    expect(fondo(titulos.getCell(2))).toBeNull();
+    expect(fondo(titulos.getCell(2))).toBe('FF2D5F86');
     const total = hoja.getRow(titulos.number + 1);
     expect(valores(total)).toEqual(['Total de la DDRISS', 600, 75.5, 902, 1000, 97, 0.95, 0.902, 'No']);
     expect(total.getCell(3).numFmt).toBe(FORMATO_DECIMAL);
@@ -424,7 +448,7 @@ describe('libro de Excel de Redes y de Producción (SPEC 72)', () => {
       { ...DATOS, territorio: { red: red3 } }));
 
     expect(hoja.name).toBe('Redes');
-    expect(hoja.getCell('A1').value).toBe('Cobertura de la Red No. 1');
+    expect(tituloDe(hoja)).toBe('Cobertura de la Red No. 1');
     expect(valorDe(hoja, 'Indicador')).toBeUndefined();
     expect(avisosDe(hoja)).toEqual([
       'Sin indicador de cobertura anual para: OPV R2. Se configuran en Administración · Indicadores.',
@@ -479,15 +503,15 @@ describe('libro de Excel de Redes y de Producción (SPEC 72)', () => {
   it('producción: las columnas de la tabla, el municipio aparte, la marca de lo que no suma y el total', async () => {
     const hoja = await releer(libroDeProduccion(PRODUCCION, { ...DATOS, establecimientos: ['CAP San Marcos'] }));
     expect(hoja.name).toBe('Producción');
-    expect(hoja.getCell('A1').value).toBe('Producción de Hexavalente');
-    expect(hoja.getCell('A2').value).toBe('PRELIMINAR');
-    expect(valorDe(hoja, 'Periodo')).toBe('De enero a agosto de 2026');
+    expect(info(hoja).getCell('A5').text).toContain('PRODUCCIÓN DE VACUNACIÓN');
+    expect(tituloDe(hoja)).toBe('Producción de Hexavalente');
+    expect(esPreliminar(hoja)).toBe(true);
+    expect(ultimoTexto(hoja, 6)).toBe('De enero a agosto de 2026');
     expect(valorDe(hoja, 'Vacuna')).toBe('Hexavalente');
     expect(valorDe(hoja, 'Establecimiento')).toBe('CAP San Marcos');
     expect(avisosDe(hoja)).toEqual(['Datos preliminares: agosto de 2026 todavía no está cerrado.']);
 
-    // La primera fila «Establecimiento» es la del encabezado; la segunda, la de los títulos de la tabla.
-    const titulos = filaQueEmpieza(hoja, 'Establecimiento', 2);
+    const titulos = filaQueEmpieza(hoja, 'Establecimiento');
     expect(valores(titulos)).toEqual(['Establecimiento', 'Municipio', 'D1', 'D2', 'Población propia',
       'Otros municipios', 'Total']);
     const cap = hoja.getRow(titulos.number + 1);
@@ -500,7 +524,7 @@ describe('libro de Excel de Redes y de Producción (SPEC 72)', () => {
     expect(total.getCell(2).value).toBeNull();
     expect(valores(total).slice(2)).toEqual([40, 35, 70, 5, 75]);
     expect(total.getCell(1).font.bold).toBe(true);
-    expect(hoja.getRow(titulos.number + 4).getCell(1).value)
+    expect(hoja.getRow(titulos.number + 5).getCell(1).value)
       .toBe('Además, 9 dosis de establecimientos que no suman en el consolidado.');
     expect(hoja.views[0]).toMatchObject({ state: 'frozen', xSplit: 2, ySplit: titulos.number });
   });
@@ -512,9 +536,9 @@ describe('libro de Excel de Redes y de Producción (SPEC 72)', () => {
       total: { ...PRODUCCION.total, porDosis: [] },
     };
     const hoja = await releer(libroDeProduccion(produccion, DATOS));
-    expect(hoja.getCell('A1').value).toBe('Producción de todas las vacunas');
-    expect(filaQueEmpieza(hoja, 'PRELIMINAR')).toBeNull();
-    expect(valorDe(hoja, 'Periodo')).toBe('Agosto de 2026');
+    expect(tituloDe(hoja)).toBe('Producción de todas las vacunas');
+    expect(esPreliminar(hoja)).toBe(false);
+    expect(ultimoTexto(hoja, 6)).toBe('Agosto de 2026');
     expect(valorDe(hoja, 'Vacuna')).toBe('Todas las vacunas');
     const titulos = filaQueEmpieza(hoja, 'Municipio de aplicación');
     expect(valores(titulos)).toEqual(['Municipio de aplicación', 'Población propia', 'Otros municipios', 'Total']);
@@ -762,7 +786,7 @@ describe('GET /indicadores/resultados/excel y /indicadores/produccion/excel (SPE
   async function hojaDe(res) {
     const libro = new ExcelJS.Workbook();
     await libro.xlsx.load(res.body);
-    return libro.worksheets[0];
+    return libro.worksheets.at(-1);
   }
   // Las filas después de la de títulos de la tabla (la primera cuya columna A es «titulo»).
   function filasDespuesDe(hoja, titulo) {
@@ -857,7 +881,7 @@ describe('GET /indicadores/resultados/excel y /indicadores/produccion/excel (SPE
     expect(redes.headers['content-disposition'])
       .toBe(`attachment; filename="indicadores-redes-red-${ids.red}-${ANIO}-07.xlsx"`);
     const hoja = await hojaDe(redes);
-    expect(hoja.getCell('A1').value).toBe('Cobertura de la vitest-hu72 Red A');
+    expect(tituloDe(hoja)).toBe('Cobertura de la vitest-hu72 Red A');
     expect(avisosDe(hoja)).toContain(
       'Sin indicador de cobertura anual para: HEXA 1. Se configuran en Administración · Indicadores.',
     );
