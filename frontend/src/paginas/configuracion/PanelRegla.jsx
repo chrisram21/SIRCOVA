@@ -20,6 +20,7 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { listarVacunas } from '@/api/catalogos.js'
 import { ErrorApi, mensajeDeError } from '@/api/cliente.js'
 import { crearRegla, publicarVersionRegla } from '@/api/configuracion.js'
@@ -31,6 +32,7 @@ import {
   validarMotivoCambio,
   validarNombreRegla,
 } from '@/validaciones/campos.js'
+import { describirMarcador, insertarMarcador } from './marcadoresRegla.js'
 import { MENSAJES_TIPOS, TIPOS_CREABLES, TIPOS_REGLA, marcadoresDesconocidos } from './tiposRegla.js'
 
 const SEVERIDADES = [
@@ -39,6 +41,7 @@ const SEVERIDADES = [
 ]
 const MENSAJE_TIPO = 'Elija el tipo de regla.'
 const MENSAJE_VACUNAS = 'Elija al menos una vacuna, o «Todas».'
+const AYUDA_MENSAJE = 'Haga clic en un dato para agregarlo al mensaje donde está el cursor.'
 
 // Los parámetros enteros viven como texto en los Input; los booleanos, como booleano.
 const aCampos = (parametros) =>
@@ -191,6 +194,10 @@ export default function PanelRegla({ modo, fila, alGuardar, alRecargar, alCerrar
   const [revisar, setRevisar] = useState(0)
   const [intentoVacunas, setIntentoVacunas] = useState(0)
   const formularioRef = useRef(null)
+  const mensajeRef = useRef(null)
+  // La última selección del campo Mensaje ({ inicio, fin }), o null si no se usó: el botón le quita el foco.
+  const seleccionMensaje = useRef(null)
+  const [cursorMensaje, setCursorMensaje] = useState(null)
 
   useEffect(() => {
     let vigente = true
@@ -215,6 +222,12 @@ export default function PanelRegla({ modo, fila, alGuardar, alRecargar, alCerrar
   }, [inicial, intentoVacunas])
 
   useEffect(() => {
+    if (cursorMensaje === null) return
+    mensajeRef.current?.focus()
+    mensajeRef.current?.setSelectionRange(cursorMensaje.posicion, cursorMensaje.posicion)
+  }, [cursorMensaje])
+
+  useEffect(() => {
     if (revisar > 0) formularioRef.current?.querySelector('[aria-invalid="true"]')?.focus()
   }, [revisar])
 
@@ -228,7 +241,22 @@ export default function PanelRegla({ modo, fila, alGuardar, alRecargar, alCerrar
     setFormulario((actual) => ({ ...actual, parametros: { ...actual.parametros, [clave]: valor } }))
 
   function elegirTipo(tipo) {
+    seleccionMensaje.current = null
     cambiar({ tipo, parametros: parametrosDeEjemplo(tipo), mensaje: TIPOS_REGLA[tipo].mensajeEjemplo })
+  }
+
+  function recordarSeleccion(evento) {
+    seleccionMensaje.current = { inicio: evento.target.selectionStart, fin: evento.target.selectionEnd }
+  }
+
+  function insertar(marcador) {
+    const mensaje = formulario.mensaje
+    const { inicio, fin } = seleccionMensaje.current ?? { inicio: mensaje.length, fin: mensaje.length }
+    const resultado = insertarMarcador(mensaje, inicio, fin, marcador)
+    seleccionMensaje.current = { inicio: resultado.cursor, fin: resultado.cursor }
+    cambiar({ mensaje: resultado.texto })
+    // Un objeto nuevo en cada inserción, para que el efecto corra aunque la posición se repita.
+    setCursorMensaje({ posicion: resultado.cursor })
   }
 
   function marcarVacuna(codigo, marcada) {
@@ -450,19 +478,44 @@ export default function PanelRegla({ modo, fila, alGuardar, alRecargar, alCerrar
               })}
 
               {definicion && (
-                <Campo
-                  id="regla-mensaje"
-                  etiqueta="Mensaje"
-                  error={errores.mensaje}
-                  ayuda={`Marcadores: ${definicion.marcadores.map((m) => `{${m}}`).join(', ')}.`}
-                >
+                <Campo id="regla-mensaje" etiqueta="Mensaje" error={errores.mensaje}>
                   <Textarea
+                    ref={mensajeRef}
                     id="regla-mensaje"
                     value={formulario.mensaje}
-                    onChange={(e) => cambiar({ mensaje: e.target.value })}
+                    onChange={(e) => {
+                      recordarSeleccion(e)
+                      cambiar({ mensaje: e.target.value })
+                    }}
+                    onSelect={recordarSeleccion}
                     disabled={enviando}
                     {...invalido('regla-mensaje', errores.mensaje)}
                   />
+                  <p className="text-xs text-muted-foreground">{AYUDA_MENSAJE}</p>
+                  <TooltipProvider>
+                    <div className="flex flex-wrap gap-2">
+                      {definicion.marcadores.map((clave) => {
+                        const { etiqueta, ayuda } = describirMarcador(clave)
+                        return (
+                          <Tooltip key={clave}>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                aria-label={`Insertar ${etiqueta}`}
+                                onClick={() => insertar(clave)}
+                                disabled={enviando}
+                              >
+                                {etiqueta}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>{ayuda}</TooltipContent>
+                          </Tooltip>
+                        )
+                      })}
+                    </div>
+                  </TooltipProvider>
                 </Campo>
               )}
 

@@ -728,6 +728,8 @@ Verificado contra la API real el 2026-10-26, con `cs1201`, en el reporte 287 (oc
 
 Verificado contra la API real el 2026-10-30, como Administrador: se creó `RANGO_01` «Prueba manual HU-24» (BCG, advertencia), se le publicó la v2, se desactivó, se activó (v3) y se dejó desactivada, con sus filas `CREAR`, `ACTUALIZAR`, `DESACTIVAR` y `REACTIVAR` en la bitácora. Se abrió «Nueva versión» de `SECUENCIA_DOSIS` sin publicarla. Las reglas de la semilla no cambiaron.
 
+**Nota (2026-11-25, spec 74, ajuste):** debajo del campo Mensaje del panel de una regla hay un botón por cada marcador del tipo, con su nombre en español («Variación máxima (%)») y un Tooltip que lo explica y dice qué inserta («Inserta {variacion_max_pct}.»). Al pulsarlo, el marcador queda donde estaba el cursor (o en lugar de la selección; al final si el campo no se usó), con un espacio antes si hace falta, y el foco vuelve al campo. La ayuda «Marcadores: {…}» se reemplazó por «Haga clic en un dato para agregarlo al mensaje donde está el cursor.». Funciona en «Nueva regla» y «Nueva versión», para los nueve tipos. El mensaje se sigue guardando con llaves y el backend no cambió. Verificado contra la API real el 2026-11-25 como Administrador, sin guardar ninguna regla ni versión.
+
 #### HU-25. Validar automáticamente el reporte
 
 > **Como** personal del establecimiento, **quiero** que el sistema revise mi reporte y me muestre errores y advertencias, **para** corregir los problemas antes de enviarlo.
