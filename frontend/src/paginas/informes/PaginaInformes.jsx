@@ -145,7 +145,7 @@ export default function PaginaInformes() {
   const acumuladoPedido = esAcumulado(deUrl.informe)
   const recortes = {
     nivel: deUrl.nivel,
-    vacuna: deUrl.vacuna ?? undefined,
+    vacuna: deUrl.vacunas.length > 0 ? deUrl.vacunas.join(',') : undefined,
     redId: redPedida?.id,
     municipioIds: deUrl.municipios,
     incluirAprobados: deUrl.aprobados,
@@ -225,7 +225,8 @@ export default function PaginaInformes() {
   const aviso = informe
     ? avisoDeMeses(informe.mesesSinCerrar, informe.preliminar, acumulado ? 'el acumulado' : 'el informe')
     : null
-  const avisoAgrupacion = informe ? avisoDeAgrupacion(informe, pedido?.vacuna === undefined) : null
+  // Con una sola vacuna elegida no hay a quién nombrar en el aviso (SPEC 73).
+  const avisoAgrupacion = informe ? avisoDeAgrupacion(informe, deUrl.vacunas.length !== 1) : null
   const sinColumnas = Boolean(informe?.agrupacion) && informe.columnas.length === 0
 
   const selectorAgrupacion = (

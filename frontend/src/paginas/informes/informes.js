@@ -85,7 +85,9 @@ export function filtrosDeInforme(parametros, opciones) {
   const nivel = NIVELES.some((n) => n.valor === parametros.get('nivel')) ? parametros.get('nivel') : NIVEL_POR_DEFECTO
   const anioDeUrl = /^\d{4}$/.test(parametros.get('anio') ?? '') ? Number(parametros.get('anio')) : null
   const anio = aniosHabilitados(meses).includes(anioDeUrl) ? anioDeUrl : anioPorDefecto(meses)
-  const vacuna = parametros.get('vacuna')
+  // SPEC 73: `vacuna` es una lista con comas; quedan las que están en las opciones, sin repetir y en su orden.
+  const pedidas = new Set((parametros.get('vacuna') ?? '').split(','))
+  const vacunas = (opciones?.vacunas ?? []).map((v) => v.codigo).filter((codigo) => pedidas.has(codigo))
   const existentes = new Set((opciones?.municipios ?? []).map((m) => m.id))
   const municipios = (parametros.get('municipios') ?? '').split(',').map(id).filter((m) => existentes.has(m))
 
@@ -95,7 +97,7 @@ export function filtrosDeInforme(parametros, opciones) {
     hasta,
     anio,
     nivel: nivelPermitido(informe, nivel),
-    vacuna: (opciones?.vacunas ?? []).some((v) => v.codigo === vacuna) ? vacuna : null,
+    vacunas,
     red: id(parametros.get('red')),
     municipios: [...new Set(municipios)],
     aprobados: parametros.get('aprobados') === 'si',
@@ -107,7 +109,7 @@ export function filtrosDeInforme(parametros, opciones) {
 // Lo que «Generar» escribe en la URL: informe, desde y hasta siempre (en el acumulado, anio en su lugar); lo demás
 // solo si no es el valor por defecto.
 export function parametrosDeInforme({
-  informe, desde, hasta, anio, nivel, vacuna, red, municipios, aprobados, ddriss,
+  informe, desde, hasta, anio, nivel, vacunas, red, municipios, aprobados, ddriss,
 }) {
   const parametros = new URLSearchParams()
   parametros.set('informe', informe)
@@ -118,7 +120,7 @@ export function parametrosDeInforme({
     parametros.set('hasta', aTextoDeMes(hasta))
   }
   if (nivel !== NIVEL_POR_DEFECTO) parametros.set('nivel', nivel)
-  if (vacuna) parametros.set('vacuna', vacuna)
+  if (vacunas?.length) parametros.set('vacuna', vacunas.join(','))
   if (red) parametros.set('red', String(red))
   if (municipios?.length) parametros.set('municipios', municipios.join(','))
   if (aprobados) parametros.set('aprobados', 'si')
@@ -184,11 +186,11 @@ export function textoMesesSinCerrar(meses) {
 }
 
 // SPEC 63: el aviso de un informe agrupado, o null sin agrupación. Sin columnas, ninguna vacuna registra la
-// dimensión; con «Todas las vacunas», cuáles se muestran.
-export function avisoDeAgrupacion({ agrupacion, columnas }, todasLasVacunas) {
+// dimensión; con todas las vacunas o con dos o más elegidas (variasVacunas, SPEC 73), cuáles se muestran.
+export function avisoDeAgrupacion({ agrupacion, columnas }, variasVacunas) {
   if (!agrupacion) return null
   if (columnas.length === 0) return `Ninguna vacuna de este informe registra ${agrupacion.nombre}.`
-  if (!todasLasVacunas) return null
+  if (!variasVacunas) return null
   const nombres = [...new Set(columnas.map((c) => c.vacuna.nombre))]
   return `Solo se muestran las vacunas que registran ${agrupacion.nombre}: ${enumerar(nombres)}.`
 }

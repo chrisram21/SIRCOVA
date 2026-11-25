@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { listarDdriss, listarRedes } from '@/api/catalogos.js'
 import { ErrorApi } from '@/api/cliente.js'
@@ -221,6 +221,55 @@ test('la Autoridad nacional elige la DDRISS y la manda con ddrissId', async () =
   await waitFor(() => expect(obtenerInforme).toHaveBeenCalledWith(expect.objectContaining({ ddrissId: 1 })))
 })
 
+describe('filtro Vacuna con varias vacunas (SPEC 73)', () => {
+  const CON_TRES = {
+    ...OPCIONES,
+    vacunas: [
+      { codigo: 'HEXA', nombre: 'Hexavalente', activa: true },
+      { codigo: 'NEUMO', nombre: 'Neumococo', activa: true },
+      { codigo: 'POLIO', nombre: 'Polio', activa: false },
+    ],
+  }
+  const filtroVacuna = () => screen.getByRole('combobox', { name: 'Vacuna' })
+  const marcar = (texto) => fireEvent.click(within(screen.getByRole('listbox')).getByText(texto))
+
+  beforeEach(() => {
+    obtenerOpcionesInformes.mockResolvedValue(CON_TRES)
+  })
+
+  test('elegir dos vacunas y «Generar» escribe vacuna=… en la URL y pide el informe con ese texto', async () => {
+    const router = montar()
+    await screen.findByText(SIN_GENERAR)
+    expect(filtroVacuna().textContent).toBe('Todas las vacunas')
+    fireEvent.click(filtroVacuna())
+    expect(within(screen.getByRole('listbox')).getByText('Polio (inactiva)')).toBeTruthy()
+    marcar('Neumococo')
+    marcar('Hexavalente')
+    expect(filtroVacuna().textContent).toBe('2 vacunas')
+    generar()
+    await waitFor(() => expect(busqueda(router)).toEqual({
+      informe: 'poblacion-propia', desde: '2026-02', hasta: '2026-08', vacuna: 'HEXA,NEUMO',
+    }))
+    await waitFor(() => expect(obtenerInforme).toHaveBeenLastCalledWith(expect.objectContaining({
+      vacuna: 'HEXA,NEUMO',
+    })))
+  })
+
+  test('una URL vieja con vacuna=HEXA sigue funcionando', async () => {
+    montar({ url: '/informes?informe=total&desde=2026-02&hasta=2026-08&vacuna=HEXA' })
+    await screen.findAllByText('1,234')
+    expect(obtenerInforme).toHaveBeenCalledWith(expect.objectContaining({ informe: 'total', vacuna: 'HEXA' }))
+    expect(filtroVacuna().textContent).toBe('Hexavalente')
+  })
+
+  test('una URL con vacunas que no están las ignora y deja las demás en el orden del catálogo', async () => {
+    montar({ url: '/informes?informe=total&desde=2026-02&hasta=2026-08&vacuna=NEUMO,XX,HEXA' })
+    await screen.findAllByText('1,234')
+    expect(obtenerInforme).toHaveBeenCalledWith(expect.objectContaining({ vacuna: 'HEXA,NEUMO' }))
+    expect(filtroVacuna().textContent).toBe('2 vacunas')
+  })
+})
+
 describe('«Agrupar por» (SPEC 63)', () => {
   const URL_TOTAL = '/informes?informe=total&desde=2026-02&hasta=2026-08'
   const SEXO = { codigo: 'sexo', nombre: 'Sexo' }
@@ -305,6 +354,15 @@ describe('«Agrupar por» (SPEC 63)', () => {
     montar({ url: `${URL_TOTAL}&vacuna=HEXA&agrupacion=sexo` })
     await screen.findByText('Masculino')
     expect(screen.queryByText(/Solo se muestran las vacunas/)).toBeNull()
+  })
+
+  test('con dos vacunas elegidas dice cuáles se muestran (SPEC 73)', async () => {
+    obtenerOpcionesInformes.mockResolvedValue({
+      ...OPCIONES, vacunas: [...OPCIONES.vacunas, { codigo: 'VPH', nombre: 'VPH', activa: true }],
+    })
+    obtenerInforme.mockResolvedValue(agrupado())
+    montar({ url: `${URL_TOTAL}&vacuna=HEXA,VPH&agrupacion=sexo` })
+    expect(await screen.findByText('Solo se muestran las vacunas que registran Sexo: VPH.')).toBeTruthy()
   })
 
   test('si ninguna vacuna registra la dimensión, lo dice en lugar de la tabla y deja el selector', async () => {

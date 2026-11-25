@@ -4,8 +4,8 @@ import { cn } from '@/lib/utils'
 import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
-// Las mismas clases que SelectTrigger, para que se vea como los demás selects.
-const CLASES_BOTON =
+// Las mismas clases que SelectTrigger, para que se vea como los demás selects (también SelectorMultipleConBusqueda).
+export const CLASES_BOTON =
   'flex h-8 w-full items-center justify-between gap-1.5 rounded-lg border border-input bg-card py-2 pr-2 pl-2.5 text-left text-sm whitespace-nowrap transition-colors outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20'
 
 // 'Concepción' → 'concepcion': sin mayúsculas ni tildes.

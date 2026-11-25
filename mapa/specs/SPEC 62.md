@@ -37,3 +37,4 @@ tags: ["spec", "modulo/informes", "origen/historia"]
 - [[SPEC 64]] — HU-47 Exportar informes a Excel · *Implementado*
 - [[SPEC 65]] — HU-48 Exportar informes a PDF · *Implementado*
 - [[SPEC 66]] — HU-49 Informe acumulado anual · *Implementado*
+- [[SPEC 73]] — Ajuste HU-45 Elegir varias vacunas en Informes · *Implementado*

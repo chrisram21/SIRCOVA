@@ -463,7 +463,7 @@ describe('columnasDelInforme (SPEC 62)', () => {
     vacunaId: ids.vacunas[vacuna], dosisId: ids.dosis[`${vacuna}.${codigo}`], grupoEdad,
   });
   const columnas = (hasta, extra = {}) =>
-    columnasDelInforme({ ddrissId, vacunaCodigo: 'ZVT_SPEC62', hasta: { anio: ANIO, mes: hasta }, ...extra });
+    columnasDelInforme({ ddrissId, vacunaCodigos: ['ZVT_SPEC62'], hasta: { anio: ANIO, mes: hasta }, ...extra });
 
   it('sigue las secciones del esquema de la DDRISS que cubre el último mes, con las dosis por su orden', async () => {
     expect(await columnas(2)).toEqual([
@@ -480,7 +480,7 @@ describe('columnasDelInforme (SPEC 62)', () => {
 
   it('un esquema sin secciones las deduce de sus grupos de edad, con el título del catálogo', async () => {
     const resultado = await columnasDelInforme({
-      ddrissId, vacunaCodigo: 'ZVT_SPEC62', hasta: { anio: ANIO - 1, mes: 12 },
+      ddrissId, vacunaCodigos: ['ZVT_SPEC62'], hasta: { anio: ANIO - 1, mes: 12 },
     });
     const menor1 = { grupoEdad: 'MENOR_1', titulo: 'Menores de 1 año' };
     const de1a5 = { grupoEdad: '1_A_5', titulo: 'De 1 a menos de 6 años' };
@@ -508,10 +508,10 @@ describe('columnasDelInforme (SPEC 62)', () => {
 
   it('una vacuna sin esquema lleva sus dosis activas sin sección, más las que tienen datos', async () => {
     const hasta = { anio: ANIO, mes: 2 };
-    const sinDatos = await columnasDelInforme({ ddrissId, vacunaCodigo: 'ZVT_SPEC62I', hasta });
+    const sinDatos = await columnasDelInforme({ ddrissId, vacunaCodigos: ['ZVT_SPEC62I'], hasta });
     expect(sinDatos).toEqual([columna('ZVT_SPEC62I', 'D1', null)]);
     const conDatos = [conDato('ZVT_SPEC62I', 'D2', null)];
-    expect(await columnasDelInforme({ ddrissId, vacunaCodigo: 'ZVT_SPEC62I', hasta, conDatos })).toEqual([
+    expect(await columnasDelInforme({ ddrissId, vacunaCodigos: ['ZVT_SPEC62I'], hasta, conDatos })).toEqual([
       columna('ZVT_SPEC62I', 'D1', null),
       columna('ZVT_SPEC62I', 'D2', null),
     ]);
@@ -540,8 +540,9 @@ describe('columnasAgrupadas (SPEC 63)', () => {
   const conDato = (vacuna, codigo, valor) => ({
     vacunaId: ids.vacunas[vacuna], dosisId: ids.dosis[`${vacuna}.${codigo}`], valor,
   });
-  const agrupadas = (vacunaCodigo, conDatos = []) =>
-    columnasAgrupadas({ ddrissId, vacunaCodigo, hasta: HASTA, dimension: sexo, conDatos });
+  const agrupadas = (vacunaCodigo, conDatos = []) => columnasAgrupadas({
+    ddrissId, vacunaCodigos: vacunaCodigo && [vacunaCodigo], hasta: HASTA, dimension: sexo, conDatos,
+  });
 
   beforeAll(async () => {
     sexo = await dimensionDeAgrupacion('sexo');
@@ -756,6 +757,75 @@ describe('GET /informes/produccion por municipio y departamento (SPEC 62)', () =
       const res = await consultar('produccion', `informe=total&desde=${ANIO}-01&hasta=${ANIO}-02`, cuentas[rol].token);
       expect(res.status, rol).toBe(403);
     }
+  });
+});
+
+// SPEC 73: `vacuna` con una lista de códigos. ZVT_SPEC62 (orden_informe 900) va antes que ZVT_SPEC63 (901).
+describe('GET /informes/produccion con varias vacunas (SPEC 73)', () => {
+  const informe = (consulta) =>
+    consultar('produccion', `ddrissId=${ddrissId}&informe=total&desde=${ANIO}-01&hasta=${ANIO}-02&${consulta}`);
+
+  // La parte de una vacuna en el informe con varias debe ser el informe de esa vacuna sola; las filas que solo
+  // salen por la otra vacuna (con datos de ella) van en cero.
+  function esLaDeLaVacunaSola(varias, sola, codigo) {
+    const posiciones = varias.columnas.flatMap((c, i) => (c.vacuna.codigo === codigo ? [i] : []));
+    const parte = (cantidades) => posiciones.map((i) => cantidades[i]);
+    expect(posiciones.map((i) => varias.columnas[i]), codigo).toEqual(sola.columnas);
+    expect(parte(varias.total.cantidades), codigo).toEqual(sola.total.cantidades);
+    const deLaSola = new Map(sola.filas.map((f) => [f.id, f]));
+    for (const f of varias.filas) {
+      const esperada = deLaSola.get(f.id);
+      if (esperada) expect({ ...f, cantidades: parte(f.cantidades) }, f.nombre).toEqual(esperada);
+      else expect(parte(f.cantidades).every((n) => n === 0), f.nombre).toBe(true);
+    }
+  }
+
+  it('trae las columnas de las dos, en el orden del catálogo, con las cantidades de cada una sola', async () => {
+    const [varias, de62, de63] = await Promise.all([
+      informe('vacuna=ZVT_SPEC62,ZVT_SPEC63'),
+      informe('vacuna=ZVT_SPEC62'),
+      informe('vacuna=ZVT_SPEC63'),
+    ]);
+    expect(varias.status, JSON.stringify(varias.body)).toBe(200);
+    expect([...new Set(varias.body.columnas.map((c) => c.vacuna.codigo))]).toEqual(['ZVT_SPEC62', 'ZVT_SPEC63']);
+    expect(varias.body.columnas).toHaveLength(de62.body.columnas.length + de63.body.columnas.length);
+    esLaDeLaVacunaSola(varias.body, de62.body, 'ZVT_SPEC62');
+    esLaDeLaVacunaSola(varias.body, de63.body, 'ZVT_SPEC63');
+    expect(varias.body.dosisFueraDelConsolidado).toBe(
+      de62.body.dosisFueraDelConsolidado + de63.body.dosisFueraDelConsolidado,
+    );
+  });
+
+  it('el orden de la lista no cambia el informe', async () => {
+    const [ordenada, alReves] = await Promise.all([
+      informe('vacuna=ZVT_SPEC62,ZVT_SPEC63'),
+      informe('vacuna=ZVT_SPEC63,ZVT_SPEC62'),
+    ]);
+    expect(alReves.status).toBe(200);
+    expect(alReves.body).toEqual(ordenada.body);
+  });
+
+  it('un código repetido, una coma al final o minúsculas responden 400', async () => {
+    const casos = [
+      ['vacuna=ZVT_SPEC62,ZVT_SPEC62', 'vacuna no puede repetir un código.'],
+      ['vacuna=ZVT_SPEC62,', null],
+      ['vacuna=zvt_spec62', null],
+      ['vacuna=ZVT_SPEC62, ZVT_SPEC63', null],
+    ];
+    const formato =
+      'La vacuna debe ser una lista de códigos de 1 a 20 letras mayúsculas, números o guiones bajos, '
+      + 'separados por comas.';
+    for (const [caso, mensaje] of casos) {
+      const res = await informe(caso);
+      expect(res.status, caso).toBe(400);
+      expect(res.body.error, caso).toEqual({ codigo: 'ENTRADA_INVALIDA', mensaje: mensaje ?? formato });
+    }
+  });
+
+  it('un código que no existe dentro de la lista responde 404', async () => {
+    const res = await informe('vacuna=ZVT_SPEC62,ZVT_NO_EXISTE');
+    expect(res.status).toBe(404);
+    expect(res.body.error).toEqual({ codigo: 'NO_ENCONTRADO', mensaje: 'La vacuna no existe.' });
   });
 });
 
@@ -1097,6 +1167,29 @@ describe('GET /informes/produccion/excel (SPEC 64)', () => {
     });
   });
 
+  it('con dos vacunas, la línea «Vacunas» y el aviso de la agrupación nombran las del catálogo (SPEC 73)', async () => {
+    const res = await descargar(
+      `informe=total&desde=${ANIO}-01&hasta=${ANIO}-01&vacuna=ZVT_SPEC63,ZVT_SPEC62&agrupacion=sexo`,
+    );
+    expect(res.status).toBe(200);
+    const hoja = (await hojaDe(res)).workbook.getWorksheet('Información');
+    const valores = new Map();
+    hoja.eachRow((fila) => valores.set(fila.getCell(1).value, fila.getCell(2).value));
+    expect(valores.get('Vacunas')).toBe('vitest-spec62 ZVT_SPEC62 y vitest-spec62 ZVT_SPEC63');
+    expect(valores.has('Vacuna')).toBe(false);
+    // ZVT_SPEC62 no registra sexo: el aviso nombra solo a ZVT_SPEC63.
+    expect(valores.get('Aviso')).toBe('Solo se muestran las vacunas que registran Sexo: vitest-spec62 ZVT_SPEC63.');
+  });
+
+  it('la fila EXPORTAR guarda las vacunas elegidas como lista, en el orden del catálogo (SPEC 73)', async () => {
+    const antes = await ultimaBitacora();
+    const res = await descargar(`informe=total&desde=${ANIO}-01&hasta=${ANIO}-01&vacuna=ZVT_SPEC63,ZVT_SPEC62`);
+    expect(res.status).toBe(200);
+    const filas = await filasExportar(antes);
+    expect(filas).toHaveLength(1);
+    expect(filas[0].valores_nuevos.vacuna).toEqual(['ZVT_SPEC62', 'ZVT_SPEC63']);
+  });
+
   it('responde los mismos 400 y 404 que el informe en pantalla, sin fila EXPORTAR', async () => {
     const antes = await ultimaBitacora();
     const casos = [
@@ -1166,7 +1259,7 @@ describe('GET /informes/produccion/pdf (SPEC 65)', () => {
   const json = (consulta) => consultar('produccion', `ddrissId=${ddrissId}&${consulta}`);
   const esPdf = (res) => Buffer.isBuffer(res.body) && res.body.subarray(0, 5).toString('latin1') === '%PDF-';
   const DATOS = {
-    ddriss: 'vitest-spec62', vacuna: null, red: null, municipios: [], generadoPor: 'prueba', generadoEn: new Date(),
+    ddriss: 'vitest-spec62', vacunas: [], red: null, municipios: [], generadoPor: 'prueba', generadoEn: new Date(),
   };
   const texto = (celda) => (typeof celda === 'string' ? celda : celda.text ?? null);
   const formato = new Intl.NumberFormat('es-GT');
@@ -1237,7 +1330,7 @@ describe('GET /informes/produccion/pdf (SPEC 65)', () => {
       desde: `${ANIO}-01`,
       hasta: `${ANIO}-02`,
       nivel: 'municipio',
-      vacuna: 'ZVT_SPEC62',
+      vacuna: ['ZVT_SPEC62'],
       redId: ids.red,
       municipioIds: [],
       agrupacion: null,
@@ -1386,6 +1479,24 @@ describe('acumuladoAnual: dosis, población y meses sin cerrar (SPEC 66)', () =>
     expect(fila(informe, 'vitest-spec62-Z802').dosis).toEqual([19, 0, 0]);
     expect(informe.total.dosis).toEqual([51, 6, 5]);
     expect(informe.preliminar).toBe(true);
+  });
+
+  it('con dos vacunas, las columnas y las cifras de cada una, en el orden del catálogo (SPEC 73)', async () => {
+    const [varias, de62, de63] = await Promise.all([
+      anual({ vacuna: 'ZVT_SPEC63,ZVT_SPEC62' }),
+      anual(SOLO_62),
+      anual({ vacuna: 'ZVT_SPEC63' }),
+    ]);
+    expect(varias.columnas).toEqual([...de62.columnas, ...de63.columnas]);
+    const juntas = (a, b) => Object.fromEntries(
+      ['dosis', 'poblacion', 'cobertura', 'brecha'].map((cifra) => [cifra, [...a[cifra], ...b[cifra]]]),
+    );
+    expect(varias.filas.map((f) => f.nombre)).toEqual(de62.filas.map((f) => f.nombre));
+    for (const f of varias.filas) {
+      expect(f, f.nombre).toMatchObject(juntas(fila(de62, f.nombre), fila(de63, f.nombre)));
+    }
+    expect(varias.total).toEqual(juntas(de62.total, de63.total));
+    await expect(anual({ vacuna: 'ZVT_SPEC62,ZVT_NO_EXISTE' })).rejects.toMatchObject({ status: 404 });
   });
 
   it('400 sin anio, con un año inválido o con nivel establecimiento; 404 con un año sin meses', async () => {
@@ -1627,7 +1738,7 @@ describe('GET /informes/acumulado-anual/excel y /pdf (SPEC 66)', () => {
     expect(filas).toHaveLength(2);
     expect(filas[0]).toMatchObject({ modulo: 'REPORTES', entidad: 'informe', entidad_id: 'acumulado-anual' });
     expect(filas[0].valores_nuevos).toEqual({
-      formato: 'xlsx', anio: ANIO, nivel: 'distrito', vacuna: 'ZVT_SPEC62', redId: ids.red, municipioIds: [],
+      formato: 'xlsx', anio: ANIO, nivel: 'distrito', vacuna: ['ZVT_SPEC62'], redId: ids.red, municipioIds: [],
       incluirAprobados: true, ddrissId,
     });
     expect(filas[1].valores_nuevos).toMatchObject({ formato: 'pdf', incluirAprobados: false, redId: null });

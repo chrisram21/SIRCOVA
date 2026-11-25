@@ -43,17 +43,24 @@ function avisoDeMeses(mesesSinCerrar, preliminar, donde = 'el informe') {
     + `en ${donde}. Marca «Incluir aprobados sin cerrar» para verlos como preliminares.`;
 }
 
-function avisoDeAgrupacion({ agrupacion, columnas }, todasLasVacunas) {
+// variasVacunas: todas o dos o más elegidas (SPEC 73); con una sola, no hay a quién nombrar.
+function avisoDeAgrupacion({ agrupacion, columnas }, variasVacunas) {
   if (!agrupacion) return null;
   if (columnas.length === 0) return `Ninguna vacuna de este informe registra ${agrupacion.nombre}.`;
-  if (!todasLasVacunas) return null;
+  if (!variasVacunas) return null;
   const nombres = [...new Set(columnas.map((c) => c.vacuna.nombre))];
   return `Solo se muestran las vacunas que registran ${agrupacion.nombre}: ${enumerar(nombres)}.`;
 }
 
-export function avisosDelInforme(informe, todasLasVacunas) {
-  return [avisoDeMeses(informe.mesesSinCerrar, informe.preliminar), avisoDeAgrupacion(informe, todasLasVacunas)]
+export function avisosDelInforme(informe, variasVacunas) {
+  return [avisoDeMeses(informe.mesesSinCerrar, informe.preliminar), avisoDeAgrupacion(informe, variasVacunas)]
     .filter(Boolean);
+}
+
+// La línea de las vacunas elegidas (nombres en el orden del catálogo; [] = todas).
+export function lineaDeVacunas(nombres) {
+  if (nombres.length === 0) return ['Vacuna', 'Todas las vacunas'];
+  return [nombres.length === 1 ? 'Vacuna' : 'Vacunas', enumerar(nombres)];
 }
 
 export function tituloDelInforme({ informe, nivel, agrupacion }) {
@@ -93,19 +100,19 @@ function textoTerritorio({ red, municipios }) {
 }
 
 /**
- * Las líneas [etiqueta, valor] del encabezado, después del título y de «PRELIMINAR». datos: { ddriss, vacuna
- * (nombre o null), red ({ nombre } o null), municipios (nombres), generadoPor, generadoEn (Date) }.
+ * Las líneas [etiqueta, valor] del encabezado, después del título y de «PRELIMINAR». datos: { ddriss, vacunas
+ * (nombres; [] = todas), red ({ nombre } o null), municipios (nombres), generadoPor, generadoEn (Date) }.
  */
 export function lineasDelEncabezado(informe, datos) {
   return [
     ['DDRISS', datos.ddriss],
     ['Periodo', textoRango(informe.desde, informe.hasta)],
-    ['Vacuna', datos.vacuna ?? 'Todas las vacunas'],
+    lineaDeVacunas(datos.vacunas),
     ['Territorio', textoTerritorio(datos)],
     ['Agrupación', informe.agrupacion?.nombre ?? 'Sección del 5C'],
     ['Incluye aprobados sin cerrar', informe.incluirAprobados ? 'Sí' : 'No'],
     ['Generado', `${fechaDeGeneracion(datos.generadoEn)} por ${datos.generadoPor}`],
-    ...avisosDelInforme(informe, !datos.vacuna).map((aviso) => ['Aviso', aviso]),
+    ...avisosDelInforme(informe, datos.vacunas.length !== 1).map((aviso) => ['Aviso', aviso]),
   ];
 }
 
@@ -179,7 +186,7 @@ export function lineasDelAcumulado(informe, datos) {
   return [
     ['DDRISS', datos.ddriss],
     ['Periodo', textoAnio(informe.anio)],
-    ['Vacuna', datos.vacuna ?? 'Todas las vacunas'],
+    lineaDeVacunas(datos.vacunas),
     ['Territorio', textoTerritorio(datos)],
     ['Incluye aprobados sin cerrar', informe.incluirAprobados ? 'Sí' : 'No'],
     ['Generado', `${fechaDeGeneracion(datos.generadoEn)} por ${datos.generadoPor}`],

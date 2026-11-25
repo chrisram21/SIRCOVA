@@ -44,7 +44,7 @@ const informeBase = (cambios = {}) => {
 };
 
 const datos = {
-  ddriss: 'DDRISS San Marcos', vacuna: null, red: null, municipios: [], generadoPor: 'Ana López',
+  ddriss: 'DDRISS San Marcos', vacunas: [], red: null, municipios: [], generadoPor: 'Ana López',
   generadoEn: new Date('2026-11-12T20:05:00Z'),
 };
 
@@ -109,6 +109,15 @@ describe('documento PDF de un informe (SPEC 65)', () => {
     expect(delExcel.at(-1)[0]).toBe('Aviso');
     // Con un aviso, el margen de arriba crece para que el encabezado no tape la tabla.
     expect(doc.pageMargins[1]).toBeGreaterThan(documentoDelInforme(informeBase(), datos).pageMargins[1]);
+  });
+
+  it('la franja de filtros nombra todas, una o varias vacunas (SPEC 73)', () => {
+    const franja = (vacunas) => textosDe(documentoDelInforme(informeBase(), { ...datos, vacunas }).header(1, 1));
+    expect(franja([])).toEqual(expect.arrayContaining(['Vacuna', 'Todas las vacunas']));
+    expect(franja(['Hexavalente'])).toEqual(expect.arrayContaining(['Vacuna', 'Hexavalente']));
+    const tres = franja(['Hexavalente', 'Neumococo', 'Rotavirus']);
+    expect(tres).toEqual(expect.arrayContaining(['Vacunas', 'Hexavalente, Neumococo y Rotavirus']));
+    expect(tres).not.toContain('Vacuna');
   });
 
   it('escribe el periodo como la plantilla', () => {
