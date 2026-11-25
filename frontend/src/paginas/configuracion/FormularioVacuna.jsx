@@ -15,6 +15,7 @@ import { mensajeDeError } from '@/api/cliente.js'
 import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
+import ContenedorFormulario from '@/componentes/ContenedorFormulario.jsx'
 import {
   LARGOS,
   validarCodigoVacuna,
@@ -282,7 +283,7 @@ export default function FormularioVacuna() {
   }
 
   return (
-    <section className="flex max-w-3xl flex-col gap-6 p-6">
+    <ContenedorFormulario ancho="3xl">
       <EncabezadoPagina antetitulo="Administración" titulo="Registrar vacuna" volverA={volverA} />
 
       <form ref={formulario} onSubmit={enviar} noValidate className="flex flex-col gap-6">
@@ -409,6 +410,6 @@ export default function FormularioVacuna() {
       </form>
 
       <AvisoCambiosSinGuardar bloqueo={bloqueo} descripcion="Si sale ahora, se pierden los datos de la vacuna." />
-    </section>
+    </ContenedorFormulario>
   )
 }

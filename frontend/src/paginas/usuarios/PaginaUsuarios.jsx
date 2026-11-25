@@ -258,7 +258,7 @@ export default function PaginaUsuarios() {
         )
       ) : (
         <div className="flex flex-col gap-4">
-          <div className="overflow-x-auto rounded-lg border" aria-busy={cargando}>
+          <div className="overflow-x-auto rounded-lg border bg-card" aria-busy={cargando}>
             <Table>
               <TableHeader>
                 <TableRow>

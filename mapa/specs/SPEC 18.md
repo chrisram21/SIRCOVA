@@ -37,3 +37,4 @@ tags: ["spec", "modulo/configuracion", "origen/historia"]
 - [[SPEC 30]] — Publicar con vista previa y menú «Administración» · *Implementado*
 - [[SPEC 43]] — Configurar indicadores por DDRISS, con versiones y activación · *Implementado*
 - [[SPEC 63]] — HU-46 Agrupar el informe por una dimensión · *Implementado*
+- [[SPEC 75]] — Ajustes de diseño: marcas de dimensiones, tabla de Usuarios, filtros sin aplicar y formularios centrados · *Implementado*

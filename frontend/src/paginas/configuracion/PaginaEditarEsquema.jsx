@@ -9,6 +9,7 @@ import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
+import ContenedorFormulario from '@/componentes/ContenedorFormulario.jsx'
 import DialogoPublicarEsquema, { avisoDePublicacion } from './DialogoPublicarEsquema.jsx'
 import EditorEsquema, { cargarReferencias, contenidoDe, RUTA_ESQUEMAS } from './EditorEsquema.jsx'
 import VistaPreviaEsquema from './VistaPreviaEsquema.jsx'
@@ -92,7 +93,7 @@ export default function PaginaEditarEsquema() {
     : null
 
   return (
-    <section className="flex max-w-5xl flex-col gap-6 p-6">
+    <ContenedorFormulario ancho="5xl">
       <EncabezadoPagina antetitulo="Administración" titulo="Editar borrador de esquema" volverA={volverA} />
 
       {(error === NO_EXISTE || error === NO_EDITABLE) && (
@@ -158,6 +159,6 @@ export default function PaginaEditarEsquema() {
       )}
 
       <AvisoCambiosSinGuardar bloqueo={bloqueo} descripcion="Si sale ahora, se pierden los cambios del borrador." />
-    </section>
+    </ContenedorFormulario>
   )
 }

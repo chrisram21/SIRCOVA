@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import BotonAplicarFiltros from '@/componentes/BotonAplicarFiltros.jsx'
 import SelectorConBusqueda from '@/componentes/SelectorConBusqueda.jsx'
 import { cn } from '@/lib/utils'
 import {
@@ -191,7 +192,7 @@ export default function BarraFiltrosAuditoria({ filtros, opciones, alAplicar, al
             />
           </Campo>
           <div className="flex items-end gap-2">
-            <Button type="submit">Aplicar</Button>
+            <BotonAplicarFiltros pendiente={JSON.stringify(borrador) !== clave}>Aplicar</BotonAplicarFiltros>
             <Button type="button" variant="outline" onClick={alLimpiar}>
               Limpiar
             </Button>

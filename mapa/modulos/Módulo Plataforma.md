@@ -6,7 +6,7 @@ tags: ["modulo", "modulo/plataforma"]
 
 > [!info] Nota generada por `scripts/mapa-obsidian.mjs`: no la edites a mano, se reescribe.
 
-Carpeta: `specs/plataforma/` · 6 specs · [[Inicio]]
+Carpeta: `specs/plataforma/` · 7 specs · [[Inicio]]
 
 ## Specs
 
@@ -16,3 +16,4 @@ Carpeta: `specs/plataforma/` · 6 specs · [[Inicio]]
 - [[SPEC 56]] — Pantalla de carga en las transiciones · *Implementado* · Corrección
 - [[SPEC 58]] — Límite de opciones en los combobox que crecen · *Implementado* · Corrección
 - [[SPEC 69]] — HU-52 Consultar y atender alertas · *Implementado* · [[HU-52]]
+- [[SPEC 75]] — Ajustes de diseño: marcas de dimensiones, tabla de Usuarios, filtros sin aplicar y formularios centrados · *Implementado* · Corrección

@@ -12,7 +12,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -39,6 +38,7 @@ import { ErrorApi, mensajeDeError } from '@/api/cliente.js'
 import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
+import ContenedorFormulario from '@/componentes/ContenedorFormulario.jsx'
 import {
   LARGOS,
   validarDescripcionDimension,
@@ -47,6 +47,7 @@ import {
 } from '@/validaciones/campos.js'
 import { Campo, CampoTexto } from '../usuarios/CamposEmpleado.jsx'
 import DialogoValorDimension from './DialogoValorDimension.jsx'
+import MarcaDimension from './MarcaDimension.jsx'
 
 const LISTA = '/administracion/dimensiones'
 const TIPOS = { CATEGORICA: 'Categórica', RANGO_EDAD: 'Rango de edad' }
@@ -192,9 +193,9 @@ function TablaValores({ dimension, ocupado, alMover, alEditar, alCambiarEstado }
                   )}
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
-                      {v.activo ? <Badge variant="secondary">Activo</Badge> : <Badge variant="outline">Inactivo</Badge>}
-                      {v.enUso && <Badge variant="outline">En uso</Badge>}
-                      {v.sinPoblacion && <Badge variant="outline">Sin población</Badge>}
+                      <MarcaDimension de="valor" marca={v.activo ? 'activo' : 'inactivo'} />
+                      {v.enUso && <MarcaDimension de="valor" marca="enUso" />}
+                      {v.sinPoblacion && <MarcaDimension de="valor" marca="sinPoblacion" />}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -411,7 +412,7 @@ export default function PaginaEditarDimension() {
   const sinGrupos = dimension?.tipo === 'RANGO_EDAD' && (dimension.gruposPoblacionDisponibles ?? []).length === 0
 
   return (
-    <section className="flex max-w-5xl flex-col gap-6 p-6">
+    <ContenedorFormulario ancho="5xl">
       <EncabezadoPagina antetitulo="Administración" titulo="Editar dimensión" volverA={volverA} />
 
       {noExiste && (
@@ -563,6 +564,6 @@ export default function PaginaEditarDimension() {
       )}
 
       <AvisoCambiosSinGuardar bloqueo={bloqueo} descripcion="Si sale ahora, se pierden los cambios de la dimensión." />
-    </section>
+    </ContenedorFormulario>
   )
 }

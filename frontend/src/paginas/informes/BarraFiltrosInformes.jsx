@@ -1,7 +1,7 @@
-import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import BotonAplicarFiltros from '@/componentes/BotonAplicarFiltros.jsx'
 import SelectorMultipleConBusqueda from '@/componentes/SelectorMultipleConBusqueda.jsx'
 import { MESES } from '@/lib/fechas.js'
 import { MenuMunicipios, Selector } from '@/paginas/indicadores/BarraFiltrosIndicadores.jsx'
@@ -47,7 +47,9 @@ function MesDelRango({ nombre, etiqueta, meses, valor, alCambiar, primero }) {
   )
 }
 
-export default function BarraFiltrosInformes({ opciones, valores, alCambiar, alCambiarDdriss, alGenerar }) {
+export default function BarraFiltrosInformes({
+  opciones, valores, alCambiar, alCambiarDdriss, alGenerar, filtrosSinAplicar,
+}) {
   const { ddriss, ddrissId, meses, vacunas, redes, municipios } = opciones
   const red = redes?.find((r) => r.id === valores.red) ?? null
   const delRecorte = red ? municipios.filter((m) => red.municipios.some((x) => x.id === m.id)) : municipios
@@ -189,7 +191,7 @@ export default function BarraFiltrosInformes({ opciones, valores, alCambiar, alC
           />
           <Label htmlFor="incluir-aprobados" className="font-normal">Incluir aprobados sin cerrar</Label>
         </div>
-        <Button type="submit" className="sm:ml-auto">Generar</Button>
+        <BotonAplicarFiltros pendiente={filtrosSinAplicar} className="sm:ml-auto">Generar</BotonAplicarFiltros>
       </div>
     </form>
   )

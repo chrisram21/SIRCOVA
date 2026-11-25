@@ -12,6 +12,7 @@ import { mensajeDeError } from '@/api/cliente.js'
 import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
+import ContenedorFormulario from '@/componentes/ContenedorFormulario.jsx'
 import { LARGOS, validarNombreRed } from '@/validaciones/campos.js'
 import { CampoTexto } from '../usuarios/CamposEmpleado.jsx'
 
@@ -211,7 +212,7 @@ export default function FormularioRed({ id }) {
   const errorTrazadoras = errorDe('dosisIds')
 
   return (
-    <section className="flex max-w-4xl flex-col gap-6 p-6">
+    <ContenedorFormulario ancho="4xl">
       <EncabezadoPagina antetitulo="Administración" titulo={titulo} volverA={volverA} />
 
       {errorCarga && (
@@ -349,6 +350,6 @@ export default function FormularioRed({ id }) {
       </form>
 
       <AvisoCambiosSinGuardar bloqueo={bloqueo} descripcion="Si sale ahora, se pierden los cambios de la red." />
-    </section>
+    </ContenedorFormulario>
   )
 }

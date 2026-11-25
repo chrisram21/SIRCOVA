@@ -125,6 +125,14 @@ test('la tabla muestra el tipo, los valores activos en orden, "+N inactivos" y e
   expect(insignias(celdasDe('pueblo')[4])).toEqual(['Inactiva'])
 })
 
+test('al enfocar "En uso" de una dimensión se ve su Tooltip', async () => {
+  await abrir()
+
+  fireEvent.focus(within(celdasDe('grupo_edad')[4]).getByText('En uso'))
+  const ayuda = 'La usa un esquema vigente o en borrador, por eso no se puede desactivar.'
+  expect((await screen.findAllByText(ayuda)).length).toBeGreaterThan(0)
+})
+
 test('cambiar el estado pide la lista con activa y lo deja en la URL; al abrir con activa se aplica', async () => {
   await abrir()
 

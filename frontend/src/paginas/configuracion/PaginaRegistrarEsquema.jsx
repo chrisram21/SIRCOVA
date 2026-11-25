@@ -10,6 +10,7 @@ import { ErrorApi, mensajeDeError } from '@/api/cliente.js'
 import AvisoCambiosSinGuardar, { useAvisoCambiosSinGuardar } from '@/componentes/AvisoCambiosSinGuardar.jsx'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
+import ContenedorFormulario from '@/componentes/ContenedorFormulario.jsx'
 import EditorEsquema, { cargarReferencias, RUTA_ESQUEMAS } from './EditorEsquema.jsx'
 import { territorioDe } from './PaginaEsquemas.jsx'
 
@@ -132,7 +133,7 @@ export default function PaginaRegistrarEsquema() {
     : null
 
   return (
-    <section className="flex max-w-5xl flex-col gap-6 p-6">
+    <ContenedorFormulario ancho="5xl">
       <EncabezadoPagina antetitulo="Administración" titulo="Nuevo borrador de esquema" volverA={volverA} />
 
       {error === NO_SE_PUEDE && (
@@ -184,6 +185,6 @@ export default function PaginaRegistrarEsquema() {
       )}
 
       <AvisoCambiosSinGuardar bloqueo={bloqueo} descripcion="Si sale ahora, se pierde el borrador sin guardar." />
-    </section>
+    </ContenedorFormulario>
   )
 }

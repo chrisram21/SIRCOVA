@@ -9,6 +9,7 @@ import { mensajeDeError } from '@/api/cliente.js'
 import { crearCuenta, listarRoles, registrarEmpleado } from '@/api/usuarios.js'
 import { AvisoError, AvisoExito } from '@/componentes/Avisos.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
+import ContenedorFormulario from '@/componentes/ContenedorFormulario.jsx'
 import { validarNombreUsuario } from '@/validaciones/campos.js'
 import CamposEmpleado, {
   AvisoSalida,
@@ -179,7 +180,7 @@ export default function PaginaRegistrarPersonal() {
 
   if (resultado) {
     return (
-      <section className="flex max-w-3xl flex-col gap-6 p-6">
+      <ContenedorFormulario ancho="3xl">
         <EncabezadoPagina antetitulo="Administración" titulo="Registrar personal" />
         <AvisoExito>
           <p>
@@ -193,7 +194,7 @@ export default function PaginaRegistrarPersonal() {
             <Link to={volverA}>Volver a Usuarios</Link>
           </Button>
         </div>
-      </section>
+      </ContenedorFormulario>
     )
   }
 
@@ -201,7 +202,7 @@ export default function PaginaRegistrarPersonal() {
   const ddriss = catalogos?.ddriss[0]
 
   return (
-    <section className="flex max-w-3xl flex-col gap-6 p-6">
+    <ContenedorFormulario ancho="3xl">
       <EncabezadoPagina
         antetitulo="Administración"
         titulo="Registrar personal"
@@ -320,6 +321,6 @@ export default function PaginaRegistrarPersonal() {
           alCerrar={cerrarDialogo}
         />
       )}
-    </section>
+    </ContenedorFormulario>
   )
 }
