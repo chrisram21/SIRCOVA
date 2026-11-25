@@ -5622,12 +5622,13 @@ paths:
         - **`solo_cobertura`** (Hospital de San Marcos), en `poblacion-propia` y `total`: por establecimiento es una
           fila con `fueraDelConsolidado: true` que no entra en `total`; en los demás niveles no se suma. Lo que
           aplicó con los mismos filtros va en `dosisFueraDelConsolidado`. En `residencia` suma como cualquiera.
-        - **Columnas:** una por vacuna, sección (grupo de edad) y dosis. Vacunas: con `vacuna`, solo esa; sin ella,
-          las activas por `ordenInforme` y nombre, más las inactivas con producción en el rango. Secciones: las del
-          esquema de captura que cubre el día 1 de `hasta` (el de la DDRISS o, si no hay, el nacional), en su
-          `orden`, con sus dosis por `orden`. Una combinación con producción en el rango que no está en ese esquema
-          va al final de su vacuna. Una vacuna sin esquema para ese mes lleva una columna por dosis activa, sin
-          sección. Todas las columnas salen, también en cero.
+        - **Columnas:** una por vacuna, sección (grupo de edad) y dosis. Vacunas: con `vacuna`, solo las de la
+          lista, en el orden del catálogo (SPEC 73); sin ella, las activas por `ordenInforme` y nombre, más las
+          inactivas con producción en el rango. Secciones: las del esquema de captura que cubre el día 1 de
+          `hasta` (el de la DDRISS o, si no hay, el nacional), en su `orden`, con sus dosis por `orden`. Una
+          combinación con producción en el rango que no está en ese esquema va al final de su vacuna. Una vacuna
+          sin esquema para ese mes lleva una columna por dosis activa, sin sección. Todas las columnas salen,
+          también en cero.
         - **Agrupación** (`agrupacion`, SPEC 63, HU-46): la producción se lee de `v_produccion_dimension` con esa
           dimensión y cada valor suma todas las edades; una cantidad sin la dimensión no entra (tampoco en `total`
           ni en `dosisFueraDelConsolidado`). Las columnas pasan a ser vacuna × valor × dosis (`seccion: null`):
@@ -5680,9 +5681,11 @@ paths:
 
         Una sola hoja, con el nombre corto del informe:
         - **Encabezado:** el título («{informe} · {nivel}», más « · por {dimensión}» con agrupación), «PRELIMINAR» si
-          `preliminar`, la DDRISS, el periodo, la vacuna, el territorio (red, municipios o todos), la agrupación, si
-          incluye aprobados sin cerrar, la fecha y hora de generación (Guatemala) con el nombre de quien lo generó, y
-          los mismos avisos que la pantalla (meses sin cerrar, vacunas mostradas al agrupar, ninguna vacuna).
+          `preliminar`, la DDRISS, el periodo, las vacunas («Vacuna: Todas las vacunas», «Vacuna: {nombre}» o
+          «Vacunas: {nombres}», SPEC 73), el territorio (red, municipios o todos), la agrupación, si incluye aprobados
+          sin cerrar, la fecha y hora de generación (Guatemala) con el nombre de quien lo generó, y los mismos avisos
+          que la pantalla (meses sin cerrar, vacunas mostradas al agrupar con todas o con dos o más elegidas, ninguna
+          vacuna).
         - **Tabla:** tres filas de encabezado combinadas (vacuna, sección o valor de la dimensión, dosis), la columna
           del nombre (y «Municipio» por establecimiento y por distrito) fijas, las cantidades como números con formato
           `#,##0`, «(no suma en el consolidado)» en las filas `fueraDelConsolidado`, la fila «Total» y, si hay
@@ -5731,8 +5734,8 @@ paths:
 
         - **Hoja:** carta horizontal.
         - **Encabezado de cada página:** SIRCOVA, el Ministerio y la DDRISS; el nombre del informe con el título de
-          sus filas, la etiqueta «PRELIMINAR» si `preliminar` y el periodo; una franja con los filtros (vacuna,
-          territorio, agrupación, si incluye aprobados sin cerrar) y, debajo, los avisos de la pantalla.
+          sus filas, la etiqueta «PRELIMINAR» si `preliminar` y el periodo; una franja con los filtros (vacunas,
+          como el Excel, territorio, agrupación, si incluye aprobados sin cerrar) y, debajo, los avisos de la pantalla.
         - **Marca de agua:** con `preliminar`, «PRELIMINAR» en diagonal en todas las páginas.
         - **Pie:** SIRCOVA, la fecha y hora de generación con quien lo generó y «Página {n} de {total}».
         - **Bloques de vacunas:** uno por página. Cada bloque junta vacunas seguidas sin partir ninguna, hasta 12
@@ -5834,7 +5837,7 @@ paths:
         como un libro .xlsx armado con ExcelJS desde la misma respuesta que la pantalla.
 
         - **Encabezado:** como el de `GET /informes/produccion/excel` («Acumulado anual · {nivel}», «PRELIMINAR» si
-          `preliminar`, DDRISS, «Enero a diciembre de {anio}», vacuna, territorio, si incluye aprobados sin cerrar,
+          `preliminar`, DDRISS, «Enero a diciembre de {anio}», vacunas, territorio, si incluye aprobados sin cerrar,
           fecha y hora de generación con quien lo generó, y el aviso de meses sin cerrar).
         - **Tabla:** las tres filas de encabezado combinadas (vacuna, sección, dosis) más una cuarta con la meta de
           cada columna («Meta 95 %»); las columnas del nombre (combinada en sus cuatro filas) y «Cifra» (Dosis,
@@ -6310,8 +6313,12 @@ components:
     InformeVacuna:
       name: vacuna
       in: query
-      description: Código de la vacuna; sin él, todas las vacunas
-      schema: { type: string, pattern: "^[A-Z0-9_]{1,20}$", example: HEXA }
+      description: |
+        Códigos de vacunas separados por comas, sin espacios ni repetidos (SPEC 73); sin él, todas las vacunas. Las
+        columnas van en el orden del catálogo (`ordenInforme` y nombre), no en el de la lista. Una vacuna elegida
+        sale aunque esté inactiva o no tenga producción en el rango. Un formato inválido o un código repetido
+        responde 400; un código que no existe, 404 «La vacuna no existe.».
+      schema: { type: string, pattern: "^[A-Z0-9_]{1,20}(,[A-Z0-9_]{1,20})*$", example: "HEXA,NEUMO" }
     InformeRedId:
       name: redId
       in: query
@@ -6455,8 +6462,8 @@ components:
             error: { codigo: NO_ENCONTRADO, mensaje: La red no existe. }
     InformeEntradaInvalida:
       description: |
-        Un parámetro falta, no es válido, es desconocido o está repetido, una lista repite un id, `desde` es
-        posterior a `hasta`, viene `nivel=establecimiento` con `informe=residencia`, viene
+        Un parámetro falta, no es válido, es desconocido o está repetido, una lista repite un id o `vacuna` repite
+        un código, `desde` es posterior a `hasta`, viene `nivel=establecimiento` con `informe=residencia`, viene
         `agrupacion=grupo_edad`, o falta `ddrissId` (Autoridad nacional)
       content:
         application/json:
@@ -6465,8 +6472,8 @@ components:
             error: { codigo: ENTRADA_INVALIDA, mensaje: El mes inicial no puede ser posterior al mes final. }
     InformeNoEncontrado:
       description: |
-        La vacuna o el `ddrissId` no existen; la red no existe, está inactiva o es de otra DDRISS; la dimensión
-        de `agrupacion` no existe o está inactiva; o `desde` o `hasta` no están habilitados en la DDRISS
+        Una vacuna de la lista o el `ddrissId` no existen; la red no existe, está inactiva o es de otra DDRISS; la
+        dimensión de `agrupacion` no existe o está inactiva; o `desde` o `hasta` no están habilitados en la DDRISS
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -6475,7 +6482,7 @@ components:
     InformeAnualEntradaInvalida:
       description: |
         Falta `anio` o no es un año, un parámetro no es válido, es desconocido o está repetido, una lista repite un
-        id, viene `nivel=establecimiento`, o falta `ddrissId` (Autoridad nacional)
+        id o `vacuna` repite un código, viene `nivel=establecimiento`, o falta `ddrissId` (Autoridad nacional)
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -6483,8 +6490,8 @@ components:
             error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro inválido: nivel." }
     InformeAnualNoEncontrado:
       description: |
-        La vacuna o el `ddrissId` no existen; la red no existe, está inactiva o es de otra DDRISS; o `anio` no tiene
-        ningún mes habilitado en la DDRISS
+        Una vacuna de la lista o el `ddrissId` no existen; la red no existe, está inactiva o es de otra DDRISS; o
+        `anio` no tiene ningún mes habilitado en la DDRISS
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }

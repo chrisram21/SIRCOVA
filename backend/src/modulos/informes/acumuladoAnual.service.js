@@ -16,11 +16,12 @@ import {
   leerIds,
   leerProduccion,
   leerRedId,
-  leerVacuna,
+  leerVacunas,
   llave,
   llaveDeColumna,
   municipiosDelRecorte,
   universoDeMunicipios,
+  vacunasElegidas,
 } from './informes.service.js';
 
 const noEncontrado = (mensaje) => new ErrorApi(404, 'NO_ENCONTRADO', mensaje);
@@ -36,7 +37,7 @@ export function leerConsultaAnual(query) {
   return {
     anio: Number(query.anio),
     nivel,
-    vacuna: leerVacuna(query),
+    vacunas: leerVacunas(query),
     redId: leerRedId(query),
     municipioIds: leerIds(query.municipioIds, 'municipioIds'),
     incluirAprobados: leerBooleano(query, 'incluirAprobados') ?? false,
@@ -134,25 +135,24 @@ export async function acumuladoAnual(usuario, query = {}) {
   const { anio, nivel, incluirAprobados } = consulta;
 
   const departamento = await departamentoDeLaDdriss(ddrissId);
-  const [meses, [vacunas], recorte, poblacion, versiones] = await Promise.all([
+  const [meses, vacunas, recorte, poblacion, versiones] = await Promise.all([
     mesesDelAnio(ddrissId, anio),
-    consulta.vacuna === null ? [[]] : pool.query('SELECT id FROM vacuna WHERE codigo = ?', [consulta.vacuna]),
+    vacunasElegidas(consulta.vacunas),
     municipiosDelRecorte(consulta, ddrissId),
     poblacionDelAnio(departamento.id, anio),
     codigoDdriss(ddrissId).then(indicadoresQueAplican),
   ]);
-  if (consulta.vacuna !== null && vacunas.length === 0) throw noEncontrado('La vacuna no existe.');
 
   const produccion = await leerProduccion({
     ddrissId, informe: 'residencia', desde: { anio, mes: 1 }, hasta: { anio, mes: 12 }, incluirAprobados,
-    vacunaId: vacunas[0]?.id ?? null, agrupacion: null,
+    vacunaIds: consulta.vacunas === null ? null : vacunas.map((v) => v.id), agrupacion: null,
   });
   const ultimo = { anio, mes: meses.at(-1).mes };
   const enRecorte = (municipioId) => recorte === null || recorte.includes(municipioId);
   const ceros = () => columnas.map(() => 0);
   const conDatos = [...new Set(produccion.map((p) => p.municipioId))];
   const [columnas, municipios] = await Promise.all([
-    columnasDelInforme({ ddrissId, vacunaCodigo: consulta.vacuna, hasta: ultimo, conDatos: produccion }),
+    columnasDelInforme({ ddrissId, vacunaCodigos: consulta.vacunas, hasta: ultimo, conDatos: produccion }),
     universoDeMunicipios(ddrissId, conDatos),
   ]);
   const { filas, destinos } = await filasDelNivel(nivel, { ddrissId, departamento, produccion, enRecorte, ceros });
@@ -211,7 +211,7 @@ export async function exportarAcumuladoAnual(usuario, query, contexto, formato, 
     formato,
     anio: consulta.anio,
     nivel: consulta.nivel,
-    vacuna: consulta.vacuna,
+    vacuna: datos.codigosDeVacunas,
     redId: consulta.redId,
     municipioIds: consulta.municipioIds ?? [],
     incluirAprobados: consulta.incluirAprobados,

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   aTextoDeMes,
   agrupacionDeUrl,
+  avisoDeAgrupacion,
   avisoDeMeses,
   conAgrupacion,
   encabezadosDeTabla,
@@ -56,7 +57,7 @@ describe('filtrosDeInforme', () => {
       hasta: { anio: 2026, mes: 8 },
       anio: 2026,
       nivel: 'municipio',
-      vacuna: null,
+      vacunas: [],
       red: null,
       municipios: [],
       aprobados: false,
@@ -73,7 +74,7 @@ describe('filtrosDeInforme', () => {
       hasta: { anio: 2026, mes: 9 },
       anio: 2026,
       nivel: 'distrito',
-      vacuna: 'BCG',
+      vacunas: ['BCG'],
       red: 3,
       municipios: [7, 1],
       aprobados: true,
@@ -88,10 +89,17 @@ describe('filtrosDeInforme', () => {
       desde: { anio: 2026, mes: 2 },
       hasta: { anio: 2026, mes: 8 },
       nivel: 'municipio',
-      vacuna: null,
+      vacunas: [],
       red: null,
       municipios: [1, 4],
     })
+  })
+
+  it('lee varias vacunas, sin las que no están ni las repetidas, en el orden de las opciones (SPEC 73)', () => {
+    const conNeumo = { ...OPCIONES, vacunas: [{ codigo: 'HEXA' }, { codigo: 'NEUMO' }, { codigo: 'BCG' }] }
+    expect(filtrosDeInforme(url('vacuna=NEUMO,HEXA,XX,HEXA'), conNeumo).vacunas).toEqual(['HEXA', 'NEUMO'])
+    expect(filtrosDeInforme(url('vacuna=HEXA'), conNeumo).vacunas).toEqual(['HEXA'])
+    expect(filtrosDeInforme(url('vacuna='), conNeumo).vacunas).toEqual([])
   })
 
   it('un mes inicial posterior al final se iguala al final', () => {
@@ -114,7 +122,7 @@ describe('filtrosDeInforme', () => {
 describe('parametrosDeInforme', () => {
   const BASE = {
     informe: 'poblacion-propia', desde: { anio: 2026, mes: 1 }, hasta: { anio: 2026, mes: 8 },
-    nivel: 'municipio', vacuna: null, red: null, municipios: [], aprobados: false, ddriss: null,
+    nivel: 'municipio', vacunas: [], red: null, municipios: [], aprobados: false, ddriss: null,
   }
 
   it('siempre escribe informe, desde y hasta, y omite los valores por defecto', () => {
@@ -123,7 +131,7 @@ describe('parametrosDeInforme', () => {
 
   it('escribe los demás filtros cuando no son los de por defecto', () => {
     const parametros = parametrosDeInforme({
-      ...BASE, nivel: 'establecimiento', vacuna: 'HEXA', red: 2, municipios: [1, 4], aprobados: true, ddriss: 5,
+      ...BASE, nivel: 'establecimiento', vacunas: ['HEXA'], red: 2, municipios: [1, 4], aprobados: true, ddriss: 5,
     })
     expect(Object.fromEntries(parametros)).toEqual({
       informe: 'poblacion-propia', desde: '2026-01', hasta: '2026-08', nivel: 'establecimiento', vacuna: 'HEXA',
@@ -132,9 +140,18 @@ describe('parametrosDeInforme', () => {
   })
 
   it('lo que escribe se vuelve a leer igual', () => {
-    const valores = { ...BASE, informe: 'total', desde: { anio: 2025, mes: 12 }, vacuna: 'BCG', municipios: [4] }
+    const valores = {
+      ...BASE, informe: 'total', desde: { anio: 2025, mes: 12 }, vacunas: ['HEXA', 'BCG'], municipios: [4],
+    }
     const leidos = filtrosDeInforme(parametrosDeInforme(valores), OPCIONES)
-    expect(leidos).toMatchObject({ informe: 'total', desde: { anio: 2025, mes: 12 }, vacuna: 'BCG', municipios: [4] })
+    expect(leidos).toMatchObject({
+      informe: 'total', desde: { anio: 2025, mes: 12 }, vacunas: ['HEXA', 'BCG'], municipios: [4],
+    })
+  })
+
+  it('escribe la lista de vacunas con comas, o no escribe vacuna (SPEC 73)', () => {
+    expect(parametrosDeInforme({ ...BASE, vacunas: ['HEXA', 'NEUMO'] }).get('vacuna')).toBe('HEXA,NEUMO')
+    expect(parametrosDeInforme({ ...BASE, vacunas: [] }).has('vacuna')).toBe(false)
   })
 
   it('aTextoDeMes completa el mes con cero', () => {
@@ -217,6 +234,21 @@ describe('agrupación en la URL (SPEC 63)', () => {
     expect(base.has('agrupacion')).toBe(false)
   })
 
+  it('el aviso nombra las vacunas con todas o con dos o más elegidas, no con una (SPEC 73)', () => {
+    const agrupado = {
+      agrupacion: { codigo: 'sexo', nombre: 'Sexo' },
+      columnas: [{ vacuna: { codigo: 'VPH', nombre: 'VPH' } }, { vacuna: { codigo: 'TD', nombre: 'Td' } }],
+    }
+    const aviso = 'Solo se muestran las vacunas que registran Sexo: VPH y Td.'
+    const variasVacunas = (elegidas) => elegidas !== 1
+    expect(avisoDeAgrupacion(agrupado, variasVacunas(0))).toBe(aviso)
+    expect(avisoDeAgrupacion(agrupado, variasVacunas(1))).toBeNull()
+    expect(avisoDeAgrupacion(agrupado, variasVacunas(2))).toBe(aviso)
+    expect(avisoDeAgrupacion({ ...agrupado, columnas: [] }, false))
+      .toBe('Ninguna vacuna de este informe registra Sexo.')
+    expect(avisoDeAgrupacion({ ...agrupado, agrupacion: null }, true)).toBeNull()
+  })
+
   it('después de «Generar», conAgrupacion conserva la agrupación', () => {
     const generados = parametrosDeInforme({
       informe: 'total', desde: { anio: 2026, mes: 1 }, hasta: { anio: 2026, mes: 8 }, nivel: 'municipio',
@@ -281,7 +313,7 @@ describe('acumulado anual (SPEC 66)', () => {
   it('«Generar» escribe anio en lugar de desde y hasta', () => {
     const parametros = parametrosDeInforme({
       informe: ACUMULADO, desde: { anio: 2026, mes: 1 }, hasta: { anio: 2026, mes: 8 }, anio: 2026,
-      nivel: 'distrito', vacuna: 'HEXA', red: null, municipios: [], aprobados: true,
+      nivel: 'distrito', vacunas: ['HEXA'], red: null, municipios: [], aprobados: true,
     })
     expect(Object.fromEntries(parametros)).toEqual({
       informe: ACUMULADO, anio: '2026', nivel: 'distrito', vacuna: 'HEXA', aprobados: 'si',

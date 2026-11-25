@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import SelectorConBusqueda from '@/componentes/SelectorConBusqueda.jsx'
+import SelectorMultipleConBusqueda from '@/componentes/SelectorMultipleConBusqueda.jsx'
 import { MESES } from '@/lib/fechas.js'
 import { MenuMunicipios, Selector } from '@/paginas/indicadores/BarraFiltrosIndicadores.jsx'
 import { INFORMES, NIVELES, aniosHabilitados, esAcumulado, nivelPermitido } from './informes.js'
@@ -146,14 +146,16 @@ export default function BarraFiltrosInformes({ opciones, valores, alCambiar, alC
           </Select>
         ))}
         {conCampo('Vacuna', (
-          <SelectorConBusqueda
+          <SelectorMultipleConBusqueda
+            id="filtro-vacuna"
             etiqueta="Vacuna"
-            valor={valores.vacuna ?? TODAS}
-            alCambiar={(codigo) => alCambiar({ vacuna: codigo === TODAS ? null : codigo })}
-            opciones={[
-              { valor: TODAS, texto: 'Todas las vacunas', fija: true },
-              ...vacunas.map((v) => ({ valor: v.codigo, texto: v.activa ? v.nombre : `${v.nombre} (inactiva)` })),
-            ]}
+            valores={valores.vacunas}
+            alCambiar={(codigos) => alCambiar({ vacunas: codigos })}
+            opciones={vacunas.map((v) => ({
+              valor: v.codigo, texto: v.activa ? v.nombre : `${v.nombre} (inactiva)`,
+            }))}
+            textoTodas="Todas las vacunas"
+            textoVarias={(n) => `${n} vacunas`}
             textoBuscar="Buscar vacuna…"
             textoVacio="Ninguna vacuna coincide."
             className="w-full sm:w-64"

@@ -3,7 +3,9 @@ import ExcelJS from 'exceljs';
 import {
   FORMATO_CANTIDAD, FORMATO_COBERTURA, libroDelAcumulado, libroDelInforme,
 } from '../src/modulos/informes/informeExcel.service.js';
-import { fechaDeGeneracion, textoRango, tituloDelInforme } from '../src/modulos/informes/textosInforme.js';
+import {
+  fechaDeGeneracion, lineaDeVacunas, textoRango, tituloDelInforme,
+} from '../src/modulos/informes/textosInforme.js';
 
 // SPEC 64: el libro se arma con datos fijos y se vuelve a leer desde el archivo, como lo abriría Excel. Los textos
 // esperados son los de frontend/src/paginas/informes/informes.js y TablaInforme.jsx.
@@ -39,7 +41,7 @@ const informeBase = (cambios = {}) => ({
 
 const datosBase = (cambios = {}) => ({
   ddriss: 'DDRISS San Marcos',
-  vacuna: null,
+  vacunas: [],
   red: null,
   municipios: [],
   generadoPor: 'Ana López',
@@ -138,7 +140,7 @@ describe('libro de Excel de un informe (SPEC 64)', () => {
   });
 
   it('nombra la vacuna, la red o los municipios del filtro y la agrupación', async () => {
-    const conRed = await leerHoja(informeBase(), datosBase({ vacuna: 'Hexavalente', red: { nombre: 'Red No. 1' } }));
+    const conRed = await leerHoja(informeBase(), datosBase({ vacunas: ['Hexavalente'], red: { nombre: 'Red No. 1' } }));
     expect(valorDe(conRed, 'Vacuna')).toBe('Hexavalente');
     expect(valorDe(conRed, 'Territorio')).toBe('Red Red No. 1');
 
@@ -200,12 +202,28 @@ describe('libro de Excel de un informe (SPEC 64)', () => {
       filas: [{ id: 1, nombre: 'San Marcos', fueraDelConsolidado: false, cantidades: [14, 2, 9] }],
       total: { cantidades: [14, 2, 9] },
     });
-    const hoja = await leerHoja(informe, datosBase({ vacuna: 'Hexavalente' }));
+    const hoja = await leerHoja(informe, datosBase({ vacunas: ['Hexavalente'] }));
     const n = filaQueEmpieza(hoja, 'Municipio de aplicación').number;
 
     expect([2, 3, 4].map((c) => hoja.getCell(n + 1, c).value)).toEqual(['Femenino', 'Femenino', 'Masculino']);
     expect(rangosCombinados(hoja)).toEqual(expect.arrayContaining([`B${n + 1}:C${n + 1}`]));
     expect(avisos(hoja)).toEqual([]);
+
+    // Con dos o más vacunas elegidas, el aviso nombra las que registran la dimensión (SPEC 73).
+    const dos = await leerHoja(informe, datosBase({ vacunas: ['BCG', 'Hexavalente'] }));
+    expect(avisos(dos)).toEqual(['Solo se muestran las vacunas que registran Sexo: Hexavalente.']);
+  });
+
+  it('la línea de las vacunas dice todas, el nombre de una o los nombres de varias (SPEC 73)', async () => {
+    expect(lineaDeVacunas([])).toEqual(['Vacuna', 'Todas las vacunas']);
+    expect(lineaDeVacunas(['Hexavalente'])).toEqual(['Vacuna', 'Hexavalente']);
+    expect(lineaDeVacunas(['Hexavalente', 'Neumococo', 'Rotavirus']))
+      .toEqual(['Vacunas', 'Hexavalente, Neumococo y Rotavirus']);
+
+    const tres = await leerHoja(informeBase(), datosBase({ vacunas: ['Hexavalente', 'Neumococo', 'Rotavirus'] }));
+    expect(info(tres).getCell(PRIMERA_DEL_RECUADRO, 1).value).toBe('Vacunas');
+    expect(valorDe(tres, 'Vacunas')).toBe('Hexavalente, Neumococo y Rotavirus');
+    expect(valorDe(tres, 'Vacuna')).toBeUndefined();
   });
 
   it('guarda las cantidades como números con separador de miles y agrega la fila «Total»', async () => {

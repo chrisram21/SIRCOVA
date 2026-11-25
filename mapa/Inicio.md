@@ -6,7 +6,7 @@ tags: ["inicio"]
 
 > [!info] Nota generada por `scripts/mapa-obsidian.mjs`: no la edites a mano, se reescribe.
 
-72 specs · 57 de 64 historias con spec · 72 Implementado
+73 specs · 57 de 64 historias con spec · 73 Implementado
 
 Primera vez aquí: [[Cómo usar el mapa]].
 
@@ -19,13 +19,13 @@ Primera vez aquí: [[Cómo usar el mapa]].
 - [[Módulo Producción]] (8)
 - [[Módulo Revisión]] (10)
 - [[Módulo Indicadores]] (15)
-- [[Módulo Informes]] (5)
+- [[Módulo Informes]] (6)
 - [[Módulo Plataforma]] (6)
 
 ## Por origen
 
 - Historia de usuario: 57
-- [[Origen - Ajuste de una HU]]: 4
+- [[Origen - Ajuste de una HU]]: 5
 - [[Origen - Corrección]]: 7
 - [[Origen - Retroalimentación]]: 3
 - [[Origen - Hotfix]]: 1

@@ -16,3 +16,5 @@ Modifica una historia que ya estaba terminada (ajustes de un sprint, cambios ped
   - HU-17 y HU-18 (cambio 1) y HU-11 (cambio 2). Las tres ya están terminadas: este spec las modifica y lo anota en su «Avance».
 - [[SPEC 31]] — Vacunas base y vacunas agregadas al reporte · *Implementado*
   - HU-19 (crear el reporte mensual), que ya está terminada: este spec modifica su criterio de vacunas y lo anota en su «Avance». Toca también HU-16 (la marca del esquema) y HU-20 (las pestañas que se agregan o se quitan en la captura).
+- [[SPEC 73]] — Ajuste HU-45 Elegir varias vacunas en Informes · *Implementado*
+  - HU-45
