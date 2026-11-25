@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { listarVacunas } from '@/api/catalogos.js'
 import { crearRegla, publicarVersionRegla } from '@/api/configuracion.js'
@@ -46,6 +46,8 @@ function montar(modo, fila) {
 }
 
 const select = () => document.querySelector('select[name="tipo"]')
+const botonesMarcador = (panel) =>
+  panel.getAllByRole('button', { name: /^Insertar / }).map((boton) => boton.textContent)
 const escribir = (panel, etiqueta, valor) =>
   fireEvent.change(panel.getByLabelText(etiqueta), { target: { value: valor } })
 
@@ -73,7 +75,13 @@ test('«Nueva regla» ofrece los cuatro tipos; elegir uno muestra sus parámetro
   expect(panel.getByLabelText('Mensaje').value).toBe(
     'La producción de {vacuna} varía {variacion} % respecto al promedio de los últimos {meses_referencia} meses.',
   )
-  expect(panel.getByText('Marcadores: {vacuna}, {variacion}, {meses_referencia}, {variacion_max_pct}.')).toBeTruthy()
+  // La ayuda con los códigos («Marcadores: {vacuna}, …») se reemplazó por botones (SPEC 74).
+  expect(panel.getByText('Haga clic en un dato para agregarlo al mensaje donde está el cursor.')).toBeTruthy()
+  expect(botonesMarcador(panel)).toEqual(['Vacuna', 'Variación (%)', 'Meses de referencia', 'Variación máxima (%)'])
+  fireEvent.focus(panel.getByRole('button', { name: 'Insertar Variación máxima (%)' }))
+  expect((await screen.findByRole('tooltip')).textContent).toBe(
+    'La variación máxima de la regla, en porcentaje. Inserta {variacion_max_pct}.',
+  )
 })
 
 test('al enviar se muestran todos los errores, con el foco en el primero, y no se llama a la API', async () => {
@@ -200,4 +208,76 @@ test('una regla nueva sin cambios se cierra sin preguntar', () => {
   fireEvent.click(panel.getByRole('button', { name: 'Cancelar' }))
   expect(screen.queryByRole('alertdialog')).toBeNull()
   expect(props.alCerrar).toHaveBeenCalledTimes(1)
+})
+
+test('con el campo Mensaje vacío, «Insertar Vacuna» deja {vacuna}', () => {
+  const panel = montar('nueva')
+  fireEvent.change(select(), { target: { value: 'RANGO' } })
+  escribir(panel, 'Mensaje', '')
+
+  fireEvent.click(panel.getByRole('button', { name: 'Insertar Vacuna' }))
+
+  expect(panel.getByLabelText('Mensaje').value).toBe('{vacuna}')
+})
+
+test('el marcador va donde estaba el cursor y el foco vuelve al campo, después del marcador', async () => {
+  const panel = montar('nueva')
+  fireEvent.change(select(), { target: { value: 'RANGO' } })
+  escribir(panel, 'Mensaje', 'La producción de  está fuera del rango.')
+  const mensaje = panel.getByLabelText('Mensaje')
+  mensaje.setSelectionRange(17, 17)
+  fireEvent.select(mensaje)
+
+  fireEvent.click(panel.getByRole('button', { name: 'Insertar Vacuna' }))
+
+  expect(mensaje.value).toBe('La producción de {vacuna} está fuera del rango.')
+  await waitFor(() => expect(document.activeElement).toBe(mensaje))
+  expect(mensaje.selectionStart).toBe(25)
+  expect(mensaje.selectionEnd).toBe(25)
+})
+
+test('al cambiar de tipo en «Nueva regla», los botones pasan a los del tipo nuevo', () => {
+  const panel = montar('nueva')
+  fireEvent.change(select(), { target: { value: 'RANGO' } })
+  expect(botonesMarcador(panel)).toEqual(['Vacuna', 'Dosis', 'Cantidad registrada', 'Mínimo', 'Máximo'])
+
+  fireEvent.change(select(), { target: { value: 'TOTAL_CUADRA' } })
+  expect(botonesMarcador(panel)).toEqual(['Vacuna', 'Total declarado', 'Suma del detalle'])
+})
+
+test('«Nueva versión» de Campos completos, que no se crea desde la pantalla, muestra sus botones', () => {
+  const base = {
+    ...RANGO_NACIONAL,
+    codigo: 'CAMPOS_COMPLETOS',
+    tipo: 'CAMPOS_COMPLETOS',
+    ambito: 'VACUNA',
+    vacunas: ['*'],
+    parametros: { cero_explicito: false },
+    mensaje: 'Faltan {n_faltantes} celdas de {vacuna}.',
+  }
+  const fila = { ...FILA_NACIONAL, codigo: 'CAMPOS_COMPLETOS', tipo: 'CAMPOS_COMPLETOS', aplica: base }
+  const panel = montar('version', fila)
+
+  expect(botonesMarcador(panel)).toEqual(['Vacuna', 'Celdas sin llenar'])
+})
+
+test('guardar después de insertar manda el marcador con llaves; al guardar, los botones se deshabilitan', async () => {
+  let responder
+  crearRegla.mockReturnValue(new Promise((resolver) => (responder = resolver)))
+  const panel = montar('nueva')
+  fireEvent.change(select(), { target: { value: 'TOTAL_CUADRA' } })
+  escribir(panel, 'Nombre', 'Total de vacunas')
+  escribir(panel, 'Mensaje', 'Revise el total de')
+  fireEvent.click(panel.getByRole('button', { name: 'Insertar Vacuna' }))
+  escribir(panel, 'Motivo del cambio', 'Control pedido por la DDRISS')
+  // El panel no envía hasta tener las vacunas activas.
+  await act(() => listarVacunas.mock.results[0].value)
+
+  fireEvent.click(panel.getByRole('button', { name: 'Crear regla' }))
+
+  await waitFor(() => expect(crearRegla).toHaveBeenCalled())
+  expect(crearRegla.mock.calls[0][0].mensaje).toBe('Revise el total de {vacuna}')
+  expect(panel.getByRole('button', { name: 'Insertar Vacuna' }).disabled).toBe(true)
+  responder({ ...RANGO_NACIONAL, codigo: 'TOTAL_CUADRA_02' })
+  await waitFor(() => expect(props.alGuardar).toHaveBeenCalled())
 })

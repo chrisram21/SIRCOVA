@@ -18,3 +18,5 @@ Modifica una historia que ya estaba terminada (ajustes de un sprint, cambios ped
   - HU-19 (crear el reporte mensual), que ya está terminada: este spec modifica su criterio de vacunas y lo anota en su «Avance». Toca también HU-16 (la marca del esquema) y HU-20 (las pestañas que se agregan o se quitan en la captura).
 - [[SPEC 73]] — Ajuste HU-45 Elegir varias vacunas en Informes · *Implementado*
   - HU-45
+- [[SPEC 74]] — Ajuste HU-24 Insertar variables en el mensaje de una regla · *Implementado*
+  - HU-24
