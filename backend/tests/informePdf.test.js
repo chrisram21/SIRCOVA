@@ -89,11 +89,12 @@ describe('documento PDF de un informe (SPEC 65)', () => {
       'Producción a la población propia', 'Municipio de aplicación', 'PERÍODO', 'Enero – agosto de 2026',
     ]));
 
-    // Las líneas del Excel van de la fila 2 a la fila vacía que separa la tabla. El PDF escribe el periodo y la
-    // DDRISS a su manera; «Generado» va en el pie y las demás (filtros y avisos) en el encabezado de cada página.
+    // Las líneas del recuadro del Excel van de la fila 9 a la fila vacía que separa la tabla (la DDRISS y el periodo
+    // van arriba, con su formato, en los dos). En el PDF, «Generado» va en el pie y las demás (filtros y avisos) en el
+    // encabezado de cada página.
     const hoja = libroDelInforme(informe, datos).worksheets[0];
     const delExcel = [];
-    for (let n = 2; hoja.getCell(n, 1).value !== null; n += 1) {
+    for (let n = 9; hoja.getCell(n, 1).value !== null; n += 1) {
       delExcel.push([hoja.getCell(n, 1).value, hoja.getCell(n, 2).value]);
     }
     const pie = textosDe(doc.footer(1, 1));

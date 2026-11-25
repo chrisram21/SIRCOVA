@@ -187,3 +187,22 @@ export function lineasDelAcumulado(informe, datos) {
       .map((aviso) => ['Aviso', aviso]),
   ];
 }
+
+// Los colores de la plantilla docs/mockups/SIRCOVA_informe_poblacion_propia_v2.pdf, que comparten los PDF y los
+// Excel del sistema (no son del tema de la pantalla).
+export const TINTA = {
+  marino: '#1f3b57',
+  marinoMedio: '#2d5f86',
+  acento: '#3b8cc2',
+  acentoTexto: '#2a78ad',
+  banda: '#e6eef6',
+  subencabezado: '#dce8f3',
+  cebra: '#f2f6fa',
+  linea: '#c3d1df',
+  lineaFuerte: '#8ea5bc',
+  lineaEncabezado: '#5f84a6',
+  texto: '#1f2d3a',
+  gris: '#5b6b7b',
+  cero: '#8593a1',
+  blanco: '#ffffff',
+};

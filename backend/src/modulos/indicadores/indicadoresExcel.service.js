@@ -8,15 +8,18 @@ import {
   avisoSinCoberturaAnual, lineasDeProduccion, lineasDelEncabezado, motivoNoCalculable, notaDelMetodo, simboloDeMeta,
   textoEsperado, textoFueraDelConsolidado, textoSumaDeBrechas, tituloDeLaVista, tituloDeProduccion,
 } from './textosIndicadores.js';
+import {
+  argb, escribirNota, hojaDeInformacion, pintarTabla, prepararHojaDeDatos,
+} from '../informes/plantillaExcel.js';
 
 // SPEC 72 (HU-64): el libro .xlsx de una pestaña de «Indicadores». Recibe lo mismo que ve la pantalla (la corrida y sus
-// resultados, o la producción) y no consulta nada; recorta y ordena con tablaIndicadores.js.
+// resultados, o la producción) y no consulta nada; recorta y ordena con tablaIndicadores.js. El aspecto sale de
+// plantillaExcel.js, común con los informes: la hoja «Información» y la de los datos.
 
 export const FORMATO_CANTIDAD = '#,##0';
 export const FORMATO_DECIMAL = '#,##0.0';
 export const FORMATO_PORCENTAJE = '0.0%';
 
-const argb = (hex) => `FF${hex.slice(1).toUpperCase()}`;
 // Como fracción, para el formato de porcentaje de Excel; toPrecision quita el resto de la división (57.35 / 100).
 const porcentaje = (valor) => (valor === null || valor === undefined ? null : Number((valor / 100).toPrecision(12)));
 const siNo = (valor) => (valor === null || valor === undefined ? null : valor ? 'Sí' : 'No');
@@ -92,19 +95,20 @@ function pintar(celda, tono) {
   if (texto) celda.font = { ...celda.font, color: { argb: argb(texto) } };
 }
 
-function nuevoLibro(nombreHoja, generadoEn) {
+// La hoja «Información» y, después, la de los datos (nombreHoja). Devuelve la de datos y lo que lleva al imprimir.
+// periodo: la etiqueta de la línea que va arriba a la derecha en «Información» («Mes de corte» o «Periodo»).
+function libroConInformacion(nombreHoja, generadoEn, { rotulo, titulo, preliminar, lineas, periodo = 'Mes de corte' }) {
   const libro = new ExcelJS.Workbook();
   libro.creator = 'SIRCOVA';
   libro.created = generadoEn;
-  return { libro, hoja: libro.addWorksheet(nombreHoja) };
+  hojaDeInformacion(libro, { rotulo, titulo, preliminar, lineas, periodo, hojaDeDatos: nombreHoja });
+  const hoja = libro.addWorksheet(nombreHoja);
+  const impresion = { titulo, generado: lineas.find(([e]) => e === 'Generado')?.[1] ?? null };
+  return { libro, hoja, impresion };
 }
 
-function escribirEncabezado(hoja, titulo, preliminar, lineas) {
-  hoja.addRow([titulo]).font = { bold: true, size: 14 };
-  if (preliminar) hoja.addRow(['PRELIMINAR']).font = { bold: true };
-  for (const [etiqueta, valor] of lineas) hoja.addRow([etiqueta, valor]).getCell(1).font = { bold: true };
-  hoja.addRow([]);
-}
+const anchoDe = (c) => c.ancho ?? Math.max(12, Math.min(c.titulo.length + 2, 22));
+const ponerAnchos = (hoja, columnas) => columnas.forEach((c, i) => { hoja.getColumn(i + 1).width = anchoDe(c); });
 
 // Una celda con su valor: un número lleva el formato de la columna; un texto en una columna de números (como «Sin
 // población») va alineado a la derecha, como en la pantalla.
@@ -114,17 +118,19 @@ function escribirCelda(celda, valor, formato) {
   else if (typeof valor === 'string' && formato) celda.alignment = { horizontal: 'right' };
 }
 
-function escribirTabla(hoja, columnas, filas, { esTotal = (r) => r.municipio === null } = {}) {
+// La tabla desde la fila 1 de la hoja de datos, con una fila de títulos.
+function escribirTabla(hoja, columnas, filas, { esTotal = (r) => r.municipio === null, impresion, xSplit = 1 }) {
+  ponerAnchos(hoja, columnas);
   const filaTitulos = hoja.addRow(columnas.map((c) => c.titulo));
   filaTitulos.font = { bold: true };
-  filaTitulos.alignment = { vertical: 'middle', wrapText: true };
-  columnas.forEach((c, i) => {
-    if (c.estimada) pintar(filaTitulos.getCell(i + 1), 'estimada');
-    hoja.getColumn(i + 1).width = c.ancho ?? Math.max(12, Math.min(c.titulo.length + 2, 22));
-  });
+  filaTitulos.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+  filaTitulos.getCell(1).alignment = { vertical: 'middle', wrapText: true, indent: 1 };
+  columnas.forEach((c, i) => { if (c.estimada) pintar(filaTitulos.getCell(i + 1), 'estimada'); });
+  const totales = new Set();
   for (const r of filas) {
     const fila = hoja.addRow([]);
     const negrita = esTotal(r);
+    if (negrita) totales.add(fila.number);
     columnas.forEach((c, i) => {
       const celda = fila.getCell(i + 1);
       escribirCelda(celda, c.valor(r), c.formato);
@@ -133,7 +139,10 @@ function escribirTabla(hoja, columnas, filas, { esTotal = (r) => r.municipio ===
       if (tono) pintar(celda, tono);
     });
   }
-  hoja.views = [{ state: 'frozen', xSplit: 1, ySplit: filaTitulos.number }];
+  pintarTabla(hoja, {
+    desde: 1, filasEncabezado: 1, hasta: hoja.rowCount, columnas: columnas.length, fijas: xSplit, totales,
+  });
+  prepararHojaDeDatos(hoja, { xSplit, filasEncabezado: 1, ...impresion });
 }
 
 /**
@@ -146,7 +155,6 @@ export function libroDeIndicador(consulta, datos) {
   const { vista, corrida, resultados, indicador } = consulta;
   const tipo = VISTAS[vista];
   const filas = filasDeLaTabla(resultados, consulta);
-  const { libro, hoja } = nuevoLibro(NOMBRES_VISTA[vista], datos.generadoEn);
 
   const avisos = [];
   if (['AVANCE_META_MES', 'COBERTURA', 'BRECHA'].includes(tipo)) avisos.push(avisoMayorACien(filas, nombreDeFila));
@@ -161,9 +169,13 @@ export function libroDeIndicador(consulta, datos) {
   }
 
   const vacunaNombre = resultados.find((r) => r.indicadorCodigo === indicador.codigo)?.vacuna.nombre;
-  escribirEncabezado(hoja, tituloDeLaVista(vista, { vacunaNombre }), corrida.parcial,
-    lineasDelEncabezado({ corrida, indicador }, datos, avisos));
-  escribirTabla(hoja, COLUMNAS[tipo], filas);
+  const { libro, hoja, impresion } = libroConInformacion(NOMBRES_VISTA[vista], datos.generadoEn, {
+    rotulo: 'INDICADORES DE VACUNACIÓN',
+    titulo: tituloDeLaVista(vista, { vacunaNombre }),
+    preliminar: corrida.parcial,
+    lineas: lineasDelEncabezado({ corrida, indicador }, datos, avisos),
+  });
+  escribirTabla(hoja, COLUMNAS[tipo], filas, { impresion });
   return libro;
 }
 
@@ -180,11 +192,15 @@ export function libroDeRed({ corrida, resultados, red }, datos) {
     faltan.length > 0 ? avisoSinCoberturaAnual(faltan) : null,
     esperado == null ? null : textoEsperado(esperado, corrida.mesHasta),
   ];
-  const { libro, hoja } = nuevoLibro(NOMBRES_VISTA.redes, datos.generadoEn);
-  escribirEncabezado(hoja, tituloDeLaVista('redes', { red }), corrida.parcial,
-    lineasDelEncabezado({ corrida, indicador: null }, datos, avisos));
+  const { libro, hoja, impresion } = libroConInformacion(NOMBRES_VISTA.redes, datos.generadoEn, {
+    rotulo: 'INDICADORES DE VACUNACIÓN',
+    titulo: tituloDeLaVista('redes', { red }),
+    preliminar: corrida.parcial,
+    lineas: lineasDelEncabezado({ corrida, indicador: null }, datos, avisos),
+  });
+  hoja.getColumn(1).width = 28;
+  columnas.forEach((_, i) => { hoja.getColumn(i + 2).width = 14; });
 
-  const filaGrupos = hoja.rowCount + 1;
   const grupos = ['Municipio', ...columnas.map(() => null)];
   let desde = 2;
   const tramos = gruposDeColumnas(columnas).map((g) => {
@@ -198,13 +214,17 @@ export function libroDeRed({ corrida, resultados, red }, datos) {
     fila.font = { bold: true };
     fila.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
   }
-  hoja.mergeCells(filaGrupos, 1, filaGrupos + 1, 1);
-  hoja.getCell(filaGrupos, 1).alignment = { horizontal: 'left', vertical: 'bottom' };
-  for (const { desde: d, hasta } of tramos) if (hasta > d) hoja.mergeCells(filaGrupos, d, filaGrupos, hasta);
+  hoja.mergeCells(1, 1, 2, 1);
+  hoja.getCell(1, 1).alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+  for (const { desde: d, hasta } of tramos) if (hasta > d) hoja.mergeCells(1, d, 1, hasta);
 
+  const totales = new Set();
   const escribirFila = (nombre, celdas, negrita) => {
     const fila = hoja.addRow([nombre]);
-    if (negrita) fila.getCell(1).font = { bold: true };
+    if (negrita) {
+      fila.getCell(1).font = { bold: true };
+      totales.add(fila.number);
+    }
     celdas.forEach((r, i) => {
       if (!r) return;
       const celda = fila.getCell(i + 2);
@@ -217,9 +237,11 @@ export function libroDeRed({ corrida, resultados, red }, datos) {
   for (const { municipio, celdas } of municipios) escribirFila(municipio.nombre, celdas, false);
   escribirFila('Total de la red', total, true);
 
-  hoja.getColumn(1).width = 28;
-  columnas.forEach((_, i) => { hoja.getColumn(i + 2).width = 14; });
-  hoja.views = [{ state: 'frozen', xSplit: 1, ySplit: filaGrupos + 1 }];
+  pintarTabla(hoja, {
+    desde: 1, filasEncabezado: 2, hasta: hoja.rowCount, columnas: columnas.length + 1, fijas: 1,
+    inicios: new Set(tramos.map((t) => t.desde)), totales,
+  });
+  prepararHojaDeDatos(hoja, { xSplit: 1, filasEncabezado: 2, ...impresion });
   return libro;
 }
 
@@ -229,10 +251,6 @@ export function libroDeRed({ corrida, resultados, red }, datos) {
  */
 export function libroDeProduccion(produccion, datos) {
   const porEstablecimiento = produccion.agrupar === 'establecimiento';
-  const { libro, hoja } = nuevoLibro(NOMBRES_VISTA.produccion, datos.generadoEn);
-  escribirEncabezado(hoja, tituloDeProduccion(produccion.vacuna), produccion.preliminar,
-    lineasDeProduccion(produccion, datos));
-
   const cantidad = (titulo, valor) => col(titulo, valor, FORMATO_CANTIDAD);
   const dosisDe = (fila, id) => fila.porDosis.find((d) => d.dosisId === id)?.dosisTotal ?? 0;
   const nombre = (f) => `${(f.establecimiento ?? f.municipio).nombre}${f.fueraDelConsolidado ? NO_SUMA : ''}`;
@@ -247,9 +265,17 @@ export function libroDeProduccion(produccion, datos) {
     cantidad('Total', (f) => f.dosisTotal),
   ];
   const filas = [...produccion.filas, { ...produccion.total, total: true }];
-  escribirTabla(hoja, columnas, filas, { esTotal: (f) => f.total === true });
-  if (porEstablecimiento) hoja.views = [{ ...hoja.views[0], xSplit: 2 }];
+  const { libro, hoja, impresion } = libroConInformacion(NOMBRES_VISTA.produccion, datos.generadoEn, {
+    rotulo: 'PRODUCCIÓN DE VACUNACIÓN',
+    titulo: tituloDeProduccion(produccion.vacuna),
+    preliminar: produccion.preliminar,
+    lineas: lineasDeProduccion(produccion, datos),
+    periodo: 'Periodo',
+  });
+  escribirTabla(hoja, columnas, filas, {
+    esTotal: (f) => f.total === true, impresion, xSplit: porEstablecimiento ? 2 : 1,
+  });
   const fuera = produccion.dosisFueraDelConsolidado;
-  if (fuera > 0) hoja.addRow([textoFueraDelConsolidado(fuera)]);
+  if (fuera > 0) escribirNota(hoja, textoFueraDelConsolidado(fuera));
   return libro;
 }
