@@ -413,10 +413,11 @@ SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo IN ('ADMINISTRADOR', 'EPIDEMIOLOGIA')
    AND p.codigo IN ('RED_CREAR', 'RED_EDITAR');
 
--- SPEC 62 (HU-45): la estadígrafa (Revisor), Epidemiología y la Autoridad generan los informes
+-- SPEC 62 (HU-45): la estadígrafa (Revisor), Epidemiología y la Autoridad generan los informes;
+-- SPEC 76: también el Administrador
 INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
- WHERE r.codigo IN ('REVISOR', 'EPIDEMIOLOGIA', 'AUTORIDAD')
+ WHERE r.codigo IN ('REVISOR', 'EPIDEMIOLOGIA', 'AUTORIDAD', 'ADMINISTRADOR')
    AND p.codigo = 'INFORME_CONSULTAR';
 
 -- SPEC 67 (HU-50): la estadígrafa (Revisor) y el Personal del establecimiento ven sus alertas en el Inicio

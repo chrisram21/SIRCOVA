@@ -20,3 +20,5 @@ Modifica una historia que ya estaba terminada (ajustes de un sprint, cambios ped
   - HU-45
 - [[SPEC 74]] — Ajuste HU-24 Insertar variables en el mensaje de una regla · *Implementado*
   - HU-24
+- [[SPEC 76]] — Ajuste HU-45 El Administrador consulta Informes · *Implementado*
+  - HU-45

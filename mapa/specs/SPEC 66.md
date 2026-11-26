@@ -33,3 +33,4 @@ tags: ["spec", "modulo/informes", "origen/historia"]
 ## Lo usan
 
 - [[SPEC 73]] — Ajuste HU-45 Elegir varias vacunas en Informes · *Implementado*
+- [[SPEC 76]] — Ajuste HU-45 El Administrador consulta Informes · *Implementado*

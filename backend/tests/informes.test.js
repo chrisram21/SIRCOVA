@@ -435,16 +435,16 @@ describe('GET /informes/opciones (SPEC 62)', () => {
     expect(res.body.error.mensaje).toBe('Parámetro no permitido: anio.');
   });
 
-  it('el Revisor y Epidemiología con su DDRISS, y la Autoridad nacional con ddrissId, tienen acceso', async () => {
-    for (const rol of ['REVISOR', 'EPIDEMIOLOGIA']) {
+  it('Revisor, Epidemiología y Administrador con su DDRISS, y la Autoridad nacional con ddrissId: 200', async () => {
+    for (const rol of ['REVISOR', 'EPIDEMIOLOGIA', 'ADMINISTRADOR']) {
       const res = await opciones('', cuentas[rol].token);
       expect(res.status, `${rol}: ${JSON.stringify(res.body)}`).toBe(200);
     }
     expect((await opciones()).status).toBe(200);
   });
 
-  it('el Personal del establecimiento y el Administrador reciben 403', async () => {
-    for (const rol of ['ESTABLECIMIENTO', 'ADMINISTRADOR']) {
+  it('el Personal del establecimiento recibe 403', async () => {
+    for (const rol of ['ESTABLECIMIENTO']) {
       const res = await opciones('', cuentas[rol].token);
       expect(res.status, rol).toBe(403);
     }
@@ -752,8 +752,22 @@ describe('GET /informes/produccion por municipio y departamento (SPEC 62)', () =
     }
   });
 
-  it('el Personal del establecimiento y el Administrador reciben 403', async () => {
-    for (const rol of ['ESTABLECIMIENTO', 'ADMINISTRADOR']) {
+  it('el Administrador consulta su DDRISS; con ddrissId, 400', async () => {
+    const { token, ddrissId: propia } = cuentas.ADMINISTRADOR;
+    const [[mes]] = await pool.query(
+      `SELECT p.anio, p.mes FROM cierre_periodo cp JOIN periodo p ON p.id = cp.periodo_id
+        WHERE cp.ddriss_id = ? ORDER BY p.anio DESC, p.mes DESC LIMIT 1`,
+      [propia],
+    );
+    const texto = `${mes.anio}-${String(mes.mes).padStart(2, '0')}`;
+    const consulta = `informe=total&desde=${texto}&hasta=${texto}&nivel=departamento`;
+    const res = await consultar('produccion', consulta, token);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect((await consultar('produccion', `${consulta}&ddrissId=${ddrissId}`, token)).status).toBe(400);
+  });
+
+  it('el Personal del establecimiento recibe 403', async () => {
+    for (const rol of ['ESTABLECIMIENTO']) {
       const res = await consultar('produccion', `informe=total&desde=${ANIO}-01&hasta=${ANIO}-02`, cuentas[rol].token);
       expect(res.status, rol).toBe(403);
     }
@@ -1215,8 +1229,8 @@ describe('GET /informes/produccion/excel (SPEC 64)', () => {
     expect(await filasExportar(antes)).toEqual([]);
   });
 
-  it('el Personal del establecimiento y el Administrador reciben 403', async () => {
-    for (const rol of ['ESTABLECIMIENTO', 'ADMINISTRADOR']) {
+  it('el Personal del establecimiento recibe 403', async () => {
+    for (const rol of ['ESTABLECIMIENTO']) {
       const res = await request(app)
         .get(`/api/v1/informes/produccion/excel?informe=total&desde=${ANIO}-01&hasta=${ANIO}-01`)
         .set('Authorization', `Bearer ${cuentas[rol].token}`);
@@ -1225,8 +1239,8 @@ describe('GET /informes/produccion/excel (SPEC 64)', () => {
     }
   });
 
-  it('el Revisor y Epidemiología exportan el informe de su propia DDRISS', async () => {
-    for (const rol of ['REVISOR', 'EPIDEMIOLOGIA']) {
+  it('el Revisor, Epidemiología y el Administrador exportan el informe de su propia DDRISS', async () => {
+    for (const rol of ['REVISOR', 'EPIDEMIOLOGIA', 'ADMINISTRADOR']) {
       const [[mes]] = await pool.query(
         `SELECT p.anio, p.mes FROM cierre_periodo cp JOIN periodo p ON p.id = cp.periodo_id
           WHERE cp.ddriss_id = ? ORDER BY p.anio DESC, p.mes DESC LIMIT 1`,
@@ -1362,8 +1376,8 @@ describe('GET /informes/produccion/pdf (SPEC 65)', () => {
     expect(await filasExportar(antes)).toEqual([]);
   });
 
-  it('el Personal del establecimiento y el Administrador reciben 403', async () => {
-    for (const rol of ['ESTABLECIMIENTO', 'ADMINISTRADOR']) {
+  it('el Personal del establecimiento recibe 403', async () => {
+    for (const rol of ['ESTABLECIMIENTO']) {
       const res = await request(app)
         .get(`/api/v1/informes/produccion/pdf?informe=total&desde=${ANIO}-01&hasta=${ANIO}-01`)
         .set('Authorization', `Bearer ${cuentas[rol].token}`);
@@ -1372,8 +1386,8 @@ describe('GET /informes/produccion/pdf (SPEC 65)', () => {
     }
   });
 
-  it('el Revisor y Epidemiología exportan el informe de su propia DDRISS', async () => {
-    for (const rol of ['REVISOR', 'EPIDEMIOLOGIA']) {
+  it('el Revisor, Epidemiología y el Administrador exportan el informe de su propia DDRISS', async () => {
+    for (const rol of ['REVISOR', 'EPIDEMIOLOGIA', 'ADMINISTRADOR']) {
       const [[mes]] = await pool.query(
         `SELECT p.anio, p.mes FROM cierre_periodo cp JOIN periodo p ON p.id = cp.periodo_id
           WHERE cp.ddriss_id = ? ORDER BY p.anio DESC, p.mes DESC LIMIT 1`,
@@ -1657,8 +1671,8 @@ describe('GET /informes/acumulado-anual (SPEC 66)', () => {
     }
   });
 
-  it('el Revisor y Epidemiología consultan su DDRISS; con ddrissId, 400', async () => {
-    for (const rol of ['REVISOR', 'EPIDEMIOLOGIA']) {
+  it('el Revisor, Epidemiología y el Administrador consultan su DDRISS; con ddrissId, 400', async () => {
+    for (const rol of ['REVISOR', 'EPIDEMIOLOGIA', 'ADMINISTRADOR']) {
       const propia = await anual('anio=2026', cuentas[rol].token);
       expect(propia.status, `${rol}: ${JSON.stringify(propia.body)}`).toBe(200);
       const ajena = await anual(`anio=2026&ddrissId=${ddrissId}`, cuentas[rol].token);
@@ -1666,8 +1680,8 @@ describe('GET /informes/acumulado-anual (SPEC 66)', () => {
     }
   });
 
-  it('el Personal del establecimiento y el Administrador reciben 403', async () => {
-    for (const rol of ['ESTABLECIMIENTO', 'ADMINISTRADOR']) {
+  it('el Personal del establecimiento recibe 403', async () => {
+    for (const rol of ['ESTABLECIMIENTO']) {
       const res = await anual(`anio=${ANIO}`, cuentas[rol].token);
       expect(res.status, rol).toBe(403);
     }
@@ -1757,8 +1771,17 @@ describe('GET /informes/acumulado-anual/excel y /pdf (SPEC 66)', () => {
     expect(await filasExportar(antes)).toEqual([]);
   });
 
-  it('el Personal del establecimiento y el Administrador reciben 403', async () => {
-    for (const rol of ['ESTABLECIMIENTO', 'ADMINISTRADOR']) {
+  it('el Administrador exporta el acumulado de su DDRISS', async () => {
+    const firmas = { excel: 'PK', pdf: '%PDF-' };
+    for (const [formato, firma] of Object.entries(firmas)) {
+      const res = await descargar(formato, 'anio=2026', cuentas.ADMINISTRADOR.token);
+      expect(res.status, formato).toBe(200);
+      expect(res.body.subarray(0, firma.length).toString('latin1'), formato).toBe(firma);
+    }
+  });
+
+  it('el Personal del establecimiento recibe 403', async () => {
+    for (const rol of ['ESTABLECIMIENTO']) {
       for (const formato of ['excel', 'pdf']) {
         const res = await consultar(`acumulado-anual/${formato}`, `anio=${ANIO}`, cuentas[rol].token);
         expect(res.status, `${rol} ${formato}`).toBe(403);

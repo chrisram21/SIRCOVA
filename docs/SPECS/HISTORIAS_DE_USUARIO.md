@@ -1312,6 +1312,8 @@ Verificado contra la API real el 2026-11-08, con el build servido por `vite prev
 
 **Nota (2026-11-25, spec 73, ajuste):** el filtro Vacuna de «Informes» elige varias vacunas con casillas y búsqueda (`SelectorMultipleConBusqueda`), con «Todas las vacunas» al inicio. El parámetro sigue siendo `vacuna`, ahora con códigos separados por comas (`vacuna=HEXA,NEUMO`; una URL con una sola vacuna funciona igual), en los cuatro informes y su Excel y PDF. Las columnas van en el orden del catálogo, el encabezado dice «Vacunas: Hexavalente, Rotavirus y Neumococo pediátrico» y la fila `EXPORTAR` guarda la lista. «Indicadores» sigue con una vacuna o todas. Verificado contra la API real el 2026-11-25 con la estadígrafa.
 
+**Nota (2026-11-26, spec 76, ajuste):** el Administrador también tiene `INFORME_CONSULTAR` (en el `05`), así que ve «Informes» en el menú y genera y exporta a Excel y PDF los cuatro informes, solo de su DDRISS, como el Revisor y Epidemiología. Cambia la decisión del spec 62, que lo dejaba fuera. La descripción del rol pasó a «Gestiona usuarios, catálogos y configuraciones, y consulta informes». Verificado contra la API real el 2026-11-26 con el Administrador.
+
 **Criterios de aceptación:**
 - [x] Puedo generar los tres informes que hoy hace la estadígrafa: producción a la población propia (Excel 1), producción total con Migrantes (Excel 2) y dosis por municipio de residencia (Excel 3).
 - [x] Puedo elegir mes inicial y final y uno o varios municipios.
