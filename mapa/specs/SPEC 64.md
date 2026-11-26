@@ -33,3 +33,4 @@ tags: ["spec", "modulo/informes", "origen/historia"]
 - [[SPEC 70]] — HU-54 Consultar la auditoría · *Implementado*
 - [[SPEC 72]] — HU-64 Exportar Indicadores a Excel · *Implementado*
 - [[SPEC 73]] — Ajuste HU-45 Elegir varias vacunas en Informes · *Implementado*
+- [[SPEC 76]] — Ajuste HU-45 El Administrador consulta Informes · *Implementado*

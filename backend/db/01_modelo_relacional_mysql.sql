@@ -822,7 +822,7 @@ INSERT INTO rol (codigo, nombre, descripcion) VALUES
  ('ESTABLECIMIENTO', 'Personal del establecimiento', 'Registra y corrige la producción mensual'),
  ('REVISOR',         'Estadígrafa / revisor DDRISS', 'Revisa, solicita correcciones, aprueba y cierra periodos'),
  ('EPIDEMIOLOGIA',   'Departamento de Epidemiología', 'Consulta indicadores, mapas, alertas, brechas, proyecciones e informes'),
- ('ADMINISTRADOR',   'Administrador',                'Gestiona usuarios, catálogos y configuraciones'),
+ ('ADMINISTRADOR',   'Administrador',                'Gestiona usuarios, catálogos y configuraciones, y consulta informes'),
  ('AUTORIDAD',       'Autoridades (solo consulta)',  'Consulta de resultados e informes de su DDRISS, o de todas si no tiene DDRISS asignada');
 
 INSERT INTO estado_reporte (codigo, nombre, permite_edicion, orden) VALUES
