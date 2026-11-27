@@ -187,6 +187,54 @@ describe('paso 2: justificación y cantidades', () => {
     expect(screen.getByRole('heading', { name: 'Cambios (1)' })).toBeTruthy()
   })
 
+  test('la tarjeta B es la tabla de municipios y compara sus casillas igual que la A', async () => {
+    const otros = (dosis) => `${dosis}|31|grupo_edad=MENOR_1`
+    obtenerFormulario.mockResolvedValue({
+      ...FORMULARIO,
+      vacunas: [
+        {
+          ...FORMULARIO.vacunas[0],
+          celdas: [
+            ...FORMULARIO.vacunas[0].celdas,
+            {
+              dosisCodigo: 'D1',
+              municipioProcedenciaId: 31,
+              dimensiones: { grupo_edad: 'MENOR_1' },
+              claveCombinacion: 'grupo_edad=MENOR_1',
+              cantidad: 3,
+            },
+          ],
+        },
+      ],
+    })
+    const router = await abrirReporte()
+
+    const tablaB = screen.getByRole('table', { name: 'Otros municipios' })
+    expect(within(tablaB).getByText('Otros municipios')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Agregar municipio de procedencia/ })).toBeNull()
+    expect(screen.getByLabelText('Otros municipios · < 1 año · 1.ª dosis').value).toBe('3')
+
+    escribir(otros('D1'), '4')
+    escribir(otros('D2'), '0')
+    expect(casilla(otros('D1')).getAttribute('data-cambiada')).toBe('true')
+    // Un 0 en una casilla vacía tampoco es un cambio en la B.
+    expect(screen.getByRole('heading', { name: 'Cambios (1)' })).toBeTruthy()
+
+    justificar('Faltó una dosis de otro municipio.')
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar solicitud' }))
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Enviar' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/rectificaciones/77'))
+    expect(solicitarRectificacion.mock.calls[0][1].cambios).toEqual([
+      {
+        vacunaId: 3,
+        dosisCodigo: 'D1',
+        municipioProcedenciaId: 31,
+        dimensiones: { grupo_edad: 'MENOR_1' },
+        cantidadNueva: 4,
+      },
+    ])
+  })
+
   test('un 0 en una casilla vacía no es un cambio', async () => {
     await abrirReporte()
     escribir(D2, '0')

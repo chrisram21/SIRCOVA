@@ -37,3 +37,4 @@ tags: ["spec", "modulo/produccion", "origen/historia"]
 - [[SPEC 35]] — Bandeja de revisión y asignación de revisor · *Implementado*
 - [[SPEC 36]] — Revisar un reporte y solicitar corrección · *Implementado*
 - [[SPEC 37]] — Corregir y reenviar un reporte devuelto · *Implementado*
+- [[SPEC 80]] — Corrección HU-21 Tabla de municipios en la tarjeta B de la captura · *Implementado*

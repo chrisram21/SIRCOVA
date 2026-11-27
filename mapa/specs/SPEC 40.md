@@ -36,3 +36,4 @@ tags: ["spec", "modulo/revision", "origen/historia"]
 
 - [[SPEC 41]] — Resolver una rectificación · *Implementado*
 - [[SPEC 57]] — Control de rectificaciones por establecimiento · *Implementado*
+- [[SPEC 80]] — Corrección HU-21 Tabla de municipios en la tarjeta B de la captura · *Implementado*

@@ -32,9 +32,7 @@ import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 import FormularioCaptura, { LetraTarjeta } from '@/componentes/formulario/FormularioCaptura.jsx'
 import TarjetaProcedencias, {
   cantidadesDeOtras,
-  filasDeCeldas,
   llaveProcedencia,
-  llavesDeFila,
 } from '@/componentes/formulario/TarjetaProcedencias.jsx'
 import { cantidadesDe, formularioDe } from '@/paginas/registro/CapturaReporte.jsx'
 import { MESES } from '@/lib/fechas.js'
@@ -322,20 +320,12 @@ function VacunaRectificable({ entrada, municipioPropio, municipios, edicion, mar
       </Card>
       <TarjetaProcedencias
         formulario={armado}
-        filas={edicion.filas}
+        celdas={captura.celdas}
         cantidades={edicion.otras}
         municipios={municipios}
         permitidas={captura.procedenciasPermitidas}
         modo={captura.esquema.procedencia.modo}
-        alAgregar={(fila) => alCambiar((e) => ({ ...e, filas: [...e.filas, fila] }))}
-        alQuitar={(fila) => {
-          const llaves = new Set(llavesDeFila(armado, fila))
-          alCambiar((e) => ({
-            ...e,
-            filas: e.filas.filter((f) => f !== fila),
-            otras: Object.fromEntries(Object.entries(e.otras).filter(([llave]) => !llaves.has(llave))),
-          }))
-        }}
+        municipioPropioId={municipioPropio.id}
         alCambiar={(llave, texto) => alCambiar((e) => ({ ...e, otras: { ...e.otras, [llave]: texto } }))}
         marcas={marcas.otras}
       />
@@ -379,13 +369,12 @@ function SolicitudDelReporte({ reporteId }) {
             propias: cantidadesDe(captura, municipioId),
             otras: armado ? cantidadesDeOtras(armado, captura.celdas, municipioId) : {},
           }
-          const filas = armado ? filasDeCeldas(armado, captura.celdas, municipioId, formulario.municipios) : []
-          return [{ vacuna, captura, armado, original, filas }]
+          return [{ vacuna, captura, armado, original }]
         })
         setDatos({ reporte, formulario, entradas })
         setEdicion(
           Object.fromEntries(
-            entradas.map((e) => [e.vacuna.vacuna.id, { propias: e.original.propias, otras: e.original.otras, filas: e.filas }]),
+            entradas.map((e) => [e.vacuna.vacuna.id, { propias: e.original.propias, otras: e.original.otras }]),
           ),
         )
         setPestana(entradas[0] ? String(entradas[0].vacuna.vacuna.id) : null)

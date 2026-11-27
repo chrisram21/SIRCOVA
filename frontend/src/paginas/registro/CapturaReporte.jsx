@@ -33,8 +33,6 @@ import FormularioCaptura, {
 } from '@/componentes/formulario/FormularioCaptura.jsx'
 import TarjetaProcedencias, {
   cantidadesDeOtras,
-  filasDeCeldas,
-  llavesDeFila,
   llaveProcedencia,
 } from '@/componentes/formulario/TarjetaProcedencias.jsx'
 import { contenidoDe } from '@/paginas/configuracion/EditorEsquema.jsx'
@@ -220,6 +218,7 @@ function PestanaVacuna({
   captura,
   formulario,
   municipio,
+  municipioId,
   municipios,
   cantidades,
   otras,
@@ -230,8 +229,6 @@ function PestanaVacuna({
   soloLectura,
   alCambiarCantidad,
   alCambiarOtra,
-  alAgregarFila,
-  alQuitarFila,
   alCambiarDato,
   alQuitar,
   quitarDeshabilitado,
@@ -322,13 +319,12 @@ function PestanaVacuna({
       </Card>
       <TarjetaProcedencias
         formulario={formulario}
-        filas={otras.filas}
-        cantidades={otras.cantidades}
+        celdas={captura.celdas}
+        cantidades={otras}
         municipios={municipios}
         permitidas={captura.procedenciasPermitidas}
         modo={esquema.procedencia.modo}
-        alAgregar={(fila) => alAgregarFila(fila)}
-        alQuitar={(fila) => alQuitarFila(fila, llavesDeFila(formulario, fila))}
+        municipioPropioId={municipioId}
         alCambiar={alCambiarOtra}
         soloLectura={soloLectura}
         marcas={marcas.otras}
@@ -416,8 +412,8 @@ function HistorialPlegable({ reporteId, estado }) {
 
 // alEnviar: avisa a la página el reporte ya enviado o corregido, para que muestre su estado nuevo.
 export default function CapturaReporte({ reporte, formularioPedido = null, alEnviar, alListo }) {
-  // formulario: GET /reportes/{id}/formulario; cantidades, otras, datos y firmas van por vacunaId. otras es la
-  // tarjeta B: { filas, cantidades }.
+  // formulario: GET /reportes/{id}/formulario; cantidades, otras, datos y firmas van por vacunaId. otras son las
+  // cantidades de la tarjeta B; sus filas salen de las celdas guardadas.
   const [formulario, setFormulario] = useState(null)
   const [errorCarga, setErrorCarga] = useState(null)
   const [cantidades, setCantidades] = useState({})
@@ -520,11 +516,11 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
     : []
 
   const camposDe = (captura) => captura.esquema?.camposAdicionales ?? []
-  const otrasDe = (vacunaId) => otras[vacunaId] ?? { filas: [], cantidades: {} }
+  const otrasDe = (vacunaId) => otras[vacunaId] ?? {}
   const cambio = ({ captura }) =>
     firmaDe(
       cantidades[captura.vacunaId] ?? {},
-      otrasDe(captura.vacunaId).cantidades,
+      otrasDe(captura.vacunaId),
       datos[captura.vacunaId] ?? {},
       camposDe(captura),
     ) !== firmas[captura.vacunaId]
@@ -548,25 +544,19 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
   // Sigue activo mientras se guarda y después de un guardado que falló a la mitad.
   const bloqueo = useAvisoCambiosSinGuardar(conCambios.length > 0)
 
-  // Las filas de la tarjeta B se arman de nuevo con lo guardado: las que quedaron vacías desaparecen.
-  function tomarVacuna(captura, municipioId, municipios, lista = vacunasReporte) {
+  function tomarVacuna(captura, municipioId, lista = vacunasReporte) {
     const campos = captura.esquema?.camposAdicionales ?? []
     const cantidadesVacuna = cantidadesDe(captura, municipioId)
     const vacuna = lista.find((v) => v.vacuna.id === captura.vacunaId)
     const armado = vacuna ? formularioDe(vacuna, captura) : null
-    const otrasVacuna = armado
-      ? {
-          filas: filasDeCeldas(armado, captura.celdas, municipioId, municipios),
-          cantidades: cantidadesDeOtras(armado, captura.celdas, municipioId),
-        }
-      : { filas: [], cantidades: {} }
+    const otrasVacuna = armado ? cantidadesDeOtras(armado, captura.celdas, municipioId) : {}
     const datosVacuna = { ...(captura.datosAdicionales ?? {}) }
     setCantidades((previas) => ({ ...previas, [captura.vacunaId]: cantidadesVacuna }))
     setOtras((previas) => ({ ...previas, [captura.vacunaId]: otrasVacuna }))
     setDatos((previos) => ({ ...previos, [captura.vacunaId]: datosVacuna }))
     setFirmas((previas) => ({
       ...previas,
-      [captura.vacunaId]: firmaDe(cantidadesVacuna, otrasVacuna.cantidades, datosVacuna, campos),
+      [captura.vacunaId]: firmaDe(cantidadesVacuna, otrasVacuna, datosVacuna, campos),
     }))
   }
 
@@ -593,7 +583,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
         setEstado(recibidoDetalle.estado)
         cargarObservaciones(recibidoDetalle.estado)
         for (const captura of recibido.vacunas) {
-          tomarVacuna(captura, recibido.municipioPropio.id, recibido.municipios, recibidoDetalle.vacunas)
+          tomarVacuna(captura, recibido.municipioPropio.id, recibidoDetalle.vacunas)
         }
         setFormulario(recibido)
       })
@@ -639,7 +629,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
         versionFila: respuesta.versionFila,
         vacunas: [...actual.vacunas, respuesta.formulario],
       }))
-      tomarVacuna(respuesta.formulario, municipioId, formulario.municipios, lista)
+      tomarVacuna(respuesta.formulario, municipioId, lista)
       // Las pestañas usan el id de reporte_vacuna, como el resto de la pantalla.
       setPestana(String(respuesta.vacuna.id))
       toast.success(`${respuesta.vacuna.vacuna.nombre} agregada al reporte.`)
@@ -739,7 +729,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
     vacunas
       .filter(
         ({ captura }) =>
-          hayInvalidas(cantidades[captura.vacunaId] ?? {}) || hayInvalidas(otrasDe(captura.vacunaId).cantidades),
+          hayInvalidas(cantidades[captura.vacunaId] ?? {}) || hayInvalidas(otrasDe(captura.vacunaId)),
       )
       .map(({ vacuna }) => vacuna.id),
   )
@@ -749,10 +739,10 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
     captura.celdas.length > 0 ||
     captura.datosAdicionales !== null ||
     conTexto(cantidades[captura.vacunaId]) ||
-    conTexto(otrasDe(captura.vacunaId).cantidades) ||
+    conTexto(otrasDe(captura.vacunaId)) ||
     conTexto(datos[captura.vacunaId])
   const cambiarOtras = (vacunaId, cambiar) =>
-    setOtras((previas) => ({ ...previas, [vacunaId]: cambiar(previas[vacunaId] ?? { filas: [], cantidades: {} }) }))
+    setOtras((previas) => ({ ...previas, [vacunaId]: cambiar(previas[vacunaId] ?? {}) }))
 
   // Un PUT por vacuna con cambios, uno tras otro: cada uno usa la versionFila que devolvió el anterior.
   async function guardar() {
@@ -763,7 +753,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
       try {
         const respuesta = await guardarVacuna(reporte.id, captura.vacunaId, {
           versionFila,
-          celdas: celdasParaGuardar(cantidades[captura.vacunaId] ?? {}, otrasDe(captura.vacunaId).cantidades, municipioId),
+          celdas: celdasParaGuardar(cantidades[captura.vacunaId] ?? {}, otrasDe(captura.vacunaId), municipioId),
           ...(camposDe(captura).length > 0 && {
             datosAdicionales: datosParaGuardar(camposDe(captura), datos[captura.vacunaId] ?? {}),
           }),
@@ -775,7 +765,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
           versionFila,
           vacunas: actual.vacunas.map((c) => (c.vacunaId === guardada.vacunaId ? guardada : c)),
         }))
-        tomarVacuna(guardada, municipioId, formulario.municipios)
+        tomarVacuna(guardada, municipioId)
         setGuardadoEn(new Date())
       } catch (err) {
         setAviso({
@@ -936,6 +926,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
                 captura={captura}
                 formulario={armados.get(vacuna.id)}
                 municipio={formulario.municipioPropio.nombre}
+                municipioId={municipioId}
                 municipios={formulario.municipios}
                 cantidades={cantidades[captura.vacunaId] ?? {}}
                 otras={otrasDe(captura.vacunaId)}
@@ -949,24 +940,7 @@ export default function CapturaReporte({ reporte, formularioPedido = null, alEnv
                   setCantidades((previas) => ({ ...previas, [captura.vacunaId]: { ...previas[captura.vacunaId], [llave]: texto } }))
                 }
                 alCambiarOtra={(llave, texto) =>
-                  cambiarOtras(captura.vacunaId, (actual) => ({
-                    ...actual,
-                    cantidades: { ...actual.cantidades, [llave]: texto },
-                  }))
-                }
-                alAgregarFila={(fila) =>
-                  cambiarOtras(captura.vacunaId, (actual) => ({ ...actual, filas: [...actual.filas, fila] }))
-                }
-                // Las cantidades de una fila quitada se borran: no se mandan, así que al guardar se borran sus celdas.
-                alQuitarFila={(fila, llaves) =>
-                  cambiarOtras(captura.vacunaId, (actual) => ({
-                    filas: actual.filas.filter(
-                      (f) => !(f.municipioId === fila.municipioId && f.dosis === fila.dosis && f.seccion === fila.seccion),
-                    ),
-                    cantidades: Object.fromEntries(
-                      Object.entries(actual.cantidades).filter(([llave]) => !llaves.includes(llave)),
-                    ),
-                  }))
+                  cambiarOtras(captura.vacunaId, (actual) => ({ ...actual, [llave]: texto }))
                 }
                 alCambiarDato={(clave, valor) =>
                   setDatos((previos) => ({ ...previos, [captura.vacunaId]: { ...previos[captura.vacunaId], [clave]: valor } }))

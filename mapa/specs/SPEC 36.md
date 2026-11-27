@@ -40,3 +40,4 @@ tags: ["spec", "modulo/revision", "origen/historia"]
 - [[SPEC 41]] — Resolver una rectificación · *Implementado*
 - [[SPEC 42]] — Historial de estados del reporte · *Implementado*
 - [[SPEC 56]] — Pantalla de carga en las transiciones · *Implementado*
+- [[SPEC 80]] — Corrección HU-21 Tabla de municipios en la tarjeta B de la captura · *Implementado*

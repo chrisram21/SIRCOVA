@@ -6,7 +6,7 @@ tags: ["modulo", "modulo/produccion"]
 
 > [!info] Nota generada por `scripts/mapa-obsidian.mjs`: no la edites a mano, se reescribe.
 
-Carpeta: `specs/produccion/` · 8 specs · [[Inicio]]
+Carpeta: `specs/produccion/` · 9 specs · [[Inicio]]
 
 ## Specs
 
@@ -18,3 +18,4 @@ Carpeta: `specs/produccion/` · 8 specs · [[Inicio]]
 - [[SPEC 31]] — Vacunas base y vacunas agregadas al reporte · *Implementado* · Ajuste de una HU
 - [[SPEC 33]] — Validación automática del reporte en borrador · *Implementado* · [[HU-25]]
 - [[SPEC 42]] — Historial de estados del reporte · *Implementado* · [[HU-34]]
+- [[SPEC 80]] — Corrección HU-21 Tabla de municipios en la tarjeta B de la captura · *Implementado* · Corrección

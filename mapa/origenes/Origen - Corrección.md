@@ -26,3 +26,5 @@ No nace de una historia: corrige o mejora algo ya hecho (documentos de correccio
   - ninguna (revisión del proyecto con el equipo, 2026-11-24 y 25)
 - [[SPEC 79]] — Corrección HU-45 Secciones de edad sin datos y desborde del PDF en informes · *Implementado*
   - HU-45
+- [[SPEC 80]] — Corrección HU-21 Tabla de municipios en la tarjeta B de la captura · *Implementado*
+  - HU-21
