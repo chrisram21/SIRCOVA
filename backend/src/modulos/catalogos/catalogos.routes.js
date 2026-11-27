@@ -7,6 +7,31 @@ const router = Router();
 
 router.get('/ddriss', autenticar, requierePermiso('DDRISS_CONSULTAR'), catalogosController.listarDdriss);
 router.get('/municipios', autenticar, requierePermiso('MUNICIPIO_CONSULTAR'), catalogosController.listarMunicipios);
+router.post('/municipios', autenticar, requierePermiso('MUNICIPIO_CREAR'), catalogosController.crearMunicipio);
+router.patch(
+  '/municipios/:id',
+  autenticar,
+  requierePermiso('MUNICIPIO_EDITAR'),
+  catalogosController.renombrarMunicipio,
+);
+router.post(
+  '/municipios/:id/desactivar',
+  autenticar,
+  requierePermiso('MUNICIPIO_EDITAR'),
+  catalogosController.desactivarMunicipio,
+);
+router.post(
+  '/municipios/:id/reactivar',
+  autenticar,
+  requierePermiso('MUNICIPIO_EDITAR'),
+  catalogosController.reactivarMunicipio,
+);
+router.get(
+  '/departamentos',
+  autenticar,
+  requierePermiso('MUNICIPIO_CONSULTAR'),
+  catalogosController.listarDepartamentos,
+);
 router.get('/distritos', autenticar, requierePermiso('DISTRITO_CONSULTAR'), catalogosController.listarDistritos);
 router.post('/distritos', autenticar, requierePermiso('DISTRITO_CREAR'), catalogosController.crearDistrito);
 router.patch('/distritos/:id', autenticar, requierePermiso('DISTRITO_EDITAR'), catalogosController.renombrarDistrito);

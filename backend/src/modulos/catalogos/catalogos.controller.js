@@ -1,6 +1,7 @@
 import * as catalogosService from './catalogos.service.js';
 import * as distritosService from './distritos.service.js';
 import * as establecimientosService from './establecimientos.service.js';
+import * as municipiosService from './municipios.service.js';
 import * as periodosService from './periodos.service.js';
 import * as poblacionService from './poblacion.service.js';
 import * as redesService from './redes.service.js';
@@ -13,6 +14,26 @@ export async function listarDdriss(req, res) {
 
 export async function listarMunicipios(req, res) {
   res.json(await catalogosService.listarMunicipios(req.usuario, req.query));
+}
+
+export async function crearMunicipio(req, res) {
+  res.status(201).json(await municipiosService.crearMunicipio(req.body, contextoAuditoria(req)));
+}
+
+export async function renombrarMunicipio(req, res) {
+  res.json(await municipiosService.renombrarMunicipio(req.params.id, req.body, contextoAuditoria(req)));
+}
+
+export async function desactivarMunicipio(req, res) {
+  res.json(await municipiosService.desactivarMunicipio(req.params.id, contextoAuditoria(req)));
+}
+
+export async function reactivarMunicipio(req, res) {
+  res.json(await municipiosService.reactivarMunicipio(req.params.id, contextoAuditoria(req)));
+}
+
+export async function listarDepartamentos(req, res) {
+  res.json(await municipiosService.listarDepartamentos(req.query));
 }
 
 export async function listarDistritos(req, res) {

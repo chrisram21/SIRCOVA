@@ -854,10 +854,19 @@ INSERT INTO tipo_establecimiento (codigo, nombre) VALUES
  ('CC', 'Centro Comunitario'), ('CM', 'Casa Materna'),
  ('UM', 'Unidad Mínima'), ('INST', 'Otra institución');
 
+-- Los tres primeros conservan los id 1 a 3, que usan municipio y ddriss; los
+-- otros 20 del INE (SPEC 77) van después.
 INSERT INTO departamento (codigo_ine, nombre) VALUES
  ('12', 'San Marcos'),
  ('99', 'No especificado / otro'),
- ('09', 'Quetzaltenango');
+ ('09', 'Quetzaltenango'),
+ ('01', 'Guatemala'), ('02', 'El Progreso'), ('03', 'Sacatepéquez'),
+ ('04', 'Chimaltenango'), ('05', 'Escuintla'), ('06', 'Santa Rosa'),
+ ('07', 'Sololá'), ('08', 'Totonicapán'), ('10', 'Suchitepéquez'),
+ ('11', 'Retalhuleu'), ('13', 'Huehuetenango'), ('14', 'Quiché'),
+ ('15', 'Baja Verapaz'), ('16', 'Alta Verapaz'), ('17', 'Petén'),
+ ('18', 'Izabal'), ('19', 'Zacapa'), ('20', 'Chiquimula'),
+ ('21', 'Jalapa'), ('22', 'Jutiapa');
 
 -- Única DDRISS que opera el proyecto. Sus distritos de salud se cargan con
 -- ddriss_id = 1; agregar otra DDRISS es insertar datos, no cambiar tablas.

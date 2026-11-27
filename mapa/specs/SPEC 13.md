@@ -38,3 +38,4 @@ tags: ["spec", "modulo/catalogos", "origen/historia"]
 - [[SPEC 30]] — Publicar con vista previa y menú «Administración» · *Implementado*
 - [[SPEC 49]] — Gráficas y filtros de la pantalla «Indicadores» · *Implementado*
 - [[SPEC 59]] — Catálogo de redes de municipios · *Implementado*
+- [[SPEC 77]] — Ajuste HU-08 Registrar municipios en Territorio · *Implementado*

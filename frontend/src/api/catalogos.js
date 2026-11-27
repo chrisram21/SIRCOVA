@@ -26,6 +26,32 @@ export function listarMunicipios({ alcance, incluirInactivos } = {}) {
   return consultarConCache(conConsulta('/municipios', { alcance, incluirInactivos }))
 }
 
+// Sin el 99 «No especificado / otro», que no admite municipios nuevos.
+export function listarDepartamentos() {
+  return consultarConCache('/departamentos')
+}
+
+// Los distritos y los establecimientos muestran el nombre de su municipio.
+const MUESTRAN_MUNICIPIOS = ['/municipios', '/distritos', '/establecimientos']
+
+export function crearMunicipio({ departamentoId, codigoIne, nombre }) {
+  const cuerpo = { departamentoId, codigoIne, nombre }
+  return yLuegoInvalidar(solicitar('/municipios', { metodo: 'POST', cuerpo }), ...MUESTRAN_MUNICIPIOS)
+}
+
+export function renombrarMunicipio(id, nombre) {
+  const pedido = solicitar(`/municipios/${id}`, { metodo: 'PATCH', cuerpo: { nombre } })
+  return yLuegoInvalidar(pedido, ...MUESTRAN_MUNICIPIOS)
+}
+
+export function desactivarMunicipio(id) {
+  return yLuegoInvalidar(solicitar(`/municipios/${id}/desactivar`, { metodo: 'POST' }), ...MUESTRAN_MUNICIPIOS)
+}
+
+export function reactivarMunicipio(id) {
+  return yLuegoInvalidar(solicitar(`/municipios/${id}/reactivar`, { metodo: 'POST' }), ...MUESTRAN_MUNICIPIOS)
+}
+
 export function listarDistritos({ municipioId, activo } = {}) {
   return consultarConCache(conConsulta('/distritos', { municipioId, activo }))
 }

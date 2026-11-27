@@ -25,18 +25,48 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import {
   desactivarDistrito,
+  desactivarMunicipio,
   listarDdriss,
   listarDistritos,
   listarMunicipios,
   reactivarDistrito,
+  reactivarMunicipio,
 } from '@/api/catalogos.js'
 import { mensajeDeError } from '@/api/cliente.js'
 import { AvisoError } from '@/componentes/Avisos.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import DialogoDistrito from './DialogoDistrito.jsx'
+import DialogoMunicipio from './DialogoMunicipio.jsx'
 import EncabezadoPagina from '@/componentes/EncabezadoPagina.jsx'
 
 const MIGRANTES = '9999'
+
+// El orden de alcance=todos: por departamento y nombre, con el 9999 al final.
+function ordenarMunicipios(lista) {
+  const comparar = (a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' })
+  return [...lista].sort(
+    (a, b) =>
+      (a.codigoIne === MIGRANTES) - (b.codigoIne === MIGRANTES) ||
+      comparar(a.departamentoNombre, b.departamentoNombre) ||
+      comparar(a.nombre, b.nombre),
+  )
+}
+
+// Lo que cambia en el AlertDialog de confirmación según se desactive o reactive un distrito o un municipio.
+const CONFIRMACION = {
+  distrito: {
+    titulo: (d) => `el distrito ${d.codigo} · ${d.nombre}`,
+    activar: 'Se le podrán volver a asignar establecimientos.',
+    desactivar: 'No se podrán asignarle establecimientos.',
+    aviso: (d, activar) => `Distrito ${d.codigo} ${activar ? 'reactivado' : 'desactivado'}.`,
+  },
+  municipio: {
+    titulo: (m) => `el municipio ${m.codigoIne} · ${m.nombre}`,
+    activar: 'Se le podrán volver a registrar distritos y establecimientos.',
+    desactivar: 'No se podrán registrarle distritos ni establecimientos. Su producción registrada no cambia.',
+    aviso: (m, activar) => `Municipio ${m.codigoIne} ${activar ? 'reactivado' : 'desactivado'}.`,
+  },
+}
 // Radix Select no acepta '' como valor de una opción; "todos" equivale a no filtrar.
 const TODOS = 'todos'
 const ESTADOS = [
@@ -85,14 +115,18 @@ function ContenidoTerritorio() {
   const { tienePermiso } = useSesion()
   const puedeCrear = tienePermiso('DISTRITO_CREAR')
   const puedeEditar = tienePermiso('DISTRITO_EDITAR')
+  const puedeCrearMunicipio = tienePermiso('MUNICIPIO_CREAR')
+  const puedeEditarMunicipio = tienePermiso('MUNICIPIO_EDITAR')
   const [datos, setDatos] = useState(null)
   const [errorCarga, setErrorCarga] = useState(null)
   const [filtroMunicipio, setFiltroMunicipio] = useState(TODOS)
   const [filtroEstado, setFiltroEstado] = useState(TODOS)
   // null, { distrito: null } para registrar o { distrito } para renombrar.
   const [dialogo, setDialogo] = useState(null)
+  // null, { municipio: null } para registrar o { municipio } para cambiar su nombre.
+  const [dialogoMunicipio, setDialogoMunicipio] = useState(null)
   const [errorAccion, setErrorAccion] = useState(null)
-  // null o { distrito, activar } mientras el AlertDialog de confirmación está abierto.
+  // null o { tipo: 'distrito' | 'municipio', elemento, activar } mientras el AlertDialog está abierto.
   const [porCambiar, setPorCambiar] = useState(null)
   const [cambiando, setCambiando] = useState(false)
   // Cada carga tiene su número; una respuesta que llega después de otra carga se descarta.
@@ -102,7 +136,8 @@ function ContenidoTerritorio() {
     const carga = ++cargaActual.current
     setDatos(null)
     setErrorCarga(null)
-    Promise.all([listarDdriss(), listarMunicipios({ alcance: 'procedencia', incluirInactivos: true }), listarDistritos()])
+    // alcance=todos: un municipio de fuera recién registrado sale aunque todavía no tenga establecimientos.
+    Promise.all([listarDdriss(), listarMunicipios({ alcance: 'todos', incluirInactivos: true }), listarDistritos()])
       .then(([ddriss, municipios, distritos]) => {
         if (carga === cargaActual.current) setDatos({ ddriss, municipios, distritos })
       })
@@ -121,6 +156,17 @@ function ContenidoTerritorio() {
     }))
   }
 
+  function ponerMunicipio(municipio, nuevo) {
+    setDatos((actual) => ({
+      ...actual,
+      municipios: ordenarMunicipios(
+        nuevo
+          ? [...actual.municipios, municipio]
+          : actual.municipios.map((m) => (m.id === municipio.id ? municipio : m)),
+      ),
+    }))
+  }
+
   function alGuardar(guardado) {
     const nuevo = dialogo.distrito === null
     ponerDistrito(guardado, nuevo)
@@ -128,16 +174,28 @@ function ContenidoTerritorio() {
     setDialogo(null)
   }
 
+  function alGuardarMunicipio(guardado) {
+    const nuevo = dialogoMunicipio.municipio === null
+    ponerMunicipio(guardado, nuevo)
+    toast.success(`Municipio ${guardado.codigoIne} ${nuevo ? 'registrado' : 'actualizado'}.`)
+    setDialogoMunicipio(null)
+  }
+
   async function confirmarCambio(evento) {
     // Radix cierra el diálogo al pulsar; se cierra a mano al terminar, para mostrar el progreso mientras tanto.
     evento.preventDefault()
-    const { distrito, activar } = porCambiar
+    const { tipo, elemento, activar } = porCambiar
     setCambiando(true)
     setErrorAccion(null)
     try {
-      const actualizado = activar ? await reactivarDistrito(distrito.id) : await desactivarDistrito(distrito.id)
-      ponerDistrito(actualizado, false)
-      toast.success(`Distrito ${actualizado.codigo} ${activar ? 'reactivado' : 'desactivado'}.`)
+      if (tipo === 'municipio') {
+        const actualizado = activar ? await reactivarMunicipio(elemento.id) : await desactivarMunicipio(elemento.id)
+        ponerMunicipio(actualizado, false)
+      } else {
+        const actualizado = activar ? await reactivarDistrito(elemento.id) : await desactivarDistrito(elemento.id)
+        ponerDistrito(actualizado, false)
+      }
+      toast.success(CONFIRMACION[tipo].aviso(elemento, activar))
     } catch (err) {
       setErrorAccion(mensajeDeError(err))
     } finally {
@@ -196,7 +254,15 @@ function ContenidoTerritorio() {
       <Card>
         <CardHeader>
           <CardTitle>Municipios</CardTitle>
-          <CardDescription>Catálogo INE; solo consulta.</CardDescription>
+          <CardDescription>Catálogo INE. Un municipio no se borra: se desactiva.</CardDescription>
+          {puedeCrearMunicipio && (
+            <CardAction>
+              <Button onClick={() => setDialogoMunicipio({ municipio: null })}>
+                <Plus />
+                Registrar municipio
+              </Button>
+            </CardAction>
+          )}
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-lg border">
@@ -208,6 +274,7 @@ function ContenidoTerritorio() {
                   <TableHead>Departamento</TableHead>
                   <TableHead>Distritos activos</TableHead>
                   <TableHead>Estado</TableHead>
+                  {puedeEditarMunicipio && <TableHead className="text-right">Acciones</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -229,6 +296,30 @@ function ContenidoTerritorio() {
                     <TableCell>
                       <EstadoActivo activo={m.activo} />
                     </TableCell>
+                    {puedeEditarMunicipio && (
+                      <TableCell className="text-right">
+                        {/* El 9999 no se renombra ni se desactiva. */}
+                        {m.codigoIne !== MIGRANTES && (
+                          <DropdownMenu modal={false}>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="outline" size="icon-sm" aria-label={`Acciones de ${m.codigoIne}`}>
+                                <MoreHorizontal />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onSelect={() => setDialogoMunicipio({ municipio: m })}>
+                                Cambiar nombre
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onSelect={() => setPorCambiar({ tipo: 'municipio', elemento: m, activar: !m.activo })}
+                              >
+                                {m.activo ? 'Desactivar' : 'Reactivar'}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
@@ -321,7 +412,7 @@ function ContenidoTerritorio() {
                                 // El backend respondería 409: primero se mueven o desactivan sus establecimientos.
                                 <DropdownMenuItem
                                   disabled={d.establecimientosActivos > 0}
-                                  onSelect={() => setPorCambiar({ distrito: d, activar: false })}
+                                  onSelect={() => setPorCambiar({ tipo: 'distrito', elemento: d, activar: false })}
                                 >
                                   <div className="flex flex-col items-start">
                                     <span>Desactivar</span>
@@ -331,7 +422,9 @@ function ContenidoTerritorio() {
                                   </div>
                                 </DropdownMenuItem>
                               ) : (
-                                <DropdownMenuItem onSelect={() => setPorCambiar({ distrito: d, activar: true })}>
+                                <DropdownMenuItem
+                                  onSelect={() => setPorCambiar({ tipo: 'distrito', elemento: d, activar: true })}
+                                >
                                   Reactivar
                                 </DropdownMenuItem>
                               )}
@@ -351,15 +444,17 @@ function ContenidoTerritorio() {
       <AlertDialog open={porCambiar !== null} onOpenChange={(abierto) => !abierto && !cambiando && setPorCambiar(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              ¿{porCambiar?.activar ? 'Reactivar' : 'Desactivar'} el distrito {porCambiar?.distrito.codigo} ·{' '}
-              {porCambiar?.distrito.nombre}?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {porCambiar?.activar
-                ? 'Se le podrán volver a asignar establecimientos.'
-                : 'No se podrán asignarle establecimientos.'}
-            </AlertDialogDescription>
+            {porCambiar && (
+              <>
+                <AlertDialogTitle>
+                  ¿{porCambiar.activar ? 'Reactivar' : 'Desactivar'}{' '}
+                  {CONFIRMACION[porCambiar.tipo].titulo(porCambiar.elemento)}?
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  {CONFIRMACION[porCambiar.tipo][porCambiar.activar ? 'activar' : 'desactivar']}
+                </AlertDialogDescription>
+              </>
+            )}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={cambiando}>Cancelar</AlertDialogCancel>
@@ -380,6 +475,14 @@ function ContenidoTerritorio() {
           municipios={municipiosSede.filter((m) => m.activo)}
           alGuardar={alGuardar}
           alCerrar={() => setDialogo(null)}
+        />
+      )}
+
+      {dialogoMunicipio && (
+        <DialogoMunicipio
+          municipio={dialogoMunicipio.municipio}
+          alGuardar={alGuardarMunicipio}
+          alCerrar={() => setDialogoMunicipio(null)}
         />
       )}
     </div>

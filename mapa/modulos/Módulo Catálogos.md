@@ -6,7 +6,7 @@ tags: ["modulo", "modulo/catalogos"]
 
 > [!info] Nota generada por `scripts/mapa-obsidian.mjs`: no la edites a mano, se reescribe.
 
-Carpeta: `specs/catalogos/` · 6 specs · [[Inicio]]
+Carpeta: `specs/catalogos/` · 7 specs · [[Inicio]]
 
 ## Specs
 
@@ -16,3 +16,4 @@ Carpeta: `specs/catalogos/` · 6 specs · [[Inicio]]
 - [[SPEC 16]] — Periodos de reporte · *Implementado* · [[HU-12]]
 - [[SPEC 17]] — Registro de la población objetivo · *Implementado* · [[HU-13]]
 - [[SPEC 59]] — Catálogo de redes de municipios · *Implementado* · Retroalimentación
+- [[SPEC 77]] — Ajuste HU-08 Registrar municipios en Territorio · *Implementado* · Ajuste de una HU

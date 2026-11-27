@@ -22,3 +22,5 @@ Modifica una historia que ya estaba terminada (ajustes de un sprint, cambios ped
   - HU-24
 - [[SPEC 76]] — Ajuste HU-45 El Administrador consulta Informes · *Implementado*
   - HU-45
+- [[SPEC 77]] — Ajuste HU-08 Registrar municipios en Territorio · *Implementado*
+  - HU-08

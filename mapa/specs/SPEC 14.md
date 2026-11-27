@@ -35,3 +35,4 @@ tags: ["spec", "modulo/catalogos", "origen/historia"]
 - [[SPEC 15]] — Gestión de vacunas y dosis · *Implementado*
 - [[SPEC 22]] — Crear el reporte mensual de un establecimiento · *Implementado*
 - [[SPEC 30]] — Publicar con vista previa y menú «Administración» · *Implementado*
+- [[SPEC 77]] — Ajuste HU-08 Registrar municipios en Territorio · *Implementado*
