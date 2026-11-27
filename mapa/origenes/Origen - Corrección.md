@@ -24,3 +24,5 @@ No nace de una historia: corrige o mejora algo ya hecho (documentos de correccio
   - ninguna (correcciones del Sprint 4, documento «Spec F» de Chris, punto 11 de `CORRECCIONES_SPRINT_4.md`)
 - [[SPEC 75]] — Ajustes de diseño: marcas de dimensiones, tabla de Usuarios, filtros sin aplicar y formularios centrados · *Implementado*
   - ninguna (revisión del proyecto con el equipo, 2026-11-24 y 25)
+- [[SPEC 79]] — Corrección HU-45 Secciones de edad sin datos y desborde del PDF en informes · *Implementado*
+  - HU-45

@@ -604,6 +604,82 @@ describe('columnasAgrupadas (SPEC 63)', () => {
   });
 });
 
+// SPEC 79: sin esquema en el mes de `hasta`, el primero que entra en vigor después. ZVT_SPEC63 solo tiene el nacional
+// desde enero de 2086, así que noviembre de 2085 usa ese. Para el empate, ZVT_SPEC62I recibe aquí (y los borra al
+// terminar) uno de otra DDRISS desde junio de 2086, uno nacional y uno de ZVT_INF62 de enero a febrero de 2087 y
+// otro de ZVT_INF62 desde marzo de 2087.
+describe('esquema de respaldo de los informes (SPEC 79)', () => {
+  const NOVIEMBRE_2085 = { anio: ANIO - 1, mes: 11 };
+  const columna = (vacuna, codigo, seccion) => ({
+    vacuna: { codigo: vacuna, nombre: `vitest-spec62 ${vacuna}` }, seccion, valor: null,
+    dosis: { id: ids.dosis[`${vacuna}.${codigo}`], codigo },
+  });
+  const MENOR_1 = { grupoEdad: 'MENOR_1', titulo: '< 1 año' };
+  const DE_1_A_5 = { grupoEdad: '1_A_5', titulo: 'De 1 a < 6 años' };
+  // Uno con fin es HISTORICO: solo puede haber un VIGENTE por vacuna y territorio.
+  const de62I = (version, territorio, desde, titulo, hasta = null) => ({
+    ...esquema({
+      version, territorio, desde, hasta, estado: hasta ? 'HISTORICO' : 'VIGENTE',
+      secciones: [seccion('MENOR_1', titulo, 1, ['D1'])],
+    }),
+    vacuna: { id: new Int32(ids.vacunas.ZVT_SPEC62I), codigo: 'ZVT_SPEC62I', nombre: 'vitest-spec62 ZVT_SPEC62I' },
+  });
+  const NACIONAL = { nivel: 'NACIONAL', ddriss_codigo: null };
+  const DE_LA_DDRISS = { nivel: 'DDRISS', ddriss_codigo: DDRISS_PRUEBA };
+  const FIN_DE_FEBRERO = `${ANIO + 1}-02-28T00:00:00.000Z`;
+
+  beforeAll(async () => {
+    await (await obtenerDb()).collection('esquemas_captura').insertMany([
+      de62I(1, { nivel: 'DDRISS', ddriss_codigo: 'ZVT_OTRA79' }, `${ANIO}-06-01T00:00:00.000Z`, 'De otra DDRISS'),
+      de62I(2, NACIONAL, `${ANIO + 1}-01-01T00:00:00.000Z`, 'Nacional', FIN_DE_FEBRERO),
+      de62I(3, DE_LA_DDRISS, `${ANIO + 1}-01-01T00:00:00.000Z`, 'De la DDRISS', FIN_DE_FEBRERO),
+      de62I(4, DE_LA_DDRISS, `${ANIO + 1}-03-01T00:00:00.000Z`, 'Después'),
+    ]);
+  });
+
+  afterAll(async () => {
+    await (await obtenerDb()).collection('esquemas_captura').deleteMany({ 'vacuna.codigo': 'ZVT_SPEC62I' });
+  });
+
+  it('un hasta anterior a la vigencia trae las secciones del esquema siguiente', async () => {
+    const resultado = await columnasDelInforme({ ddrissId, vacunaCodigos: ['ZVT_SPEC63'], hasta: NOVIEMBRE_2085 });
+    expect(resultado).toEqual([
+      columna('ZVT_SPEC63', 'D1', MENOR_1),
+      columna('ZVT_SPEC63', 'D2', MENOR_1),
+      columna('ZVT_SPEC63', 'R1', MENOR_1),
+      columna('ZVT_SPEC63', 'D1', DE_1_A_5),
+    ]);
+    expect(resultado).toEqual(
+      await columnasDelInforme({ ddrissId, vacunaCodigos: ['ZVT_SPEC63'], hasta: { anio: ANIO, mes: 1 } }),
+    );
+  });
+
+  it('con esquema en el mes de hasta no cambia, aunque haya uno posterior', async () => {
+    const enero = await columnasDelInforme({ ddrissId, vacunaCodigos: ['ZVT_SPEC62'], hasta: { anio: ANIO, mes: 1 } });
+    const general = { grupoEdad: null, titulo: 'General' };
+    expect(enero).toEqual([columna('ZVT_SPEC62', 'D1', general), columna('ZVT_SPEC62', 'D2', general)]);
+  });
+
+  it('el primero posterior de su territorio; si empatan, el de la DDRISS', async () => {
+    const titulos = async (hasta) => {
+      const resultado = await columnasDelInforme({ ddrissId, vacunaCodigos: ['ZVT_SPEC62I'], hasta });
+      return resultado.map((c) => c.seccion?.titulo ?? null);
+    };
+    expect(await titulos({ anio: ANIO, mes: 2 })).toEqual(['De la DDRISS']);
+    expect(await titulos({ anio: ANIO, mes: 12 })).toEqual(['De la DDRISS']);
+  });
+
+  it('la agrupación por dimensión también usa el esquema siguiente', async () => {
+    const sexo = await dimensionDeAgrupacion('sexo');
+    const agrupadas = (hasta) => columnasAgrupadas({
+      ddrissId, vacunaCodigos: ['ZVT_SPEC63'], hasta, dimension: sexo, conDatos: [],
+    });
+    const resultado = await agrupadas(NOVIEMBRE_2085);
+    expect(resultado).toHaveLength(4);
+    expect(resultado).toEqual(await agrupadas({ anio: ANIO, mes: 2 }));
+  });
+});
+
 describe('GET /informes/produccion por municipio y departamento (SPEC 62)', () => {
   const informe = (consulta, token) => consultar('produccion', `ddrissId=${ddrissId}&${consulta}`, token);
   const ENERO_A_FEBRERO = `desde=${ANIO}-01&hasta=${ANIO}-02&vacuna=ZVT_SPEC62`;

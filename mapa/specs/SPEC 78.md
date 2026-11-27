@@ -29,4 +29,4 @@ tags: ["spec", "modulo/informes", "origen/ajuste"]
 
 ## Lo usan
 
-Ningún spec depende de este todavía.
+- [[SPEC 79]] — Corrección HU-45 Secciones de edad sin datos y desborde del PDF en informes · *Implementado*
