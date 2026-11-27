@@ -65,8 +65,8 @@ const aColumna = (vacuna, seccion, valor, d) => ({
 const ORDEN_DEL_CATALOGO = 'ORDER BY activa DESC, orden_informe, nombre';
 
 // Las vacunas del informe (con vacunaCodigos, solo esas; sin ellos, las activas y las inactivas con datos), en el
-// orden del catálogo, sus dosis y el esquema de cada una que cubre el día 1 de `hasta` (las que no tienen esquema no
-// están en el Map).
+// orden del catálogo, sus dosis y el esquema de cada una que cubre el día 1 de `hasta` o, si no tiene, el primero
+// que entró en vigor después (SPEC 79; las que no tienen ninguno no están en el Map).
 async function vacunasConSusEsquemas({ ddrissId, vacunaCodigos, hasta, conDatos }) {
   const [[todas], ddriss] = await Promise.all([
     vacunaCodigos
@@ -85,7 +85,7 @@ async function vacunasConSusEsquemas({ ddrissId, vacunaCodigos, hasta, conDatos 
     pool.query('SELECT id, vacuna_id, codigo, orden, activa FROM dosis WHERE vacuna_id IN (?) ORDER BY orden, id', [
       vacunas.map((v) => v.id),
     ]),
-    seccionesDelPeriodo(vacunas.map((v) => v.codigo), ddriss, fecha),
+    seccionesDelPeriodo(vacunas.map((v) => v.codigo), ddriss, fecha, { posterior: true }),
   ]);
   return { vacunas, dosis, esquemas };
 }

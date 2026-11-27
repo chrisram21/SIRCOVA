@@ -6,7 +6,7 @@ tags: ["modulo", "modulo/informes"]
 
 > [!info] Nota generada por `scripts/mapa-obsidian.mjs`: no la edites a mano, se reescribe.
 
-Carpeta: `specs/informes/` · 8 specs · [[Inicio]]
+Carpeta: `specs/informes/` · 9 specs · [[Inicio]]
 
 ## Specs
 
@@ -18,3 +18,4 @@ Carpeta: `specs/informes/` · 8 specs · [[Inicio]]
 - [[SPEC 73]] — Ajuste HU-45 Elegir varias vacunas en Informes · *Implementado* · Ajuste de una HU
 - [[SPEC 76]] — Ajuste HU-45 El Administrador consulta Informes · *Implementado* · Ajuste de una HU
 - [[SPEC 78]] — Ajuste HU-47 Hojas por mes en el Excel de informes · *Implementado* · Ajuste de una HU
+- [[SPEC 79]] — Corrección HU-45 Secciones de edad sin datos y desborde del PDF en informes · *Implementado* · Corrección

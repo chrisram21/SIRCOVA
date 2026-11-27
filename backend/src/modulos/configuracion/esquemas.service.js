@@ -201,17 +201,14 @@ export async function listarEsquemas(query, usuario) {
 // Las vacunas sin esquema para esa fecha no aparecen en el Map.
 async function documentosDelPeriodo(codigosVacuna, ddrissCodigo, fecha, campos) {
   if (codigosVacuna.length === 0) return new Map();
-  const territorios = [{ 'territorio.nivel': NACIONAL }];
-  if (ddrissCodigo) territorios.push({ 'territorio.ddriss_codigo': ddrissCodigo });
   const documentos = await (await coleccion())
     .find(
       {
-        'vacuna.codigo': { $in: codigosVacuna },
-        estado: { $in: ['VIGENTE', 'HISTORICO'] },
+        ...filtroPublicado(codigosVacuna, ddrissCodigo),
         'vigencia.desde': { $lte: fecha },
-        $and: [{ $or: [{ 'vigencia.hasta': null }, { 'vigencia.hasta': { $gte: fecha } }] }, { $or: territorios }],
+        $or: [{ 'vigencia.hasta': null }, { 'vigencia.hasta': { $gte: fecha } }],
       },
-      { projection: Object.fromEntries(['vacuna', 'territorio', ...campos].map((campo) => [campo, 1])) },
+      { projection: proyeccion(campos) },
     )
     .toArray();
   const nacionales = new Map();
@@ -220,6 +217,39 @@ async function documentosDelPeriodo(codigosVacuna, ddrissCodigo, fecha, campos) 
     (doc.territorio.nivel === NACIONAL ? nacionales : deLaDdriss).set(doc.vacuna.codigo, doc);
   }
   return new Map([...nacionales, ...deLaDdriss]);
+}
+
+// El primer esquema publicado que entra en vigor después de la fecha, por vacuna; si un nacional y uno de la DDRISS
+// empiezan el mismo día, el de la DDRISS, como en documentosDelPeriodo. Solo lo usan los informes (SPEC 79).
+async function documentosPosteriores(codigosVacuna, ddrissCodigo, fecha, campos) {
+  if (codigosVacuna.length === 0) return new Map();
+  const documentos = await (await coleccion())
+    .find(
+      { ...filtroPublicado(codigosVacuna, ddrissCodigo), 'vigencia.desde': { $gt: fecha } },
+      { projection: proyeccion([...campos, 'vigencia']), sort: { 'vigencia.desde': 1 } },
+    )
+    .toArray();
+  const elegidos = new Map();
+  for (const doc of documentos) {
+    const elegido = elegidos.get(doc.vacuna.codigo);
+    const empate = elegido && elegido.vigencia.desde.getTime() === doc.vigencia.desde.getTime();
+    if (!elegido || (empate && doc.territorio.nivel !== NACIONAL)) elegidos.set(doc.vacuna.codigo, doc);
+  }
+  return elegidos;
+}
+
+function filtroPublicado(codigosVacuna, ddrissCodigo) {
+  const territorios = [{ 'territorio.nivel': NACIONAL }];
+  if (ddrissCodigo) territorios.push({ 'territorio.ddriss_codigo': ddrissCodigo });
+  return {
+    'vacuna.codigo': { $in: codigosVacuna },
+    estado: { $in: ['VIGENTE', 'HISTORICO'] },
+    $and: [{ $or: territorios }],
+  };
+}
+
+function proyeccion(campos) {
+  return Object.fromEntries(['vacuna', 'territorio', ...campos].map((campo) => [campo, 1]));
 }
 
 export async function esquemasDelPeriodo(codigosVacuna, ddrissCodigo, fecha) {
@@ -235,8 +265,16 @@ export async function esquemasDelPeriodo(codigosVacuna, ddrissCodigo, fecha) {
 // Las secciones del esquema que cubre la fecha (misma regla), por orden, con sus dosis y su desagregación en la forma
 // de aEsquema: { secciones: [{ grupoEdad, titulo, dosis }], dosis, desagregacion }. Un esquema anterior a la v0.4 no
 // tiene secciones (lista vacía; se deducen con seccionesDeducidas). Las vacunas sin esquema no aparecen en el Map.
-export async function seccionesDelPeriodo(codigosVacuna, ddrissCodigo, fecha) {
-  const documentos = await documentosDelPeriodo(codigosVacuna, ddrissCodigo, fecha, ['secciones', 'dimensiones']);
+// Con posterior, a una vacuna sin esquema en la fecha se le da el primero que entra en vigor después.
+export async function seccionesDelPeriodo(codigosVacuna, ddrissCodigo, fecha, { posterior = false } = {}) {
+  const campos = ['secciones', 'dimensiones'];
+  const documentos = await documentosDelPeriodo(codigosVacuna, ddrissCodigo, fecha, campos);
+  if (posterior) {
+    const faltan = codigosVacuna.filter((codigo) => !documentos.has(codigo));
+    for (const [codigo, doc] of await documentosPosteriores(faltan, ddrissCodigo, fecha, campos)) {
+      documentos.set(codigo, doc);
+    }
+  }
   return new Map(
     [...documentos].map(([codigo, doc]) => [
       codigo,

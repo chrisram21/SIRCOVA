@@ -5848,15 +5848,18 @@ paths:
         - **Columnas:** una por vacuna, sección (grupo de edad) y dosis. Vacunas: con `vacuna`, solo las de la
           lista, en el orden del catálogo (SPEC 73); sin ella, las activas por `ordenInforme` y nombre, más las
           inactivas con producción en el rango. Secciones: las del esquema de captura que cubre el día 1 de
-          `hasta` (el de la DDRISS o, si no hay, el nacional), en su `orden`, con sus dosis por `orden`. Una
-          combinación con producción en el rango que no está en ese esquema va al final de su vacuna. Una vacuna
-          sin esquema para ese mes lleva una columna por dosis activa, sin sección. Todas las columnas salen,
-          también en cero.
+          `hasta` (el de la DDRISS o, si no hay, el nacional); si la vacuna no tiene, el primero que entró en
+          vigor después (SPEC 79; si un nacional y uno de la DDRISS empiezan el mismo día, el de la DDRISS). Van
+          en su `orden`, con sus dosis por `orden`, y cada cantidad cae en la columna de su dosis y grupo de edad.
+          Una combinación con producción en el rango que no está en ese esquema va al final de su vacuna. Una
+          vacuna sin ningún esquema publicado en `hasta` ni después lleva una columna por dosis activa, sin
+          sección. Todas las columnas salen, también en cero.
         - **Agrupación** (`agrupacion`, SPEC 63, HU-46): la producción se lee de `v_produccion_dimension` con esa
           dimensión y cada valor suma todas las edades; una cantidad sin la dimensión no entra (tampoco en `total`
           ni en `dosisFueraDelConsolidado`). Las columnas pasan a ser vacuna × valor × dosis (`seccion: null`):
-          - solo las vacunas que registran la dimensión: alguna dosis del esquema que cubre el día 1 de `hasta` la
-            pide en su desagregación efectiva (la de la dosis o, si no tiene, la del esquema), o hay cantidades con
+          - solo las vacunas que registran la dimensión: alguna dosis del esquema que cubre el día 1 de `hasta` (si
+            la vacuna no tiene, el primero que entró en vigor después, como en las columnas) la pide en su
+            desagregación efectiva (la de la dosis o, si no tiene, la del esquema), o hay cantidades con
             ella en el rango;
           - por cada valor que el esquema pide, en el orden de `catalogo_dimensiones`, las dosis que lo piden, en
             el orden de `dimensiones.dosis` del esquema;
@@ -6024,7 +6027,8 @@ paths:
         - **Niveles:** `departamento`, `municipio` y `distrito`, con las filas y los recortes (`redId`,
           `municipioIds`, sobre el municipio de residencia) del informe `residencia`. No hay `establecimiento` (400).
         - **Columnas:** las del informe `residencia` (sin `agrupacion`), con el esquema de captura que cubre el día 1
-          del último mes de `anio` con `cierre_periodo`.
+          del último mes de `anio` con `cierre_periodo`; si la vacuna no tiene, el primero que entró en vigor
+          después (SPEC 79).
         - **Población:** `poblacion_objetivo.cantidad` del municipio, de `anio` y de la `clasificacion_poblacion`
           cuyo `codigo` es el `grupoEdad` de la sección. Sin sección, sin grupo de edad o con un grupo que no está en
           `clasificacion_poblacion`, `null`. El distrito usa la de su municipio y «Sin distrito», la suma de los

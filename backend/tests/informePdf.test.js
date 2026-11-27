@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { libroDelInforme } from '../src/modulos/informes/informeExcel.service.js';
 import {
   ANCHO_NOMBRE_ANUAL, COLUMNAS_POR_TRAMO, COLUMNAS_POR_TRAMO_ANUAL, documentoDelAcumulado, documentoDelInforme, pdfDelAcumulado,
-  pdfDelInforme, textoPeriodo, tramosDeColumnas, unidadesPorPagina,
+  ajustarInforme, maquetar, paginarAcumulado, pdfDelInforme, textoPeriodo, tramosDeColumnas, unidadesPorPagina,
 } from '../src/modulos/informes/informePdf.service.js';
 
 // SPEC 65: el PDF se prueba sobre su definición de pdfmake (textos y cantidades de las celdas) y sobre los bytes
@@ -56,6 +56,12 @@ const textosDe = (nodo) => {
   if (!nodo || typeof nodo !== 'object') return [];
   return [nodo.text, nodo.stack, nodo.columns, nodo.table?.body].flatMap(textosDe);
 };
+// SPEC 79: el encabezado completo es el primer nodo del contenido (solo la página 1), en una tabla de una celda.
+const encabezadoCompleto = (doc) => {
+  const [primero] = doc.content;
+  expect(primero.id).toBe('encabezado-completo');
+  return primero.table.body[0][0];
+};
 const bloques = (doc) => doc.content.filter((n) => n.id?.startsWith('tramo-'));
 const tablas = (doc) => bloques(doc).map((b) => b.stack.at(-1));
 const rotuloDe = (bloque) => bloque.stack[0].columns.map((c) => c.text);
@@ -83,7 +89,7 @@ describe('documento PDF de un informe (SPEC 65)', () => {
     expect(doc).toMatchObject({ pageSize: 'LETTER', pageOrientation: 'landscape' });
     expect(doc.defaultStyle.font).toBe('Lato');
     expect(doc.info.title).toBe('Producción a la población propia · Municipio');
-    const encabezado = textosDe(doc.header(1, 1));
+    const encabezado = textosDe(encabezadoCompleto(doc));
     expect(encabezado).toEqual(expect.arrayContaining([
       'SIRCOVA', 'Ministerio de Salud Pública y Asistencia Social', 'San Marcos', 'PRODUCCIÓN DE VACUNACIÓN',
       'Producción a la población propia', 'Municipio de aplicación', 'PERÍODO', 'Enero – agosto de 2026',
@@ -112,7 +118,9 @@ describe('documento PDF de un informe (SPEC 65)', () => {
   });
 
   it('la franja de filtros nombra todas, una o varias vacunas (SPEC 73)', () => {
-    const franja = (vacunas) => textosDe(documentoDelInforme(informeBase(), { ...datos, vacunas }).header(1, 1));
+    const franja = (vacunas) => textosDe(
+      encabezadoCompleto(documentoDelInforme(informeBase(), { ...datos, vacunas })),
+    );
     expect(franja([])).toEqual(expect.arrayContaining(['Vacuna', 'Todas las vacunas']));
     expect(franja(['Hexavalente'])).toEqual(expect.arrayContaining(['Vacuna', 'Hexavalente']));
     const tres = franja(['Hexavalente', 'Neumococo', 'Rotavirus']);
@@ -131,13 +139,13 @@ describe('documento PDF de un informe (SPEC 65)', () => {
       incluirAprobados: true, preliminar: true, mesesSinCerrar: [{ anio: 2026, mes: 8, estado: 'ABIERTO' }],
     }), datos);
     expect(preliminar.watermark).toMatchObject({ text: 'PRELIMINAR' });
-    expect(textosDe(preliminar.header(1, 1))).toEqual(expect.arrayContaining([
+    expect(textosDe(encabezadoCompleto(preliminar))).toEqual(expect.arrayContaining([
       'PRELIMINAR', 'Datos preliminares: agosto de 2026 todavía no está cerrado.',
     ]));
 
     const normal = documentoDelInforme(informeBase(), datos);
     expect(normal.watermark).toBeUndefined();
-    expect(textosDe(normal.header(1, 1))).not.toContain('PRELIMINAR');
+    expect(textosDe(encabezadoCompleto(normal))).not.toContain('PRELIMINAR');
   });
 
   it('el pie lleva SIRCOVA y la página', () => {
@@ -236,8 +244,9 @@ describe('documento PDF de un informe (SPEC 65)', () => {
       total: { cantidades: [] },
       dosisFueraDelConsolidado: 3,
     }), datos);
-    expect(doc.content).toEqual([]);
-    expect(textosDe(doc.header(1, 1))).toContain('Ninguna vacuna de este informe registra Pueblo de pertenencia.');
+    expect(doc.content.map((n) => n.id)).toEqual(['encabezado-completo']);
+    expect(textosDe(encabezadoCompleto(doc)))
+      .toContain('Ninguna vacuna de este informe registra Pueblo de pertenencia.');
   });
 
   it('las cantidades reparten el ancho de la hoja y caben en el tramo más ancho', () => {
@@ -290,7 +299,7 @@ describe('documento PDF del acumulado anual (SPEC 66)', () => {
     const doc = documentoDelAcumulado(acumulado(), datos);
     expect(doc).toMatchObject({ pageSize: 'LETTER', pageOrientation: 'landscape' });
     expect(doc.info.title).toBe('Acumulado anual · Municipio');
-    expect(textosDe(doc.header(1, 1))).toEqual(expect.arrayContaining([
+    expect(textosDe(encabezadoCompleto(doc))).toEqual(expect.arrayContaining([
       'COBERTURA DE VACUNACIÓN', 'Acumulado anual', 'Municipio de residencia', 'Enero – diciembre de 2026',
     ]));
     const [tabla] = tablas(doc);
@@ -346,25 +355,32 @@ describe('documento PDF del acumulado anual (SPEC 66)', () => {
     expect(anchoDeCantidad(conMunicipio)).toBeGreaterThanOrEqual(ANCHO_MINIMO);
   });
 
-  it('reparte las unidades por página sin partir ninguna y el total va al final', () => {
-    const filas = Array.from({ length: 20 }, (_, i) => ({ ...acumulado().filas[0], id: i, nombre: `Municipio ${i}` }));
+  it('reparte las unidades por página sin partir ninguna y el total va al final', async () => {
     const doce = [...deVacuna('HEXA', 6), ...deVacuna('POLIO', 6)];
-    const doc = documentoDelAcumulado(acumulado({ columnas: doce, filas }), datos);
-    const porPagina = unidadesPorPagina([]);
-    const paginas = Math.ceil((filas.length + 1) / porPagina);
+    // Las cifras de cada fila, con las doce columnas: la pasada de prueba maqueta la tabla de verdad.
+    const [fila] = acumulado({ columnas: doce }).filas;
+    const filas = Array.from({ length: 20 }, (_, i) => ({ ...fila, id: i, nombre: `Municipio ${i}` }));
+    const informe = acumulado({ columnas: doce, filas });
+    // SPEC 79: cuántas caben en cada página sale de la pasada de prueba (paginarAcumulado).
+    const paginacion = await paginarAcumulado(informe, datos);
+    const doc = documentoDelAcumulado(informe, datos, paginacion);
+    const paginas = paginacion[0].length;
 
-    expect(porPagina).toBeGreaterThanOrEqual(5);
-    expect(tablas(doc)).toHaveLength(2 * paginas);
-    for (const tabla of tablas(doc)) {
-      const unidades = (tabla.table.body.length - 4) / 4;
-      expect(Number.isInteger(unidades) && unidades <= porPagina).toBe(true);
-    }
+    expect(paginacion).toHaveLength(2);
+    expect(paginacion.every((t) => t.reduce((suma, n) => suma + n, 0) === filas.length + 1)).toBe(true);
+    expect(tablas(doc)).toHaveLength(paginacion.flat().length);
+    tablas(doc).forEach((tabla, i) => expect((tabla.table.body.length - 4) / 4).toBe(paginacion.flat()[i]));
     const nombres = (tabla) => tabla.table.body.slice(4).map((f) => texto(f[0])).filter(Boolean);
     expect(tablas(doc).slice(0, paginas).flatMap(nombres)).toEqual([...filas.map((f) => f.nombre), 'TOTAL']);
     expect(nombres(tablas(doc)[0])).not.toContain('TOTAL');
     expect(rotuloDe(bloques(doc)[paginas])).toEqual(['DOSIS, POBLACIÓN, COBERTURA Y BRECHA', 'Bloque de vacunas 02 / 02']);
-    // Con avisos, el encabezado ocupa más y caben menos.
-    expect(unidadesPorPagina(['Un aviso.'])).toBeLessThanOrEqual(porPagina);
+  });
+
+  it('unidadesPorPagina: caben menos cuanto más abajo empieza el bloque, y por lo menos una', () => {
+    const medidas = { encabezado: 60, unidad: 40 };
+    expect(unidadesPorPagina({ ...medidas, inicio: 88 })).toBe(Math.floor((572 - 88 - 60) / 40));
+    expect(unidadesPorPagina({ ...medidas, inicio: 152 })).toBeLessThan(unidadesPorPagina({ ...medidas, inicio: 88 }));
+    expect(unidadesPorPagina({ ...medidas, inicio: 560 })).toBe(1);
   });
 
   it('pinta las vacunas de marino y, en verde, la cobertura con brecha 0', () => {
@@ -404,9 +420,9 @@ describe('logo de la DDRISS en el PDF (SPEC 78)', () => {
   it('con logo, lo lleva en lugar del Ministerio, con la Dirección y la DDRISS a su izquierda', () => {
     const doc = documentoDelInforme(informeBase(), conLogo);
     expect(doc.images.logo.startsWith('data:image/png;base64,')).toBe(true);
-    const [imagen] = imagenesDe(doc.header(1, 1));
+    const [imagen] = imagenesDe(encabezadoCompleto(doc));
     expect(imagen).toMatchObject({ image: 'logo', height: 32, width: Math.round((32 * 463) / 166) });
-    const encabezado = textosDe(doc.header(2, 3));
+    const encabezado = textosDe(encabezadoCompleto(doc));
     expect(encabezado).toEqual(expect.arrayContaining([
       'Dirección Departamental de Redes Integradas de Servicios de Salud', 'San Marcos',
     ]));
@@ -419,16 +435,176 @@ describe('logo de la DDRISS en el PDF (SPEC 78)', () => {
     for (const ddrissCodigo of [undefined, 'ZVT_SIN_LOGO']) {
       const doc = documentoDelInforme(informeBase(), { ...datos, ddrissCodigo });
       expect(doc.images, String(ddrissCodigo)).toBeUndefined();
-      expect(imagenesDe(doc.header(1, 1))).toEqual([]);
-      expect(textosDe(doc.header(1, 1))).toEqual(expect.arrayContaining([MINISTERIO, 'San Marcos']));
+      expect(imagenesDe(encabezadoCompleto(doc))).toEqual([]);
+      expect(textosDe(encabezadoCompleto(doc))).toEqual(expect.arrayContaining([MINISTERIO, 'San Marcos']));
     }
   });
 
   it('el acumulado anual también lo lleva, con las mismas páginas que sin logo', async () => {
     const doc = documentoDelAcumulado(acumulado(), conLogo);
-    expect(imagenesDe(doc.header(1, 1))).toHaveLength(1);
+    expect(imagenesDe(encabezadoCompleto(doc))).toHaveLength(1);
     expect(doc.content.length).toBe(documentoDelAcumulado(acumulado(), datos).content.length);
     const bytes = await pdfDelInforme(informeBase(), conLogo);
     expect(bytes.subarray(0, 5).toString()).toBe('%PDF-');
+  });
+});
+
+// SPEC 79: encabezado completo solo en la página 1 y reducido en las demás, y la pasada de prueba (maquetar) que
+// compacta las filas, corta las tablas y reparte el acumulado. Estas pruebas maquetan de verdad con pdfmake.
+describe('páginas del PDF (SPEC 79)', () => {
+  const ONCE = ['Hexavalente', 'BCG', 'Polio', 'Rotavirus', 'Neumococo', 'SPR', 'Td', 'VPH', 'Varicela', 'COVID-19',
+    'Hepatitis B'];
+  // Cuatro dosis por vacuna; la sección de las dos últimas, «De 1 a < 2 años», se parte en dos líneas.
+  const columnasLargas = ONCE.flatMap((nombre, v) => ['D1', 'D2', 'D3', 'R1'].map((codigo, i) => ({
+    vacuna: { codigo: `V${v}`, nombre },
+    seccion: i < 2 ? { grupoEdad: 'MENOR_1', titulo: '< 1 año' } : { grupoEdad: '1_A_2', titulo: 'De 1 a < 2 años' },
+    valor: null,
+    dosis: { id: v * 10 + i, codigo },
+  })));
+  const CON_AVISOS = {
+    incluirAprobados: true,
+    preliminar: true,
+    mesesSinCerrar: [{ anio: 2026, mes: 9, estado: 'APROBADO' }, { anio: 2026, mes: 10, estado: 'ABIERTO' }],
+  };
+  const conFilas = (nivel, n, cambios = {}) => informeBase({
+    nivel,
+    hasta: { anio: 2026, mes: 10 },
+    columnas: columnasLargas,
+    filas: Array.from({ length: n }, (_, i) => ({
+      id: i, nombre: `${nivel === 'establecimiento' ? 'Puesto de Salud' : 'Municipio'} ${i + 1}`,
+      municipio: { nombre: 'San Marcos' }, fueraDelConsolidado: false,
+      cantidades: columnasLargas.map((_, c) => (i * 7 + c) % 300),
+    })),
+    total: { cantidades: columnasLargas.map(() => 999) },
+    dosisFueraDelConsolidado: 78,
+    ...CON_AVISOS,
+    ...cambios,
+  });
+  const conLogo = { ...datos, ddrissCodigo: 'DDRISS_SM' };
+  const pagina = (nodos, id) => nodos.get(id).paginas;
+  const tieneImagen = (nodo) => {
+    if (Array.isArray(nodo)) return nodo.some(tieneImagen);
+    if (!nodo || typeof nodo !== 'object') return false;
+    return Boolean(nodo.image) || [nodo.stack, nodo.columns].some(tieneImagen);
+  };
+  // Los ajustes de la pasada de prueba y dónde cae cada nodo con ellos.
+  const ajustado = async (informe) => {
+    const ajustes = await ajustarInforme(informe, conLogo);
+    return { ajustes, nodos: await maquetar(documentoDelInforme(informe, conLogo, ajustes)) };
+  };
+
+  it('el encabezado completo va solo en la página 1; las demás llevan el reducido, con logo y avisos', async () => {
+    const informe = conFilas('municipio', 30);
+    const doc = documentoDelInforme(informe, conLogo);
+    expect(doc.header(1, 4)).toBeNull();
+    const reducido = doc.header(2, 4);
+    const textos = textosDe(reducido);
+    expect(textos).toEqual(expect.arrayContaining([
+      'SIRCOVA', 'Informes de vacunación', 'Dirección Departamental de Redes Integradas de Servicios de Salud',
+      'San Marcos', 'Producción a la población propia', 'Enero – octubre de 2026',
+    ]));
+    expect(tieneImagen(reducido)).toBe(true);
+    // Los avisos van en todas las páginas; el rótulo y la franja de filtros, solo en la primera.
+    const completo = textosDe(encabezadoCompleto(doc));
+    const avisos = completo.filter((t) => t.includes('todavía no'));
+    expect(avisos.length).toBeGreaterThan(0);
+    expect(textos).toEqual(expect.arrayContaining(avisos));
+    expect(completo).toContain('PRODUCCIÓN DE VACUNACIÓN');
+    expect(textos).not.toContain('PRODUCCIÓN DE VACUNACIÓN');
+    expect(textos.length).toBeLessThan(completo.length);
+    // El completo sube hasta arriba de la página 1 y no se repite.
+    const nodos = await maquetar(doc);
+    expect(nodos.get('encabezado-completo')).toEqual({ paginas: [1], arriba: 18 });
+    expect(doc.content.filter((n) => n.id === 'encabezado-completo')).toHaveLength(1);
+  });
+
+  it('por municipio, 30 filas con avisos y secciones de dos líneas caben en una página por bloque', async () => {
+    const { ajustes, nodos } = await ajustado(conFilas('municipio', 30));
+    ajustes.forEach((_, orden) => {
+      expect(pagina(nodos, `fila-${orden}-0`), `bloque ${orden}`).toEqual([orden + 1]);
+      expect(pagina(nodos, `total-${orden}`), `bloque ${orden}`).toEqual([orden + 1]);
+    });
+    expect(pagina(nodos, 'nota-final')).toEqual([ajustes.length]);
+    expect(ajustes.every((a) => a.corte === null)).toBe(true);
+  });
+
+  it('por municipio, un bloque que no cabe se compacta en lugar de pasar a otra página', async () => {
+    const informe = conFilas('municipio', 38);
+    const antes = await maquetar(documentoDelInforme(informe, conLogo));
+    expect(pagina(antes, 'total-0')).not.toEqual(pagina(antes, 'fila-0-0'));
+    const { ajustes, nodos } = await ajustado(informe);
+    expect(ajustes[0].densidad).not.toBe('normal');
+    ajustes.forEach((_, orden) => expect(pagina(nodos, `total-${orden}`)).toEqual([orden + 1]));
+    expect(pagina(nodos, 'nota-final')).toEqual([ajustes.length]);
+  });
+
+  it('por establecimiento, ninguna página queda con solo el TOTAL ni con solo la nota final', async () => {
+    let totalSolo = 0;
+    let notaSola = 0;
+    for (let n = 28; n <= 45; n += 1) {
+      const informe = conFilas('establecimiento', n);
+      const antes = await maquetar(documentoDelInforme(informe, conLogo));
+      const ultimo = tramosDeColumnas(informe.columnas, COLUMNAS_POR_TRAMO.conMunicipio).length - 1;
+      if (pagina(antes, 'total-0')[0] > pagina(antes, `fila-0-${n - 1}`)[0]) totalSolo += 1;
+      if (pagina(antes, 'nota-final')[0] > pagina(antes, `total-${ultimo}`)[0]) notaSola += 1;
+
+      const { ajustes, nodos } = await ajustado(informe);
+      expect(ajustes.every((a) => a.densidad === 'normal'), `${n} filas`).toBe(true);
+      ajustes.forEach((_, orden) => {
+        const total = pagina(nodos, `total-${orden}`)[0];
+        const conElTotal = Array.from({ length: n }, (_, i) => pagina(nodos, `fila-${orden}-${i}`).at(-1))
+          .filter((p) => p === total).length;
+        expect(conElTotal, `${n} filas, bloque ${orden}`).toBeGreaterThanOrEqual(3);
+      });
+      expect(pagina(nodos, 'nota-final')[0], `${n} filas`).toBe(pagina(nodos, `total-${ultimo}`)[0]);
+    }
+    // Sin los ajustes, los dos casos sí ocurren en este rango.
+    expect(totalSolo).toBeGreaterThan(0);
+    expect(notaSola).toBeGreaterThan(0);
+  });
+
+  it('un corte parte la tabla en dos con el encabezado repetido y la cebra seguida', () => {
+    const informe = conFilas('establecimiento', 10);
+    const doc = documentoDelInforme(informe, conLogo, [{ densidad: 'normal', corte: 7 }]);
+    const [primera, segunda] = bloques(doc)[0].stack.slice(2);
+    expect(filasDe(primera).map((f) => f[0])).toEqual(informe.filas.slice(0, 7).map((f) => f.nombre));
+    expect(filasDe(segunda).map((f) => f[0])).toEqual([...informe.filas.slice(7).map((f) => f.nombre), 'TOTAL']);
+    expect(segunda.pageBreak).toBe('before');
+    expect(segunda.table.headerRows).toBe(3);
+    expect(textosDe(segunda.table.body.slice(0, 3))).toEqual(textosDe(primera.table.body.slice(0, 3)));
+    // La primera fila de la segunda tabla (la 8) lleva el fondo que tendría sin el corte.
+    const [entera] = tablas(documentoDelInforme(informe, conLogo));
+    const fondo = (tabla, fila) => tabla.layout.fillColor(fila, tabla, 3);
+    expect([fondo(segunda, 3), fondo(segunda, 4)]).toEqual([fondo(entera, 3 + 7), fondo(entera, 4 + 7)]);
+  });
+
+  it('la densidad mínima usa letra 6.5 en toda la fila de datos y no cambia el encabezado de la tabla', () => {
+    const minima = [{ densidad: 'minima', corte: null }];
+    const [tabla] = tablas(documentoDelInforme(conFilas('municipio', 3), conLogo, minima));
+    expect(tabla.table.body[3].every((celda) => celda.fontSize === 6.5)).toBe(true);
+    expect(tabla.table.body.slice(0, 3).flat().some((celda) => celda.fontSize === 6.5)).toBe(false);
+    expect(tabla.layout.paddingTop(3)).toBe(0);
+    expect(tabla.layout.paddingTop(1)).toBe(0.75);
+  });
+
+  it('en el acumulado, ninguna unidad queda partida, también con avisos y secciones de dos líneas', async () => {
+    const tres = columnasLargas.filter((c) => c.dosis.codigo !== 'R1');
+    const [fila] = acumulado({ columnas: tres }).filas;
+    for (const cambios of [{}, CON_AVISOS]) {
+      const informe = acumulado({
+        columnas: tres,
+        filas: Array.from({ length: 30 }, (_, i) => ({ ...fila, id: i, nombre: `Municipio ${i + 1}` })),
+        ...cambios,
+      });
+      const paginacion = await paginarAcumulado(informe, conLogo);
+      const nodos = await maquetar(documentoDelAcumulado(informe, conLogo, paginacion));
+      const ordenes = paginacion.flat().map((_, orden) => orden);
+      for (const orden of ordenes) {
+        expect(pagina(nodos, `fin-${orden}`), `bloque ${orden}`).toEqual(pagina(nodos, `unidad-${orden}-0`));
+      }
+      // Una página por tabla, y la segunda página del primer bloque lleva más unidades que la primera.
+      expect(new Set(ordenes.map((orden) => pagina(nodos, `unidad-${orden}-0`)[0])).size).toBe(ordenes.length);
+      expect(paginacion[0][1]).toBeGreaterThan(paginacion[0][0]);
+    }
   });
 });
