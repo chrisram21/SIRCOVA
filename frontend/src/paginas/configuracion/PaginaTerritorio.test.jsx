@@ -3,8 +3,11 @@ import { toast } from 'sonner'
 import { MemoryRouter } from 'react-router-dom'
 import {
   crearDistrito,
+  crearMunicipio,
   desactivarDistrito,
+  desactivarMunicipio,
   listarDdriss,
+  listarDepartamentos,
   listarDistritos,
   listarMunicipios,
   reactivarDistrito,
@@ -24,6 +27,11 @@ vi.mock('@/api/catalogos.js', () => ({
   renombrarDistrito: vi.fn(),
   desactivarDistrito: vi.fn(),
   reactivarDistrito: vi.fn(),
+  listarDepartamentos: vi.fn(),
+  crearMunicipio: vi.fn(),
+  renombrarMunicipio: vi.fn(),
+  desactivarMunicipio: vi.fn(),
+  reactivarMunicipio: vi.fn(),
 }))
 
 const DDRISS = [{ id: 1, codigo: 'DDRISS_SM', nombre: 'DDRISS San Marcos', departamentoId: 1, departamentoNombre: 'San Marcos' }]
@@ -124,12 +132,13 @@ beforeEach(() => {
   listarDistritos.mockResolvedValue(DISTRITOS)
 })
 
-test('abre la pantalla Territorio y pide los municipios de procedencia, incluidos los inactivos', async () => {
+// SPEC 77: alcance=todos, para que un municipio de fuera recién registrado salga aunque no tenga establecimientos.
+test('abre la pantalla Territorio y pide todos los municipios, incluidos los inactivos', async () => {
   await abrir()
 
   expect(screen.getByRole('heading', { level: 1, name: 'Territorio' })).toBeTruthy()
   expect(screen.getByText('Administración')).toBeTruthy()
-  expect(listarMunicipios).toHaveBeenCalledWith({ alcance: 'procedencia', incluirInactivos: true })
+  expect(listarMunicipios).toHaveBeenCalledWith({ alcance: 'todos', incluirInactivos: true })
   expect(listarDdriss).toHaveBeenCalledTimes(1)
   expect(listarDistritos).toHaveBeenCalledTimes(1)
   expect(screen.getByText('Departamento sede: San Marcos')).toBeTruthy()
@@ -392,5 +401,92 @@ describe('desactivar y reactivar', () => {
     ).toBeTruthy()
     expect(screen.queryByRole('alertdialog')).toBeNull()
     expect(within(filaDe('Distritos de salud', 'DS-1207-02')).getByText('Activo')).toBeTruthy()
+  })
+})
+
+describe('municipios (SPEC 77)', () => {
+  const CON_MUNICIPIOS = [...TODOS_LOS_PERMISOS, 'MUNICIPIO_CREAR', 'MUNICIPIO_EDITAR']
+  const dialogo = () => within(screen.getByRole('dialog'))
+  const confirmar = async (boton) => {
+    const alerta = await screen.findByRole('alertdialog')
+    fireEvent.click(within(alerta).getByRole('button', { name: boton }))
+  }
+
+  test('la tarjeta dice que un municipio no se borra; sin los permisos no hay botón ni acciones', async () => {
+    await abrir()
+
+    expect(screen.getByText('Catálogo INE. Un municipio no se borra: se desactiva.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Registrar municipio' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Acciones de 1207' })).toBeNull()
+    expect(within(tabla('Municipios')).queryByRole('columnheader', { name: 'Acciones' })).toBeNull()
+  })
+
+  test('con MUNICIPIO_CREAR sale "Registrar municipio", y el registrado aparece en la tabla con su aviso', async () => {
+    listarDepartamentos.mockResolvedValue([{ id: 3, codigoIne: '09', nombre: 'Quetzaltenango' }])
+    const nuevo = municipio(41, '0915', 'Flores Costa Cuca', {
+      departamentoId: 3,
+      departamentoNombre: 'Quetzaltenango',
+    })
+    crearMunicipio.mockResolvedValue(nuevo)
+    await abrir(CON_MUNICIPIOS)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar municipio' }))
+    await waitFor(() => expect(document.querySelector('select[name="departamentoId"] option[value="3"]')).toBeTruthy())
+    elegirFiltro('departamentoId', 3)
+    fireEvent.change(dialogo().getByLabelText('Código INE'), { target: { value: '0915' } })
+    fireEvent.change(dialogo().getByLabelText('Nombre'), { target: { value: 'Flores Costa Cuca' } })
+    fireEvent.click(dialogo().getByRole('button', { name: 'Guardar' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(crearMunicipio).toHaveBeenCalledWith({ departamentoId: 3, codigoIne: '0915', nombre: 'Flores Costa Cuca' })
+    expect(within(filaDe('Municipios', '0915')).getByText('Fuera del departamento')).toBeTruthy()
+    expect(toast.success).toHaveBeenCalledWith('Municipio 0915 registrado.')
+    // El orden de alcance=todos: por departamento y nombre, con el 9999 al final.
+    expect(filasDe('Municipios').map((f) => f.cells[0].textContent)).toEqual(['0920', '0915', '1201', '1207', '9999'])
+    expect(listarMunicipios).toHaveBeenCalledTimes(1)
+  })
+
+  test('el 9999 no tiene acciones; los demás ofrecen "Cambiar nombre" y "Desactivar"', async () => {
+    await abrir(CON_MUNICIPIOS)
+
+    expect(within(tabla('Municipios')).getByRole('columnheader', { name: 'Acciones' })).toBeTruthy()
+    expect(within(filaDe('Municipios', '9999')).queryByRole('button')).toBeNull()
+    const menu = await abrirMenu('0920')
+    expect(within(menu).getAllByRole('menuitem').map((o) => o.textContent)).toEqual(['Cambiar nombre', 'Desactivar'])
+  })
+
+  test('desactivar pide confirmación y la fila queda "Inactivo" con su aviso', async () => {
+    desactivarMunicipio.mockResolvedValue({ ...MUNICIPIOS[1], activo: false })
+    await abrir(CON_MUNICIPIOS)
+
+    await elegirAccion('1207', 'Desactivar')
+    const alerta = await screen.findByRole('alertdialog')
+    expect(within(alerta).getByText('¿Desactivar el municipio 1207 · Tacaná?')).toBeTruthy()
+    expect(desactivarMunicipio).not.toHaveBeenCalled()
+    await confirmar('Desactivar')
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(desactivarMunicipio).toHaveBeenCalledWith(7)
+    expect(within(filaDe('Municipios', '1207')).getByText('Inactivo')).toBeTruthy()
+    expect(toast.success).toHaveBeenCalledWith('Municipio 1207 desactivado.')
+  })
+
+  test('un 409 al desactivar muestra el mensaje de la API y la fila no cambia', async () => {
+    desactivarMunicipio.mockRejectedValue(
+      new ErrorApi(
+        409,
+        'MUNICIPIO_EN_USO',
+        'El municipio tiene 1 establecimiento activo; desactívelos o quítelo de la red primero.',
+      ),
+    )
+    await abrir(CON_MUNICIPIOS)
+
+    await elegirAccion('0920', 'Desactivar')
+    await confirmar('Desactivar')
+
+    const mensaje = 'El municipio tiene 1 establecimiento activo; desactívelos o quítelo de la red primero.'
+    expect(await screen.findByText(mensaje)).toBeTruthy()
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(within(filaDe('Municipios', '0920')).getByText('Activo')).toBeTruthy()
   })
 })

@@ -10,6 +10,8 @@ import {
   validarNombreUsuario,
   validarNombreDistrito,
   validarNombreRed,
+  validarCodigoIne,
+  validarNombreMunicipio,
   validarNombreEstablecimiento,
   validarDireccion,
   validarNombreContacto,
@@ -190,6 +192,39 @@ const CASOS = {
       ['a'.repeat(121), MENSAJES.nombreRedLargo],
       ['Red #1', MENSAJES.nombreRed],
       ['Red/Norte', MENSAJES.nombreRed],
+    ],
+  },
+  validarCodigoIne: {
+    validos: [
+      ['0915', '0915'],
+      ['  1230 ', '1230'],
+      ['09 15', '0915'],
+    ],
+    invalidos: [
+      ['', MENSAJES.codigoIneObligatorio],
+      [null, MENSAJES.codigoIneObligatorio],
+      ['   ', MENSAJES.codigoIneObligatorio],
+      ['915', MENSAJES.codigoIne],
+      ['09150', MENSAJES.codigoIne],
+      ['09A5', MENSAJES.codigoIne],
+      ['09-15', MENSAJES.codigoIne],
+    ],
+  },
+  validarNombreMunicipio: {
+    validos: [
+      ['Flores Costa Cuca', 'Flores Costa Cuca'],
+      ['  San   Juan  Ostuncalco ', 'San Juan Ostuncalco'],
+      ['Pajapita (La Blanca) - Ocós.', 'Pajapita (La Blanca) - Ocós.'],
+      ['Ixchiguán', 'Ixchiguán'],
+      ['a'.repeat(80), 'a'.repeat(80)],
+    ],
+    invalidos: [
+      ['', MENSAJES.nombreMunicipioObligatorio],
+      [null, MENSAJES.nombreMunicipioObligatorio],
+      ['SM', MENSAJES.nombreMunicipioLargo],
+      ['a'.repeat(81), MENSAJES.nombreMunicipioLargo],
+      ['Migrantes / fuera', MENSAJES.nombreMunicipio],
+      ["San Pedro #2", MENSAJES.nombreMunicipio],
     ],
   },
   validarNombreEstablecimiento: {
@@ -564,7 +599,7 @@ const CASOS = {
 const REGLAS = {
   validarNombres, validarApellidos, validarCargo, validarTelefono, validarCorreo, validarCui, validarNombreUsuario,
   validarNombreDistrito, validarNombreRed, validarNombreEstablecimiento, validarDireccion, validarNombreContacto,
-  validarCodigoVacuna,
+  validarCodigoVacuna, validarCodigoIne, validarNombreMunicipio,
   validarNombreVacuna, validarDescripcionVacuna, validarNombreDosis, validarCantidadPoblacion, validarFuentePoblacion,
   validarCodigoDimension, validarCodigoValorDimension, validarNombreDimension, validarDescripcionDimension,
   validarEtiquetaValorDimension, validarEdadMeses, validarTituloSeccion, validarMotivoCambio, validarNombreRegla,
@@ -592,6 +627,8 @@ describe('valores que no son texto', () => {
     expect(validarCargo(['Enfermera'])).toEqual({ error: MENSAJES.cargo })
     expect(validarNombreUsuario(42)).toEqual({ error: MENSAJES.nombreUsuario })
     expect(validarNombreDistrito(123)).toEqual({ error: MENSAJES.nombreDistrito })
+    expect(validarCodigoIne(915)).toEqual({ error: MENSAJES.codigoIne })
+    expect(validarNombreMunicipio({})).toEqual({ error: MENSAJES.nombreMunicipio })
     expect(validarNombreEstablecimiento(123)).toEqual({ error: MENSAJES.nombreEstablecimiento })
     expect(validarDireccion(5)).toEqual({ error: MENSAJES.direccion })
     expect(validarNombreContacto({})).toEqual({ error: MENSAJES.nombreContacto })

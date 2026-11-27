@@ -807,7 +807,8 @@ paths:
       tags: [Catálogos]
       summary: Listar los municipios del ámbito del usuario (codigo_ine es la llave del GeoJSON)
       description: |
-        Solo consulta: los municipios son el catálogo INE y no se crean, editan ni borran desde la API.
+        Los municipios son el catálogo INE, nacional (sin DDRISS). El Administrador los registra, renombra,
+        desactiva y reactiva con `POST /municipios` y los endpoints de `/municipios/{id}`; no se borran.
 
         - `alcance=departamento` (por defecto): los municipios del departamento sede de la DDRISS del usuario,
           ordenados por nombre.
@@ -834,15 +835,7 @@ paths:
             application/json:
               schema:
                 type: array
-                items:
-                  type: object
-                  properties:
-                    id: { type: integer }
-                    departamentoId: { type: integer }
-                    departamentoNombre: { type: string, example: San Marcos }
-                    codigoIne: { type: string, example: "1207" }
-                    nombre: { type: string, example: Tacaná }
-                    activo: { type: boolean }
+                items: { $ref: "#/components/schemas/Municipio" }
         "400":
           description: Un parámetro inválido, desconocido o repetido
           content:
@@ -861,6 +854,236 @@ paths:
                 repetido:
                   value:
                     error: { codigo: ENTRADA_INVALIDA, mensaje: alcance no se puede repetir. }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+    post:
+      tags: [Catálogos]
+      summary: Registrar un municipio en el catálogo INE
+      description: |
+        El catálogo es nacional: se puede registrar un municipio de cualquier departamento salvo el `99`
+        «No especificado / otro». Sirve para un municipio nuevo del departamento sede o para uno de otro
+        departamento donde haya un establecimiento externo. Un municipio de fuera no entra en
+        `alcance=procedencia` por sí solo: aparece cuando la DDRISS le registra un establecimiento.
+
+        - `codigoIne`: 4 dígitos, y los dos primeros deben ser el código INE del departamento (422 si no).
+          No puede repetirse, contando los inactivos.
+        - `nombre`: no puede repetirse en el mismo departamento, contando los inactivos y sin distinguir
+          mayúsculas ni tildes. El mismo nombre en otro departamento sí se acepta.
+        - El código y el departamento no se pueden cambiar después. El municipio nuevo no tiene forma en el
+          GeoJSON del mapa.
+      x-permiso: MUNICIPIO_CREAR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [departamentoId, codigoIne, nombre]
+              additionalProperties: false
+              properties:
+                departamentoId: { type: integer, minimum: 1, example: 3 }
+                codigoIne: { $ref: "#/components/schemas/CodigoIneMunicipio" }
+                nombre: { $ref: "#/components/schemas/TextoNombreMunicipio" }
+      responses:
+        "201":
+          description: Municipio registrado, activo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Municipio" }
+        "400":
+          description: Campo inválido, ausente o no permitido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                departamentoId:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: departamentoId debe ser un número entero positivo. }
+                codigoIne:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El código INE debe tener 4 dígitos. }
+                sinCodigo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El código INE es obligatorio. }
+                nombre:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El nombre del municipio debe tener entre 3 y 80 caracteres. }
+                signos:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El nombre del municipio solo puede tener letras, números, espacios y los signos . - ( ). }
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: activo." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "409":
+          description: Ya hay un municipio con ese código INE, o con ese nombre en el departamento
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                codigo:
+                  value:
+                    error: { codigo: MUNICIPIO_DUPLICADO, mensaje: Ya hay un municipio con el código INE 0920. }
+                nombre:
+                  value:
+                    error: { codigo: MUNICIPIO_NOMBRE_DUPLICADO, mensaje: Ya hay un municipio con ese nombre en el departamento. }
+        "422":
+          description: El departamento no existe o es el `99`, o el código no empieza con el código del departamento
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                departamento:
+                  value:
+                    error: { codigo: DEPARTAMENTO_INVALIDO, mensaje: El departamento no existe o no admite municipios. }
+                prefijo:
+                  value:
+                    error: { codigo: CODIGO_INE_DEPARTAMENTO, mensaje: "El código INE debe empezar con 09, el código del departamento." }
+
+  /municipios/{id}:
+    patch:
+      tags: [Catálogos]
+      summary: Cambiar el nombre de un municipio
+      description: |
+        Solo cambia el nombre, también de un municipio inactivo. El código INE y el departamento no se pueden
+        cambiar. El mismo nombre responde 200 sin registrar nada en la bitácora. El `9999` «Migrantes / fuera de
+        San Marcos» no se puede renombrar (409 `MUNICIPIO_ESPECIAL`).
+      x-permiso: MUNICIPIO_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre]
+              additionalProperties: false
+              properties:
+                nombre: { $ref: "#/components/schemas/TextoNombreMunicipio" }
+      responses:
+        "200":
+          description: Municipio actualizado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Municipio" }
+        "400":
+          description: Nombre inválido o ausente, campo que no se puede cambiar o campo no permitido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                nombre:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El nombre del municipio debe tener entre 3 y 80 caracteres. }
+                sinNombre:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: El nombre del municipio es obligatorio. }
+                codigoIne:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: codigoIne no se puede cambiar. }
+                departamentoId:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: departamentoId no se puede cambiar. }
+                campo:
+                  value:
+                    error: { codigo: ENTRADA_INVALIDA, mensaje: "Campo no permitido: activo." }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/MunicipioNoEncontrado" }
+        "409":
+          description: Ya hay otro municipio con ese nombre en el departamento, o es el `9999`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                nombre:
+                  value:
+                    error: { codigo: MUNICIPIO_NOMBRE_DUPLICADO, mensaje: Ya hay un municipio con ese nombre en el departamento. }
+                especial:
+                  value:
+                    error: { codigo: MUNICIPIO_ESPECIAL, mensaje: El municipio Migrantes / fuera de San Marcos no se puede cambiar. }
+
+  /municipios/{id}/desactivar:
+    post:
+      tags: [Catálogos]
+      summary: Desactivar un municipio
+      description: |
+        Desactivación lógica: el municipio no se borra y su producción ya registrada no cambia. No se puede
+        desactivar mientras tenga distritos o establecimientos activos o esté en una red activa; el personal
+        con ese municipio no lo impide. El `9999` no se puede desactivar. Un municipio ya inactivo responde 200
+        sin registrar nada en la bitácora.
+      x-permiso: MUNICIPIO_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Municipio desactivado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Municipio" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/MunicipioNoEncontrado" }
+        "409":
+          description: El municipio está en uso, o es el `9999`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                enUso:
+                  value:
+                    error: { codigo: MUNICIPIO_EN_USO, mensaje: El municipio tiene 2 distritos activos y 1 establecimiento activo; desactívelos o quítelo de la red primero. }
+                red:
+                  value:
+                    error: { codigo: MUNICIPIO_EN_USO, mensaje: El municipio tiene la red activa Red No. 1; desactívelos o quítelo de la red primero. }
+                especial:
+                  value:
+                    error: { codigo: MUNICIPIO_ESPECIAL, mensaje: El municipio Migrantes / fuera de San Marcos no se puede cambiar. }
+
+  /municipios/{id}/reactivar:
+    post:
+      tags: [Catálogos]
+      summary: Reactivar un municipio
+      description: Un municipio ya activo responde 200 sin registrar nada en la bitácora.
+      x-permiso: MUNICIPIO_EDITAR
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200":
+          description: Municipio reactivado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Municipio" }
+        "401": { $ref: "#/components/responses/NoAutenticado" }
+        "403": { $ref: "#/components/responses/SinPermiso" }
+        "404": { $ref: "#/components/responses/MunicipioNoEncontrado" }
+
+  /departamentos:
+    get:
+      tags: [Catálogos]
+      summary: Listar los departamentos del INE que admiten municipios
+      description: |
+        Los departamentos de la tabla sin el `99` «No especificado / otro», ordenados por código INE. Los usa el
+        diálogo para registrar un municipio. No se crean ni editan desde la API. Un parámetro de consulta
+        responde 400 `ENTRADA_INVALIDA`.
+      x-permiso: MUNICIPIO_CONSULTAR
+      responses:
+        "200":
+          description: Lista de departamentos
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Departamento" }
+        "400":
+          description: Un parámetro de consulta
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: { codigo: ENTRADA_INVALIDA, mensaje: "Parámetro no permitido: orden." }
         "401": { $ref: "#/components/responses/NoAutenticado" }
         "403": { $ref: "#/components/responses/SinPermiso" }
 
@@ -6504,6 +6727,13 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
           example:
             error: { codigo: NO_ENCONTRADO, mensaje: El recurso solicitado no existe. }
+    MunicipioNoEncontrado:
+      description: El municipio no existe
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: { codigo: NO_ENCONTRADO, mensaje: El municipio no existe. }
     DistritoNoEncontrado:
       description: El distrito no existe o es de otra DDRISS
       content:
@@ -7194,6 +7424,42 @@ components:
         total: { type: integer, minimum: 0, example: 57 }
         pagina: { type: integer, minimum: 1, example: 2 }
         porPagina: { type: integer, minimum: 1, maximum: 100, example: 20 }
+
+    Departamento:
+      type: object
+      required: [id, codigoIne, nombre]
+      properties:
+        id: { type: integer, example: 3 }
+        codigoIne: { type: string, example: "09" }
+        nombre: { type: string, example: Quetzaltenango }
+
+    Municipio:
+      type: object
+      required: [id, departamentoId, departamentoNombre, codigoIne, nombre, activo]
+      properties:
+        id: { type: integer, example: 33 }
+        departamentoId: { type: integer, example: 3 }
+        departamentoNombre: { type: string, example: Quetzaltenango }
+        codigoIne: { type: string, description: "Llave del GeoJSON; no cambia", example: "0915" }
+        nombre: { type: string, example: Flores Costa Cuca }
+        activo: { type: boolean, example: true }
+
+    CodigoIneMunicipio:
+      type: string
+      pattern: '^\d{4}$'
+      description: |
+        Código INE del municipio: 4 dígitos (se quitan los espacios), y los dos primeros son el código del
+        departamento.
+      example: "0915"
+
+    TextoNombreMunicipio:
+      type: string
+      minLength: 3
+      maxLength: 80
+      description: |
+        Nombre del municipio: letras (con tildes, ñ y ü), dígitos, espacios y `.`, `-`, `(`, `)`. Se quitan los
+        espacios de los extremos y se reducen los dobles; de 3 a 80 caracteres después de limpiar.
+      example: Flores Costa Cuca
 
     TextoNombreDistrito:
       type: string

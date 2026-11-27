@@ -3,6 +3,7 @@
 
 export const LARGOS = {
   nombres: 100, apellidos: 100, cargo: 100, correo: 150, nombreUsuario: 50, nombreDistrito: 120, nombreRed: 120,
+  nombreMunicipio: 80,
   nombreEstablecimiento: 150, direccion: 255, nombreContacto: 150, codigoVacuna: 20, nombreVacuna: 120,
   descripcionVacuna: 255, nombreDosis: 60, fuentePoblacion: 150, codigoDimension: 30, codigoValorDimension: 30,
   nombreDimension: 60, descripcionDimension: 255, etiquetaValorDimension: 60,
@@ -33,6 +34,11 @@ export const MENSAJES = {
   nombreRedObligatorio: 'El nombre de la red es obligatorio.',
   nombreRed: 'El nombre de la red solo puede tener letras, números, espacios y los signos . - ( ).',
   nombreRedLargo: 'El nombre de la red debe tener entre 3 y 120 caracteres.',
+  codigoIneObligatorio: 'El código INE es obligatorio.',
+  codigoIne: 'El código INE debe tener 4 dígitos.',
+  nombreMunicipioObligatorio: 'El nombre del municipio es obligatorio.',
+  nombreMunicipio: 'El nombre del municipio solo puede tener letras, números, espacios y los signos . - ( ).',
+  nombreMunicipioLargo: 'El nombre del municipio debe tener entre 3 y 80 caracteres.',
   nombreEstablecimientoObligatorio: 'El nombre del establecimiento es obligatorio.',
   nombreEstablecimiento:
     "El nombre del establecimiento solo puede tener letras, números, espacios y los signos . , - ( ) / '.",
@@ -188,6 +194,24 @@ export function validarNombreRed(valor) {
   if (texto === '') return { error: MENSAJES.nombreRedObligatorio };
   if (texto === null || !NOMBRE_DISTRITO.test(texto)) return { error: MENSAJES.nombreRed };
   if (texto.length < 3 || texto.length > LARGOS.nombreRed) return { error: MENSAJES.nombreRedLargo };
+  return { valor: texto };
+}
+
+// Que los dos primeros dígitos sean los del departamento lo revisa el servicio, que conoce el departamento.
+export function validarCodigoIne(valor) {
+  const texto = limpiar(valor);
+  if (texto === '') return { error: MENSAJES.codigoIneObligatorio };
+  const codigo = texto?.replace(/ /g, '');
+  if (texto === null || !/^\d{4}$/.test(codigo)) return { error: MENSAJES.codigoIne };
+  return { valor: codigo };
+}
+
+// Mismos caracteres que el nombre del distrito; el 9999 (con «/») no se edita.
+export function validarNombreMunicipio(valor) {
+  const texto = limpiar(valor);
+  if (texto === '') return { error: MENSAJES.nombreMunicipioObligatorio };
+  if (texto === null || !NOMBRE_DISTRITO.test(texto)) return { error: MENSAJES.nombreMunicipio };
+  if (texto.length < 3 || texto.length > LARGOS.nombreMunicipio) return { error: MENSAJES.nombreMunicipioLargo };
   return { valor: texto };
 }
 

@@ -356,12 +356,10 @@ describe('alcance y permisos', () => {
     }
   });
 
-  it('no hay ruta para borrar, crear ni editar municipios', async () => {
-    const respuestas = [
-      await enviar('delete', '/municipios/1'),
-      await enviar('post', '/municipios', { nombre: 'Nuevo' }),
-      await enviar('patch', '/municipios/1', { nombre: 'Otro' }),
-    ];
-    for (const res of respuestas) expect(res.status).toBe(404);
+  // Desde el SPEC 77 los municipios se crean y se editan (municipios.test.js), pero no se borran.
+  it('no hay ruta para borrar municipios', async () => {
+    const res = await enviar('delete', '/municipios/1');
+
+    expect(res.status).toBe(404);
   });
 });

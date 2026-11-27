@@ -130,12 +130,14 @@ Base de datos `vacunacion_ddriss` (MySQL 8.0, InnoDB, utf8mb4). Las tablas se ag
 
 **`departamento`**: catálogo de departamentos.
 - Columnas: `id`, `codigo_ine` (único), `nombre`.
-- Semillas: `12` San Marcos, `09` Quetzaltenango (por Coatepeque) y `99` No especificado.
+- Semillas: los 22 departamentos del INE (`01` Guatemala a `22` Jutiapa) y `99` No especificado. Los tres primeros siguen siendo `12` San Marcos, `99` y `09` Quetzaltenango (`id` 1 a 3), que usan las semillas de `municipio` y `ddriss`; los otros 20 se agregaron en el SPEC 77, y en una base anterior los agrega `14_departamentos_mysql.sql` (idempotente, `INSERT IGNORE`).
+- No se crean ni se editan desde la API: `GET /departamentos` los lista sin el `99`, que no admite municipios nuevos.
 
 **`municipio`**: catálogo de municipios (INE). Incluye municipios de fuera de la DDRISS para registrar la procedencia.
 - Columnas: `id`, `departamento_id` → departamento, `codigo_ine` (único; también es la llave del GeoJSON de Leaflet), `nombre`, `activo`.
 - En v0.5 se eliminó `es_jurisdiccion`: un municipio pertenece a una DDRISS si alguno de sus distritos de salud pertenece a ella.
 - Semillas: los 30 municipios de San Marcos (códigos 1201 a 1230), `9999` Migrantes / fuera de San Marcos y `0920` Coatepeque.
+- Desde el SPEC 77, el Administrador registra, renombra, desactiva y reactiva municipios desde la API. El código INE tiene 4 dígitos que empiezan con el código del departamento, y ni el código ni el departamento cambian. El `9999` no se renombra ni se desactiva. Un municipio de otro departamento solo entra en la procedencia cuando tiene un establecimiento de la DDRISS.
 
 **`ddriss`** (nueva en v0.5): Direcciones Departamentales de Redes Integradas de Servicios de Salud. Sirve para que el modelo admita varias DDRISS; su territorio son los municipios de sus distritos.
 - Columnas: `id`, `codigo` (único; provisional `DDRISS_SM`), `nombre`, `departamento_id` → departamento (sede; un departamento puede tener más de una DDRISS), `activo`.

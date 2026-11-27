@@ -203,6 +203,11 @@ INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
 INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
  ('BITACORA_CONSULTAR',        'SISTEMA',                 'Consultar y exportar la bitácora de auditoría de su DDRISS');
 
+-- SPEC 77 (HU-08): registrar y editar municipios del catálogo INE
+INSERT IGNORE INTO permiso (codigo, modulo, descripcion) VALUES
+ ('MUNICIPIO_CREAR',           'CONFIGURACION_CATALOGOS', 'Registrar municipios en el catálogo INE'),
+ ('MUNICIPIO_EDITAR',          'CONFIGURACION_CATALOGOS', 'Renombrar, desactivar y reactivar municipios del catálogo INE');
+
 -- -----------------------------------------------------------------------------
 -- Asignaciones (rol → permiso)
 -- -----------------------------------------------------------------------------
@@ -454,6 +459,12 @@ INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
 SELECT r.id, p.id FROM rol r JOIN permiso p
  WHERE r.codigo = 'ADMINISTRADOR'
    AND p.codigo = 'INDICADOR_CONFIG_CONSULTAR';
+
+-- SPEC 77 (HU-08): solo el Administrador registra y edita municipios
+INSERT IGNORE INTO rol_permiso (rol_id, permiso_id)
+SELECT r.id, p.id FROM rol r JOIN permiso p
+ WHERE r.codigo = 'ADMINISTRADOR'
+   AND p.codigo IN ('MUNICIPIO_CREAR', 'MUNICIPIO_EDITAR');
 
 -- -----------------------------------------------------------------------------
 -- Asignaciones retiradas
