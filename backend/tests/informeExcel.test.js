@@ -4,8 +4,22 @@ import {
   FORMATO_CANTIDAD, FORMATO_COBERTURA, libroDelAcumulado, libroDelInforme,
 } from '../src/modulos/informes/informeExcel.service.js';
 import {
-  fechaDeGeneracion, lineaDeVacunas, textoRango, tituloDelInforme,
+  etiquetaDeDosis, fechaDeGeneracion, lineaDeVacunas, nombreDeHojaDelMes, textoRango, tituloDelInforme,
 } from '../src/modulos/informes/textosInforme.js';
+import { logoDeLaDdriss } from '../src/modulos/informes/logos.js';
+
+// SPEC 78: la misma tabla que frontend/src/paginas/informes/informes.test.js.
+const ETIQUETAS_DE_DOSIS = [
+  ['D1', '1ra'], ['D2', '2da'], ['D3', '3ra'], ['D4', '4ta'], ['D5', '5ta'], ['D6', '6ta'], ['D7', '7ma'],
+  ['D8', '8va'], ['D9', '9na'], ['D10', '10ma'], ['D11', 'D11'], ['D0', 'D0'], ['D01', 'D01'], ['R1', 'R1'],
+  ['R2', 'R2'], ['UNICA', 'UNICA'], ['D1X', 'D1X'], ['d1', 'd1'],
+];
+
+describe('etiquetaDeDosis (SPEC 78)', () => {
+  it.each(ETIQUETAS_DE_DOSIS)('%s se muestra como %s', (codigo, etiqueta) => {
+    expect(etiquetaDeDosis(codigo)).toBe(etiqueta);
+  });
+});
 
 // SPEC 64: el libro se arma con datos fijos y se vuelve a leer desde el archivo, como lo abriría Excel. Los textos
 // esperados son los de frontend/src/paginas/informes/informes.js y TablaInforme.jsx.
@@ -185,7 +199,7 @@ describe('libro de Excel de un informe (SPEC 64)', () => {
     const fila = (r) => [2, 3, 4, 5].map((c) => hoja.getCell(r, c).value);
     expect(fila(n)).toEqual(['Hexavalente', 'Hexavalente', 'Hexavalente', 'BCG']);
     expect(fila(n + 1)).toEqual(['< 1 año', '< 1 año', 'De 1 a < 6 años', null]);
-    expect(fila(n + 2)).toEqual(['D1', 'D2', 'R1', 'UNICA']);
+    expect(fila(n + 2)).toEqual(['1ra', '2da', 'R1', 'UNICA']);
     expect(rangosCombinados(hoja))
       .toEqual(expect.arrayContaining([`A${n}:A${n + 2}`, `B${n}:D${n}`, `B${n + 1}:C${n + 1}`]));
     expect(hoja.views[0]).toMatchObject({ state: 'frozen', xSplit: 1, ySplit: n + 2 });
@@ -291,6 +305,129 @@ describe('libro de Excel de un informe (SPEC 64)', () => {
   });
 });
 
+// SPEC 78: una hoja por mes del rango antes de la acumulada, con las filas y columnas del informe.
+const mesDe = (anio, mes, estado, factor = 1, dosisFueraDelConsolidado = 0) => ({
+  anio, mes, estado,
+  filas: informeBase().filas.map((f) => ({ ...f, cantidades: f.cantidades.map((c) => c * factor) })),
+  total: { cantidades: informeBase().total.cantidades.map((c) => c * factor) },
+  dosisFueraDelConsolidado,
+});
+
+async function leerLibro(informe, datos = datosBase()) {
+  const libro = new ExcelJS.Workbook();
+  await libro.xlsx.load(await libroDelInforme(informe, datos).xlsx.writeBuffer());
+  return libro;
+}
+const celdasDe = (hoja) => {
+  const filas = [];
+  hoja.eachRow((fila) => filas.push(fila.values.map((v) => (typeof v === 'object' && v !== null ? v.text : v))));
+  return filas;
+};
+
+describe('hojas por mes en el libro de un informe (SPEC 78)', () => {
+  const RANGO = { desde: { anio: 2025, mes: 12 }, hasta: { anio: 2026, mes: 2 } };
+
+  it('ordena «Información», un mes por hoja con su año y al final la acumulada', async () => {
+    const libro = await leerLibro(informeBase({
+      ...RANGO,
+      meses: [mesDe(2025, 12, 'CERRADO', 0), mesDe(2026, 1, 'CERRADO', 1), mesDe(2026, 2, 'CERRADO', 0)],
+    }));
+    expect(libro.worksheets.map((h) => h.name)).toEqual([
+      'Información', 'Diciembre 2025', 'Enero 2026', 'Febrero 2026', 'Población propia',
+    ]);
+    expect(nombreDeHojaDelMes({ anio: 2026, mes: 9 })).toBe('Septiembre 2026');
+  });
+
+  it('cada hoja mensual tiene el encabezado, las filas y el total de la acumulada, con lo del mes', async () => {
+    const libro = await leerLibro(informeBase({ ...RANGO, meses: [mesDe(2025, 12, 'CERRADO', 2)] }));
+    const mes = libro.getWorksheet('Diciembre 2025');
+    const acumulada = libro.getWorksheet('Población propia');
+    const nombres = (hoja) => celdasDe(hoja).map((f) => f[1]);
+
+    expect(nombres(mes)).toEqual(nombres(acumulada));
+    expect(celdasDe(mes).slice(0, 3)).toEqual(celdasDe(acumulada).slice(0, 3));
+    expect(mes.model.merges).toEqual(acumulada.model.merges);
+    expect([2, 3, 4, 5].map((c) => filaQueEmpieza(mes, 'San Marcos').getCell(c).value)).toEqual([2400, 70, 0, 14]);
+    expect([2, 3, 4, 5].map((c) => filaQueEmpieza(mes, 'Total').getCell(c).value)).toEqual([4000, 94, 6, 14]);
+    expect(filaQueEmpieza(mes, 'San Marcos').getCell(2).numFmt).toBe(FORMATO_CANTIDAD);
+    expect(mes.views[0]).toMatchObject({ state: 'frozen', xSplit: 1, ySplit: 3, showGridLines: false });
+    expect(mes.headerFooter.oddHeader)
+      .toContain('SIRCOVA · Producción a la población propia · Municipio · Diciembre 2025');
+    // Un mes cerrado sin dosis fuera del consolidado no lleva nota.
+    expect(mes.rowCount).toBe(filaQueEmpieza(mes, 'Total').number);
+  });
+
+  it('un rango de un solo mes trae también la hoja de ese mes', async () => {
+    const agosto = { anio: 2026, mes: 8 };
+    const libro = await leerLibro(informeBase({ desde: agosto, hasta: agosto, meses: [mesDe(2026, 8, 'CERRADO')] }));
+    expect(libro.worksheets.map((h) => h.name)).toEqual(['Información', 'Agosto 2026', 'Población propia']);
+  });
+
+  it('pone debajo de la tabla de un mes la nota de su estado y la de las dosis fuera del consolidado', async () => {
+    const notas = async (mes, incluirAprobados = false) => {
+      const libro = await leerLibro(informeBase({ incluirAprobados, meses: [mes] }));
+      const hoja = libro.worksheets[1];
+      const total = filaQueEmpieza(hoja, 'Total').number;
+      return celdasDe(hoja).slice(total).map((f) => f[1]).filter(Boolean);
+    };
+    expect(await notas(mesDe(2026, 3, null, 0)))
+      .toEqual(['Marzo de 2026 no está habilitado en la DDRISS: no tiene datos.']);
+    expect(await notas(mesDe(2026, 7, 'EN_CIERRE')))
+      .toEqual(['Julio de 2026 todavía no está cerrado y no suma en esta hoja.']);
+    expect(await notas(mesDe(2026, 8, 'ABIERTO'), true))
+      .toEqual(['Datos preliminares: agosto de 2026 todavía no está cerrado.']);
+    expect(await notas(mesDe(2026, 1, 'CERRADO'))).toEqual([]);
+    expect(await notas(mesDe(2026, 2, 'EN_CIERRE', 1, 1155), true)).toEqual([
+      'Datos preliminares: febrero de 2026 todavía no está cerrado.',
+      'Además, 1,155 dosis de establecimientos que no suman en el consolidado.',
+    ]);
+  });
+
+  it('la hoja acumulada conserva su nota y «Información», sus avisos', async () => {
+    const informe = informeBase({
+      dosisFueraDelConsolidado: 20,
+      mesesSinCerrar: [{ anio: 2026, mes: 8, estado: 'EN_CIERRE' }],
+      meses: [mesDe(2026, 8, 'EN_CIERRE')],
+    });
+    const libro = await leerLibro(informe);
+    const acumulada = libro.getWorksheet('Población propia');
+    expect(acumulada.getCell(acumulada.rowCount, 1).value)
+      .toBe('Además, 20 dosis de establecimientos que no suman en el consolidado.');
+    expect(avisos(acumulada)).toEqual([
+      'Agosto de 2026 todavía no está cerrado y no suma en el informe. '
+        + 'Marca «Incluir aprobados sin cerrar» para verlos como preliminares.',
+    ]);
+  });
+
+  it('«Información» enlaza cada hoja de datos en el orden del libro', async () => {
+    const libro = await leerLibro(informeBase({
+      ...RANGO, meses: [mesDe(2025, 12, 'CERRADO'), mesDe(2026, 1, 'CERRADO'), mesDe(2026, 2, 'CERRADO')],
+    }));
+    const hoja = libro.getWorksheet('Información');
+    const titulo = filaQueEmpieza(hoja, 'Hojas de datos:').number;
+    const enlaces = [1, 2, 3, 4].map((i) => hoja.getCell(titulo + i, 1).value);
+    expect(enlaces).toEqual([
+      { text: 'Diciembre 2025', hyperlink: "#'Diciembre 2025'!A1" },
+      { text: 'Enero 2026', hyperlink: "#'Enero 2026'!A1" },
+      { text: 'Febrero 2026', hyperlink: "#'Febrero 2026'!A1" },
+      { text: 'Población propia (acumulado del rango)', hyperlink: "#'Población propia'!A1" },
+    ]);
+    expect(hoja.getCell(titulo + 5, 1).value).toBeNull();
+  });
+
+  it('sin columnas, el libro solo trae «Información», sin hojas mensuales', async () => {
+    const libro = await leerLibro(informeBase({
+      agrupacion: { codigo: 'pueblo', nombre: 'Pueblo de pertenencia' },
+      columnas: [],
+      filas: [{ id: 1, nombre: 'San Marcos', fueraDelConsolidado: false, cantidades: [] }],
+      total: { cantidades: [] },
+      meses: [{ ...mesDe(2026, 8, 'CERRADO'), filas: [], total: { cantidades: [] } }],
+    }));
+    expect(libro.worksheets.map((h) => h.name)).toEqual(['Información']);
+    expect(filaQueEmpieza(libro.getWorksheet('Información'), 'Hojas de datos:')).toBeNull();
+  });
+});
+
 // SPEC 66: el acumulado anual, con las mismas columnas y cuatro cifras por unidad.
 const acumuladoBase = (cambios = {}) => ({
   informe: 'acumulado-anual',
@@ -338,7 +475,7 @@ describe('libro de Excel del acumulado anual (SPEC 66)', () => {
     const encabezado = filaQueEmpieza(hoja, 'Municipio de residencia');
     const n = encabezado.number;
     expect(encabezado.getCell(2).value).toBe('Cifra');
-    expect(hoja.getRow(n + 2).getCell(3).value).toBe('D3');
+    expect(hoja.getRow(n + 2).getCell(3).value).toBe('3ra');
     expect([hoja.getRow(n + 3).getCell(3).value, hoja.getRow(n + 3).getCell(4).value]).toEqual(['Meta 95 %', 'Meta 90.5 %']);
 
     const unidad = filaQueEmpieza(hoja, 'San Marcos').number;
@@ -388,5 +525,54 @@ describe('libro de Excel del acumulado anual (SPEC 66)', () => {
     const unidad = filaQueEmpieza(hoja, 'Distrito 1');
     expect([unidad.getCell(2).value, unidad.getCell(3).value, unidad.getCell(4).value]).toEqual(['San Marcos', 'Dosis', 1300]);
     expect(filaQueEmpieza(hoja, 'Distrito').getCell(3).value).toBe('Cifra');
+  });
+});
+
+// SPEC 78: el logo del MSPAS, por código de DDRISS (logos/DDRISS_SM.png).
+describe('logo de la DDRISS en «Información» (SPEC 78)', () => {
+  const MINISTERIO = 'Ministerio de Salud Pública y Asistencia Social';
+  const textos = (hoja) => {
+    const lista = [];
+    hoja.eachRow((fila) => fila.eachCell((celda) => { if (celda.text) lista.push(celda.text); }));
+    return lista;
+  };
+
+  it('logoDeLaDdriss da el logo de DDRISS_SM con su tamaño, y null para otro código', () => {
+    const logo = logoDeLaDdriss('DDRISS_SM');
+    expect(logo).toMatchObject({ ancho: 463, alto: 166 });
+    expect(logo.bytes.subarray(1, 4).toString()).toBe('PNG');
+    for (const codigo of ['ZVT_SIN_LOGO', null, undefined, '', '../DDRISS_SM', 'ddriss_sm']) {
+      expect(logoDeLaDdriss(codigo), String(codigo)).toBeNull();
+    }
+  });
+
+  it('con logo, lo pone arriba a la derecha en lugar del Ministerio, con la Dirección y la DDRISS a su lado', async () => {
+    const hoja = await leerHoja(informeBase(), datosBase({ ddrissCodigo: 'DDRISS_SM' }));
+    const imagenes = info(hoja).getImages();
+    expect(imagenes).toHaveLength(1);
+    expect(imagenes[0].range.tl.nativeRow).toBe(0);
+    expect(imagenes[0].range.tl.nativeCol).toBeGreaterThanOrEqual(3);
+    expect(textos(info(hoja))).not.toContain(MINISTERIO);
+    // La Dirección y la DDRISS, en la columna D (a la izquierda del logo, que está en la E), alineadas a la derecha.
+    expect(info(hoja).getCell(2, 4).value).toBe('Dirección Departamental de Redes Integradas de Servicios de Salud');
+    expect(info(hoja).getCell(3, 4).value).toBe('San Marcos');
+    expect(info(hoja).getCell(3, 4).alignment.horizontal).toBe('right');
+    expect(info(hoja).getCell(3, 5).value).toBeNull();
+    expect(hoja.getImages()).toHaveLength(0);
+  });
+
+  it('sin logo (otra DDRISS o sin código), conserva los tres renglones y no lleva imagen', async () => {
+    for (const ddrissCodigo of [undefined, 'ZVT_SIN_LOGO']) {
+      const hoja = await leerHoja(informeBase(), datosBase({ ddrissCodigo }));
+      expect(info(hoja).getImages(), String(ddrissCodigo)).toHaveLength(0);
+      expect(ultimoTexto(hoja, 1)).toBe(MINISTERIO);
+      expect(ultimoTexto(hoja, 3)).toBe('San Marcos');
+    }
+  });
+
+  it('el acumulado anual también lleva el logo', async () => {
+    const hoja = await leerAcumulado(acumuladoBase(), datosBase({ ddrissCodigo: 'DDRISS_SM' }));
+    expect(info(hoja).getImages()).toHaveLength(1);
+    expect(textos(info(hoja))).not.toContain(MINISTERIO);
   });
 });

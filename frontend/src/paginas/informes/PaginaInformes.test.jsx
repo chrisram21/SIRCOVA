@@ -568,6 +568,39 @@ describe('«Exportar PDF» (SPEC 65)', () => {
     expect(botonExcel().disabled).toBe(false)
   })
 
+  test.each([
+    ['xlsx', 'Exportar Excel', 'lucide-file-spreadsheet'],
+    ['pdf', 'Exportar PDF', 'lucide-file-text'],
+  ])('mientras descarga, el botón de %s muestra el círculo de carga girando (SPEC 78)', async (_, texto, icono) => {
+    let terminar
+    const descarga = texto === 'Exportar PDF' ? descargarInformePdf : descargarInformeExcel
+    descarga.mockReturnValue(new Promise((resolver) => {
+      terminar = resolver
+    }))
+    montar({ url: URL_INFORME })
+    await screen.findAllByText('1,234')
+    expect(screen.getByRole('button', { name: texto }).querySelector(`svg.${icono}`)).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: texto }))
+
+    const pulsado = await screen.findByRole('button', { name: 'Exportando…' })
+    const carga = pulsado.querySelector('svg.lucide-loader-circle')
+    expect(carga).not.toBeNull()
+    expect(carga.getAttribute('class')).toContain('animate-spin')
+    expect(carga.getAttribute('class')).toContain('motion-reduce:animate-none')
+    expect(pulsado.querySelector(`svg.${icono}`)).toBeNull()
+    expect(pulsado.disabled).toBe(true)
+    expect([botonExcel(), botonPdf()].filter(Boolean).every((b) => b.disabled)).toBe(true)
+    expect([botonExcel(), botonPdf()].filter(Boolean)).toHaveLength(1)
+
+    terminar(texto === 'Exportar PDF' ? ARCHIVO : { blob: new Blob(['PK']), nombre: 'informe.xlsx' })
+    const deNuevo = await screen.findByRole('button', { name: texto })
+    expect(deNuevo.disabled).toBe(false)
+    expect(deNuevo.querySelector(`svg.${icono}`)).not.toBeNull()
+    expect(document.querySelector('svg.lucide-loader-circle')).toBeNull()
+    expect(botonExcel().disabled).toBe(false)
+    expect(botonPdf().disabled).toBe(false)
+  })
+
   test('si falla, muestra el mismo aviso que el Excel', async () => {
     descargarInformePdf.mockRejectedValueOnce(new ErrorApi(404, 'NO_ENCONTRADO', 'La red no existe.'))
     montar({ url: URL_INFORME })

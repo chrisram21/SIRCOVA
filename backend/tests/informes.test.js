@@ -9,8 +9,12 @@ import {
   columnasAgrupadas,
   columnasDelInforme,
   dimensionDeAgrupacion,
+  informePorFila,
+  llaveDeColumna,
 } from '../src/modulos/informes/informes.service.js';
 import { documentoDelInforme } from '../src/modulos/informes/informePdf.service.js';
+import { etiquetaDeDosis } from '../src/modulos/informes/textosInforme.js';
+import { logoDeLaDdriss } from '../src/modulos/informes/logos.js';
 import { acumuladoAnual } from '../src/modulos/informes/acumuladoAnual.service.js';
 import { claveCombinacion } from '../src/modulos/produccion/celdas.service.js';
 import { tokenDePrueba } from './sesionDePrueba.js';
@@ -1034,6 +1038,148 @@ describe('GET /informes/produccion agrupado por una dimensión (SPEC 63)', () =>
   });
 });
 
+describe('informePorFila con porMes (SPEC 78)', () => {
+  const nacional = { rol: 'AUTORIDAD', ddrissId: null };
+  const RANGO = { desde: `${ANIO - 1}-12`, hasta: `${ANIO}-02` };
+  const aTexto = ({ anio, mes }) => `${anio}-${String(mes).padStart(2, '0')}`;
+  const informe = (consulta, opciones) =>
+    informePorFila(nacional, { ddrissId: String(ddrissId), ...RANGO, ...consulta }, opciones);
+  const unidades = (filas) => filas.map((f) => [f.id, f.nombre, f.municipio?.id ?? null, f.fueraDelConsolidado]);
+  // Las cantidades distintas de cero por fila y columna (con la llave de la columna, no su posición).
+  function celdas(columnas, { filas, total, dosisFueraDelConsolidado }) {
+    const mapa = { fuera: dosisFueraDelConsolidado };
+    const anotar = (fila, cantidades) => cantidades.forEach((c, i) => {
+      if (c !== 0) mapa[`${fila}|${llaveDeColumna(columnas[i])}`] = c;
+    });
+    for (const f of filas) anotar(`${f.id}|${f.nombre}`, f.cantidades);
+    anotar('total', total.cantidades);
+    return mapa;
+  }
+
+  const CASOS = [
+    ['población propia por municipio, con aprobados', { informe: 'poblacion-propia', incluirAprobados: 'true' }],
+    ['total por establecimiento, con aprobados', {
+      informe: 'total', nivel: 'establecimiento', incluirAprobados: 'true',
+    }],
+    ['residencia por distrito', { informe: 'residencia', nivel: 'distrito' }],
+    ['total agrupado por sexo, con aprobados', { informe: 'total', agrupacion: 'sexo', incluirAprobados: 'true' }],
+    ['dos vacunas por departamento', {
+      informe: 'poblacion-propia', nivel: 'departamento', vacuna: 'ZVT_SPEC62,ZVT_SPEC63',
+    }],
+  ];
+
+  it('un elemento por mes del rango, en orden y cruzando el año, con las mismas filas que el acumulado', async () => {
+    const res = await informe({ informe: 'total', incluirAprobados: 'true' }, { porMes: true });
+    expect(res.meses.map(({ anio, mes, estado }) => ({ anio, mes, estado }))).toEqual([
+      { anio: ANIO - 1, mes: 12, estado: 'CERRADO' },
+      { anio: ANIO, mes: 1, estado: 'CERRADO' },
+      { anio: ANIO, mes: 2, estado: 'EN_CIERRE' },
+    ]);
+    for (const mes of res.meses) {
+      expect(unidades(mes.filas)).toEqual(unidades(res.filas));
+      expect(mes.filas.every((f) => f.cantidades.length === res.columnas.length)).toBe(true);
+    }
+  });
+
+  it.each(CASOS)('%s: sin porMes la respuesta es la misma, sin meses', async (_, consulta) => {
+    const sinMeses = await informe(consulta);
+    const { meses, ...acumulado } = await informe(consulta, { porMes: true });
+    expect(sinMeses).not.toHaveProperty('meses');
+    expect(meses).toHaveLength(3);
+    expect(acumulado).toEqual(sinMeses);
+  });
+
+  it.each(CASOS)('%s: la suma de los meses es el acumulado, celda por celda', async (_, consulta) => {
+    const res = await informe(consulta, { porMes: true });
+    expect(res.columnas.length).toBeGreaterThan(0);
+    const suma = (lista) => lista.reduce((a, b) => a + b, 0);
+    res.filas.forEach((fila, i) => {
+      fila.cantidades.forEach((cantidad, j) => {
+        expect(suma(res.meses.map((m) => m.filas[i].cantidades[j])), `${fila.nombre} ${j}`).toBe(cantidad);
+      });
+    });
+    res.total.cantidades.forEach((cantidad, j) => {
+      expect(suma(res.meses.map((m) => m.total.cantidades[j])), `total ${j}`).toBe(cantidad);
+    });
+    expect(suma(res.meses.map((m) => m.dosisFueraDelConsolidado))).toBe(res.dosisFueraDelConsolidado);
+    expect(suma(res.total.cantidades)).toBeGreaterThan(0);
+  });
+
+  it.each(CASOS)('%s: cada mes tiene las cantidades del informe de ese mes solo', async (_, consulta) => {
+    const res = await informe(consulta, { porMes: true });
+    for (const mes of res.meses) {
+      const texto = aTexto(mes);
+      const solo = await informe({ ...consulta, desde: texto, hasta: texto });
+      expect(celdas(res.columnas, mes), texto).toEqual(celdas(solo.columnas, solo));
+    }
+  });
+
+  describe('con un mes sin cierre_periodo dentro del rango', () => {
+    // Marzo de 2086 no tiene cierre_periodo de la DDRISS: se le agrega un reporte cerrado, que no debe contar, y un
+    // abril en cierre para que marzo quede dentro del rango.
+    const extra = {};
+    beforeAll(async () => {
+      const inicio = `${ANIO}-04-01`;
+      extra.abril = await insertar(
+        'INSERT INTO periodo (anio, mes, fecha_inicio, fecha_fin) VALUES (?, 4, ?, LAST_DAY(?))',
+        [ANIO, inicio, inicio],
+      );
+      await pool.query(
+        `INSERT INTO cierre_periodo (periodo_id, ddriss_id, fecha_limite_envio, estado)
+         VALUES (?, ?, '2099-12-31', 'EN_CIERRE')`,
+        [extra.abril, ddrissId],
+      );
+      extra.reporte = await insertar(
+        'INSERT INTO reporte_produccion (establecimiento_id, periodo_id, estado, creado_por) VALUES (?, ?, ?, ?)',
+        [ids.establecimientos.CS1, ids.periodos[3], 'CERRADO', usuarioId],
+      );
+      extra.reporteVacuna = await insertar(
+        `INSERT INTO reporte_vacuna (reporte_id, vacuna_id, esquema_mongo_id, esquema_version)
+         VALUES (?, ?, '000000000000000000000000', 1)`,
+        [extra.reporte, ids.vacunas.ZVT_SPEC62],
+      );
+      const detalle = await insertar(
+        `INSERT INTO detalle_produccion
+           (reporte_vacuna_id, dosis_id, municipio_procedencia_id, clave_combinacion, cantidad, actualizado_por)
+         VALUES (?, ?, ?, ?, 50, ?)`,
+        [
+          extra.reporteVacuna, ids.dosis['ZVT_SPEC62.D1'], ids.municipios.Z801,
+          claveCombinacion({ grupo_edad: 'MENOR_1' }), usuarioId,
+        ],
+      );
+      await pool.query(
+        `INSERT INTO detalle_dimension (detalle_id, dimension_codigo, valor_codigo)
+         VALUES (?, 'grupo_edad', 'MENOR_1')`,
+        [detalle],
+      );
+    }, 60000);
+    afterAll(async () => {
+      await pool.query(
+        `DELETE FROM detalle_dimension WHERE detalle_id IN
+           (SELECT id FROM (SELECT id FROM detalle_produccion WHERE reporte_vacuna_id = ?) t)`,
+        [extra.reporteVacuna],
+      );
+      await pool.query('DELETE FROM detalle_produccion WHERE reporte_vacuna_id = ?', [extra.reporteVacuna]);
+      await pool.query('DELETE FROM reporte_vacuna WHERE id = ?', [extra.reporteVacuna]);
+      await pool.query('DELETE FROM reporte_produccion WHERE id = ?', [extra.reporte]);
+      await pool.query('DELETE FROM cierre_periodo WHERE periodo_id = ?', [extra.abril]);
+      await pool.query('DELETE FROM periodo WHERE id = ?', [extra.abril]);
+    }, 60000);
+
+    it('el mes sale con estado null y en ceros', async () => {
+      const res = await informe({ informe: 'total', desde: `${ANIO}-01`, hasta: `${ANIO}-04` }, { porMes: true });
+      expect(res.meses.map(({ mes, estado }) => [mes, estado])).toEqual([
+        [1, 'CERRADO'], [2, 'EN_CIERRE'], [3, null], [4, 'EN_CIERRE'],
+      ]);
+      const marzo = res.meses[2];
+      expect(unidades(marzo.filas)).toEqual(unidades(res.filas));
+      expect(marzo.filas.every((f) => f.cantidades.every((c) => c === 0))).toBe(true);
+      expect(marzo.total.cantidades.every((c) => c === 0)).toBe(true);
+      expect(marzo.dosisFueraDelConsolidado).toBe(0);
+    });
+  });
+});
+
 describe('GET /informes/produccion/excel (SPEC 64)', () => {
   const ruta = (consulta) => `produccion/excel?ddrissId=${ddrissId}&${consulta}`;
   const binario = (res, listo) => {
@@ -1107,6 +1253,38 @@ describe('GET /informes/produccion/excel (SPEC 64)', () => {
       }
       const total = [...delArchivo].find(([llave]) => llave.startsWith('Total|'))[1];
       expect(total, consulta).toEqual(pantalla.body.total.cantidades);
+    }
+  });
+
+  it('trae una hoja por mes antes de la acumulada, con las cantidades de ese mes (SPEC 78)', async () => {
+    const nacional = { rol: 'AUTORIDAD', ddrissId: null };
+    const casos = [
+      [`informe=total&desde=${ANIO}-01&hasta=${ANIO}-02&nivel=establecimiento&incluirAprobados=true`,
+        ['Información', `Enero ${ANIO}`, `Febrero ${ANIO}`, 'Producción total']],
+      [`informe=residencia&desde=${ANIO - 1}-12&hasta=${ANIO}-02&nivel=distrito`,
+        ['Información', `Diciembre ${ANIO - 1}`, `Enero ${ANIO}`, `Febrero ${ANIO}`, 'Residencia']],
+      [`informe=total&desde=${ANIO}-01&hasta=${ANIO}-02&vacuna=ZVT_SPEC63&agrupacion=sexo&incluirAprobados=true`,
+        ['Información', `Enero ${ANIO}`, `Febrero ${ANIO}`, 'Producción total']],
+    ];
+    for (const [consulta, hojas] of casos) {
+      const query = Object.fromEntries(new URLSearchParams(`ddrissId=${ddrissId}&${consulta}`));
+      const [archivo, informe] = await Promise.all([
+        descargar(consulta), informePorFila(nacional, query, { porMes: true }),
+      ]);
+      expect(archivo.status, consulta).toBe(200);
+      const libro = (await hojaDe(archivo)).workbook;
+      expect(libro.worksheets.map((h) => h.name), consulta).toEqual(hojas);
+
+      informe.meses.forEach((mes, i) => {
+        const delMes = { ...informe, filas: mes.filas };
+        const delArchivo = cantidadesDelArchivo(libro.worksheets[i + 1], delMes);
+        for (const fila of mes.filas) {
+          expect(delArchivo.get(llaveDeFila(delMes, fila)), `${consulta} ${hojas[i + 1]}: ${fila.nombre}`)
+            .toEqual(fila.cantidades);
+        }
+        const total = [...delArchivo].find(([llave]) => llave.startsWith('Total|'))[1];
+        expect(total, `${consulta} ${hojas[i + 1]}`).toEqual(mes.total.cantidades);
+      });
     }
   });
 
@@ -1253,7 +1431,11 @@ describe('GET /informes/produccion/excel (SPEC 64)', () => {
         .buffer(true)
         .parse(binario);
       expect(res.status, rol).toBe(200);
-      expect((await hojaDe(res)).workbook.getWorksheet('Información').getCell('A7').value).toBe('Departamento');
+      const informacion = (await hojaDe(res)).workbook.getWorksheet('Información');
+      expect(informacion.getCell('A7').value).toBe('Departamento');
+      // SPEC 78: el logo de su DDRISS, si tiene.
+      const [[{ codigo }]] = await pool.query('SELECT codigo FROM ddriss WHERE id = ?', [cuentas[rol].ddrissId]);
+      expect(informacion.getImages(), `${rol} ${codigo}`).toHaveLength(logoDeLaDdriss(codigo) ? 1 : 0);
     }
   });
 });
@@ -1315,7 +1497,7 @@ describe('GET /informes/produccion/pdf (SPEC 65)', () => {
       expect(unidas, consulta).toEqual([...informe.filas, informe.total]
         .map((f) => f.cantidades.map((n) => formato.format(n))));
       expect(tramos.flatMap((t) => t.table.body[2].slice(fijas).map(texto)), consulta)
-        .toEqual(informe.columnas.map((c) => c.dosis.codigo));
+        .toEqual(informe.columnas.map((c) => etiquetaDeDosis(c.dosis.codigo)));
     }
   });
 

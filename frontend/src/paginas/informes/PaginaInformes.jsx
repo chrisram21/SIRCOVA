@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { FileSpreadsheet, FileText, TriangleAlert } from 'lucide-react'
+import { FileSpreadsheet, FileText, LoaderCircle, TriangleAlert } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -338,7 +338,9 @@ export default function PaginaInformes() {
                         onClick={() => exportar(formato)}
                         disabled={exportando !== null}
                       >
-                        <Icono />
+                        {exportando === formato
+                          ? <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+                          : <Icono />}
                         {exportando === formato ? 'Exportando…' : texto}
                       </Button>
                     ))}

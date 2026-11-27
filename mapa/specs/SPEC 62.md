@@ -40,3 +40,4 @@ tags: ["spec", "modulo/informes", "origen/historia"]
 - [[SPEC 73]] — Ajuste HU-45 Elegir varias vacunas en Informes · *Implementado*
 - [[SPEC 75]] — Ajustes de diseño: marcas de dimensiones, tabla de Usuarios, filtros sin aplicar y formularios centrados · *Implementado*
 - [[SPEC 76]] — Ajuste HU-45 El Administrador consulta Informes · *Implementado*
+- [[SPEC 78]] — Ajuste HU-47 Hojas por mes en el Excel de informes · *Implementado*

@@ -30,4 +30,4 @@ tags: ["spec", "modulo/informes", "origen/ajuste"]
 
 ## Lo usan
 
-Ningún spec depende de este todavía.
+- [[SPEC 78]] — Ajuste HU-47 Hojas por mes en el Excel de informes · *Implementado*

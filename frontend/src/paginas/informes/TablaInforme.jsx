@@ -128,7 +128,7 @@ export default function TablaInforme({ informe, acumulado = false }) {
             </TableRow>
             <TableRow>
               {dosis.map((d) => (
-                <TableHead key={d.clave} className="border-l text-right">{d.codigo}</TableHead>
+                <TableHead key={d.clave} className="border-l text-right">{d.etiqueta}</TableHead>
               ))}
             </TableRow>
             {acumulado && (

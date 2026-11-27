@@ -26,17 +26,17 @@ async function libroEnBytes(libro) {
   return Buffer.from(await libro.xlsx.writeBuffer());
 }
 
-// El nombre de la DDRISS y el de quien exporta.
+// El nombre y el código de la DDRISS (el código elige el logo, SPEC 78) y el nombre de quien exporta.
 async function nombresDelEncabezado(usuario, ddrissId) {
   const [[[ddriss]], [[empleado]]] = await Promise.all([
-    pool.query('SELECT nombre FROM ddriss WHERE id = ?', [ddrissId]),
+    pool.query('SELECT codigo, nombre FROM ddriss WHERE id = ?', [ddrissId]),
     pool.query(
       `SELECT CONCAT(e.nombres, ' ', e.apellidos) AS nombre FROM usuario u JOIN empleado e ON e.id = u.empleado_id
         WHERE u.id = ?`,
       [usuario.id],
     ),
   ]);
-  return { ddriss: ddriss.nombre, generadoPor: empleado.nombre };
+  return { ddriss: ddriss.nombre, ddrissCodigo: ddriss.codigo, generadoPor: empleado.nombre };
 }
 
 async function leerDistrito(distritoId, ddrissId) {

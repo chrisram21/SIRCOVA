@@ -1,3 +1,4 @@
+import { logoDeLaDdriss } from './logos.js';
 import { TINTA } from './textosInforme.js';
 
 // El aspecto común de los Excel del sistema (informes, indicadores y bitácora), tomado de la plantilla
@@ -47,30 +48,63 @@ function paraImprimir(hoja, extra = {}) {
 
 const valorDeLinea = (lineas, etiqueta) => lineas.find(([e]) => e === etiqueta)?.[1] ?? null;
 
+// El logo (SPEC 78) ocupa las filas 1 a 3 de la última columna, pegado a su borde derecho, al alto de los tres
+// renglones que había antes (26 + 15 + 15 pt). Excel mide una columna en
+// caracteres (unos 7 px cada uno, más 5 de margen); el desplazamiento dentro de la celda va en EMU (9525 por px),
+// porque ExcelJS convierte mal la parte fraccionaria de `col`.
+const ALTO_DEL_LOGO_PX = 66;
+const EMU_POR_PX = 9525;
+function ponerLogo(libro, hoja, { bytes, ancho, alto }) {
+  const anchoPx = Math.round((ALTO_DEL_LOGO_PX * ancho) / alto);
+  const pxDeColumna = (c) => ANCHOS_INFORMACION[c] * 7 + 5;
+  // La columna (desde 0) donde empieza el logo y cuánto de ella le queda a la derecha.
+  let columna = DERECHA - 1;
+  let falta = anchoPx;
+  while (columna > 0 && falta > pxDeColumna(columna)) {
+    falta -= pxDeColumna(columna);
+    columna -= 1;
+  }
+  const id = libro.addImage({ buffer: bytes, extension: 'png' });
+  hoja.addImage(id, {
+    tl: {
+      nativeCol: columna, nativeColOff: (pxDeColumna(columna) - falta) * EMU_POR_PX,
+      nativeRow: 0, nativeRowOff: 3 * EMU_POR_PX,
+    },
+    ext: { width: anchoPx, height: ALTO_DEL_LOGO_PX },
+    editAs: 'oneCell',
+  });
+}
+
 /**
  * Crea la hoja «Información», la primera del libro. opciones: { marca ('Informes de vacunación'), rotulo (PRODUCCIÓN
  * DE VACUNACIÓN…), titulo, subtitulo, preliminar, lineas ([[etiqueta, valor]], las del encabezado del libro), periodo
- * (la etiqueta de la línea que va como periodo arriba a la derecha), hojaDeDatos (el nombre de la otra hoja, o null si
- * no hay tabla) }. La línea «DDRISS» y la del periodo van arriba; las demás, en el recuadro de filtros desde la fila 9
- * («Aviso» en ámbar), y al final un enlace a la hoja de datos.
+ * (la etiqueta de la línea que va como periodo arriba a la derecha), hojasDeDatos (las otras hojas en el orden del
+ * libro, cada una como nombre o { nombre, texto }; [] si no hay tabla) }. La línea «DDRISS» y la del periodo van
+ * arriba; las demás, en el recuadro de filtros desde la fila 9 («Aviso» en ámbar), y al final los enlaces: con una
+ * hoja, «Ver los datos en la hoja «…»»; con varias, «Hojas de datos:» y un enlace por hoja (SPEC 78). ddrissCodigo:
+ * con logo (logos.js), el logo va arriba a la derecha en lugar del Ministerio, con la Dirección y la DDRISS a su lado.
  */
 export function hojaDeInformacion(libro, {
   marca = 'Informes de vacunación', rotulo, titulo, subtitulo = null, preliminar = false, lineas, periodo,
-  hojaDeDatos = null,
+  hojasDeDatos = [], ddrissCodigo = null,
 }) {
   const hoja = libro.addWorksheet(HOJA_DE_INFORMACION);
   ANCHOS_INFORMACION.forEach((ancho, i) => { hoja.getColumn(i + 1).width = ancho; });
   const ddriss = String(valorDeLinea(lineas, 'DDRISS') ?? '').replace(/^DDRISS\s+/i, '');
   const aDerecha = { horizontal: 'right' };
   const color = (hex) => ({ argb: argb(hex) });
+  const logo = logoDeLaDdriss(ddrissCodigo);
 
   escribir(hoja, 1, 1, 'SIRCOVA', { size: 20, bold: true, color: color(TINTA.marino) });
   escribir(hoja, 2, 1, marca, { size: 10, color: color(TINTA.gris) });
   for (const n of [1, 2]) hoja.getCell(n, 1).border = { left: borde(TINTA.acento, 'thick') };
-  escribir(hoja, 1, DERECHA, 'Ministerio de Salud Pública y Asistencia Social', { size: 11, bold: true }, aDerecha);
-  escribir(hoja, 2, DERECHA, 'Dirección Departamental de Redes Integradas de Servicios de Salud',
+  // Con logo, la Dirección y la DDRISS van en la columna anterior, a la izquierda del logo, que reemplaza al Ministerio.
+  const columnaDeTexto = logo ? DERECHA - 1 : DERECHA;
+  if (logo) ponerLogo(libro, hoja, logo);
+  else escribir(hoja, 1, DERECHA, 'Ministerio de Salud Pública y Asistencia Social', { size: 11, bold: true }, aDerecha);
+  escribir(hoja, 2, columnaDeTexto, 'Dirección Departamental de Redes Integradas de Servicios de Salud',
     { size: 9, color: color(TINTA.gris) }, aDerecha);
-  escribir(hoja, 3, DERECHA, ddriss, { size: 11, bold: true }, aDerecha);
+  escribir(hoja, 3, columnaDeTexto, ddriss, { size: 11, bold: true }, aDerecha);
   hoja.getRow(1).height = 26;
   for (let c = 1; c <= DERECHA; c += 1) {
     hoja.getCell(3, c).border = { ...hoja.getCell(3, c).border, bottom: borde(TINTA.marino, 'medium') };
@@ -108,10 +142,17 @@ export function hojaDeInformacion(libro, {
     hoja.getRow(n).height = esAviso ? 15 * Math.max(1, Math.ceil(String(texto).length / ancho)) : 17;
   }
 
-  if (hojaDeDatos) {
-    const enlace = hoja.getCell(n + 2, 1);
-    enlace.value = { text: `Ver los datos en la hoja «${hojaDeDatos}»`, hyperlink: `#'${hojaDeDatos}'!A1` };
+  const enlaces = hojasDeDatos.map((h) => (typeof h === 'string' ? { nombre: h, texto: h } : h));
+  const enlazar = (fila, texto, nombre) => {
+    const enlace = hoja.getCell(fila, 1);
+    enlace.value = { text: texto, hyperlink: `#'${nombre}'!A1` };
     enlace.font = letra({ bold: true, underline: true, color: color(TINTA.acentoTexto) });
+  };
+  if (enlaces.length === 1) {
+    enlazar(n + 2, `Ver los datos en la hoja «${enlaces[0].nombre}»`, enlaces[0].nombre);
+  } else if (enlaces.length > 1) {
+    escribir(hoja, n + 2, 1, 'Hojas de datos:', { size: 9, bold: true, color: color(TINTA.gris) });
+    enlaces.forEach(({ nombre, texto }, i) => enlazar(n + 3 + i, texto, nombre));
   }
 
   hoja.views = [{ state: 'normal', showGridLines: false }];

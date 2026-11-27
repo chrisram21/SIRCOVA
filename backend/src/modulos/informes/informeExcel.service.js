@@ -1,7 +1,8 @@
 import ExcelJS from 'exceljs';
 import {
-  CIFRAS, COLORES, NOMBRES_INFORME, SIN_VALOR, lineasDelAcumulado, lineasDelEncabezado, llevaMunicipio, nombreDeFila,
-  textoFueraDelConsolidado, textoMeta, tituloDeLaFila, tituloDelInforme, tonoDeCifra, tramosDelEncabezado,
+  CIFRAS, COLORES, NOMBRES_INFORME, SIN_VALOR, etiquetaDeDosis, lineasDelAcumulado, lineasDelEncabezado,
+  llevaMunicipio, nombreDeFila, nombreDeHojaDelMes, notaDelMes, textoFueraDelConsolidado, textoMeta, tituloDeLaFila,
+  tituloDelInforme, tonoDeCifra, tramosDelEncabezado,
 } from './textosInforme.js';
 import { argb, escribirNota, hojaDeInformacion, pintarTabla, prepararHojaDeDatos } from './plantillaExcel.js';
 
@@ -42,7 +43,7 @@ function escribirEncabezadoDeTabla(hoja, informe, delanteras, extra = []) {
   vacunas.forEach((v) => { primera[fijas + v.desde] = v.nombre; });
   const segunda = [...Array(fijas).fill(null), ...vacio];
   secciones.forEach((s) => { segunda[fijas + s.desde] = s.titulo || null; });
-  const tercera = [...Array(fijas).fill(null), ...informe.columnas.map((c) => c.dosis.codigo)];
+  const tercera = [...Array(fijas).fill(null), ...informe.columnas.map((c) => etiquetaDeDosis(c.dosis.codigo))];
   const filas = [primera, segunda, tercera, ...extra.map((f) => [...Array(fijas).fill(null), ...f])];
   for (const valores of filas) {
     const fila = hoja.addRow(valores);
@@ -61,30 +62,13 @@ function escribirEncabezadoDeTabla(hoja, informe, delanteras, extra = []) {
   return { filasEncabezado: filas.length, inicios: iniciosDeVacuna(vacunas, fijas), columna };
 }
 
-/**
- * informe: la respuesta de informePorFila. datos: los de lineasDelEncabezado (textosInforme.js).
- */
-export function libroDelInforme(informe, datos) {
-  const libro = nuevoLibro(datos.generadoEn);
+// Una hoja con la tabla del informe: las columnas de informe y las filas, el total y las dosis fuera del consolidado
+// de tabla (el acumulado o un mes de informe.meses). notas: los textos debajo de la tabla, en orden.
+function hojaDeTabla(libro, nombre, informe, tabla, { titulo, generado, notas }) {
   const conMunicipio = llevaMunicipio(informe.nivel);
   const fijas = conMunicipio ? 2 : 1;
   const columnas = fijas + informe.columnas.length;
-  const lineas = lineasDelEncabezado(informe, datos);
-  const nombreHoja = HOJAS[informe.informe];
-  const hayTabla = informe.columnas.length > 0;
-
-  hojaDeInformacion(libro, {
-    rotulo: 'PRODUCCIÓN DE VACUNACIÓN',
-    titulo: NOMBRES_INFORME[informe.informe],
-    subtitulo: subtituloDe(informe),
-    preliminar: informe.preliminar,
-    lineas,
-    periodo: 'Periodo',
-    hojaDeDatos: hayTabla ? nombreHoja : null,
-  });
-  if (!hayTabla) return libro;
-
-  const hoja = libro.addWorksheet(nombreHoja);
+  const hoja = libro.addWorksheet(nombre);
   hoja.getColumn(1).width = ANCHO_NOMBRE;
   if (conMunicipio) hoja.getColumn(2).width = ANCHO_MUNICIPIO;
   for (let c = fijas + 1; c <= columnas; c += 1) hoja.getColumn(c).width = ANCHO_CANTIDAD;
@@ -96,21 +80,58 @@ export function libroDelInforme(informe, datos) {
     cantidades.forEach((_, i) => { fila.getCell(columna(i)).numFmt = FORMATO_CANTIDAD; });
     return fila;
   };
-  for (const fila of informe.filas) {
+  for (const fila of tabla.filas) {
     agregarCantidades([nombreDeFila(fila), ...(conMunicipio ? [fila.municipio?.nombre ?? null] : [])], fila.cantidades);
   }
-  const total = agregarCantidades(['Total', ...(conMunicipio ? [null] : [])], informe.total.cantidades);
+  const total = agregarCantidades(['Total', ...(conMunicipio ? [null] : [])], tabla.total.cantidades);
   total.font = { bold: true };
 
   pintarTabla(hoja, {
     desde: 1, filasEncabezado, hasta: total.number, columnas, fijas, inicios,
     totales: new Set([total.number]), cerosEnGris: true,
   });
-  const fuera = informe.dosisFueraDelConsolidado;
-  if (fuera > 0) escribirNota(hoja, textoFueraDelConsolidado(fuera));
-  prepararHojaDeDatos(hoja, {
-    xSplit: fijas, filasEncabezado, titulo: tituloDelInforme(informe), generado: valorDeLinea(lineas, 'Generado'),
+  const fuera = tabla.dosisFueraDelConsolidado;
+  for (const nota of [...notas, ...(fuera > 0 ? [textoFueraDelConsolidado(fuera)] : [])]) escribirNota(hoja, nota);
+  prepararHojaDeDatos(hoja, { xSplit: fijas, filasEncabezado, titulo, generado });
+  return hoja;
+}
+
+/**
+ * informe: la respuesta de informePorFila; con porMes, una hoja por cada elemento de informe.meses antes de la
+ * acumulada (SPEC 78). datos: los de lineasDelEncabezado (textosInforme.js).
+ */
+export function libroDelInforme(informe, datos) {
+  const libro = nuevoLibro(datos.generadoEn);
+  const lineas = lineasDelEncabezado(informe, datos);
+  const nombreHoja = HOJAS[informe.informe];
+  const hayTabla = informe.columnas.length > 0;
+  const meses = hayTabla ? informe.meses ?? [] : [];
+
+  hojaDeInformacion(libro, {
+    rotulo: 'PRODUCCIÓN DE VACUNACIÓN',
+    titulo: NOMBRES_INFORME[informe.informe],
+    subtitulo: subtituloDe(informe),
+    preliminar: informe.preliminar,
+    lineas,
+    periodo: 'Periodo',
+    ddrissCodigo: datos.ddrissCodigo,
+    hojasDeDatos: !hayTabla ? [] : [
+      ...meses.map(nombreDeHojaDelMes),
+      meses.length > 0 ? { nombre: nombreHoja, texto: `${nombreHoja} (acumulado del rango)` } : nombreHoja,
+    ],
   });
+  if (!hayTabla) return libro;
+
+  const generado = valorDeLinea(lineas, 'Generado');
+  const titulo = tituloDelInforme(informe);
+  for (const mes of meses) {
+    const nombre = nombreDeHojaDelMes(mes);
+    hojaDeTabla(libro, nombre, informe, mes, {
+      titulo: `${titulo} · ${nombre}`, generado,
+      notas: [notaDelMes(mes, informe.incluirAprobados)].filter(Boolean),
+    });
+  }
+  hojaDeTabla(libro, nombreHoja, informe, informe, { titulo, generado, notas: [] });
   return libro;
 }
 
@@ -144,7 +165,8 @@ export function libroDelAcumulado(informe, datos) {
     preliminar: informe.preliminar,
     lineas,
     periodo: 'Periodo',
-    hojaDeDatos: hayTabla ? nombreHoja : null,
+    hojasDeDatos: hayTabla ? [nombreHoja] : [],
+    ddrissCodigo: datos.ddrissCodigo,
   });
   if (!hayTabla) return libro;
 
