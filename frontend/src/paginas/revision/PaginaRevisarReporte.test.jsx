@@ -234,6 +234,50 @@ test('carga el detalle, las vacunas en solo consulta, la validación guardada y 
   expect(anteriores.getAllByRole('listitem')).toHaveLength(2)
 })
 
+describe('tarjeta B en solo consulta', () => {
+  test('sin dosis de otros municipios lo dice y no dibuja la tabla', async () => {
+    await montar()
+
+    expect(screen.getByText('Sin dosis atribuidas a otros municipios.')).toBeTruthy()
+    expect(screen.queryByRole('table', { name: 'Otros municipios' })).toBeNull()
+  })
+
+  test('muestra solo los municipios con datos y la fila «Total»', async () => {
+    const [hexa, vph] = FORMULARIO.vacunas
+    const deOtro = (municipioProcedenciaId, cantidad) => ({
+      dosisCodigo: 'D1',
+      municipioProcedenciaId,
+      dimensiones: { grupo_edad: 'MENOR_1' },
+      claveCombinacion: 'grupo_edad=MENOR_1',
+      cantidad,
+    })
+    obtenerFormulario.mockResolvedValue({
+      ...FORMULARIO,
+      municipios: [
+        { id: 2, codigoIne: '1202', nombre: 'San Pedro Sacatepéquez' },
+        { id: 13, codigoIne: '1213', nombre: 'Sibinal' },
+        ...FORMULARIO.municipios,
+      ],
+      vacunas: [
+        {
+          ...hexa,
+          esquema: { ...hexa.esquema, procedencia: { modo: 'MUNICIPIO_DETALLADO', permiteNoEspecificado: true } },
+          procedenciasPermitidas: [2, 13, 31],
+          celdas: [...hexa.celdas, deOtro(13, 4), deOtro(31, 0)],
+        },
+        vph,
+      ],
+    })
+    await montar()
+
+    const tabla = screen.getByRole('table', { name: 'Otros municipios' })
+    const nombres = [...tabla.querySelectorAll('tbody tr, tfoot tr')].map((tr) => tr.querySelector('td').textContent)
+    expect(nombres).toEqual(['Sibinal', 'Migrantes / fuera de San Marcos', 'Total'])
+    expect(screen.getByLabelText('Sibinal · < 1 año · 1.ª dosis').disabled).toBe(true)
+    expect(screen.getByLabelText('Total de Otros municipios').textContent).toBe('4')
+  })
+})
+
 test('una observación atendida dice cuándo se atendió; una pendiente no (SPEC 37)', async () => {
   const [pendiente, atendida] = OBSERVACIONES
   listarObservaciones.mockResolvedValue([pendiente, { ...atendida, atendida: true, atendidaEn: '2026-10-22T15:30:00.000Z' }])

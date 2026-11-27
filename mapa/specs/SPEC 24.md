@@ -36,3 +36,4 @@ tags: ["spec", "modulo/produccion", "origen/historia"]
 - [[SPEC 33]] — Validación automática del reporte en borrador · *Implementado*
 - [[SPEC 36]] — Revisar un reporte y solicitar corrección · *Implementado*
 - [[SPEC 40]] — Solicitar una rectificación · *Implementado*
+- [[SPEC 80]] — Corrección HU-21 Tabla de municipios en la tarjeta B de la captura · *Implementado*

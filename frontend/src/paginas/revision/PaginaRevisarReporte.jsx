@@ -25,7 +25,7 @@ import HistorialEstadosReporte from '@/componentes/HistorialEstadosReporte.jsx'
 import InsigniaEstadoReporte, { ESTADOS_REPORTE } from '@/componentes/InsigniaEstadoReporte.jsx'
 import { useSesion } from '@/componentes/ProveedorSesion.jsx'
 import FormularioCaptura, { CamposAdicionales, LetraTarjeta } from '@/componentes/formulario/FormularioCaptura.jsx'
-import TarjetaProcedencias, { cantidadesDeOtras, filasDeCeldas } from '@/componentes/formulario/TarjetaProcedencias.jsx'
+import TarjetaProcedencias, { cantidadesDeOtras } from '@/componentes/formulario/TarjetaProcedencias.jsx'
 import { nombreDelMes } from '@/lib/fechas.js'
 import { cantidadesDe, formularioDe } from '@/paginas/registro/CapturaReporte.jsx'
 import PanelValidacion from '@/paginas/registro/PanelValidacion.jsx'
@@ -108,13 +108,12 @@ function VacunaEnRevision({ vacuna, captura, formulario }) {
       </Card>
       <TarjetaProcedencias
         formulario={armado}
-        filas={filasDeCeldas(armado, captura.celdas, municipioId, formulario.municipios)}
+        celdas={captura.celdas}
         cantidades={cantidadesDeOtras(armado, captura.celdas, municipioId)}
         municipios={formulario.municipios}
         permitidas={captura.procedenciasPermitidas}
         modo={esquema.procedencia.modo}
-        alAgregar={nada}
-        alQuitar={nada}
+        municipioPropioId={municipioId}
         alCambiar={nada}
         soloLectura
       />
