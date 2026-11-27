@@ -4,7 +4,7 @@ import ExcelJS from 'exceljs';
 import app from '../src/app.js';
 import pool from '../src/config/mysql.js';
 import { exportarBitacora } from '../src/modulos/auditoria/bitacora.service.js';
-import { COLUMNAS } from '../src/modulos/auditoria/bitacoraExcel.service.js';
+import { COLUMNAS, libroDeBitacora } from '../src/modulos/auditoria/bitacoraExcel.service.js';
 import { diaEnGuatemala } from '../src/modulos/auditoria/textosBitacora.js';
 import { tokenDePrueba } from './sesionDePrueba.js';
 
@@ -381,6 +381,7 @@ describe('GET /auditoria/bitacora/excel', () => {
     expect(hoja.workbook.worksheets.map((h) => h.name)).toEqual(['Información', 'Bitácora']);
     expect(info(hoja).getCell('A1').value).toBe('SIRCOVA');
     expect(info(hoja).getCell('A6').value).toBe('Bitácora del sistema');
+    expect(info(hoja).getImages()).toHaveLength(0);
     expect(hoja.autoFilter).toBeTruthy();
     expect(hoja.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
     expect(encabezado).toMatchObject({
@@ -496,5 +497,27 @@ describe('GET /auditoria/bitacora: errores', () => {
 
   it('401 sin sesión', async () => {
     expect((await request(app).get('/api/v1/auditoria/bitacora')).status).toBe(401);
+  });
+});
+
+// SPEC 78: el logo de la DDRISS en «Información». La DDRISS de prueba ZVT_HU54A no tiene logo: el Excel del endpoint
+// conserva los tres renglones; con DDRISS_SM, el libro lleva la imagen.
+describe('logo de la DDRISS en el Excel de la bitácora (SPEC 78)', () => {
+  const datosDe = (ddrissCodigo) => ({
+    ddriss: 'DDRISS San Marcos', ddrissCodigo, generadoPor: 'Ana López', generadoEn: new Date(), filtros: [],
+  });
+  async function informacion(libro) {
+    const otro = new ExcelJS.Workbook();
+    await otro.xlsx.load(await libro.xlsx.writeBuffer());
+    return otro.getWorksheet('Información');
+  }
+
+  it('con DDRISS_SM lleva la imagen; sin logo, el nombre del Ministerio', async () => {
+    const conLogo = await informacion(libroDeBitacora([], datosDe('DDRISS_SM')));
+    expect(conLogo.getImages()).toHaveLength(1);
+    expect(conLogo.getCell(1, 5).value).toBeNull();
+    const sinLogo = await informacion(libroDeBitacora([], datosDe(null)));
+    expect(sinLogo.getImages()).toHaveLength(0);
+    expect(sinLogo.getCell(1, 5).value).toBe('Ministerio de Salud Pública y Asistencia Social');
   });
 });

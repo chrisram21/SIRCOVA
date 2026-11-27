@@ -5902,17 +5902,25 @@ paths:
         permiso, el mismo ámbito y los mismos errores, como un libro .xlsx armado con ExcelJS. El libro sale de la
         misma respuesta que la pantalla, así que sus cantidades son las mismas.
 
-        Una sola hoja, con el nombre corto del informe:
-        - **Encabezado:** el título («{informe} · {nivel}», más « · por {dimensión}» con agrupación), «PRELIMINAR» si
-          `preliminar`, la DDRISS, el periodo, las vacunas («Vacuna: Todas las vacunas», «Vacuna: {nombre}» o
-          «Vacunas: {nombres}», SPEC 73), el territorio (red, municipios o todos), la agrupación, si incluye aprobados
-          sin cerrar, la fecha y hora de generación (Guatemala) con el nombre de quien lo generó, y los mismos avisos
-          que la pantalla (meses sin cerrar, vacunas mostradas al agrupar con todas o con dos o más elegidas, ninguna
-          vacuna).
-        - **Tabla:** tres filas de encabezado combinadas (vacuna, sección o valor de la dimensión, dosis), la columna
-          del nombre (y «Municipio» por establecimiento y por distrito) fijas, las cantidades como números con formato
-          `#,##0`, «(no suma en el consolidado)» en las filas `fueraDelConsolidado`, la fila «Total» y, si hay
-          `dosisFueraDelConsolidado`, la línea que lo explica. Con `columnas` vacío, solo el encabezado.
+        Las hojas del libro, en este orden (SPEC 78):
+        1. **«Información»:** el título («{informe} · {nivel}», más « · por {dimensión}» con agrupación),
+           «PRELIMINAR» si `preliminar`, la DDRISS, el periodo, las vacunas («Vacuna: Todas las vacunas», «Vacuna:
+           {nombre}» o «Vacunas: {nombres}», SPEC 73), el territorio (red, municipios o todos), la agrupación, si
+           incluye aprobados sin cerrar, la fecha y hora de generación (Guatemala) con el nombre de quien lo generó,
+           los mismos avisos que la pantalla (meses sin cerrar, vacunas mostradas al agrupar con todas o con dos o más
+           elegidas, ninguna vacuna) y un enlace a cada hoja de datos.
+        2. **Una hoja por cada mes de `desde` a `hasta`** («Enero 2026», «Febrero 2026»…), también con un solo
+           mes: la tabla de la hoja acumulada, con las mismas columnas y filas, y solo las cantidades de ese mes. Un
+           mes sin cerrar o sin `cierre_periodo` sale con su nota debajo de la tabla (y en ceros si no suma).
+        3. **La hoja acumulada**, con el nombre corto del informe: la tabla del rango completo, que es la suma de las
+           hojas mensuales.
+
+        Cada tabla lleva tres filas de encabezado combinadas (vacuna, sección o valor de la dimensión, dosis), la
+        columna del nombre (y «Municipio» por establecimiento y por distrito) fijas, las cantidades como números con
+        formato `#,##0`, «(no suma en el consolidado)» en las filas `fueraDelConsolidado`, la fila «Total» y, si hay
+        `dosisFueraDelConsolidado`, la línea que lo explica. Con `columnas` vacío, el libro solo trae
+        «Información». La fila de dosis muestra `D1` a `D10` como «1ra», «2da»… «10ma», y los refuerzos, `UNICA` y
+        los demás códigos como vienen (SPEC 78; igual en el PDF, el acumulado anual y la pantalla).
 
         Cada descarga correcta deja una fila `EXPORTAR` del módulo `REPORTES` en la bitácora (`entidad` `informe`,
         `entidadId` el código del informe), con los parámetros y `formato: xlsx` en `valoresNuevos`, sin cantidades.
@@ -5966,6 +5974,7 @@ paths:
           «TOTAL», y repite sus tres filas de encabezado (vacuna, sección o valor de la dimensión, dosis) si sigue en
           otra página. Las filas `fueraDelConsolidado` llevan «(no suma en el consolidado)» y, si hay
           `dosisFueraDelConsolidado`, una línea lo explica al final. Con `columnas` vacío, solo el encabezado.
+          La fila de dosis usa las etiquetas de `GET /informes/produccion/excel` («1ra», «2da»…, SPEC 78).
 
         Cada descarga correcta deja una fila `EXPORTAR` del módulo `REPORTES` en la bitácora, como el Excel, con
         `formato: pdf` en `valoresNuevos`. Un error no la deja.
@@ -6062,7 +6071,8 @@ paths:
         - **Encabezado:** como el de `GET /informes/produccion/excel` («Acumulado anual · {nivel}», «PRELIMINAR» si
           `preliminar`, DDRISS, «Enero a diciembre de {anio}», vacunas, territorio, si incluye aprobados sin cerrar,
           fecha y hora de generación con quien lo generó, y el aviso de meses sin cerrar).
-        - **Tabla:** las tres filas de encabezado combinadas (vacuna, sección, dosis) más una cuarta con la meta de
+        - **Tabla:** las tres filas de encabezado combinadas (vacuna, sección, dosis con las etiquetas «1ra», «2da»…
+          de `GET /informes/produccion/excel`, SPEC 78) más una cuarta con la meta de
           cada columna («Meta 95 %»); las columnas del nombre (combinada en sus cuatro filas) y «Cifra» (Dosis,
           Población, Cobertura %, Brecha) fijas; dosis, población y brecha con formato `#,##0`, cobertura con
           `0.0`, y las celdas `null` como «—»; las cuatro filas del «Total» al final.
@@ -6104,7 +6114,8 @@ paths:
         El mismo informe de `GET /informes/acumulado-anual`, con los mismos parámetros, permiso, ámbito y errores,
         como un PDF de pdfmake con la hoja, la fuente, el encabezado, la marca de agua «PRELIMINAR», el pie y los
         bloques de vacunas de `GET /informes/produccion/pdf`. Cada bloque lleva sus cuatro filas de encabezado
-        (vacuna, sección, dosis y meta) y las columnas del nombre y «Cifra», con las cuatro filas por unidad y las
+        (vacuna, sección, dosis con las etiquetas «1ra», «2da»… y meta) y las columnas del nombre y «Cifra», con las
+        cuatro filas por unidad y las
         del «TOTAL»; las celdas `null` salen «—». Una unidad no se parte entre páginas: si no caben todas, el bloque
         sigue en la página siguiente.
 

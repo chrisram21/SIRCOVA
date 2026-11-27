@@ -43,7 +43,7 @@ test('el encabezado tiene vacuna, sección y dosis, cada una sobre sus columnas'
   expect(celdasDe(secciones, 'th').map((th) => [th.textContent, th.getAttribute('colspan')])).toEqual([
     ['< 1 año', '2'], ['De 1 a < 6 años', '1'], ['', '1'],
   ])
-  expect(celdasDe(dosis, 'th').map((th) => th.textContent)).toEqual(['D1', 'D2', 'D1', 'UNICA'])
+  expect(celdasDe(dosis, 'th').map((th) => th.textContent)).toEqual(['1ra', '2da', '1ra', 'UNICA'])
 })
 
 test('al agrupar, la segunda fila del encabezado es el valor y abarca sus dosis (SPEC 63)', () => {
@@ -71,7 +71,7 @@ test('al agrupar, la segunda fila del encabezado es el valor y abarca sus dosis 
   expect(celdasDe(valores, 'th').map((th) => [th.textContent, th.getAttribute('colspan')])).toEqual([
     ['Masculino', '2'], ['Femenino', '1'],
   ])
-  expect(celdasDe(dosis, 'th').map((th) => th.textContent)).toEqual(['D1', 'D2', 'D1'])
+  expect(celdasDe(dosis, 'th').map((th) => th.textContent)).toEqual(['1ra', '2da', '1ra'])
   expect(celdasDe(filaDe('San Marcos'), 'td').map((td) => td.textContent)).toEqual(['San Marcos', '4', '0', '14'])
 })
 
@@ -164,7 +164,7 @@ describe('acumulado anual (SPEC 66)', () => {
     expect(celdasDe(vacunas, 'th').map((th) => [th.textContent, th.getAttribute('rowspan')])).toEqual([
       ['Municipio de residencia', '4'], ['Cifra', '4'], ['Hexavalente', null], ['BCG', null],
     ])
-    expect(celdasDe(dosis, 'th').map((th) => th.textContent)).toEqual(['D3', 'UNICA'])
+    expect(celdasDe(dosis, 'th').map((th) => th.textContent)).toEqual(['3ra', 'UNICA'])
     expect(celdasDe(metas, 'th').map((th) => th.textContent)).toEqual(['Meta 95 %', 'Meta 90.5 %'])
   })
 

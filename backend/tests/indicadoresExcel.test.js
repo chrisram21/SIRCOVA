@@ -1002,3 +1002,23 @@ describe('GET /indicadores/resultados/excel y /indicadores/produccion/excel (SPE
     expect(res.body.error).toEqual({ codigo: 'ENTRADA_INVALIDA', mensaje: 'El distrito y la red no se combinan.' });
   });
 });
+
+// SPEC 78: «Información» lleva el logo de la DDRISS si tiene (logos/DDRISS_SM.png); si no, los tres renglones.
+describe('logo de la DDRISS en «Información» de Indicadores (SPEC 78)', () => {
+  const libro = (datos) => libroDeIndicador({
+    vista: 'cobertura', corrida: CORRIDA, resultados: [resultado('COB_HEXA3', null)],
+    indicador: indicadorDe('COB_HEXA3', 'COBERTURA', 'Cobertura HEXA 3'),
+  }, datos);
+
+  it('con DDRISS_SM lleva una imagen y no el nombre del Ministerio; sin código, el texto de siempre', async () => {
+    const conLogo = info(await releer(libro({ ...DATOS, ddrissCodigo: 'DDRISS_SM' })));
+    expect(conLogo.getImages()).toHaveLength(1);
+    const textos = [];
+    conLogo.eachRow((f) => f.eachCell((c) => { if (c.text) textos.push(c.text); }));
+    expect(textos).not.toContain('Ministerio de Salud Pública y Asistencia Social');
+
+    const sinLogo = info(await releer(libro(DATOS)));
+    expect(sinLogo.getImages()).toHaveLength(0);
+    expect(sinLogo.getCell(1, 5).value).toBe('Ministerio de Salud Pública y Asistencia Social');
+  });
+});

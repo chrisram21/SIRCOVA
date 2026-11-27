@@ -1,9 +1,11 @@
 import path from 'node:path';
 import pdfmake from 'pdfmake';
 import { NOMBRES_MES } from '../produccion/validacion.service.js';
+import { logoDeLaDdriss } from './logos.js';
 import {
-  CIFRAS, COLORES, NOMBRES_INFORME, TINTA, lineasDelAcumulado, lineasDelEncabezado, llevaMunicipio, nombreDeFila,
-  textoCifra, textoFueraDelConsolidado, textoMeta, tituloDeLaFila, tituloDelInforme, tonoDeCifra, tramosDelEncabezado,
+  CIFRAS, COLORES, NOMBRES_INFORME, TINTA, etiquetaDeDosis, lineasDelAcumulado, lineasDelEncabezado, llevaMunicipio,
+  nombreDeFila, textoCifra, textoFueraDelConsolidado, textoMeta, tituloDeLaFila, tituloDelInforme, tonoDeCifra,
+  tramosDelEncabezado,
 } from './textosInforme.js';
 
 // SPEC 65 (HU-48) y 66 (HU-49): el PDF de un informe de producción y del acumulado anual, en carta horizontal, con
@@ -32,6 +34,8 @@ const ALTO_LINEA_AVISO = 11;
 const MARGEN_ABAJO = 40;
 const CARACTERES_POR_LINEA_AVISO = 170;
 const FILAS_DE_ENCABEZADO = 3;
+// SPEC 78: el logo mide lo mismo que los tres renglones de texto que reemplaza, así que el encabezado no crece.
+const ALTO_LOGO = 32;
 
 // Columnas de cantidades por bloque: con la columna «Municipio» caben menos. Las cantidades reparten el ancho que
 // dejan las columnas fijas.
@@ -134,7 +138,40 @@ function recuadroDeAvisos(avisos) {
 }
 
 // El encabezado que se repite en cada página: marca, institución, título, periodo, filtros y avisos.
-function encabezadoDePagina({ rotuloDelInforme, nombre, subtitulo, periodo, preliminar, ddriss, filtros, avisos }) {
+// La esquina derecha: el Ministerio, la Dirección y la DDRISS; con logo (SPEC 78), el logo reemplaza al Ministerio y
+// los otros dos renglones van a su izquierda.
+const DIRECCION = {
+  text: 'Dirección Departamental de Redes Integradas de Servicios de Salud', fontSize: 7.5, color: TINTA.gris,
+};
+const nombreDeLaDdriss = (ddriss) => ({ text: ddriss, fontSize: 8.5, bold: true, color: TINTA.texto });
+function institucion(ddriss, logo) {
+  if (logo) {
+    const ancho = Math.round((ALTO_LOGO * logo.ancho) / logo.alto);
+    return {
+      width: '*',
+      columns: [
+        {
+          width: '*', alignment: 'right', margin: [0, 7, 8, 0],
+          stack: [DIRECCION, { ...nombreDeLaDdriss(ddriss), margin: [0, 1, 0, 0] }],
+        },
+        { width: ancho, image: 'logo', height: ALTO_LOGO },
+      ],
+    };
+  }
+  return {
+    width: '*',
+    alignment: 'right',
+    stack: [
+      { text: 'Ministerio de Salud Pública y Asistencia Social', fontSize: 8.5, bold: true, color: TINTA.texto },
+      { ...DIRECCION, margin: [0, 2, 0, 0] },
+      { ...nombreDeLaDdriss(ddriss), margin: [0, 1, 0, 0] },
+    ],
+  };
+}
+
+function encabezadoDePagina({
+  rotuloDelInforme, nombre, subtitulo, periodo, preliminar, ddriss, logo, filtros, avisos,
+}) {
   return {
     margin: [MARGEN_LADO, 18, MARGEN_LADO, 0],
     stack: [
@@ -148,20 +185,7 @@ function encabezadoDePagina({ rotuloDelInforme, nombre, subtitulo, periodo, prel
               { text: 'Informes de vacunación', fontSize: 8, color: TINTA.gris },
             ],
           },
-          {
-            width: '*',
-            alignment: 'right',
-            stack: [
-              {
-                text: 'Ministerio de Salud Pública y Asistencia Social', fontSize: 8.5, bold: true, color: TINTA.texto,
-              },
-              {
-                text: 'Dirección Departamental de Redes Integradas de Servicios de Salud',
-                fontSize: 7.5, color: TINTA.gris, margin: [0, 2, 0, 0],
-              },
-              { text: ddriss, fontSize: 8.5, bold: true, color: TINTA.texto, margin: [0, 1, 0, 0] },
-            ],
-          },
+          institucion(ddriss, logo),
         ],
       },
       regla([0, 6, 0, 0]),
@@ -234,8 +258,9 @@ const lineasDeAvisos = (avisos) =>
   avisos.reduce((suma, aviso) => suma + Math.ceil(aviso.length / CARACTERES_POR_LINEA_AVISO), 0);
 const margenArriba = (avisos) => MARGEN_ARRIBA + (avisos.length ? 6 + lineasDeAvisos(avisos) * ALTO_LINEA_AVISO : 0);
 
-// Lo común a los PDF de informes: hoja, fuente, marca de agua, encabezado, pie y los bloques.
-function documento({ titulo, preliminar, generadoEn, lineas, cabecera, contenido }) {
+// Lo común a los PDF de informes: hoja, fuente, marca de agua, encabezado, pie y los bloques. logo: el de
+// logoDeLaDdriss o null; va una sola vez en `images` aunque se repita en cada página.
+function documento({ titulo, preliminar, generadoEn, lineas, cabecera, contenido, logo }) {
   const { ddriss, generado, avisos, filtros } = repartirLineas(lineas);
   const arriba = margenArriba(avisos);
   return {
@@ -247,7 +272,8 @@ function documento({ titulo, preliminar, generadoEn, lineas, cabecera, contenido
     ...(preliminar
       ? { watermark: { text: 'PRELIMINAR', color: '#888888', opacity: 0.1, bold: true } }
       : {}),
-    header: () => encabezadoDePagina({ ...cabecera, preliminar, ddriss, filtros, avisos }),
+    ...(logo ? { images: { logo: `data:image/png;base64,${logo.bytes.toString('base64')}` } } : {}),
+    header: () => encabezadoDePagina({ ...cabecera, preliminar, ddriss, logo, filtros, avisos }),
     footer: (pagina, paginas) => pieDePagina(generado, pagina, paginas),
     content: contenido,
   };
@@ -337,7 +363,7 @@ function tablaDelTramo(informe, { desde, hasta }) {
       ...vacunas.flatMap(deVacuna),
     ],
     [...vacias(fijas), ...secciones.flatMap((s) => abarcando({ ...subencabezado(s.titulo), fontSize: 7 }, s.abarca))],
-    [...vacias(fijas), ...columnas.map((c) => subencabezado(c.dosis.codigo))],
+    [...vacias(fijas), ...columnas.map((c) => subencabezado(etiquetaDeDosis(c.dosis.codigo)))],
   ];
   const filas = informe.filas.map((fila) => [
     nombreDeFila(fila), ...(conMunicipio ? [fila.municipio?.nombre ?? ''] : []),
@@ -387,6 +413,7 @@ export function documentoDelInforme(informe, datos) {
   const limite = llevaMunicipio(informe.nivel) ? COLUMNAS_POR_TRAMO.conMunicipio : COLUMNAS_POR_TRAMO.sinMunicipio;
   const tramos = tramosDeColumnas(informe.columnas, limite);
   return documento({
+    logo: logoDeLaDdriss(datos.ddrissCodigo),
     titulo: tituloDelInforme(informe),
     preliminar: informe.preliminar,
     generadoEn: datos.generadoEn,
@@ -450,7 +477,7 @@ function tablaDelTramoAnual(informe, { desde, hasta }, unidades) {
       ...vacunas.flatMap(deVacuna),
     ],
     [...vacias(fijas), ...secciones.flatMap((s) => abarcando({ ...subencabezado(s.titulo), fontSize: 7 }, s.abarca))],
-    [...vacias(fijas), ...columnas.map((c) => subencabezado(c.dosis.codigo))],
+    [...vacias(fijas), ...columnas.map((c) => subencabezado(etiquetaDeDosis(c.dosis.codigo)))],
     [...vacias(fijas), ...columnas.map((c) => ({
       text: textoMeta(c.meta), alignment: 'center', fontSize: 6.5, ...tono('muted', 'mutedTexto'),
     }))],
@@ -528,6 +555,7 @@ export function documentoDelAcumulado(informe, datos) {
     (_, i) => unidades.slice(i * porPagina, (i + 1) * porPagina));
   const bloques = tramos.flatMap((tramo, numero) => paginas.map((pagina) => ({ tramo, numero, pagina })));
   return documento({
+    logo: logoDeLaDdriss(datos.ddrissCodigo),
     titulo: tituloDelInforme(informe),
     preliminar: informe.preliminar,
     generadoEn: datos.generadoEn,

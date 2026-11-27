@@ -223,7 +223,7 @@ function textoDeFechas({ desde, hasta }) {
 // Las líneas [etiqueta, valor] del encabezado del Excel: las fechas siempre, los demás filtros solo si se aplicaron.
 async function datosDelExcel(usuario, filtros) {
   const [[[ddriss]], [[autor]], [[cuenta]]] = await Promise.all([
-    pool.query('SELECT nombre FROM ddriss WHERE id = ?', [usuario.ddrissId ?? 0]),
+    pool.query('SELECT codigo, nombre FROM ddriss WHERE id = ?', [usuario.ddrissId ?? 0]),
     pool.query(
       `SELECT CONCAT(e.nombres, ' ', e.apellidos) AS nombre FROM usuario u JOIN empleado e ON e.id = u.empleado_id
         WHERE u.id = ?`,
@@ -240,6 +240,7 @@ async function datosDelExcel(usuario, filtros) {
   const elemento = [filtros.entidades?.join(', '), filtros.entidadId && `#${filtros.entidadId}`].filter(Boolean);
   return {
     ddriss: ddriss?.nombre ?? '',
+    ddrissCodigo: ddriss?.codigo ?? null,
     generadoPor: autor?.nombre ?? '',
     filtros: [
       ['Fechas', textoDeFechas(filtros)],

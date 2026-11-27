@@ -97,11 +97,16 @@ function pintar(celda, tono) {
 
 // La hoja «Información» y, después, la de los datos (nombreHoja). Devuelve la de datos y lo que lleva al imprimir.
 // periodo: la etiqueta de la línea que va arriba a la derecha en «Información» («Mes de corte» o «Periodo»).
-function libroConInformacion(nombreHoja, generadoEn, { rotulo, titulo, preliminar, lineas, periodo = 'Mes de corte' }) {
+// ddrissCodigo: el de datos, para el logo de la DDRISS (SPEC 78).
+function libroConInformacion(nombreHoja, generadoEn, {
+  rotulo, titulo, preliminar, lineas, periodo = 'Mes de corte', ddrissCodigo = null,
+}) {
   const libro = new ExcelJS.Workbook();
   libro.creator = 'SIRCOVA';
   libro.created = generadoEn;
-  hojaDeInformacion(libro, { rotulo, titulo, preliminar, lineas, periodo, hojaDeDatos: nombreHoja });
+  hojaDeInformacion(libro, {
+    rotulo, titulo, preliminar, lineas, periodo, hojasDeDatos: [nombreHoja], ddrissCodigo,
+  });
   const hoja = libro.addWorksheet(nombreHoja);
   const impresion = { titulo, generado: lineas.find(([e]) => e === 'Generado')?.[1] ?? null };
   return { libro, hoja, impresion };
@@ -149,7 +154,7 @@ function escribirTabla(hoja, columnas, filas, { esTotal = (r) => r.municipio ===
  * El libro de una pestaña de indicadores (avance, brecha, cobertura, desercion o proyeccion).
  * consulta: { vista, corrida, resultados (todos los de la corrida), indicador (de corrida.indicadores), red (la del
  * filtro, con municipios) o null, municipioDelDistrito (id) o null, municipioIds }.
- * datos: { ddriss, territorio, generadoPor, generadoEn }.
+ * datos: { ddriss, ddrissCodigo (para el logo, SPEC 78), territorio, generadoPor, generadoEn }.
  */
 export function libroDeIndicador(consulta, datos) {
   const { vista, corrida, resultados, indicador } = consulta;
@@ -174,6 +179,7 @@ export function libroDeIndicador(consulta, datos) {
     titulo: tituloDeLaVista(vista, { vacunaNombre }),
     preliminar: corrida.parcial,
     lineas: lineasDelEncabezado({ corrida, indicador }, datos, avisos),
+    ddrissCodigo: datos.ddrissCodigo,
   });
   escribirTabla(hoja, COLUMNAS[tipo], filas, { impresion });
   return libro;
@@ -197,6 +203,7 @@ export function libroDeRed({ corrida, resultados, red }, datos) {
     titulo: tituloDeLaVista('redes', { red }),
     preliminar: corrida.parcial,
     lineas: lineasDelEncabezado({ corrida, indicador: null }, datos, avisos),
+    ddrissCodigo: datos.ddrissCodigo,
   });
   hoja.getColumn(1).width = 28;
   columnas.forEach((_, i) => { hoja.getColumn(i + 2).width = 14; });
@@ -270,6 +277,7 @@ export function libroDeProduccion(produccion, datos) {
     titulo: tituloDeProduccion(produccion.vacuna),
     preliminar: produccion.preliminar,
     lineas: lineasDeProduccion(produccion, datos),
+    ddrissCodigo: datos.ddrissCodigo,
     periodo: 'Periodo',
   });
   escribirTabla(hoja, columnas, filas, {

@@ -23,7 +23,8 @@ export const COLUMNAS = [
 const aJson = (valor) => (valor == null ? '' : JSON.stringify(valor));
 
 /**
- * registros: los elementos de GET /auditoria/bitacora, ya ordenados. datos: { ddriss, generadoPor, generadoEn (Date),
+ * registros: los elementos de GET /auditoria/bitacora, ya ordenados. datos: { ddriss, ddrissCodigo (el logo, SPEC 78
+ * o null), generadoPor, generadoEn (Date),
  * filtros: [[etiqueta, valor]] }; el de «Fechas» va arriba a la derecha como periodo.
  */
 export function libroDeBitacora(registros, datos) {
@@ -43,7 +44,8 @@ export function libroDeBitacora(registros, datos) {
       ['Generado', generado],
     ],
     periodo: 'Fechas',
-    hojaDeDatos: 'Bitácora',
+    hojasDeDatos: ['Bitácora'],
+    ddrissCodigo: datos.ddrissCodigo,
   });
 
   const hoja = libro.addWorksheet('Bitácora');

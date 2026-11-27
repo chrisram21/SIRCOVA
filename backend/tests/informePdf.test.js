@@ -167,7 +167,7 @@ describe('documento PDF de un informe (SPEC 65)', () => {
     expect(primero.table.headerRows).toBe(3);
     expect(primero.table.body[0].map(texto).filter(Boolean)).toEqual(['Municipio de aplicación', 'Hexavalente']);
     expect(primero.table.body[0][1]).toMatchObject({ text: 'Hexavalente', colSpan: 6 });
-    expect(primero.table.body[2].map(texto).slice(1)).toEqual(['D1', 'D2', 'D3', 'D4', 'D5', 'D6']);
+    expect(primero.table.body[2].map(texto).slice(1)).toEqual(['1ra', '2da', '3ra', '4ta', '5ta', '6ta']);
     expect(filasDe(primero)).toEqual([
       ['San Marcos', ...fmt(informe.filas[0].cantidades, 0, 6)],
       ['San Pedro', ...fmt(informe.filas[1].cantidades, 0, 6)],
@@ -297,7 +297,7 @@ describe('documento PDF del acumulado anual (SPEC 66)', () => {
     expect(tabla.table.headerRows).toBe(4);
     const cuerpo = tabla.table.body.map((f) => f.map(texto));
     expect(cuerpo[0].slice(0, 3)).toEqual(['Municipio de residencia', 'Cifra', 'Hexavalente']);
-    expect(cuerpo[2].slice(2)).toEqual(['D3', 'UNICA']);
+    expect(cuerpo[2].slice(2)).toEqual(['3ra', 'UNICA']);
     expect(cuerpo[3].slice(2)).toEqual(['Meta 95 %', 'Meta 90 %']);
   });
 
@@ -387,5 +387,48 @@ describe('documento PDF del acumulado anual (SPEC 66)', () => {
       ...acumulado().filas[0], nombre: 'Distrito 1', municipio: { id: 1, nombre: 'San Marcos' },
     }] }), datos);
     expect(bytes.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+  });
+});
+
+// SPEC 78: el logo del MSPAS en el encabezado de cada página, por código de DDRISS.
+describe('logo de la DDRISS en el PDF (SPEC 78)', () => {
+  const MINISTERIO = 'Ministerio de Salud Pública y Asistencia Social';
+  // Los nodos de imagen de un nodo de pdfmake.
+  const imagenesDe = (nodo) => {
+    if (Array.isArray(nodo)) return nodo.flatMap(imagenesDe);
+    if (!nodo || typeof nodo !== 'object') return [];
+    return [...(nodo.image ? [nodo] : []), ...[nodo.stack, nodo.columns].flatMap(imagenesDe)];
+  };
+  const conLogo = { ...datos, ddrissCodigo: 'DDRISS_SM' };
+
+  it('con logo, lo lleva en lugar del Ministerio, con la Dirección y la DDRISS a su izquierda', () => {
+    const doc = documentoDelInforme(informeBase(), conLogo);
+    expect(doc.images.logo.startsWith('data:image/png;base64,')).toBe(true);
+    const [imagen] = imagenesDe(doc.header(1, 1));
+    expect(imagen).toMatchObject({ image: 'logo', height: 32, width: Math.round((32 * 463) / 166) });
+    const encabezado = textosDe(doc.header(2, 3));
+    expect(encabezado).toEqual(expect.arrayContaining([
+      'Dirección Departamental de Redes Integradas de Servicios de Salud', 'San Marcos',
+    ]));
+    expect(encabezado).not.toContain(MINISTERIO);
+    // El logo mide lo que los renglones que reemplaza: el margen de arriba no cambia y las tablas no se corren.
+    expect(doc.pageMargins).toEqual(documentoDelInforme(informeBase(), datos).pageMargins);
+  });
+
+  it('sin logo (otra DDRISS o sin código), conserva los tres renglones y no lleva imagen', () => {
+    for (const ddrissCodigo of [undefined, 'ZVT_SIN_LOGO']) {
+      const doc = documentoDelInforme(informeBase(), { ...datos, ddrissCodigo });
+      expect(doc.images, String(ddrissCodigo)).toBeUndefined();
+      expect(imagenesDe(doc.header(1, 1))).toEqual([]);
+      expect(textosDe(doc.header(1, 1))).toEqual(expect.arrayContaining([MINISTERIO, 'San Marcos']));
+    }
+  });
+
+  it('el acumulado anual también lo lleva, con las mismas páginas que sin logo', async () => {
+    const doc = documentoDelAcumulado(acumulado(), conLogo);
+    expect(imagenesDe(doc.header(1, 1))).toHaveLength(1);
+    expect(doc.content.length).toBe(documentoDelAcumulado(acumulado(), datos).content.length);
+    const bytes = await pdfDelInforme(informeBase(), conLogo);
+    expect(bytes.subarray(0, 5).toString()).toBe('%PDF-');
   });
 });

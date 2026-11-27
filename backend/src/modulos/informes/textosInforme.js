@@ -84,6 +84,26 @@ export const nombreDeFila = (fila) => (fila.fueraDelConsolidado ? `${fila.nombre
 export const textoFueraDelConsolidado = (dosis) =>
   `Además, ${formatoEntero.format(dosis)} dosis de establecimientos que no suman en el consolidado.`;
 
+// SPEC 78 (pedido de la DDRISS): D1 a D10 se muestran como ordinal femenino («1ra»); los refuerzos, UNICA y los
+// demás códigos, como vienen.
+const ORDINALES = ['1ra', '2da', '3ra', '4ta', '5ta', '6ta', '7ma', '8va', '9na', '10ma'];
+export function etiquetaDeDosis(codigo) {
+  const partes = /^D([1-9]\d*)$/.exec(codigo);
+  return (partes && ORDINALES[Number(partes[1]) - 1]) ?? codigo;
+}
+
+// SPEC 78: el nombre de la hoja de un mes en el Excel («Septiembre 2026», menos de los 31 caracteres de Excel).
+export const nombreDeHojaDelMes = ({ anio, mes }) => `${conMayuscula(NOMBRES_MES[mes - 1])} ${anio}`;
+
+// La nota debajo de la tabla de un mes según su estado en cierre_periodo (null: sin él); un mes cerrado no lleva.
+export function notaDelMes({ anio, mes, estado }, incluirAprobados) {
+  const nombre = nombreDelMes({ anio, mes });
+  if (estado === null) return `${conMayuscula(nombre)} no está habilitado en la DDRISS: no tiene datos.`;
+  if (estado === 'CERRADO') return null;
+  if (incluirAprobados) return `Datos preliminares: ${nombre} todavía no está cerrado.`;
+  return `${conMayuscula(nombre)} todavía no está cerrado y no suma en esta hoja.`;
+}
+
 // DD/MM/AAAA HH:mm en Guatemala; no se lee de MySQL (sale 6 h corrida con Aiven).
 export function fechaDeGeneracion(fecha) {
   const partes = Object.fromEntries(new Intl.DateTimeFormat('es-GT', {

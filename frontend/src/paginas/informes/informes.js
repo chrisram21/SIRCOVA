@@ -160,8 +160,18 @@ export function encabezadosDeTabla(columnas) {
     else secciones.push({ clave: `s${i}`, titulo, grupoEdad: grupo, abarca: 1 })
     ultimaIdentidad = identidad
   })
-  const dosis = columnas.map((columna, i) => ({ clave: `d${i}`, codigo: columna.dosis.codigo }))
+  const dosis = columnas.map((columna, i) => ({
+    clave: `d${i}`, codigo: columna.dosis.codigo, etiqueta: etiquetaDeDosis(columna.dosis.codigo),
+  }))
   return { vacunas, secciones, dosis }
+}
+
+// SPEC 78 (pedido de la DDRISS): D1 a D10 se muestran como ordinal femenino («1ra»); los refuerzos, UNICA y los
+// demás códigos, como vienen. Repite etiquetaDeDosis de backend/src/modulos/informes/textosInforme.js.
+const ORDINALES = ['1ra', '2da', '3ra', '4ta', '5ta', '6ta', '7ma', '8va', '9na', '10ma']
+export function etiquetaDeDosis(codigo) {
+  const partes = /^D([1-9]\d*)$/.exec(codigo)
+  return (partes && ORDINALES[Number(partes[1]) - 1]) ?? codigo
 }
 
 const conMayuscula = (texto) => texto.charAt(0).toUpperCase() + texto.slice(1)

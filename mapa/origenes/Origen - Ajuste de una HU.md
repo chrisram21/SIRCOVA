@@ -24,3 +24,5 @@ Modifica una historia que ya estaba terminada (ajustes de un sprint, cambios ped
   - HU-45
 - [[SPEC 77]] — Ajuste HU-08 Registrar municipios en Territorio · *Implementado*
   - HU-08
+- [[SPEC 78]] — Ajuste HU-47 Hojas por mes en el Excel de informes · *Implementado*
+  - HU-47

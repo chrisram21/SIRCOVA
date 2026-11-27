@@ -225,6 +225,15 @@ function leerMesDelRango(valor, nombre) {
 
 const numeroDeMes = ({ anio, mes }) => anio * 100 + mes;
 
+function mesesEntre(desde, hasta) {
+  const lista = [];
+  for (let { anio, mes } = desde; numeroDeMes({ anio, mes }) <= numeroDeMes(hasta); mes = (mes % 12) + 1) {
+    lista.push({ anio, mes });
+    if (mes === 12) anio += 1;
+  }
+  return lista;
+}
+
 export function leerIds(valor, nombre) {
   if (valor === undefined) return null;
   if (!/^[1-9]\d*(,[1-9]\d*)*$/.test(valor)) {
@@ -333,7 +342,10 @@ export async function municipiosDelRecorte({ redId, municipioIds }, ddrissId) {
 // Una fila por establecimiento, municipio de la fila (de aplicación o de residencia), dosis y grupo de edad; con
 // agrupacion, por valor de esa dimensión en lugar del grupo de edad (las cantidades sin ella no entran).
 // residencia: solo procedencias del departamento de la DDRISS, como v_produccion_atribuida. vacunaIds: null = todas.
-export async function leerProduccion({ ddrissId, informe, desde, hasta, vacunaIds, incluirAprobados, agrupacion }) {
+// porMes: también por mes, con anio y mes en cada fila (SPEC 78), en la misma consulta.
+export async function leerProduccion({
+  ddrissId, informe, desde, hasta, vacunaIds, incluirAprobados, agrupacion, porMes = false,
+}) {
   const estados = incluirAprobados ? ['APROBADO', 'CERRADO', 'RECTIFICACION'] : ['CERRADO', 'RECTIFICACION'];
   const municipio = informe === 'residencia' ? 'vp.municipio_procedencia_id' : 'vp.municipio_aplicacion_id';
   const condiciones = {
@@ -348,16 +360,17 @@ export async function leerProduccion({ ddrissId, informe, desde, hasta, vacunaId
        LEFT JOIN detalle_dimension dd ON dd.detalle_id = vp.detalle_id AND dd.dimension_codigo = 'grupo_edad'`
       : 'v_produccion_dimension vp';
   const subcolumna = agrupacion === null ? 'dd.valor_codigo' : 'vp.valor_codigo';
+  const delMes = porMes ? ', vp.anio, vp.mes' : '';
   const [filas] = await pool.query(
     `SELECT vp.establecimiento_id, ${municipio} AS municipio_id, vp.solo_cobertura, vp.vacuna_id, vp.dosis_id,
-            ${subcolumna} AS subcolumna, SUM(vp.cantidad) AS cantidad
+            ${subcolumna} AS subcolumna${delMes}, SUM(vp.cantidad) AS cantidad
        FROM ${origen}
       WHERE vp.ddriss_id = ? AND vp.estado IN (?) AND vp.anio * 100 + vp.mes BETWEEN ? AND ?
         AND vp.periodo_id IN (SELECT periodo_id FROM cierre_periodo WHERE ddriss_id = ?)
         ${agrupacion === null ? '' : 'AND vp.dimension_codigo = ?'}
         ${vacunaIds === null ? '' : 'AND vp.vacuna_id IN (?)'}
         ${condiciones[informe]}
-      GROUP BY vp.establecimiento_id, municipio_id, vp.solo_cobertura, vp.vacuna_id, vp.dosis_id, subcolumna`,
+      GROUP BY vp.establecimiento_id, municipio_id, vp.solo_cobertura, vp.vacuna_id, vp.dosis_id, subcolumna${delMes}`,
     [
       ddrissId, estados, numeroDeMes(desde), numeroDeMes(hasta), ddrissId,
       ...(agrupacion === null ? [] : [agrupacion]),
@@ -373,6 +386,7 @@ export async function leerProduccion({ ddrissId, informe, desde, hasta, vacunaId
     vacunaId: f.vacuna_id,
     dosisId: f.dosis_id,
     ...(agrupacion === null ? { grupoEdad: f.subcolumna ?? null } : { valor: f.subcolumna }),
+    ...(porMes ? { anio: f.anio, mes: f.mes } : {}),
     cantidad: Number(f.cantidad),
   }));
 }
@@ -468,7 +482,39 @@ export async function filasDelNivel(nivel, { ddrissId, departamento, produccion,
   return { filas, destinos: (p) => porMunicipio.get(p.municipioId) ?? [] };
 }
 
-export async function informePorFila(usuario, query = {}) {
+// Suma la producción en las filas que da destinos y en el total. Devuelve el total y las dosis fuera del consolidado.
+function repartir(produccion, { indice, enRecorte, destinos, nivel, ceros }) {
+  const total = { cantidades: ceros() };
+  let dosisFueraDelConsolidado = 0;
+  for (const p of produccion) {
+    if (!enRecorte(p.municipioId)) continue;
+    const posicion = indice.get(llave(p.dosisId, p.valor ?? p.grupoEdad));
+    if (p.fueraDelConsolidado) dosisFueraDelConsolidado += p.cantidad;
+    else total.cantidades[posicion] += p.cantidad;
+    // Un solo_cobertura solo tiene fila propia por establecimiento: en los demás niveles inflaría su municipio.
+    if (p.fueraDelConsolidado && nivel !== 'establecimiento') continue;
+    for (const destino of destinos(p)) destino.cantidades[posicion] += p.cantidad;
+  }
+  return { total, dosisFueraDelConsolidado };
+}
+
+// Cada mes de desde a hasta, también sin cierre_periodo (estado null, sin producción), con copias de las filas del
+// rango: así la suma de los meses es el acumulado, celda por celda.
+function repartirPorMes(produccion, { desde, hasta, meses, filas, destinos, ...reparto }) {
+  return mesesEntre(desde, hasta).map(({ anio, mes }) => {
+    const copias = filas.map((f) => ({ ...f, cantidades: reparto.ceros() }));
+    const copiaDe = new Map(filas.map((f, i) => [f, copias[i]]));
+    const delMes = produccion.filter((p) => p.anio === anio && p.mes === mes);
+    const { total, dosisFueraDelConsolidado } = repartir(delMes, {
+      ...reparto, destinos: (p) => destinos(p).map((f) => copiaDe.get(f)),
+    });
+    const estado = meses.find((m) => m.anio === anio && m.mes === mes)?.estado ?? null;
+    return { anio, mes, estado, filas: copias, total, dosisFueraDelConsolidado };
+  });
+}
+
+// porMes: agrega `meses`, un elemento por mes del rango con sus filas y su total (solo el Excel, SPEC 78).
+export async function informePorFila(usuario, query = {}, { porMes = false } = {}) {
   const consulta = leerConsulta(query);
   const ddrissId = ddrissDeLaConsulta(usuario, query);
   const { informe, nivel, desde, hasta, incluirAprobados } = consulta;
@@ -485,6 +531,7 @@ export async function informePorFila(usuario, query = {}) {
     ddrissId, informe, desde, hasta, incluirAprobados,
     vacunaIds: consulta.vacunas === null ? null : vacunas.map((v) => v.id),
     agrupacion: consulta.agrupacion,
+    porMes,
   });
   const deColumnas = { ddrissId, vacunaCodigos: consulta.vacunas, hasta, conDatos: produccion };
   const columnas = dimension
@@ -494,18 +541,9 @@ export async function informePorFila(usuario, query = {}) {
   const enRecorte = (municipioId) => recorte === null || recorte.includes(municipioId);
   const ceros = () => columnas.map(() => 0);
   const { filas, destinos } = await filasDelNivel(nivel, { ddrissId, departamento, produccion, enRecorte, ceros });
-
-  const total = { cantidades: ceros() };
-  let dosisFueraDelConsolidado = 0;
-  for (const p of produccion) {
-    if (!enRecorte(p.municipioId)) continue;
-    const posicion = indice.get(llave(p.dosisId, p.valor ?? p.grupoEdad));
-    if (p.fueraDelConsolidado) dosisFueraDelConsolidado += p.cantidad;
-    else total.cantidades[posicion] += p.cantidad;
-    // Un solo_cobertura solo tiene fila propia por establecimiento: en los demás niveles inflaría su municipio.
-    if (p.fueraDelConsolidado && nivel !== 'establecimiento') continue;
-    for (const destino of destinos(p)) destino.cantidades[posicion] += p.cantidad;
-  }
+  const reparto = { indice, enRecorte, nivel, ceros };
+  const porMesDelRango = porMes && repartirPorMes(produccion, { ...reparto, desde, hasta, meses, filas, destinos });
+  const { total, dosisFueraDelConsolidado } = repartir(produccion, { ...reparto, destinos });
 
   const mesesSinCerrar = meses
     .filter((m) => m.estado !== 'CERRADO')
@@ -523,6 +561,7 @@ export async function informePorFila(usuario, query = {}) {
     dosisFueraDelConsolidado,
     mesesSinCerrar,
     preliminar: incluirAprobados && mesesSinCerrar.length > 0,
+    ...(porMes ? { meses: porMesDelRango } : {}),
   };
 }
 
@@ -532,7 +571,7 @@ export async function informePorFila(usuario, query = {}) {
 // los de la bitácora, en el orden del catálogo (null con todas).
 export async function datosDelEncabezado(usuario, consulta, ddrissId) {
   const [[[ddriss]], [[empleado]], vacunas, red, [municipios]] = await Promise.all([
-    pool.query('SELECT nombre FROM ddriss WHERE id = ?', [ddrissId]),
+    pool.query('SELECT codigo, nombre FROM ddriss WHERE id = ?', [ddrissId]),
     pool.query(
       `SELECT CONCAT(e.nombres, ' ', e.apellidos) AS nombre FROM usuario u JOIN empleado e ON e.id = u.empleado_id
         WHERE u.id = ?`,
@@ -546,6 +585,7 @@ export async function datosDelEncabezado(usuario, consulta, ddrissId) {
   ]);
   return {
     ddriss: ddriss.nombre,
+    ddrissCodigo: ddriss.codigo,
     generadoPor: empleado.nombre,
     vacunas: vacunas.map((v) => v.nombre),
     codigosDeVacunas: vacunas.length === 0 ? null : vacunas.map((v) => v.codigo),
@@ -577,7 +617,7 @@ export function registrarExportacion(contexto, entidadId, valoresNuevos) {
 // El mismo informe de informePorFila como archivo (formato: xlsx o pdf). Deja la fila EXPORTAR después de armarlo:
 // si la bitácora falla, no se entrega el archivo. contexto: contextoAuditoria(req).
 export async function exportarInforme(usuario, query, contexto, formato, ahora = new Date()) {
-  const informe = await informePorFila(usuario, query);
+  const informe = await informePorFila(usuario, query, { porMes: formato === 'xlsx' });
   const consulta = leerConsulta(query);
   const ddrissId = ddrissDeLaConsulta(usuario, query);
   const datos = await datosDelEncabezado(usuario, consulta, ddrissId);

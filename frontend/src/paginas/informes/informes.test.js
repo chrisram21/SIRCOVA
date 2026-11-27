@@ -6,6 +6,7 @@ import {
   avisoDeMeses,
   conAgrupacion,
   encabezadosDeTabla,
+  etiquetaDeDosis,
   filtrosDeInforme,
   nivelPermitido,
   parametrosDeInforme,
@@ -182,8 +183,9 @@ describe('encabezadosDeTabla', () => {
         { clave: 's3', titulo: '', grupoEdad: null, abarca: 1 },
       ],
       dosis: [
-        { clave: 'd0', codigo: 'D1' }, { clave: 'd1', codigo: 'D2' }, { clave: 'd2', codigo: 'D1' },
-        { clave: 'd3', codigo: 'UNICA' },
+        { clave: 'd0', codigo: 'D1', etiqueta: '1ra' }, { clave: 'd1', codigo: 'D2', etiqueta: '2da' },
+        { clave: 'd2', codigo: 'D1', etiqueta: '1ra' },
+        { clave: 'd3', codigo: 'UNICA', etiqueta: 'UNICA' },
       ],
     })
   })
@@ -212,6 +214,19 @@ describe('encabezadosDeTabla', () => {
       { clave: 's2', titulo: 'Femenino', grupoEdad: null, abarca: 1 },
       { clave: 's3', titulo: 'Femenino', grupoEdad: null, abarca: 1 },
     ])
+  })
+})
+
+// SPEC 78: la misma tabla que backend/tests/informeExcel.test.js.
+const ETIQUETAS_DE_DOSIS = [
+  ['D1', '1ra'], ['D2', '2da'], ['D3', '3ra'], ['D4', '4ta'], ['D5', '5ta'], ['D6', '6ta'], ['D7', '7ma'],
+  ['D8', '8va'], ['D9', '9na'], ['D10', '10ma'], ['D11', 'D11'], ['D0', 'D0'], ['D01', 'D01'], ['R1', 'R1'],
+  ['R2', 'R2'], ['UNICA', 'UNICA'], ['D1X', 'D1X'], ['d1', 'd1'],
+]
+
+describe('etiquetaDeDosis (SPEC 78)', () => {
+  it.each(ETIQUETAS_DE_DOSIS)('%s se muestra como %s', (codigo, etiqueta) => {
+    expect(etiquetaDeDosis(codigo)).toBe(etiqueta)
   })
 })
 
